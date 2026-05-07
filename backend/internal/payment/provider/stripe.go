@@ -135,7 +135,7 @@ func buildStripeInvoiceCreateParams(customerID string, req payment.CreatePayment
 		AutoAdvance:                 stripe.Bool(false),
 		PendingInvoiceItemsBehavior: stripe.String("exclude"),
 		Description:                 stripe.String(req.Subject),
-		Metadata: stripePaymentMetadata(req.OrderID, instanceID),
+		Metadata:                    stripePaymentMetadata(req.OrderID, instanceID),
 	}
 	if len(methods) > 0 {
 		// Stripe Hosted Invoice 不显式传支付方式时，会按 Dashboard 的 Invoice 支付方式配置展示。
