@@ -11,58 +11,6 @@ import (
 	stripe "github.com/stripe/stripe-go/v85"
 )
 
-func TestResolveStripeInvoiceMethodTypes(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		input string
-		want  []string
-	}{
-		{
-			name:  "empty config defaults to card and link",
-			input: "",
-			want:  []string{"card", "link"},
-		},
-		{
-			name:  "stripe top-level method expands to supported invoice methods",
-			input: "stripe",
-			want:  []string{"card", "link", "wechat_pay"},
-		},
-		{
-			name:  "unsupported alipay is ignored for invoice confirmation",
-			input: "alipay,card,link,wxpay",
-			want:  []string{"card", "link", "wechat_pay"},
-		},
-		{
-			name:  "duplicates are removed while preserving first occurrence",
-			input: "card,stripe,link,wxpay",
-			want:  []string{"card", "link", "wechat_pay"},
-		},
-		{
-			name:  "only unsupported values falls back to card",
-			input: "alipay,unknown",
-			want:  []string{"card"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := resolveStripeInvoiceMethodTypes(tt.input)
-			if len(got) != len(tt.want) {
-				t.Fatalf("method count = %d, want %d: %#v", len(got), len(tt.want), got)
-			}
-			for i := range tt.want {
-				if got[i] != tt.want[i] {
-					t.Fatalf("method[%d] = %q, want %q: %#v", i, got[i], tt.want[i], got)
-				}
-			}
-		})
-	}
-}
-
 func TestBuildStripeInvoiceCreateParamsUsesHostedInvoiceMode(t *testing.T) {
 	t.Parallel()
 
@@ -96,6 +44,19 @@ func TestBuildStripeInvoiceCreateParamsUsesHostedInvoiceMode(t *testing.T) {
 	}
 	if params.Metadata["providerInstanceId"] != "42" {
 		t.Fatalf("metadata providerInstanceId = %q", params.Metadata["providerInstanceId"])
+	}
+}
+
+func TestBuildStripeInvoiceCreateParamsOmitsPaymentSettingsWhenMethodsEmpty(t *testing.T) {
+	t.Parallel()
+
+	params := buildStripeInvoiceCreateParams("cus_123", payment.CreatePaymentRequest{
+		OrderID: "sub2_order_123",
+		Subject: "TokenRouter Balance",
+	}, nil, "42")
+
+	if params.PaymentSettings != nil {
+		t.Fatalf("payment settings = %#v, want nil", params.PaymentSettings)
 	}
 }
 

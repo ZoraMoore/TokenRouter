@@ -117,7 +117,8 @@ func (s *PaymentService) AdminCancelOrder(ctx context.Context, orderID int64) (s
 
 func (s *PaymentService) cancelCore(ctx context.Context, o *dbent.PaymentOrder, fs, op, ad string) (string, error) {
 	if o.PaymentTradeNo != "" || o.PaymentType != "" {
-		if s.checkPaid(ctx, o) == checkPaidResultAlreadyPaid {
+		// 取消/过期路径可在确认未支付后关闭上游单据；普通 verify 只查询，不取消。
+		if s.checkPaidAndMaybeCancel(ctx, o, true) == checkPaidResultAlreadyPaid {
 			return checkPaidResultAlreadyPaid, nil
 		}
 	}
@@ -136,6 +137,10 @@ func (s *PaymentService) cancelCore(ctx context.Context, o *dbent.PaymentOrder, 
 }
 
 func (s *PaymentService) checkPaid(ctx context.Context, o *dbent.PaymentOrder) string {
+	return s.checkPaidAndMaybeCancel(ctx, o, false)
+}
+
+func (s *PaymentService) checkPaidAndMaybeCancel(ctx context.Context, o *dbent.PaymentOrder, cancelUnpaid bool) string {
 	prov, err := s.getOrderProvider(ctx, o)
 	if err != nil {
 		return ""
@@ -181,6 +186,9 @@ func (s *PaymentService) checkPaid(ctx context.Context, o *dbent.PaymentOrder) s
 			// Still return already_paid — order was paid, fulfillment can be retried
 		}
 		return checkPaidResultAlreadyPaid
+	}
+	if !cancelUnpaid {
+		return ""
 	}
 	if cp, ok := prov.(payment.CancelableProvider); ok {
 		_ = cp.CancelPayment(ctx, queryRef)

@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 const pollOrderStatus = vi.hoisted(() => vi.fn())
 const cancelOrder = vi.hoisted(() => vi.fn())
+const verifyOrder = vi.hoisted(() => vi.fn())
 const showError = vi.hoisted(() => vi.fn())
 const toCanvas = vi.hoisted(() => vi.fn())
 const formatBalanceAmountMock = vi.hoisted(() => vi.fn())
@@ -32,6 +33,7 @@ vi.mock('@/stores', () => ({
 vi.mock('@/api/payment', () => ({
   paymentAPI: {
     cancelOrder,
+    verifyOrder,
   },
 }))
 
@@ -69,6 +71,7 @@ describe('PaymentStatusPanel', () => {
     vi.useFakeTimers()
     pollOrderStatus.mockReset()
     cancelOrder.mockReset()
+    verifyOrder.mockReset()
     showError.mockReset()
     toCanvas.mockReset().mockResolvedValue(undefined)
     formatBalanceAmountMock.mockReset().mockImplementation((amount: number) => `Balance ${amount.toFixed(2)}`)
@@ -164,5 +167,128 @@ describe('PaymentStatusPanel', () => {
     )
 
     openSpy.mockRestore()
+  })
+
+  it('actively verifies upstream status when out_trade_no is available', async () => {
+    verifyOrder.mockResolvedValue({ data: orderFactory('PAID') })
+
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: '',
+        expiresAt: '2099-01-01T12:30:00Z',
+        paymentType: 'stripe',
+        outTradeNo: 'sub2_20260420abcd1234',
+        orderType: 'balance',
+      },
+      global: {
+        stubs: {
+          Icon: true,
+        },
+      },
+    })
+
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    expect(verifyOrder).toHaveBeenCalledWith('sub2_20260420abcd1234')
+    expect(pollOrderStatus).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('payment.result.success')
+  })
+
+  it('keeps non-stripe payment polling read-only even when out_trade_no is available', async () => {
+    pollOrderStatus.mockResolvedValue(orderFactory('RECHARGING'))
+
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: 'https://pay.example.com/qr/42',
+        expiresAt: '2099-01-01T12:30:00Z',
+        paymentType: 'alipay',
+        outTradeNo: 'sub2_20260420abcd1234',
+        orderType: 'balance',
+      },
+      global: {
+        stubs: {
+          Icon: true,
+        },
+      },
+    })
+
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    expect(verifyOrder).not.toHaveBeenCalled()
+    expect(pollOrderStatus).toHaveBeenCalledWith(42)
+    expect(wrapper.text()).toContain('payment.result.success')
+  })
+
+  it('shows success when cancel discovers the order was already paid', async () => {
+    cancelOrder.mockResolvedValue({ data: { message: 'already_paid' } })
+    verifyOrder.mockResolvedValue({ data: orderFactory('COMPLETED') })
+
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: '',
+        expiresAt: '2099-01-01T12:30:00Z',
+        paymentType: 'stripe',
+        outTradeNo: 'sub2_20260420abcd1234',
+        orderType: 'balance',
+      },
+      global: {
+        stubs: {
+          Icon: true,
+        },
+      },
+    })
+
+    await flushPromises()
+    await wrapper.get('button.btn.btn-secondary.w-full').trigger('click')
+    await flushPromises()
+
+    expect(cancelOrder).toHaveBeenCalledWith(42)
+    expect(verifyOrder).toHaveBeenCalledWith('sub2_20260420abcd1234')
+    expect(wrapper.text()).toContain('payment.result.success')
+    expect(wrapper.emitted('success')).toHaveLength(1)
+  })
+
+  it('keeps waiting when cancel sees already_paid but local order is not successful yet', async () => {
+    vi.setSystemTime(new Date('2099-01-01T12:00:00Z'))
+    cancelOrder.mockResolvedValue({ data: { message: 'already_paid' } })
+    verifyOrder.mockResolvedValue({ data: orderFactory('PENDING') })
+
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: '',
+        expiresAt: '2099-01-01T12:30:00Z',
+        paymentType: 'stripe',
+        outTradeNo: 'sub2_20260420abcd1234',
+        orderType: 'balance',
+      },
+      global: {
+        stubs: {
+          Icon: true,
+        },
+      },
+    })
+
+    await flushPromises()
+    await wrapper.get('button.btn.btn-secondary.w-full').trigger('click')
+    await flushPromises()
+
+    expect(cancelOrder).toHaveBeenCalledWith(42)
+    expect(verifyOrder).toHaveBeenCalledWith('sub2_20260420abcd1234')
+    expect(wrapper.text()).not.toContain('payment.result.success')
+    expect(wrapper.emitted('success')).toBeUndefined()
+    expect(wrapper.text()).toContain('payment.qr.payInNewWindowHint')
+
+    await vi.advanceTimersByTimeAsync(1000)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('29:59')
   })
 })

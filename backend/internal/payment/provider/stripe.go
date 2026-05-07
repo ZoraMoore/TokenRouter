@@ -63,13 +63,6 @@ func (s *Stripe) SupportedTypes() []payment.PaymentType {
 	return []payment.PaymentType{payment.TypeStripe}
 }
 
-var stripeInvoicePaymentMethodTypes = map[string][]string{
-	payment.TypeCard:   {"card"},
-	payment.TypeStripe: {"card", "link", "wechat_pay"},
-	payment.TypeWxpay:  {"wechat_pay"},
-	payment.TypeLink:   {"link"},
-}
-
 // CreatePayment 使用 Stripe Invoice 创建可开具账单的支付单。
 func (s *Stripe) CreatePayment(ctx context.Context, req payment.CreatePaymentRequest) (*payment.CreatePaymentResponse, error) {
 	s.ensureInit()
@@ -87,8 +80,7 @@ func (s *Stripe) CreatePayment(ctx context.Context, req payment.CreatePaymentReq
 		return nil, fmt.Errorf("stripe create customer: %w", err)
 	}
 
-	methods := resolveStripeInvoiceMethodTypes(req.InstanceSubMethods)
-	invoiceParams := buildStripeInvoiceCreateParams(customer.ID, req, methods, s.instanceID)
+	invoiceParams := buildStripeInvoiceCreateParams(customer.ID, req, nil, s.instanceID)
 	invoiceParams.SetIdempotencyKey(fmt.Sprintf("in-%s", req.OrderID))
 	invoice, err := s.sc.V1Invoices.Create(ctx, invoiceParams)
 	if err != nil {
@@ -143,10 +135,14 @@ func buildStripeInvoiceCreateParams(customerID string, req payment.CreatePayment
 		AutoAdvance:                 stripe.Bool(false),
 		PendingInvoiceItemsBehavior: stripe.String("exclude"),
 		Description:                 stripe.String(req.Subject),
-		PaymentSettings: &stripe.InvoiceCreatePaymentSettingsParams{
-			PaymentMethodTypes: stripe.StringSlice(methods),
-		},
 		Metadata: stripePaymentMetadata(req.OrderID, instanceID),
+	}
+	if len(methods) > 0 {
+		// Stripe Hosted Invoice 不显式传支付方式时，会按 Dashboard 的 Invoice 支付方式配置展示。
+		// 只有旧配置明确限制到 Invoice API 接受的方式时，才传 payment_method_types。
+		params.PaymentSettings = &stripe.InvoiceCreatePaymentSettingsParams{
+			PaymentMethodTypes: stripe.StringSlice(methods),
+		}
 	}
 	// 托管账单必须有到期时间；优先复用本地订单过期时间，避免渠道账单晚于本地订单太多。
 	if dueDate := stripeInvoiceDueDate(req.ExpiresAt); dueDate > 0 {
@@ -360,31 +356,6 @@ func (s *Stripe) Refund(ctx context.Context, req payment.RefundRequest) (*paymen
 		RefundID: r.ID,
 		Status:   refundStatus,
 	}, nil
-}
-
-// resolveStripeInvoiceMethodTypes 只返回 Invoice 支持且当前前端可安全确认的方法。
-func resolveStripeInvoiceMethodTypes(instanceSubMethods string) []string {
-	if strings.TrimSpace(instanceSubMethods) == "" {
-		return []string{"card", "link"}
-	}
-	var methods []string
-	seen := map[string]bool{}
-	for _, t := range strings.Split(instanceSubMethods, ",") {
-		t = strings.TrimSpace(t)
-		if mapped, ok := stripeInvoicePaymentMethodTypes[t]; ok {
-			for _, method := range mapped {
-				if method == "" || seen[method] {
-					continue
-				}
-				seen[method] = true
-				methods = append(methods, method)
-			}
-		}
-	}
-	if len(methods) == 0 {
-		return []string{"card"}
-	}
-	return methods
 }
 
 // CancelPayment 对新 Invoice 订单执行 void，对旧 PaymentIntent 订单执行 cancel。

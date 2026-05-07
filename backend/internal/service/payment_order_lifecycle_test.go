@@ -22,6 +22,7 @@ import (
 type paymentOrderLifecycleQueryProvider struct {
 	lastQueryTradeNo string
 	queryCalls       int
+	cancelCalls      int
 	responses        []*payment.QueryOrderResponse
 	resp             *payment.QueryOrderResponse
 }
@@ -69,6 +70,11 @@ func (p *paymentOrderLifecycleQueryProvider) VerifyNotification(context.Context,
 
 func (p *paymentOrderLifecycleQueryProvider) Refund(context.Context, payment.RefundRequest) (*payment.RefundResponse, error) {
 	panic("unexpected call")
+}
+
+func (p *paymentOrderLifecycleQueryProvider) CancelPayment(context.Context, string) error {
+	p.cancelCalls++
+	return nil
 }
 
 func (r *paymentOrderLifecycleRedeemRepo) Create(context.Context, *RedeemCode) error {
@@ -571,6 +577,59 @@ func TestVerifyOrderByOutTradeNoUsesOutTradeNoWhenPaymentTradeNoAlreadyExistsFor
 	require.NoError(t, err)
 	require.Equal(t, order.OutTradeNo, provider.lastQueryTradeNo)
 	require.Equal(t, "upstream-trade-existing", got.PaymentTradeNo)
+}
+
+func TestVerifyOrderByOutTradeNoDoesNotCancelPendingUpstreamOrder(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentOrderLifecycleTestClient(t)
+
+	user, err := client.User.Create().
+		SetEmail("checkpaid-pending@example.com").
+		SetPasswordHash("hash").
+		SetUsername("checkpaid-pending-user").
+		Save(ctx)
+	require.NoError(t, err)
+
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(88).
+		SetPayAmount(88).
+		SetFeeRate(0).
+		SetRechargeCode("CHECKPAID-PENDING").
+		SetOutTradeNo("sub2_checkpaid_pending").
+		SetPaymentType(payment.TypeAlipay).
+		SetPaymentTradeNo("").
+		SetOrderType(payment.OrderTypeBalance).
+		SetStatus(OrderStatusPending).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("api.example.com").
+		Save(ctx)
+	require.NoError(t, err)
+
+	registry := payment.NewRegistry()
+	provider := &paymentOrderLifecycleQueryProvider{
+		resp: &payment.QueryOrderResponse{
+			TradeNo: "upstream-trade-pending",
+			Status:  payment.ProviderStatusPending,
+			Amount:  88,
+		},
+	}
+	registry.Register(provider)
+
+	svc := &PaymentService{
+		entClient:       client,
+		registry:        registry,
+		providersLoaded: true,
+	}
+
+	got, err := svc.VerifyOrderByOutTradeNo(ctx, order.OutTradeNo, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusPending, got.Status)
+	require.Equal(t, 1, provider.queryCalls)
+	require.Equal(t, 0, provider.cancelCalls)
 }
 
 func TestPaymentOrderAllowsRegistryFallbackOnlyForLegacyOrdersWithoutPinnedProviderState(t *testing.T) {

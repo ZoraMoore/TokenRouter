@@ -19,6 +19,7 @@
             :qr-code="paymentState.qrCode"
             :expires-at="paymentState.expiresAt"
             :payment-type="paymentState.paymentType"
+            :out-trade-no="paymentState.outTradeNo"
             :pay-url="paymentState.payUrl"
             :order-type="paymentState.orderType"
             @done="onPaymentDone"

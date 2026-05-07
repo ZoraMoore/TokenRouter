@@ -141,6 +141,7 @@ const props = defineProps<{
   qrCode: string
   expiresAt: string
   paymentType: string
+  outTradeNo?: string
   payUrl?: string
   orderType?: string
 }>()
@@ -207,6 +208,11 @@ function isSuccessStatus(status: string | null | undefined): boolean {
   return status === 'COMPLETED' || status === 'PAID' || status === 'RECHARGING'
 }
 
+function upstreamVerificationOutTradeNo(): string {
+  if (props.paymentType !== 'stripe') return ''
+  return props.outTradeNo || ''
+}
+
 function reopenPopup() {
   if (props.payUrl) {
     const win = window.open(props.payUrl, 'paymentPopup', getPaymentPopupFeatures())
@@ -233,25 +239,48 @@ async function renderQR() {
 
 async function pollStatus() {
   if (!props.orderId || outcome.value) return
-  const order = await paymentStore.pollOrderStatus(props.orderId)
-  if (!order) return
+  // Stripe 支付等待页主动向上游确认，避免 webhook 延迟或漏发时一直停在等待态。
+  const upstreamOutTradeNo = upstreamVerificationOutTradeNo()
+  const order = upstreamOutTradeNo
+    ? await verifyOrderWithUpstream(upstreamOutTradeNo)
+    : await paymentStore.pollOrderStatus(props.orderId)
+  applyResolvedOrderStatus(order)
+}
+
+function applyResolvedOrderStatus(order: PaymentOrder | null): boolean {
+  if (!order) return false
   if (isSuccessStatus(order.status)) {
     cleanup()
     paidOrder.value = order
     setOutcome('success')
     emit('success')
+    return true
   } else if (order.status === 'CANCELLED') {
     cleanup()
     setOutcome('cancelled')
+    return true
   } else if (order.status === 'EXPIRED' || order.status === 'FAILED') {
     cleanup()
     setOutcome('expired')
+    return true
+  }
+  return false
+}
+
+async function verifyOrderWithUpstream(outTradeNo: string): Promise<PaymentOrder | null> {
+  try {
+    const response = await paymentAPI.verifyOrder(outTradeNo)
+    return response.data
+  } catch (err: unknown) {
+    console.warn('[payment] Failed to verify order upstream:', err)
+    return paymentStore.pollOrderStatus(props.orderId)
   }
 }
 
 function startCountdown(seconds: number) {
   remainingSeconds.value = Math.max(0, seconds)
   if (remainingSeconds.value <= 0) { setOutcome('expired'); return }
+  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null }
   countdownTimer = setInterval(() => {
     remainingSeconds.value--
     if (remainingSeconds.value <= 0) { setOutcome('expired'); cleanup() }
@@ -262,9 +291,20 @@ async function handleCancel() {
   if (!props.orderId || cancelling.value) return
   cancelling.value = true
   try {
-    await paymentAPI.cancelOrder(props.orderId)
+    const response = await paymentAPI.cancelOrder(props.orderId)
     cleanup()
-    setOutcome('cancelled')
+    if ((response.data as { message?: string } | undefined)?.message === 'already_paid') {
+      const upstreamOutTradeNo = upstreamVerificationOutTradeNo()
+      const order = upstreamOutTradeNo
+        ? await verifyOrderWithUpstream(upstreamOutTradeNo)
+        : await paymentStore.pollOrderStatus(props.orderId)
+      if (!applyResolvedOrderStatus(order)) {
+        startCountdown(remainingSeconds.value)
+        startPolling()
+      }
+    } else {
+      setOutcome('cancelled')
+    }
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
   } finally {
@@ -279,6 +319,12 @@ function cleanup() {
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null }
 }
 
+function startPolling() {
+  if (!pollTimer) {
+    pollTimer = setInterval(pollStatus, 3000)
+  }
+}
+
 // Initialize on mount
 qrUrl.value = props.qrCode
 let seconds = 30 * 60
@@ -286,7 +332,7 @@ if (props.expiresAt) {
   seconds = Math.floor((new Date(props.expiresAt).getTime() - Date.now()) / 1000)
 }
 startCountdown(seconds)
-pollTimer = setInterval(pollStatus, 3000)
+startPolling()
 renderQR()
 
 watch(() => qrUrl.value, () => renderQR())
