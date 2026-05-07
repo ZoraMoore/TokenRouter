@@ -4405,6 +4405,39 @@
             </div>
           </div>
         </div>
+
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t("admin.settings.features.riskControl.title") }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t("admin.settings.features.riskControl.description") }}
+            </p>
+            <p class="mt-1.5 text-xs">
+              <router-link
+                to="/admin/risk-control"
+                class="inline-flex items-center gap-1 text-primary-600 hover:underline dark:text-primary-400"
+              >
+                {{ t("admin.settings.features.riskControl.configureLink") }}
+                <span aria-hidden="true">-&gt;</span>
+              </router-link>
+            </p>
+          </div>
+          <div class="space-y-5 p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="font-medium text-gray-900 dark:text-white">
+                  {{ t("admin.settings.features.riskControl.enabled") }}
+                </label>
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.features.riskControl.enabledHint") }}
+                </p>
+              </div>
+              <Toggle v-model="form.risk_control_enabled" />
+            </div>
+          </div>
+        </div>
         <!-- /Tab: General -->
 
         <!-- Tab: Email -->
@@ -5817,6 +5850,7 @@ const form = reactive<SettingsForm>({
   enable_metadata_passthrough: false,
   enable_cch_signing: false,
   enable_anthropic_cache_ttl_1h_injection: false,
+  risk_control_enabled: false,
   // Balance & quota notification
   balance_low_notify_enabled: false,
   balance_low_notify_threshold: 0,
@@ -6813,6 +6847,7 @@ async function saveSettings() {
         form.enable_anthropic_cache_ttl_1h_injection,
       // Payment configuration
       payment_enabled: form.payment_enabled,
+      risk_control_enabled: form.risk_control_enabled,
       payment_min_amount: Number(form.payment_min_amount) || 0,
       payment_max_amount: Number(form.payment_max_amount) || 0,
       payment_daily_limit: Number(form.payment_daily_limit) || 0,

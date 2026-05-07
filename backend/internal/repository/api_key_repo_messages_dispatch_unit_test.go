@@ -86,6 +86,7 @@ func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_S
 
 	got, err := repo.GetByKeyForAuth(ctx, key.Key)
 	require.NoError(t, err)
+	require.Equal(t, key.Name, got.Name)
 	require.NotNil(t, got.Group)
 	require.Equal(t, group.MessagesDispatchModelConfig, got.Group.MessagesDispatchModelConfig)
 }

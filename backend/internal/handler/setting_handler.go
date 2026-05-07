@@ -78,6 +78,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		BalanceIconSVG:                   settings.BalanceIconSVG,
 		BalanceLowNotifyEnabled:          settings.BalanceLowNotifyEnabled,
 		AccountQuotaNotifyEnabled:        settings.AccountQuotaNotifyEnabled,
+		RiskControlEnabled:               settings.RiskControlEnabled,
 		BalanceLowNotifyThreshold:        settings.BalanceLowNotifyThreshold,
 		BalanceLowNotifyRechargeURL:      settings.BalanceLowNotifyRechargeURL,
 	})

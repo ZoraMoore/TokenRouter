@@ -468,6 +468,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyBalanceLowNotifyThreshold,
 		SettingKeyBalanceLowNotifyRechargeURL,
 		SettingKeyAccountQuotaNotifyEnabled,
+		SettingKeyRiskControlEnabled,
 	}
 
 	settings, err := s.settingRepo.GetMultiple(ctx, keys)
@@ -567,6 +568,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		BalanceIconSVG:                   strings.TrimSpace(settings[SettingKeyBalanceIconSVG]),
 		BalanceLowNotifyEnabled:          settings[SettingKeyBalanceLowNotifyEnabled] == "true",
 		AccountQuotaNotifyEnabled:        settings[SettingKeyAccountQuotaNotifyEnabled] == "true",
+		RiskControlEnabled:               settings[SettingKeyRiskControlEnabled] == "true",
 		BalanceLowNotifyThreshold:        balanceLowNotifyThreshold,
 		BalanceLowNotifyRechargeURL:      settings[SettingKeyBalanceLowNotifyRechargeURL],
 	}, nil
@@ -638,6 +640,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		BalanceIconSVG                   string          `json:"balance_icon_svg"`
 		BalanceLowNotifyEnabled          bool            `json:"balance_low_notify_enabled"`
 		AccountQuotaNotifyEnabled        bool            `json:"account_quota_notify_enabled"`
+		RiskControlEnabled               bool            `json:"risk_control_enabled"`
 		BalanceLowNotifyThreshold        float64         `json:"balance_low_notify_threshold"`
 		BalanceLowNotifyRechargeURL      string          `json:"balance_low_notify_recharge_url"`
 	}{
@@ -686,6 +689,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		BalanceIconSVG:                   settings.BalanceIconSVG,
 		BalanceLowNotifyEnabled:          settings.BalanceLowNotifyEnabled,
 		AccountQuotaNotifyEnabled:        settings.AccountQuotaNotifyEnabled,
+		RiskControlEnabled:               settings.RiskControlEnabled,
 		BalanceLowNotifyThreshold:        settings.BalanceLowNotifyThreshold,
 		BalanceLowNotifyRechargeURL:      settings.BalanceLowNotifyRechargeURL,
 	}, nil
@@ -1199,6 +1203,9 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyBalanceLowNotifyRechargeURL] = settings.BalanceLowNotifyRechargeURL
 	updates[SettingKeyAccountQuotaNotifyEnabled] = strconv.FormatBool(settings.AccountQuotaNotifyEnabled)
 	updates[SettingKeyAccountQuotaNotifyEmails] = MarshalNotifyEmails(settings.AccountQuotaNotifyEmails)
+
+	// 风控中心总开关：控制菜单入口和网关内容审计是否执行。
+	updates[SettingKeyRiskControlEnabled] = strconv.FormatBool(settings.RiskControlEnabled)
 
 	return updates, nil
 }
@@ -1825,6 +1832,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingPaymentVisibleMethodAlipayEnabled:     "false",
 		SettingPaymentVisibleMethodWxpayEnabled:      "false",
 		openAIAdvancedSchedulerSettingKey:            "false",
+
+		// 风控中心默认关闭，避免升级后未配置审计 Key 时影响现有请求。
+		SettingKeyRiskControlEnabled: "false",
 	}
 
 	return s.settingRepo.SetMultiple(ctx, defaults)
@@ -1882,6 +1892,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		BalanceUnitSymbol:                balanceUnitSymbol,
 		BalanceIconSVG:                   strings.TrimSpace(settings[SettingKeyBalanceIconSVG]),
 		BackendModeEnabled:               settings[SettingKeyBackendModeEnabled] == "true",
+		RiskControlEnabled:               settings[SettingKeyRiskControlEnabled] == "true",
 	}
 	result.TableDefaultPageSize, result.TablePageSizeOptions = parseTablePreferences(
 		settings[SettingKeyTableDefaultPageSize],

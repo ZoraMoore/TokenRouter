@@ -27,6 +27,7 @@ import backupAPI from './backup'
 import tlsFingerprintProfileAPI from './tlsFingerprintProfile'
 import channelsAPI from './channels'
 import adminPaymentAPI from './payment'
+import riskControlAPI from './riskControl'
 
 /**
  * Unified admin API object for convenient access
@@ -55,7 +56,8 @@ export const adminAPI = {
   backup: backupAPI,
   tlsFingerprintProfiles: tlsFingerprintProfileAPI,
   channels: channelsAPI,
-  payment: adminPaymentAPI
+  payment: adminPaymentAPI,
+  riskControl: riskControlAPI
 }
 
 export {
@@ -82,7 +84,8 @@ export {
   backupAPI,
   tlsFingerprintProfileAPI,
   channelsAPI,
-  adminPaymentAPI
+  adminPaymentAPI,
+  riskControlAPI
 }
 
 export default adminAPI
@@ -92,3 +95,4 @@ export type { BalanceHistoryItem } from './users'
 export type { ErrorPassthroughRule, CreateRuleRequest, UpdateRuleRequest } from './errorPassthrough'
 export type { BackupAgentHealth, DataManagementConfig } from './dataManagement'
 export type { TLSFingerprintProfile, CreateProfileRequest, UpdateProfileRequest } from './tlsFingerprintProfile'
+export type { ContentModerationConfig, ContentModerationLog, ModerationMode } from './riskControl'

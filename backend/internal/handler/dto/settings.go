@@ -119,6 +119,7 @@ type SystemSettings struct {
 
 	DefaultConcurrency         int                          `json:"default_concurrency"`
 	DefaultBalance             float64                      `json:"default_balance"`
+	RiskControlEnabled         bool                         `json:"risk_control_enabled"` // 风控中心功能开关
 	DefaultUserRPMLimit        int                          `json:"default_user_rpm_limit"`
 	DefaultSubscriptions       []DefaultSubscriptionSetting `json:"default_subscriptions"`
 	BalanceUnitName            string                       `json:"balance_unit_name"`
@@ -202,6 +203,7 @@ type SystemSettings struct {
 	BalanceLowNotifyRechargeURL string             `json:"balance_low_notify_recharge_url"`
 	AccountQuotaNotifyEnabled   bool               `json:"account_quota_notify_enabled"`
 	AccountQuotaNotifyEmails    []NotifyEmailEntry `json:"account_quota_notify_emails"`
+
 	// OpenAI fast/flex 策略
 	OpenAIFastPolicySettings *OpenAIFastPolicySettings `json:"openai_fast_policy_settings,omitempty"`
 }
@@ -258,6 +260,7 @@ type PublicSettings struct {
 	BalanceIconSVG                   string           `json:"balance_icon_svg"`
 	BalanceLowNotifyEnabled          bool             `json:"balance_low_notify_enabled"`
 	AccountQuotaNotifyEnabled        bool             `json:"account_quota_notify_enabled"`
+	RiskControlEnabled               bool             `json:"risk_control_enabled"` // 风控中心入口开关
 	BalanceLowNotifyThreshold        float64          `json:"balance_low_notify_threshold"`
 	BalanceLowNotifyRechargeURL      string           `json:"balance_low_notify_recharge_url"`
 }

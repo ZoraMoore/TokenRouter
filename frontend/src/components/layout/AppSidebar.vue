@@ -194,6 +194,8 @@ interface NavItem {
   icon: unknown
   iconSvg?: string
   hideInSimpleMode?: boolean
+  // featureFlag 返回 false 时隐藏菜单项，用于按公开设置控制可选入口。
+  featureFlag?: () => boolean
   children?: NavItem[]
 }
 
@@ -550,6 +552,22 @@ const OrderListIcon = {
     )
 }
 
+// ShieldIcon 用于风控中心菜单项，保持与现有手写 SVG 图标风格一致。
+const ShieldIcon = {
+  render: () =>
+    h(
+      'svg',
+      { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' },
+      [
+        h('path', {
+          'stroke-linecap': 'round',
+          'stroke-linejoin': 'round',
+          d: 'M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z'
+        })
+      ]
+    )
+}
+
 const ChevronDoubleRightIcon = {
   render: () =>
     h(
@@ -689,6 +707,13 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/accounts', label: t('nav.accounts'), icon: GlobeIcon },
     { path: '/admin/announcements', label: t('nav.announcements'), icon: BellIcon },
     { path: '/admin/proxies', label: t('nav.proxies'), icon: ServerIcon },
+    {
+      path: '/admin/risk-control',
+      label: t('nav.riskControl'),
+      icon: ShieldIcon,
+      hideInSimpleMode: true,
+      featureFlag: () => appStore.cachedPublicSettings?.risk_control_enabled === true
+    },
     { path: '/admin/redeem', label: t('nav.redeemCodes'), icon: TicketIcon, hideInSimpleMode: true },
     { path: '/admin/promo-codes', label: t('nav.promoCodes'), icon: GiftIcon, hideInSimpleMode: true },
     ...(adminSettingsStore.paymentEnabled
@@ -711,7 +736,7 @@ const adminNavItems = computed((): NavItem[] => {
 
   // 简单模式下，在系统设置前插入 API密钥
   if (authStore.isSimpleMode) {
-    const filtered = baseItems.filter(item => !item.hideInSimpleMode)
+    const filtered = baseItems.filter(item => !item.hideInSimpleMode && item.featureFlag?.() !== false)
     filtered.push({ path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon })
     filtered.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
     // Add admin custom menu items after settings
@@ -721,12 +746,13 @@ const adminNavItems = computed((): NavItem[] => {
     return filtered
   }
 
-  baseItems.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
+  const visibleItems = baseItems.filter(item => item.featureFlag?.() !== false)
+  visibleItems.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
   // Add admin custom menu items after settings
   for (const cm of customMenuItemsForAdmin.value) {
-    baseItems.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+    visibleItems.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
   }
-  return baseItems
+  return visibleItems
 })
 
 function toggleSidebar() {

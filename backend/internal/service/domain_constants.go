@@ -92,6 +92,8 @@ const (
 	SettingKeyFrontendURL                      = "frontend_url"                        // 前端基础URL，用于生成邮件中的重置密码链接
 	SettingKeyInvitationCodeEnabled            = "invitation_code_enabled"             // 是否启用邀请码注册
 	SettingKeyReferralRewardAmount             = "referral_reward_amount"              // 邀请返利额度
+	SettingKeyRiskControlEnabled               = "risk_control_enabled"                // 是否启用风控中心入口与内容审计链路
+	SettingKeyContentModerationConfig          = "content_moderation_config"           // 内容审计配置（JSON）
 
 	// 邮件服务设置
 	SettingKeySMTPHost     = "smtp_host"      // SMTP服务器地址

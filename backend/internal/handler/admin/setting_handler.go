@@ -193,6 +193,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		CustomEndpoints:                        dto.ParseCustomEndpoints(settings.CustomEndpoints),
 		DefaultConcurrency:                     settings.DefaultConcurrency,
 		DefaultBalance:                         settings.DefaultBalance,
+		RiskControlEnabled:                     settings.RiskControlEnabled,
 		DefaultUserRPMLimit:                    settings.DefaultUserRPMLimit,
 		DefaultSubscriptions:                   defaultSubscriptions,
 		BalanceUnitName:                        settings.BalanceUnitName,
@@ -536,6 +537,10 @@ type UpdateSettingsRequest struct {
 	PaymentCancelRateLimitWindow  *int    `json:"payment_cancel_rate_limit_window"`
 	PaymentCancelRateLimitUnit    *string `json:"payment_cancel_rate_limit_unit"`
 	PaymentCancelRateLimitMode    *string `json:"payment_cancel_rate_limit_window_mode"`
+
+	// 风控中心功能开关
+	RiskControlEnabled *bool `json:"risk_control_enabled"`
+
 	// OpenAI fast/flex 策略（只在请求显式提供时更新）
 	OpenAIFastPolicySettings *dto.OpenAIFastPolicySettings `json:"openai_fast_policy_settings,omitempty"`
 }
@@ -1251,24 +1256,30 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		CustomEndpoints:                  customEndpointsJSON,
 		DefaultConcurrency:               req.DefaultConcurrency,
 		DefaultBalance:                   req.DefaultBalance,
-		DefaultUserRPMLimit:              req.DefaultUserRPMLimit,
-		DefaultSubscriptions:             defaultSubscriptions,
-		BalanceUnitName:                  req.BalanceUnitName,
-		BalanceUnitSymbol:                req.BalanceUnitSymbol,
-		BalanceIconSVG:                   req.BalanceIconSVG,
-		ReasoningPointRMBUnitPrice:       float64ValueOrDefault(req.ReasoningPointRMBUnitPrice, previousSettings.ReasoningPointRMBUnitPrice),
-		USDExchangeRate:                  float64ValueOrDefault(req.USDExchangeRate, previousSettings.USDExchangeRate),
-		EnableModelFallback:              req.EnableModelFallback,
-		FallbackModelAnthropic:           req.FallbackModelAnthropic,
-		FallbackModelOpenAI:              req.FallbackModelOpenAI,
-		FallbackModelGemini:              req.FallbackModelGemini,
-		FallbackModelAntigravity:         req.FallbackModelAntigravity,
-		EnableIdentityPatch:              req.EnableIdentityPatch,
-		IdentityPatchPrompt:              req.IdentityPatchPrompt,
-		MinClaudeCodeVersion:             req.MinClaudeCodeVersion,
-		MaxClaudeCodeVersion:             req.MaxClaudeCodeVersion,
-		AllowUngroupedKeyScheduling:      req.AllowUngroupedKeyScheduling,
-		BackendModeEnabled:               req.BackendModeEnabled,
+		RiskControlEnabled: func() bool {
+			if req.RiskControlEnabled != nil {
+				return *req.RiskControlEnabled
+			}
+			return previousSettings.RiskControlEnabled
+		}(),
+		DefaultUserRPMLimit:         req.DefaultUserRPMLimit,
+		DefaultSubscriptions:        defaultSubscriptions,
+		BalanceUnitName:             req.BalanceUnitName,
+		BalanceUnitSymbol:           req.BalanceUnitSymbol,
+		BalanceIconSVG:              req.BalanceIconSVG,
+		ReasoningPointRMBUnitPrice:  float64ValueOrDefault(req.ReasoningPointRMBUnitPrice, previousSettings.ReasoningPointRMBUnitPrice),
+		USDExchangeRate:             float64ValueOrDefault(req.USDExchangeRate, previousSettings.USDExchangeRate),
+		EnableModelFallback:         req.EnableModelFallback,
+		FallbackModelAnthropic:      req.FallbackModelAnthropic,
+		FallbackModelOpenAI:         req.FallbackModelOpenAI,
+		FallbackModelGemini:         req.FallbackModelGemini,
+		FallbackModelAntigravity:    req.FallbackModelAntigravity,
+		EnableIdentityPatch:         req.EnableIdentityPatch,
+		IdentityPatchPrompt:         req.IdentityPatchPrompt,
+		MinClaudeCodeVersion:        req.MinClaudeCodeVersion,
+		MaxClaudeCodeVersion:        req.MaxClaudeCodeVersion,
+		AllowUngroupedKeyScheduling: req.AllowUngroupedKeyScheduling,
+		BackendModeEnabled:          req.BackendModeEnabled,
 		OpsMonitoringEnabled: func() bool {
 			if req.OpsMonitoringEnabled != nil {
 				return *req.OpsMonitoringEnabled
@@ -1575,6 +1586,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		CustomEndpoints:                        dto.ParseCustomEndpoints(updatedSettings.CustomEndpoints),
 		DefaultConcurrency:                     updatedSettings.DefaultConcurrency,
 		DefaultBalance:                         updatedSettings.DefaultBalance,
+		RiskControlEnabled:                     updatedSettings.RiskControlEnabled,
 		DefaultUserRPMLimit:                    updatedSettings.DefaultUserRPMLimit,
 		DefaultSubscriptions:                   updatedDefaultSubscriptions,
 		BalanceUnitName:                        updatedSettings.BalanceUnitName,
@@ -1698,6 +1710,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.PasswordResetEnabled != after.PasswordResetEnabled {
 		changed = append(changed, "password_reset_enabled")
+	}
+	if before.RiskControlEnabled != after.RiskControlEnabled {
+		changed = append(changed, "risk_control_enabled")
 	}
 	if before.FrontendURL != after.FrontendURL {
 		changed = append(changed, "frontend_url")

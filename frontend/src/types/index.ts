@@ -198,6 +198,7 @@ export interface PublicSettings {
   balance_icon_svg: string
   balance_low_notify_enabled: boolean
   account_quota_notify_enabled: boolean
+  risk_control_enabled: boolean
   balance_low_notify_threshold: number
   balance_low_notify_recharge_url?: string
 }
