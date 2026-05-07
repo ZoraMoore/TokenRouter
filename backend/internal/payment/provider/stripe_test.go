@@ -60,6 +60,46 @@ func TestBuildStripeInvoiceCreateParamsOmitsPaymentSettingsWhenMethodsEmpty(t *t
 	}
 }
 
+func TestStripeInvoicePaymentMethodTypesMapsConfiguredSubMethods(t *testing.T) {
+	t.Parallel()
+
+	got := stripeInvoicePaymentMethodTypes("card,alipay,wxpay,link,stripe,unknown,alipay")
+	want := []string{"card", "alipay", "wechat_pay", "link"}
+	if len(got) != len(want) {
+		t.Fatalf("payment method types = %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("payment method types = %#v, want %#v", got, want)
+		}
+	}
+}
+
+func TestBuildStripeInvoiceCreateParamsUsesConfiguredSubMethods(t *testing.T) {
+	t.Parallel()
+
+	req := payment.CreatePaymentRequest{
+		OrderID:            "sub2_order_123",
+		Subject:            "TokenRouter Balance",
+		InstanceSubMethods: "card,alipay,wxpay,link",
+	}
+	params := buildStripeInvoiceCreateParams("cus_123", req, stripeInvoicePaymentMethodTypes(req.InstanceSubMethods), "42")
+
+	if params.PaymentSettings == nil || len(params.PaymentSettings.PaymentMethodTypes) != 4 {
+		t.Fatalf("payment method types = %#v, want 4 methods", params.PaymentSettings)
+	}
+	got := make([]string, 0, len(params.PaymentSettings.PaymentMethodTypes))
+	for _, method := range params.PaymentSettings.PaymentMethodTypes {
+		got = append(got, *method)
+	}
+	want := []string{"card", "alipay", "wechat_pay", "link"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("payment method types = %#v, want %#v", got, want)
+		}
+	}
+}
+
 func TestBuildStripeInvoiceCreateParamsFallsBackToOneDayDue(t *testing.T) {
 	t.Parallel()
 

@@ -80,7 +80,7 @@ func (s *Stripe) CreatePayment(ctx context.Context, req payment.CreatePaymentReq
 		return nil, fmt.Errorf("stripe create customer: %w", err)
 	}
 
-	invoiceParams := buildStripeInvoiceCreateParams(customer.ID, req, nil, s.instanceID)
+	invoiceParams := buildStripeInvoiceCreateParams(customer.ID, req, stripeInvoicePaymentMethodTypes(req.InstanceSubMethods), s.instanceID)
 	invoiceParams.SetIdempotencyKey(fmt.Sprintf("in-%s", req.OrderID))
 	invoice, err := s.sc.V1Invoices.Create(ctx, invoiceParams)
 	if err != nil {
@@ -151,6 +151,41 @@ func buildStripeInvoiceCreateParams(customerID string, req payment.CreatePayment
 		params.DaysUntilDue = stripe.Int64(1)
 	}
 	return params
+}
+
+// 将后台实例勾选的 Stripe 子支付方式转换为 Invoice API 的 payment_method_types。
+func stripeInvoicePaymentMethodTypes(subMethods string) []string {
+	seen := make(map[string]struct{})
+	methods := make([]string, 0)
+	for _, raw := range strings.Split(subMethods, ",") {
+		method := stripeInvoicePaymentMethodType(raw)
+		if method == "" {
+			continue
+		}
+		if _, ok := seen[method]; ok {
+			continue
+		}
+		seen[method] = struct{}{}
+		methods = append(methods, method)
+	}
+	return methods
+}
+
+// 将本系统的可见支付方式命名映射为 Stripe 侧的支付方式命名。
+func stripeInvoicePaymentMethodType(method string) string {
+	switch strings.TrimSpace(method) {
+	case payment.TypeCard:
+		return payment.TypeCard
+	case payment.TypeAlipay:
+		return payment.TypeAlipay
+	case payment.TypeWxpay, "wechat_pay":
+		return "wechat_pay"
+	case payment.TypeLink:
+		return payment.TypeLink
+	default:
+		// 旧数据可能保存了 "stripe" 或其它未知值，这些不是 Stripe Invoice 的具体支付方式。
+		return ""
+	}
 }
 
 func stripePaymentMetadata(orderID string, instanceID string) map[string]string {
