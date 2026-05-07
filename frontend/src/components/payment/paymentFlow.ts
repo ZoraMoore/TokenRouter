@@ -134,13 +134,14 @@ export function decidePaymentLaunch(
   context: PaymentLaunchContext,
 ): PaymentLaunchDecision {
   const visibleMethod = normalizeVisibleMethod(context.visibleMethod) || context.visibleMethod
+  const hostedInvoiceUrl = (result.invoice_url || '').trim()
   const baseState = createPaymentRecoverySnapshot({
     orderId: result.order_id,
     amount: result.amount,
     qrCode: result.qr_code || '',
     expiresAt: result.expires_at || '',
     paymentType: visibleMethod,
-    payUrl: result.pay_url || '',
+    payUrl: result.pay_url || hostedInvoiceUrl,
     outTradeNo: result.out_trade_no || '',
     clientSecret: result.client_secret || '',
     payAmount: result.pay_amount,
@@ -149,9 +150,13 @@ export function decidePaymentLaunch(
     resumeToken: result.resume_token || '',
   }, context.now)
 
+  if (hostedInvoiceUrl) {
+    const paymentState = { ...baseState, payUrl: hostedInvoiceUrl }
+    return { kind: 'redirect_waiting', paymentState, recovery: paymentState }
+  }
+
   if (baseState.clientSecret) {
-    // visibleMethod === 'stripe' means the user clicked the dedicated Stripe button
-    // and should land on the full Payment Element to choose a sub-method themselves.
+    // 用户点击独立 Stripe 按钮时展示完整 Payment Element，由用户自行选择子支付方式。
     const isStripeButton = visibleMethod === 'stripe'
     const stripeMethod: StripeVisibleMethod | undefined = isStripeButton
       ? undefined

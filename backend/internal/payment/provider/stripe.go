@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/TokenFlux/TokenRouter/internal/payment"
 	stripe "github.com/stripe/stripe-go/v85"
@@ -86,23 +87,8 @@ func (s *Stripe) CreatePayment(ctx context.Context, req payment.CreatePaymentReq
 		return nil, fmt.Errorf("stripe create customer: %w", err)
 	}
 
-	metadata := map[string]string{
-		"orderId":            req.OrderID,
-		"providerInstanceId": s.instanceID,
-	}
 	methods := resolveStripeInvoiceMethodTypes(req.InstanceSubMethods)
-	invoiceParams := &stripe.InvoiceCreateParams{
-		Customer:                    stripe.String(customer.ID),
-		Currency:                    stripe.String(stripeCurrency),
-		CollectionMethod:            stripe.String(string(stripe.InvoiceCollectionMethodChargeAutomatically)),
-		AutoAdvance:                 stripe.Bool(false),
-		PendingInvoiceItemsBehavior: stripe.String("exclude"),
-		Description:                 stripe.String(req.Subject),
-		PaymentSettings: &stripe.InvoiceCreatePaymentSettingsParams{
-			PaymentMethodTypes: stripe.StringSlice(methods),
-		},
-		Metadata: metadata,
-	}
+	invoiceParams := buildStripeInvoiceCreateParams(customer.ID, req, methods, s.instanceID)
 	invoiceParams.SetIdempotencyKey(fmt.Sprintf("in-%s", req.OrderID))
 	invoice, err := s.sc.V1Invoices.Create(ctx, invoiceParams)
 	if err != nil {
@@ -115,7 +101,7 @@ func (s *Stripe) CreatePayment(ctx context.Context, req payment.CreatePaymentReq
 		Customer:    stripe.String(customer.ID),
 		Invoice:     stripe.String(invoice.ID),
 		Description: stripe.String(req.Subject),
-		Metadata:    metadata,
+		Metadata:    stripePaymentMetadata(req.OrderID, s.instanceID),
 	}
 	itemParams.SetIdempotencyKey(fmt.Sprintf("ii-%s", req.OrderID))
 	if _, err := s.sc.V1InvoiceItems.Create(ctx, itemParams); err != nil {
@@ -132,24 +118,11 @@ func (s *Stripe) CreatePayment(ctx context.Context, req payment.CreatePaymentReq
 		return nil, fmt.Errorf("stripe finalize invoice: %w", err)
 	}
 
-	tradeNo := stripeInvoicePaymentIntentID(finalized)
+	tradeNo := stripeInvoiceTradeNo(finalized, stripeInvoiceClientSecret(finalized))
 	if tradeNo == "" {
-		tradeNo, err = s.findInvoicePaymentIntentID(ctx, finalized.ID)
-		if err != nil {
-			return nil, err
-		}
+		tradeNo = invoice.ID
 	}
-
-	clientSecret := ""
-	if finalized.ConfirmationSecret != nil {
-		clientSecret = strings.TrimSpace(finalized.ConfirmationSecret.ClientSecret)
-	}
-	if clientSecret == "" {
-		return nil, fmt.Errorf("stripe finalize invoice: confirmation secret is empty")
-	}
-	if tradeNo == "" {
-		tradeNo = stripeInvoiceTradeNo(finalized, clientSecret)
-	}
+	clientSecret := stripeInvoiceClientSecret(finalized)
 
 	return &payment.CreatePaymentResponse{
 		TradeNo:       tradeNo,
@@ -160,6 +133,46 @@ func (s *Stripe) CreatePayment(ctx context.Context, req payment.CreatePaymentReq
 		InvoicePDF:    finalized.InvoicePDF,
 		InvoiceStatus: string(finalized.Status),
 	}, nil
+}
+
+func buildStripeInvoiceCreateParams(customerID string, req payment.CreatePaymentRequest, methods []string, instanceID string) *stripe.InvoiceCreateParams {
+	params := &stripe.InvoiceCreateParams{
+		Customer:                    stripe.String(customerID),
+		Currency:                    stripe.String(stripeCurrency),
+		CollectionMethod:            stripe.String(string(stripe.InvoiceCollectionMethodSendInvoice)),
+		AutoAdvance:                 stripe.Bool(false),
+		PendingInvoiceItemsBehavior: stripe.String("exclude"),
+		Description:                 stripe.String(req.Subject),
+		PaymentSettings: &stripe.InvoiceCreatePaymentSettingsParams{
+			PaymentMethodTypes: stripe.StringSlice(methods),
+		},
+		Metadata: stripePaymentMetadata(req.OrderID, instanceID),
+	}
+	// 托管账单必须有到期时间；优先复用本地订单过期时间，避免渠道账单晚于本地订单太多。
+	if dueDate := stripeInvoiceDueDate(req.ExpiresAt); dueDate > 0 {
+		params.DueDate = stripe.Int64(dueDate)
+	} else {
+		params.DaysUntilDue = stripe.Int64(1)
+	}
+	return params
+}
+
+func stripePaymentMetadata(orderID string, instanceID string) map[string]string {
+	return map[string]string{
+		"orderId":            orderID,
+		"providerInstanceId": strings.TrimSpace(instanceID),
+	}
+}
+
+func stripeInvoiceDueDate(expiresAt time.Time) int64 {
+	if expiresAt.IsZero() {
+		return 0
+	}
+	// Stripe 不接受已经过期或非常接近过期的 due_date，这类订单回退到最短天数。
+	if !expiresAt.After(time.Now().Add(time.Minute)) {
+		return 0
+	}
+	return expiresAt.Unix()
 }
 
 // QueryOrder 支持按 Invoice ID 查询新订单，也保留旧 PaymentIntent 订单查询。
@@ -314,9 +327,20 @@ func (s *Stripe) Refund(ctx context.Context, req payment.RefundRequest) (*paymen
 	if err != nil {
 		return nil, fmt.Errorf("stripe refund: %w", err)
 	}
+	// 托管账单订单可能只持久化 invoice id，退款前需要解析到实际的 PaymentIntent。
+	paymentIntentID := strings.TrimSpace(req.TradeNo)
+	if strings.HasPrefix(paymentIntentID, "in_") {
+		paymentIntentID, err = s.findInvoicePaymentIntentID(ctx, paymentIntentID)
+		if err != nil {
+			return nil, err
+		}
+		if paymentIntentID == "" {
+			return nil, fmt.Errorf("stripe refund: invoice payment intent is unavailable")
+		}
+	}
 
 	params := &stripe.RefundCreateParams{
-		PaymentIntent: stripe.String(req.TradeNo),
+		PaymentIntent: stripe.String(paymentIntentID),
 		Amount:        stripe.Int64(amountInCents),
 		Reason:        stripe.String(string(stripe.RefundReasonRequestedByCustomer)),
 	}
@@ -553,6 +577,13 @@ func stripePaymentIntentIDFromClientSecret(clientSecret string) string {
 		return clientSecret[:idx]
 	}
 	return ""
+}
+
+func stripeInvoiceClientSecret(inv *stripe.Invoice) string {
+	if inv == nil || inv.ConfirmationSecret == nil {
+		return ""
+	}
+	return strings.TrimSpace(inv.ConfirmationSecret.ClientSecret)
 }
 
 // stripeInvoiceTradeNo 按支付意图、确认密钥、账单 ID 的顺序选择可持久化的交易号。

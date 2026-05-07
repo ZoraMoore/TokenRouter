@@ -60,6 +60,37 @@ describe('getVisibleMethods', () => {
 })
 
 describe('decidePaymentLaunch', () => {
+  it('uses hosted invoice URL before Stripe client secret', () => {
+    const decision = decidePaymentLaunch(createOrderResult({
+      client_secret: 'cs_test',
+      invoice_url: 'https://invoice.stripe.com/i/acct/test',
+      invoice_pdf: 'https://invoice.stripe.com/i/acct/test.pdf',
+      resume_token: 'resume-invoice',
+    }), {
+      visibleMethod: 'stripe',
+      orderType: 'balance',
+      isMobile: false,
+    })
+
+    expect(decision.kind).toBe('redirect_waiting')
+    expect(decision.paymentState.payUrl).toBe('https://invoice.stripe.com/i/acct/test')
+    expect(decision.recovery.resumeToken).toBe('resume-invoice')
+    expect(decision.stripeMethod).toBeUndefined()
+  })
+
+  it('does not use invoice PDF as a Stripe hosted payment URL', () => {
+    const decision = decidePaymentLaunch(createOrderResult({
+      invoice_pdf: 'https://invoice.stripe.com/i/acct/test.pdf',
+    }), {
+      visibleMethod: 'stripe',
+      orderType: 'subscription',
+      isMobile: true,
+    })
+
+    expect(decision.kind).toBe('unhandled')
+    expect(decision.paymentState.payUrl).toBe('')
+  })
+
   it('uses Stripe popup waiting flow for desktop Alipay client secret', () => {
     const decision = decidePaymentLaunch(createOrderResult({
       client_secret: 'cs_test',

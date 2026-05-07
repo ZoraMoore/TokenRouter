@@ -2,7 +2,10 @@
 // registry, load balancing, and shared utilities for the payment subsystem.
 package payment
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // PaymentType represents a supported payment method.
 type PaymentType = string
@@ -93,19 +96,20 @@ func GetBasePaymentType(t string) string {
 	}
 }
 
-// CreatePaymentRequest holds the parameters for creating a new payment.
+// CreatePaymentRequest 保存创建支付单时传给支付渠道的参数。
 type CreatePaymentRequest struct {
-	OrderID            string // Internal order ID
-	Amount             string // Pay amount in CNY (formatted to 2 decimal places)
-	PaymentType        string // e.g. "alipay", "wxpay", "stripe"
-	Subject            string // Product description
-	NotifyURL          string // Webhook callback URL
-	ReturnURL          string // Browser redirect URL after payment
-	OpenID             string // WeChat JSAPI payer OpenID when available
-	ClientIP           string // Payer's IP address
-	IsMobile           bool   // Whether the request comes from a mobile device
-	InstanceSubMethods string // Comma-separated sub-methods from instance supported_types (for Stripe)
-	UserEmail          string // 从本地用户资料复制的付款人邮箱
+	OrderID            string    // 本地订单号
+	Amount             string    // 以元为单位的实付金额，保留两位小数
+	PaymentType        string    // 支付方式，例如 "alipay"、"wxpay"、"stripe"
+	Subject            string    // 商品或订单描述
+	NotifyURL          string    // 支付渠道回调地址
+	ReturnURL          string    // 浏览器支付完成后的返回地址
+	OpenID             string    // 微信 JSAPI 支付使用的付款人 OpenID
+	ClientIP           string    // 付款人 IP
+	IsMobile           bool      // 请求是否来自移动端
+	InstanceSubMethods string    // Stripe 实例 supported_types 中配置的子支付方式
+	ExpiresAt          time.Time // 本地订单过期时间，用于同步渠道账单到期时间
+	UserEmail          string    // 从本地用户资料复制的付款人邮箱
 	BillingInfo        *BillingInfo
 }
 

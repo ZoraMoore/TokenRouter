@@ -137,6 +137,30 @@ func TestBuildCreateOrderResponseCopiesStripeInvoiceFields(t *testing.T) {
 	}
 }
 
+func TestBuildProviderCreatePaymentRequestCopiesExpiresAt(t *testing.T) {
+	t.Parallel()
+
+	expiresAt := time.Date(2026, 5, 7, 12, 30, 0, 0, time.UTC)
+	req := buildProviderCreatePaymentRequest(
+		CreateOrderRequest{
+			PaymentType: payment.TypeStripe,
+			ReturnURL:   "https://app.example.com/payment/result",
+		},
+		&payment.InstanceSelection{SupportedTypes: "stripe"},
+		"sub2_123",
+		"10.00",
+		"TokenRouter Balance",
+		expiresAt,
+	)
+
+	if !req.ExpiresAt.Equal(expiresAt) {
+		t.Fatalf("expires_at = %s, want %s", req.ExpiresAt, expiresAt)
+	}
+	if req.InstanceSubMethods != "stripe" {
+		t.Fatalf("instance sub methods = %q, want stripe", req.InstanceSubMethods)
+	}
+}
+
 func TestMaybeBuildWeChatOAuthRequiredResponse(t *testing.T) {
 	t.Setenv("PAYMENT_RESUME_SIGNING_KEY", "0123456789abcdef0123456789abcdef")
 

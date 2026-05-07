@@ -889,12 +889,12 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
       }
     }
     const visibleMethod = normalizeVisibleMethod(requestType) || requestType
-    // When user clicks the dedicated Stripe button, leave method blank so the
-    // landing page renders Stripe's full Payment Element (card/link/alipay/wxpay).
+    // 用户点击独立 Stripe 按钮时不指定子方式，让落地页展示完整 Payment Element。
     const stripeMethod = visibleMethod === 'stripe'
       ? ''
       : visibleMethod === 'wxpay' ? 'wechat_pay' : 'alipay'
-    const stripeRouteUrl = result.client_secret
+    const stripeHostedInvoiceUrl = (result.invoice_url || '').trim()
+    const stripeRouteUrl = stripeHostedInvoiceUrl || (result.client_secret
       ? router.resolve({
         path: '/payment/stripe',
         query: {
@@ -904,7 +904,7 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
           resume_token: result.resume_token || undefined,
         },
       }).href
-      : ''
+      : '')
     const decision = decidePaymentLaunch(result, {
       visibleMethod,
       orderType,
@@ -1086,7 +1086,8 @@ async function attemptMobileQrFallback(err: unknown, context: MobileQrFallbackCo
     })
     const result = await paymentStore.createOrder(payload) as CreateOrderResult & { resume_token?: string }
     const stripeMethod = visibleMethod === 'wxpay' ? 'wechat_pay' : 'alipay'
-    const stripeRouteUrl = result.client_secret
+    const stripeHostedInvoiceUrl = (result.invoice_url || '').trim()
+    const stripeRouteUrl = stripeHostedInvoiceUrl || (result.client_secret
       ? router.resolve({
         path: '/payment/stripe',
         query: {
@@ -1096,7 +1097,7 @@ async function attemptMobileQrFallback(err: unknown, context: MobileQrFallbackCo
           resume_token: result.resume_token || undefined,
         },
       }).href
-      : ''
+      : '')
     const decision = decidePaymentLaunch(result, {
       visibleMethod,
       orderType: context.orderType,

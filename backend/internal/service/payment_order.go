@@ -429,7 +429,7 @@ func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.Paymen
 		IsMobile:    req.IsMobile,
 		ReturnURL:   providerReturnURL,
 		BillingInfo: req.BillingInfo,
-	}, sel, outTradeNo, payAmountStr, subject)
+	}, sel, outTradeNo, payAmountStr, subject, order.ExpiresAt)
 	providerReq.UserEmail = order.UserEmail
 	pr, err := prov.CreatePayment(ctx, providerReq)
 	if err != nil {
@@ -471,7 +471,7 @@ func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.Paymen
 	return resp, nil
 }
 
-func buildProviderCreatePaymentRequest(req CreateOrderRequest, sel *payment.InstanceSelection, orderID, amount, subject string) payment.CreatePaymentRequest {
+func buildProviderCreatePaymentRequest(req CreateOrderRequest, sel *payment.InstanceSelection, orderID, amount, subject string, expiresAt time.Time) payment.CreatePaymentRequest {
 	return payment.CreatePaymentRequest{
 		OrderID:            orderID,
 		Amount:             amount,
@@ -482,6 +482,7 @@ func buildProviderCreatePaymentRequest(req CreateOrderRequest, sel *payment.Inst
 		ClientIP:           req.ClientIP,
 		IsMobile:           req.IsMobile,
 		InstanceSubMethods: selectedInstanceSupportedTypes(sel),
+		ExpiresAt:          expiresAt,
 		BillingInfo:        req.BillingInfo,
 	}
 }

@@ -5,6 +5,7 @@ package provider
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/TokenFlux/TokenRouter/internal/payment"
 	stripe "github.com/stripe/stripe-go/v85"
@@ -57,6 +58,67 @@ func TestResolveStripeInvoiceMethodTypes(t *testing.T) {
 				if got[i] != tt.want[i] {
 					t.Fatalf("method[%d] = %q, want %q: %#v", i, got[i], tt.want[i], got)
 				}
+			}
+		})
+	}
+}
+
+func TestBuildStripeInvoiceCreateParamsUsesHostedInvoiceMode(t *testing.T) {
+	t.Parallel()
+
+	expiresAt := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
+	params := buildStripeInvoiceCreateParams("cus_123", payment.CreatePaymentRequest{
+		OrderID:   "sub2_order_123",
+		Subject:   "TokenRouter Balance",
+		ExpiresAt: expiresAt,
+	}, []string{"card", "link", "wechat_pay"}, "42")
+
+	if params.Customer == nil || *params.Customer != "cus_123" {
+		t.Fatalf("customer = %#v, want cus_123", params.Customer)
+	}
+	if params.CollectionMethod == nil || *params.CollectionMethod != string(stripe.InvoiceCollectionMethodSendInvoice) {
+		t.Fatalf("collection_method = %#v, want send_invoice", params.CollectionMethod)
+	}
+	if params.DueDate == nil || *params.DueDate != expiresAt.Unix() {
+		t.Fatalf("due_date = %#v, want %d", params.DueDate, expiresAt.Unix())
+	}
+	if params.DaysUntilDue != nil {
+		t.Fatalf("days_until_due should be empty when due_date is set")
+	}
+	if params.PaymentSettings == nil || len(params.PaymentSettings.PaymentMethodTypes) != 3 {
+		t.Fatalf("payment method types = %#v", params.PaymentSettings)
+	}
+	if got := *params.PaymentSettings.PaymentMethodTypes[2]; got != "wechat_pay" {
+		t.Fatalf("payment method type[2] = %q, want wechat_pay", got)
+	}
+	if params.Metadata["orderId"] != "sub2_order_123" {
+		t.Fatalf("metadata orderId = %q", params.Metadata["orderId"])
+	}
+	if params.Metadata["providerInstanceId"] != "42" {
+		t.Fatalf("metadata providerInstanceId = %q", params.Metadata["providerInstanceId"])
+	}
+}
+
+func TestBuildStripeInvoiceCreateParamsFallsBackToOneDayDue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		req  payment.CreatePaymentRequest
+	}{
+		{name: "missing expiry", req: payment.CreatePaymentRequest{}},
+		{name: "past expiry", req: payment.CreatePaymentRequest{ExpiresAt: time.Now().Add(-time.Minute)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			params := buildStripeInvoiceCreateParams("cus_123", tt.req, []string{"card"}, "")
+			if params.DueDate != nil {
+				t.Fatalf("due_date should be empty without a usable order expiry")
+			}
+			if params.DaysUntilDue == nil || *params.DaysUntilDue != 1 {
+				t.Fatalf("days_until_due = %#v, want 1", params.DaysUntilDue)
 			}
 		})
 	}
