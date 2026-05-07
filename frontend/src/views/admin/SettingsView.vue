@@ -4960,6 +4960,7 @@
             :enabled-payment-types="form.payment_enabled_types"
             :all-payment-types="allPaymentTypes"
             :redirect-label="t('admin.settings.payment.easypayRedirect')"
+            :updating-provider-ids="updatingProviderIds"
             @refresh="loadProviders"
             @create="openCreateProvider"
             @edit="openEditProvider"
@@ -7490,6 +7491,7 @@ function slog(...args: unknown[]) {
 const providersLoading = ref(false);
 const providerSaving = ref(false);
 const providers = ref<ProviderInstance[]>([]);
+const providerUpdatingIds = ref<Set<number>>(new Set());
 const showProviderDialog = ref(false);
 const showDeleteProviderDialog = ref(false);
 const editingProvider = ref<ProviderInstance | null>(null);
@@ -7497,6 +7499,24 @@ const deletingProviderId = ref<number | null>(null);
 const providerDialogRef = ref<InstanceType<
   typeof PaymentProviderDialog
 > | null>(null);
+let providersLoadSeq = 0;
+
+const updatingProviderIds = computed(() => Array.from(providerUpdatingIds.value));
+
+function isProviderUpdating(providerId: number): boolean {
+  return providerUpdatingIds.value.has(providerId);
+}
+
+function setProviderUpdating(providerId: number, updating: boolean) {
+  // 同一个服务商的更新必须串行化，避免快速连点产生乱序 PATCH 和列表回写。
+  const next = new Set(providerUpdatingIds.value);
+  if (updating) {
+    next.add(providerId);
+  } else {
+    next.delete(providerId);
+  }
+  providerUpdatingIds.value = next;
+}
 
 const providerKeyOptions = computed(() => [
   { value: "easypay", label: t("admin.settings.payment.providerEasypay") },
@@ -7631,14 +7651,20 @@ function showProviderEnablementConflict(
 }
 
 async function loadProviders() {
+  const seq = ++providersLoadSeq;
   providersLoading.value = true;
   try {
     const res = await adminAPI.payment.getProviders();
-    providers.value = res.data || [];
+    // 只接受最后一次加载结果，避免较慢的旧请求覆盖较新的服务商列表。
+    if (seq === providersLoadSeq) {
+      providers.value = res.data || [];
+    }
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, "payment.errors", t("common.error")));
   } finally {
-    providersLoading.value = false;
+    if (seq === providersLoadSeq) {
+      providersLoading.value = false;
+    }
   }
 }
 
@@ -7695,60 +7721,79 @@ async function handleToggleField(
   provider: ProviderInstance,
   field: "enabled" | "refund_enabled" | "allow_user_refund",
 ) {
-  let newValue: boolean;
-  if (field === "enabled") newValue = !provider.enabled;
-  else if (field === "refund_enabled") newValue = !provider.refund_enabled;
-  else newValue = !provider.allow_user_refund;
+  if (isProviderUpdating(provider.id)) {
+    return;
+  }
+  setProviderUpdating(provider.id, true);
+  try {
+    const currentProvider =
+      providers.value.find((item) => item.id === provider.id) ?? provider;
+    let newValue: boolean;
+    if (field === "enabled") newValue = !currentProvider.enabled;
+    else if (field === "refund_enabled") newValue = !currentProvider.refund_enabled;
+    else newValue = !currentProvider.allow_user_refund;
 
-  if (field === "enabled" && newValue) {
+    if (field === "enabled" && newValue) {
+      const conflict = findProviderEnablementConflict({
+        id: currentProvider.id,
+        provider_key: currentProvider.provider_key,
+        supported_types: currentProvider.supported_types,
+        enabled: true,
+        name: currentProvider.name,
+      });
+      if (conflict) {
+        showProviderEnablementConflict(conflict);
+        return;
+      }
+    }
+
+    const payload: Record<string, boolean> = { [field]: newValue };
+    // 关闭退款能力时同步关闭用户自助退款，保持前后端状态一致。
+    if (field === "refund_enabled" && !newValue) {
+      payload.allow_user_refund = false;
+    }
+    await adminAPI.payment.updateProvider(currentProvider.id, payload);
+    await loadProviders();
+  } catch (err: unknown) {
+    appStore.showError(extractI18nErrorMessage(err, t, "payment.errors", t("common.error")));
+  } finally {
+    setProviderUpdating(provider.id, false);
+  }
+}
+
+async function handleToggleType(provider: ProviderInstance, type: string) {
+  if (isProviderUpdating(provider.id)) {
+    return;
+  }
+  setProviderUpdating(provider.id, true);
+  try {
+    const currentProvider =
+      providers.value.find((item) => item.id === provider.id) ?? provider;
+    const supportedTypes = Array.isArray(currentProvider.supported_types)
+      ? currentProvider.supported_types
+      : [];
+    const updated = supportedTypes.includes(type)
+      ? supportedTypes.filter((t) => t !== type)
+      : [...supportedTypes, type];
     const conflict = findProviderEnablementConflict({
-      id: provider.id,
-      provider_key: provider.provider_key,
-      supported_types: provider.supported_types,
-      enabled: true,
-      name: provider.name,
+      id: currentProvider.id,
+      provider_key: currentProvider.provider_key,
+      supported_types: updated,
+      enabled: currentProvider.enabled,
+      name: currentProvider.name,
     });
     if (conflict) {
       showProviderEnablementConflict(conflict);
       return;
     }
-  }
-
-  const payload: Record<string, boolean> = { [field]: newValue };
-  // Cascade: turning off refund_enabled also turns off allow_user_refund
-  if (field === "refund_enabled" && !newValue) {
-    payload.allow_user_refund = false;
-  }
-  try {
-    await adminAPI.payment.updateProvider(provider.id, payload);
-    await loadProviders();
-  } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, "payment.errors", t("common.error")));
-  }
-}
-
-async function handleToggleType(provider: ProviderInstance, type: string) {
-  const updated = provider.supported_types.includes(type)
-    ? provider.supported_types.filter((t) => t !== type)
-    : [...provider.supported_types, type];
-  const conflict = findProviderEnablementConflict({
-    id: provider.id,
-    provider_key: provider.provider_key,
-    supported_types: updated,
-    enabled: provider.enabled,
-    name: provider.name,
-  });
-  if (conflict) {
-    showProviderEnablementConflict(conflict);
-    return;
-  }
-  try {
-    await adminAPI.payment.updateProvider(provider.id, {
+    await adminAPI.payment.updateProvider(currentProvider.id, {
       supported_types: updated,
-    } as any);
+    } as Partial<ProviderInstance>);
     await loadProviders();
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, "payment.errors", t("common.error")));
+  } finally {
+    setProviderUpdating(provider.id, false);
   }
 }
 

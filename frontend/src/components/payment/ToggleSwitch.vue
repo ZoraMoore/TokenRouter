@@ -5,9 +5,11 @@
       type="button"
       role="switch"
       :aria-checked="checked"
-      @click="emit('toggle')"
+      :disabled="disabled"
+      @click.stop="emit('toggle')"
       :class="[
         'relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200',
+        disabled ? 'cursor-wait opacity-60' : '',
         checked ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
       ]"
     >
@@ -20,6 +22,6 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ label: string; checked: boolean }>()
+defineProps<{ label: string; checked: boolean; disabled?: boolean }>()
 const emit = defineEmits<{ toggle: [] }>()
 </script>

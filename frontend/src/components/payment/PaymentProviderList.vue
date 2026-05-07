@@ -62,6 +62,7 @@
               :provider="p"
               :enabled="isEnabled(p.provider_key)"
               :available-types="getTypes(p.provider_key)"
+              :updating="isUpdating(p.id)"
               @toggle-field="(field) => emit('toggleField', p, field)"
               @toggle-type="(type) => emit('toggleType', p, type)"
               @edit="emit('edit', p)"
@@ -108,6 +109,7 @@ const props = defineProps<{
   enabledPaymentTypes: string[]
   allPaymentTypes: TypeOption[]
   redirectLabel: string
+  updatingProviderIds?: number[]
 }>()
 
 const emit = defineEmits<{
@@ -138,6 +140,11 @@ function onDragEnd() {
 
 function isEnabled(providerKey: string): boolean {
   return props.enabledPaymentTypes.includes(providerKey)
+}
+
+function isUpdating(providerId: number): boolean {
+  // 父组件按服务商 ID 标记更新中，列表只负责把禁用态传给具体卡片。
+  return props.updatingProviderIds?.includes(providerId) ?? false
 }
 
 function getTypes(providerKey: string): TypeOption[] {

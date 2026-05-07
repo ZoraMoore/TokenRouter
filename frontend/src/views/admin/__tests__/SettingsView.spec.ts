@@ -770,6 +770,79 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(getProviders).toHaveBeenCalledTimes(2);
   });
 
+  it("ignores repeated provider type clicks while the same provider is updating", async () => {
+    const provider = {
+      id: 8,
+      provider_key: "stripe",
+      name: "Stripe",
+      config: {},
+      supported_types: ["card"],
+      enabled: true,
+      payment_mode: "",
+      refund_enabled: false,
+      allow_user_refund: false,
+      limits: "",
+      sort_order: 0,
+    };
+    let resolveUpdate: ((value: unknown) => void) | undefined;
+    getProviders.mockReset();
+    getProviders.mockResolvedValue({ data: [provider] });
+    updateProvider.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveUpdate = resolve;
+        }),
+    );
+
+    const PaymentProviderListStub = defineComponent({
+      emits: ["toggleType"],
+      setup(_, { emit }) {
+        return () =>
+          h(
+            "button",
+            {
+              class: "provider-type-stub",
+              onClick: () => emit("toggleType", provider, "wxpay"),
+            },
+            "toggle type",
+          );
+      },
+    });
+
+    const wrapper = mount(SettingsView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+          Select: SelectStub,
+          Toggle: ToggleStub,
+          Icon: true,
+          ConfirmDialog: true,
+          PaymentProviderList: PaymentProviderListStub,
+          PaymentProviderDialog: true,
+          GroupBadge: true,
+          GroupOptionItem: true,
+          ProxySelector: true,
+          ModelWhitelistSelector: true,
+          ImageUpload: ImageUploadStub,
+          BackupSettings: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    await openPaymentTab(wrapper);
+    await wrapper.get(".provider-type-stub").trigger("click");
+    await wrapper.get(".provider-type-stub").trigger("click");
+
+    expect(updateProvider).toHaveBeenCalledTimes(1);
+    expect(updateProvider).toHaveBeenCalledWith(8, {
+      supported_types: ["card", "wxpay"],
+    });
+
+    resolveUpdate?.({ data: { ...provider, supported_types: ["card", "wxpay"] } });
+    await flushPromises();
+  });
+
   it("renders advanced scheduler copy as local experimental gateway policy", async () => {
     const wrapper = mountView();
 
