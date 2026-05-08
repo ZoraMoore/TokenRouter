@@ -7,6 +7,7 @@ const openaiModels = [
   'gpt-5.2',
   'gpt-5.3',
   'gpt-5.3-spark',
+  'codex-auto-review',
   'gpt-5.4',
   'gpt-5.4-mini',
   'gpt-5.5'
