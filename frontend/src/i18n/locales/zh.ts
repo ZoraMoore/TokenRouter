@@ -6106,10 +6106,15 @@ export default {
   customPage: {
     title: '自定义页面',
     openInNewTab: '新窗口打开',
+    toc: '目录',
+    hideToc: '收起目录',
+    showToc: '展开目录',
     notFoundTitle: '页面不存在',
     notFoundDesc: '该自定义页面不存在或已被删除。',
     notConfiguredTitle: '页面链接未配置',
     notConfiguredDesc: '该自定义页面的 URL 未正确配置。',
+    markdownNotFound: '页面不存在',
+    markdownLoadFailed: '页面加载失败',
   },
 
   // Announcements Page

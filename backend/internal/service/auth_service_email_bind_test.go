@@ -838,6 +838,12 @@ func (s *emailBindUserRepoStub) DeductBalance(ctx context.Context, id int64, amo
 	return amount, nil
 }
 func (s *emailBindUserRepoStub) UpdateConcurrency(context.Context, int64, int) error { return nil }
+func (s *emailBindUserRepoStub) BatchSetConcurrency(context.Context, []int64, int) (int, error) {
+	return 0, nil
+}
+func (s *emailBindUserRepoStub) BatchAddConcurrency(context.Context, []int64, int) (int, error) {
+	return 0, nil
+}
 
 func (s *emailBindUserRepoStub) ExistsByEmail(_ context.Context, email string) (bool, error) {
 	s.mu.Lock()

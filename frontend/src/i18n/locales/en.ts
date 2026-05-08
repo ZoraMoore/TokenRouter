@@ -5948,10 +5948,15 @@ export default {
   customPage: {
     title: 'Custom Page',
     openInNewTab: 'Open in new tab',
+    toc: 'Contents',
+    hideToc: 'Hide contents',
+    showToc: 'Show contents',
     notFoundTitle: 'Page not found',
     notFoundDesc: 'This custom page does not exist or has been removed.',
     notConfiguredTitle: 'Page URL not configured',
     notConfiguredDesc: 'The URL for this custom page has not been properly configured.',
+    markdownNotFound: 'Page not found',
+    markdownLoadFailed: 'Failed to load page',
   },
 
   // Announcements Page

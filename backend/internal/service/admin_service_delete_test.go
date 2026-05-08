@@ -152,6 +152,14 @@ func (s *userRepoStub) UpdateConcurrency(ctx context.Context, id int64, amount i
 	panic("unexpected UpdateConcurrency call")
 }
 
+func (s *userRepoStub) BatchSetConcurrency(ctx context.Context, userIDs []int64, value int) (int, error) {
+	panic("unexpected BatchSetConcurrency call")
+}
+
+func (s *userRepoStub) BatchAddConcurrency(ctx context.Context, userIDs []int64, delta int) (int, error) {
+	panic("unexpected BatchAddConcurrency call")
+}
+
 func (s *userRepoStub) ExistsByEmail(ctx context.Context, email string) (bool, error) {
 	if s.existsErr != nil {
 		return false, s.existsErr

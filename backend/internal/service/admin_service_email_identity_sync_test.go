@@ -118,6 +118,12 @@ func (s *emailSyncRepoStub) DeductBalance(context.Context, int64, float64) (floa
 }
 
 func (s *emailSyncRepoStub) UpdateConcurrency(context.Context, int64, int) error { return nil }
+func (s *emailSyncRepoStub) BatchSetConcurrency(context.Context, []int64, int) (int, error) {
+	return 0, nil
+}
+func (s *emailSyncRepoStub) BatchAddConcurrency(context.Context, []int64, int) (int, error) {
+	return 0, nil
+}
 
 func (s *emailSyncRepoStub) ExistsByEmail(context.Context, string) (bool, error) { return false, nil }
 

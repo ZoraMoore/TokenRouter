@@ -171,6 +171,12 @@ func (m *mockUserRepo) DeductBalance(context.Context, int64, float64) (float64, 
 	return 0, nil
 }
 func (m *mockUserRepo) UpdateConcurrency(context.Context, int64, int) error { return nil }
+func (m *mockUserRepo) BatchSetConcurrency(context.Context, []int64, int) (int, error) {
+	return 0, nil
+}
+func (m *mockUserRepo) BatchAddConcurrency(context.Context, []int64, int) (int, error) {
+	return 0, nil
+}
 func (m *mockUserRepo) ExistsByEmail(context.Context, string) (bool, error) { return false, nil }
 func (m *mockUserRepo) ExistsByNormalizedEmail(context.Context, string) (bool, error) {
 	return false, nil

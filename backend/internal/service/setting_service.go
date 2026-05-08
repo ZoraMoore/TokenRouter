@@ -1539,6 +1539,15 @@ func (s *SettingService) GetDefaultConcurrency(ctx context.Context) int {
 	return s.cfg.Default.UserConcurrency
 }
 
+// GetCustomMenuItemsRaw 获取自定义菜单原始 JSON，用于页面 slug 权限校验。
+func (s *SettingService) GetCustomMenuItemsRaw(ctx context.Context) string {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyCustomMenuItems)
+	if err != nil {
+		return "[]"
+	}
+	return value
+}
+
 // GetDefaultBalance 获取默认余额
 func (s *SettingService) GetDefaultBalance(ctx context.Context) float64 {
 	value, err := s.settingRepo.GetValue(ctx, SettingKeyDefaultBalance)

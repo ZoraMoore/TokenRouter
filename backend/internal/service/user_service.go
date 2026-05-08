@@ -99,6 +99,10 @@ type UserRepository interface {
 	UpdateBalance(ctx context.Context, id int64, amount float64) error
 	DeductBalance(ctx context.Context, id int64, amount float64) (float64, error)
 	UpdateConcurrency(ctx context.Context, id int64, amount int) error
+	// BatchSetConcurrency 批量设置用户并发数，负数会按 0 处理。
+	BatchSetConcurrency(ctx context.Context, userIDs []int64, value int) (int, error)
+	// BatchAddConcurrency 批量增减用户并发数，结果不会低于 0。
+	BatchAddConcurrency(ctx context.Context, userIDs []int64, delta int) (int, error)
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
 	ExistsByNormalizedEmail(ctx context.Context, normalizedEmail string) (bool, error)
 	LockRegistrationEmail(ctx context.Context, normalizedEmail string) error
