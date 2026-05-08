@@ -22,6 +22,10 @@ type SystemSettings struct {
 	InvitationCodeEnabled            bool
 	ReferralRewardAmount             float64
 	TotpEnabled                      bool // TOTP 双因素认证
+	LoginAgreementEnabled            bool
+	LoginAgreementMode               string
+	LoginAgreementUpdatedAt          string
+	LoginAgreementDocuments          []LoginAgreementDocument
 
 	SMTPHost               string
 	SMTPPort               int
@@ -207,6 +211,11 @@ type PublicSettings struct {
 	PasswordResetEnabled             bool
 	InvitationCodeEnabled            bool
 	TotpEnabled                      bool // TOTP 双因素认证
+	LoginAgreementEnabled            bool
+	LoginAgreementMode               string
+	LoginAgreementUpdatedAt          string
+	LoginAgreementRevision           string
+	LoginAgreementDocuments          []LoginAgreementDocument
 	TurnstileEnabled                 bool
 	TurnstileSiteKey                 string
 	SiteName                         string
@@ -254,6 +263,12 @@ type PublicSettings struct {
 	RiskControlEnabled          bool
 	BalanceLowNotifyThreshold   float64
 	BalanceLowNotifyRechargeURL string
+}
+
+type LoginAgreementDocument struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	ContentMD string `json:"content_md"`
 }
 
 type WeChatConnectOAuthConfig struct {
