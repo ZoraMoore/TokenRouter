@@ -90,7 +90,8 @@ func TestOpenAIGatewayServiceParseOpenAIImagesRequest_MultipartEdit(t *testing.T
 	require.Equal(t, OpenAIImagesCapabilityNative, parsed.RequiredCapability)
 }
 
-func TestOpenAIImagesRequestModerationBody_JSONEditIncludesInputImageURLs(t *testing.T) {
+func TestOpenAIImagesRequestModerationBody_JSONEditSamplesInputImageURLs(t *testing.T) {
+	images := []string{"https://example.com/source.png", "https://example.com/mask.png"}
 	parsed := &OpenAIImagesRequest{
 		Endpoint:       openAIImagesEditsEndpoint,
 		Prompt:         "replace background",
@@ -101,10 +102,15 @@ func TestOpenAIImagesRequestModerationBody_JSONEditIncludesInputImageURLs(t *tes
 	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIImages, parsed.ModerationBody())
 
 	require.Equal(t, "replace background", input.Text)
-	require.Equal(t, []string{"https://example.com/source.png", "https://example.com/mask.png"}, input.Images)
+	require.Len(t, input.Images, 1)
+	require.Contains(t, images, input.Images[0])
 }
 
-func TestOpenAIImagesRequestModerationBody_MultipartEditIncludesUploadsInMemory(t *testing.T) {
+func TestOpenAIImagesRequestModerationBody_MultipartEditSamplesUploadsInMemory(t *testing.T) {
+	images := []string{
+		"data:image/png;base64,ZmFrZS1pbWFnZS1ieXRlcw==",
+		"data:image/png;base64,ZmFrZS1tYXNrLWJ5dGVz",
+	}
 	parsed := &OpenAIImagesRequest{
 		Endpoint: openAIImagesEditsEndpoint,
 		Prompt:   "replace background",
@@ -125,10 +131,8 @@ func TestOpenAIImagesRequestModerationBody_MultipartEditIncludesUploadsInMemory(
 	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIImages, parsed.ModerationBody())
 
 	require.Equal(t, "replace background", input.Text)
-	require.Equal(t, []string{
-		"data:image/png;base64,ZmFrZS1pbWFnZS1ieXRlcw==",
-		"data:image/png;base64,ZmFrZS1tYXNrLWJ5dGVz",
-	}, input.Images)
+	require.Len(t, input.Images, 1)
+	require.Contains(t, images, input.Images[0])
 
 	log := (&ContentModerationService{}).buildLog(ContentModerationCheckInput{}, defaultContentModerationConfig(), ContentModerationActionAllow, false, "", 0, nil, input.ExcerptText(), nil, nil, "")
 	require.Equal(t, "replace background", log.InputExcerpt)
