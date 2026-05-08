@@ -5014,6 +5014,7 @@ export default {
       description: '管理注册、邮箱验证、默认值和 SMTP 设置',
       tabs: {
         general: '通用设置',
+        features: '功能特性',
         security: '安全与认证',
         users: '用户默认值',
         gateway: '网关服务',
@@ -5023,6 +5024,15 @@ export default {
       },
       emailTabDisabledTitle: '邮箱验证未启用',
       emailTabDisabledHint: '请在「安全与认证」选项卡中启用邮箱验证后，再配置 SMTP 设置。',
+      features: {
+        riskControl: {
+          title: '风控中心',
+          description: '启用内容审计菜单和全端点请求审核入口。默认关闭。',
+          configureLink: '前往 风控中心 配置内容审计',
+          enabled: '启用风控中心',
+          enabledHint: '关闭后管理员侧边栏入口隐藏，网关内容审计不会执行。',
+        },
+      },
       registration: {
         title: '注册设置',
         description: '控制用户注册和验证',

@@ -4405,40 +4405,44 @@
             </div>
           </div>
         </div>
+        <!-- /分页：通用设置 -->
 
-        <div class="card">
-          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-              {{ t("admin.settings.features.riskControl.title") }}
-            </h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              {{ t("admin.settings.features.riskControl.description") }}
-            </p>
-            <p class="mt-1.5 text-xs">
-              <router-link
-                to="/admin/risk-control"
-                class="inline-flex items-center gap-1 text-primary-600 hover:underline dark:text-primary-400"
-              >
-                {{ t("admin.settings.features.riskControl.configureLink") }}
-                <span aria-hidden="true">-&gt;</span>
-              </router-link>
-            </p>
-          </div>
-          <div class="space-y-5 p-6">
-            <div class="flex items-center justify-between">
-              <div>
-                <label class="font-medium text-gray-900 dark:text-white">
-                  {{ t("admin.settings.features.riskControl.enabled") }}
-                </label>
-                <p class="text-sm text-gray-500 dark:text-gray-400">
-                  {{ t("admin.settings.features.riskControl.enabledHint") }}
-                </p>
+        <!-- 分页：功能特性 -->
+        <div v-show="activeTab === 'features'" class="space-y-6">
+          <div class="card">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.features.riskControl.title") }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.features.riskControl.description") }}
+              </p>
+              <p class="mt-1.5 text-xs">
+                <router-link
+                  to="/admin/risk-control"
+                  class="inline-flex items-center gap-1 text-primary-600 hover:underline dark:text-primary-400"
+                >
+                  {{ t("admin.settings.features.riskControl.configureLink") }}
+                  <span aria-hidden="true">-&gt;</span>
+                </router-link>
+              </p>
+            </div>
+            <div class="space-y-5 p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <label class="font-medium text-gray-900 dark:text-white">
+                    {{ t("admin.settings.features.riskControl.enabled") }}
+                  </label>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.features.riskControl.enabledHint") }}
+                  </p>
+                </div>
+                <Toggle v-model="form.risk_control_enabled" />
               </div>
-              <Toggle v-model="form.risk_control_enabled" />
             </div>
           </div>
         </div>
-        <!-- /Tab: General -->
+        <!-- /分页：功能特性 -->
 
         <!-- Tab: Email -->
         <!-- Tab: Payment -->
@@ -5535,6 +5539,7 @@ const paymentMethodsHref = computed(() =>
 
 type SettingsTab =
   | "general"
+  | "features"
   | "security"
   | "users"
   | "gateway"
@@ -5543,6 +5548,7 @@ type SettingsTab =
   | "backup";
 const settingsTabs = [
   { key: "general" as SettingsTab, icon: "home" as const },
+  { key: "features" as SettingsTab, icon: "bolt" as const },
   { key: "security" as SettingsTab, icon: "shield" as const },
   { key: "users" as SettingsTab, icon: "user" as const },
   { key: "gateway" as SettingsTab, icon: "server" as const },
