@@ -1075,6 +1075,10 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
+import {
+  buildCcSwitchImportDeeplink,
+  type CcSwitchClientType
+} from '@/utils/ccswitchImport'
 
 // Helper to format date for datetime-local input
 const formatDateTimeLocal = (isoDate: string): string => {
@@ -1727,47 +1731,9 @@ const toJsStringLiteral = (value: string) =>
     .replace(/\u2028/g, '\\u2028')
     .replace(/\u2029/g, '\\u2029')
 
-const encodeBase64Utf8 = (value: string) => {
-  const bytes = new TextEncoder().encode(value)
-  let binary = ''
-  const chunkSize = 0x8000
-
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
-  }
-
-  return btoa(binary)
-}
-
-const stripTrailingV1 = (value: string) => value.replace(/\/+$/, '').replace(/\/v1$/, '')
-
-const executeCcsImport = (row: ApiKey, clientType: 'claude' | 'gemini') => {
+const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType) => {
   const baseUrl = publicSettings.value?.api_base_url || window.location.origin
   const platform = row.group?.platform || 'anthropic'
-
-  // Determine app name and endpoint based on platform and client type
-  let app: string
-  let endpoint: string
-
-  if (platform === 'antigravity') {
-    // Antigravity always uses /antigravity suffix
-    app = clientType === 'gemini' ? 'gemini' : 'claude'
-    endpoint = `${baseUrl}/antigravity`
-  } else {
-    switch (platform) {
-      case 'openai':
-        app = 'codex'
-        endpoint = baseUrl
-        break
-      case 'gemini':
-        app = 'gemini'
-        endpoint = baseUrl
-        break
-      default: // anthropic
-        app = 'claude'
-        endpoint = stripTrailingV1(baseUrl)
-    }
-  }
 
   const fallbackUnitLiteral = toJsStringLiteral(balanceUnitName.value)
   // Anthropic 导入的是根地址，客户端请求时会自行拼接 /v1，用量查询仍要走网关路由。
@@ -1789,20 +1755,14 @@ const executeCcsImport = (row: ApiKey, clientType: 'claude' | 'gemini') => {
     }
   })`
   const providerName = (publicSettings.value?.site_name || 'sub2api').trim() || 'sub2api'
-
-  const params = new URLSearchParams({
-    resource: 'provider',
-    app: app,
-    name: providerName,
-    homepage: baseUrl,
-    endpoint: endpoint,
+  const deeplink = buildCcSwitchImportDeeplink({
+    baseUrl,
+    platform,
+    clientType,
+    providerName,
     apiKey: row.key,
-    configFormat: 'json',
-    usageEnabled: 'true',
-    usageScript: encodeBase64Utf8(usageScript),
-    usageAutoInterval: '30'
+    usageScript
   })
-  const deeplink = `ccswitch://v1/import?${params.toString()}`
 
   try {
     window.open(deeplink, '_self')
@@ -1819,7 +1779,7 @@ const executeCcsImport = (row: ApiKey, clientType: 'claude' | 'gemini') => {
   }
 }
 
-const handleCcsClientSelect = (clientType: 'claude' | 'gemini') => {
+const handleCcsClientSelect = (clientType: CcSwitchClientType) => {
   if (pendingCcsRow.value) {
     executeCcsImport(pendingCcsRow.value, clientType)
   }
