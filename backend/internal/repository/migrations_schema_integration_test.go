@@ -141,6 +141,8 @@ func TestMigrationsRunner_AuthIdentityAndPaymentSchemaStayAligned(t *testing.T) 
 		"'linuxdo'",
 		"'wechat'",
 		"'oidc'",
+		"'github'",
+		"'google'",
 	)
 
 	requireForeignKeyOnDelete(t, tx, "auth_identities", "user_id", "users", "CASCADE")

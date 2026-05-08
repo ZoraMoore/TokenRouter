@@ -173,6 +173,16 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		OIDCConnectUserInfoEmailPath:           settings.OIDCConnectUserInfoEmailPath,
 		OIDCConnectUserInfoIDPath:              settings.OIDCConnectUserInfoIDPath,
 		OIDCConnectUserInfoUsernamePath:        settings.OIDCConnectUserInfoUsernamePath,
+		GitHubOAuthEnabled:                     settings.GitHubOAuthEnabled,
+		GitHubOAuthClientID:                    settings.GitHubOAuthClientID,
+		GitHubOAuthClientSecretConfigured:      settings.GitHubOAuthClientSecretConfigured,
+		GitHubOAuthRedirectURL:                 settings.GitHubOAuthRedirectURL,
+		GitHubOAuthFrontendRedirectURL:         settings.GitHubOAuthFrontendRedirectURL,
+		GoogleOAuthEnabled:                     settings.GoogleOAuthEnabled,
+		GoogleOAuthClientID:                    settings.GoogleOAuthClientID,
+		GoogleOAuthClientSecretConfigured:      settings.GoogleOAuthClientSecretConfigured,
+		GoogleOAuthRedirectURL:                 settings.GoogleOAuthRedirectURL,
+		GoogleOAuthFrontendRedirectURL:         settings.GoogleOAuthFrontendRedirectURL,
 		SiteName:                               settings.SiteName,
 		SiteLogo:                               settings.SiteLogo,
 		SiteSubtitle:                           settings.SiteSubtitle,
@@ -413,6 +423,18 @@ type UpdateSettingsRequest struct {
 	OIDCConnectUserInfoIDPath       string `json:"oidc_connect_userinfo_id_path"`
 	OIDCConnectUserInfoUsernamePath string `json:"oidc_connect_userinfo_username_path"`
 
+	// GitHub / Google 邮箱快捷登录
+	GitHubOAuthEnabled             bool   `json:"github_oauth_enabled"`
+	GitHubOAuthClientID            string `json:"github_oauth_client_id"`
+	GitHubOAuthClientSecret        string `json:"github_oauth_client_secret"`
+	GitHubOAuthRedirectURL         string `json:"github_oauth_redirect_url"`
+	GitHubOAuthFrontendRedirectURL string `json:"github_oauth_frontend_redirect_url"`
+	GoogleOAuthEnabled             bool   `json:"google_oauth_enabled"`
+	GoogleOAuthClientID            string `json:"google_oauth_client_id"`
+	GoogleOAuthClientSecret        string `json:"google_oauth_client_secret"`
+	GoogleOAuthRedirectURL         string `json:"google_oauth_redirect_url"`
+	GoogleOAuthFrontendRedirectURL string `json:"google_oauth_frontend_redirect_url"`
+
 	// OEM设置
 	SiteName                    string                `json:"site_name"`
 	SiteLogo                    string                `json:"site_logo"`
@@ -466,6 +488,16 @@ type UpdateSettingsRequest struct {
 	AuthSourceDefaultWeChatSubscriptions     *[]dto.DefaultSubscriptionSetting `json:"auth_source_default_wechat_subscriptions"`
 	AuthSourceDefaultWeChatGrantOnSignup     *bool                             `json:"auth_source_default_wechat_grant_on_signup"`
 	AuthSourceDefaultWeChatGrantOnFirstBind  *bool                             `json:"auth_source_default_wechat_grant_on_first_bind"`
+	AuthSourceDefaultGitHubBalance           *float64                          `json:"auth_source_default_github_balance"`
+	AuthSourceDefaultGitHubConcurrency       *int                              `json:"auth_source_default_github_concurrency"`
+	AuthSourceDefaultGitHubSubscriptions     *[]dto.DefaultSubscriptionSetting `json:"auth_source_default_github_subscriptions"`
+	AuthSourceDefaultGitHubGrantOnSignup     *bool                             `json:"auth_source_default_github_grant_on_signup"`
+	AuthSourceDefaultGitHubGrantOnFirstBind  *bool                             `json:"auth_source_default_github_grant_on_first_bind"`
+	AuthSourceDefaultGoogleBalance           *float64                          `json:"auth_source_default_google_balance"`
+	AuthSourceDefaultGoogleConcurrency       *int                              `json:"auth_source_default_google_concurrency"`
+	AuthSourceDefaultGoogleSubscriptions     *[]dto.DefaultSubscriptionSetting `json:"auth_source_default_google_subscriptions"`
+	AuthSourceDefaultGoogleGrantOnSignup     *bool                             `json:"auth_source_default_google_grant_on_signup"`
+	AuthSourceDefaultGoogleGrantOnFirstBind  *bool                             `json:"auth_source_default_google_grant_on_first_bind"`
 	ForceEmailOnThirdPartySignup             *bool                             `json:"force_email_on_third_party_signup"`
 
 	// Model fallback configuration
@@ -620,6 +652,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	req.AuthSourceDefaultLinuxDoSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultLinuxDoSubscriptions)
 	req.AuthSourceDefaultOIDCSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultOIDCSubscriptions)
 	req.AuthSourceDefaultWeChatSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultWeChatSubscriptions)
+	req.AuthSourceDefaultGitHubSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultGitHubSubscriptions)
+	req.AuthSourceDefaultGoogleSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultGoogleSubscriptions)
 
 	// SMTP 配置保护：如果请求中 smtp_host 为空但数据库中已有配置，则保留已有 SMTP 配置
 	// 防止前端加载设置失败时空表单覆盖已保存的 SMTP 配置
@@ -967,6 +1001,80 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		}
 	}
 
+	req.GitHubOAuthClientID = strings.TrimSpace(req.GitHubOAuthClientID)
+	req.GitHubOAuthClientSecret = strings.TrimSpace(req.GitHubOAuthClientSecret)
+	req.GitHubOAuthRedirectURL = strings.TrimSpace(req.GitHubOAuthRedirectURL)
+	req.GitHubOAuthFrontendRedirectURL = strings.TrimSpace(req.GitHubOAuthFrontendRedirectURL)
+	if req.GitHubOAuthEnabled {
+		req.GitHubOAuthClientID = strings.TrimSpace(firstNonEmpty(req.GitHubOAuthClientID, previousSettings.GitHubOAuthClientID))
+		req.GitHubOAuthRedirectURL = strings.TrimSpace(firstNonEmpty(req.GitHubOAuthRedirectURL, previousSettings.GitHubOAuthRedirectURL))
+		req.GitHubOAuthFrontendRedirectURL = strings.TrimSpace(firstNonEmpty(req.GitHubOAuthFrontendRedirectURL, previousSettings.GitHubOAuthFrontendRedirectURL, "/auth/oauth/callback"))
+		if req.GitHubOAuthClientID == "" {
+			response.BadRequest(c, "GitHub OAuth Client ID is required when enabled")
+			return
+		}
+		if req.GitHubOAuthClientSecret == "" {
+			if previousSettings.GitHubOAuthClientSecret == "" {
+				response.BadRequest(c, "GitHub OAuth Client Secret is required when enabled")
+				return
+			}
+			req.GitHubOAuthClientSecret = previousSettings.GitHubOAuthClientSecret
+		}
+		if req.GitHubOAuthRedirectURL == "" {
+			response.BadRequest(c, "GitHub OAuth Redirect URL is required when enabled")
+			return
+		}
+		if err := config.ValidateAbsoluteHTTPURL(req.GitHubOAuthRedirectURL); err != nil {
+			response.BadRequest(c, "GitHub OAuth Redirect URL must be an absolute http(s) URL")
+			return
+		}
+		if req.GitHubOAuthFrontendRedirectURL == "" {
+			response.BadRequest(c, "GitHub OAuth Frontend Redirect URL is required when enabled")
+			return
+		}
+		if err := config.ValidateFrontendRedirectURL(req.GitHubOAuthFrontendRedirectURL); err != nil {
+			response.BadRequest(c, "GitHub OAuth Frontend Redirect URL is invalid")
+			return
+		}
+	}
+
+	req.GoogleOAuthClientID = strings.TrimSpace(req.GoogleOAuthClientID)
+	req.GoogleOAuthClientSecret = strings.TrimSpace(req.GoogleOAuthClientSecret)
+	req.GoogleOAuthRedirectURL = strings.TrimSpace(req.GoogleOAuthRedirectURL)
+	req.GoogleOAuthFrontendRedirectURL = strings.TrimSpace(req.GoogleOAuthFrontendRedirectURL)
+	if req.GoogleOAuthEnabled {
+		req.GoogleOAuthClientID = strings.TrimSpace(firstNonEmpty(req.GoogleOAuthClientID, previousSettings.GoogleOAuthClientID))
+		req.GoogleOAuthRedirectURL = strings.TrimSpace(firstNonEmpty(req.GoogleOAuthRedirectURL, previousSettings.GoogleOAuthRedirectURL))
+		req.GoogleOAuthFrontendRedirectURL = strings.TrimSpace(firstNonEmpty(req.GoogleOAuthFrontendRedirectURL, previousSettings.GoogleOAuthFrontendRedirectURL, "/auth/oauth/callback"))
+		if req.GoogleOAuthClientID == "" {
+			response.BadRequest(c, "Google OAuth Client ID is required when enabled")
+			return
+		}
+		if req.GoogleOAuthClientSecret == "" {
+			if previousSettings.GoogleOAuthClientSecret == "" {
+				response.BadRequest(c, "Google OAuth Client Secret is required when enabled")
+				return
+			}
+			req.GoogleOAuthClientSecret = previousSettings.GoogleOAuthClientSecret
+		}
+		if req.GoogleOAuthRedirectURL == "" {
+			response.BadRequest(c, "Google OAuth Redirect URL is required when enabled")
+			return
+		}
+		if err := config.ValidateAbsoluteHTTPURL(req.GoogleOAuthRedirectURL); err != nil {
+			response.BadRequest(c, "Google OAuth Redirect URL must be an absolute http(s) URL")
+			return
+		}
+		if req.GoogleOAuthFrontendRedirectURL == "" {
+			response.BadRequest(c, "Google OAuth Frontend Redirect URL is required when enabled")
+			return
+		}
+		if err := config.ValidateFrontendRedirectURL(req.GoogleOAuthFrontendRedirectURL); err != nil {
+			response.BadRequest(c, "Google OAuth Frontend Redirect URL is invalid")
+			return
+		}
+	}
+
 	// “购买订阅”页面配置验证
 	purchaseEnabled := previousSettings.PurchaseSubscriptionEnabled
 	if req.PurchaseSubscriptionEnabled != nil {
@@ -1252,6 +1360,16 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		OIDCConnectUserInfoEmailPath:     req.OIDCConnectUserInfoEmailPath,
 		OIDCConnectUserInfoIDPath:        req.OIDCConnectUserInfoIDPath,
 		OIDCConnectUserInfoUsernamePath:  req.OIDCConnectUserInfoUsernamePath,
+		GitHubOAuthEnabled:               req.GitHubOAuthEnabled,
+		GitHubOAuthClientID:              req.GitHubOAuthClientID,
+		GitHubOAuthClientSecret:          req.GitHubOAuthClientSecret,
+		GitHubOAuthRedirectURL:           req.GitHubOAuthRedirectURL,
+		GitHubOAuthFrontendRedirectURL:   req.GitHubOAuthFrontendRedirectURL,
+		GoogleOAuthEnabled:               req.GoogleOAuthEnabled,
+		GoogleOAuthClientID:              req.GoogleOAuthClientID,
+		GoogleOAuthClientSecret:          req.GoogleOAuthClientSecret,
+		GoogleOAuthRedirectURL:           req.GoogleOAuthRedirectURL,
+		GoogleOAuthFrontendRedirectURL:   req.GoogleOAuthFrontendRedirectURL,
 		SiteName:                         req.SiteName,
 		SiteLogo:                         req.SiteLogo,
 		SiteSubtitle:                     req.SiteSubtitle,
@@ -1438,6 +1556,20 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			GrantOnSignup:    boolValueOrDefault(req.AuthSourceDefaultWeChatGrantOnSignup, previousAuthSourceDefaults.WeChat.GrantOnSignup),
 			GrantOnFirstBind: boolValueOrDefault(req.AuthSourceDefaultWeChatGrantOnFirstBind, previousAuthSourceDefaults.WeChat.GrantOnFirstBind),
 		},
+		GitHub: service.ProviderDefaultGrantSettings{
+			Balance:          float64ValueOrDefault(req.AuthSourceDefaultGitHubBalance, previousAuthSourceDefaults.GitHub.Balance),
+			Concurrency:      intValueOrDefault(req.AuthSourceDefaultGitHubConcurrency, previousAuthSourceDefaults.GitHub.Concurrency),
+			Subscriptions:    defaultSubscriptionsValueOrDefault(req.AuthSourceDefaultGitHubSubscriptions, previousAuthSourceDefaults.GitHub.Subscriptions),
+			GrantOnSignup:    boolValueOrDefault(req.AuthSourceDefaultGitHubGrantOnSignup, previousAuthSourceDefaults.GitHub.GrantOnSignup),
+			GrantOnFirstBind: boolValueOrDefault(req.AuthSourceDefaultGitHubGrantOnFirstBind, previousAuthSourceDefaults.GitHub.GrantOnFirstBind),
+		},
+		Google: service.ProviderDefaultGrantSettings{
+			Balance:          float64ValueOrDefault(req.AuthSourceDefaultGoogleBalance, previousAuthSourceDefaults.Google.Balance),
+			Concurrency:      intValueOrDefault(req.AuthSourceDefaultGoogleConcurrency, previousAuthSourceDefaults.Google.Concurrency),
+			Subscriptions:    defaultSubscriptionsValueOrDefault(req.AuthSourceDefaultGoogleSubscriptions, previousAuthSourceDefaults.Google.Subscriptions),
+			GrantOnSignup:    boolValueOrDefault(req.AuthSourceDefaultGoogleGrantOnSignup, previousAuthSourceDefaults.Google.GrantOnSignup),
+			GrantOnFirstBind: boolValueOrDefault(req.AuthSourceDefaultGoogleGrantOnFirstBind, previousAuthSourceDefaults.Google.GrantOnFirstBind),
+		},
 		ForceEmailOnThirdPartySignup: boolValueOrDefault(req.ForceEmailOnThirdPartySignup, previousAuthSourceDefaults.ForceEmailOnThirdPartySignup),
 	}
 	if err := h.settingService.UpdateSettingsWithAuthSourceDefaults(c.Request.Context(), settings, authSourceDefaults); err != nil {
@@ -1582,6 +1714,16 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		OIDCConnectUserInfoEmailPath:           updatedSettings.OIDCConnectUserInfoEmailPath,
 		OIDCConnectUserInfoIDPath:              updatedSettings.OIDCConnectUserInfoIDPath,
 		OIDCConnectUserInfoUsernamePath:        updatedSettings.OIDCConnectUserInfoUsernamePath,
+		GitHubOAuthEnabled:                     updatedSettings.GitHubOAuthEnabled,
+		GitHubOAuthClientID:                    updatedSettings.GitHubOAuthClientID,
+		GitHubOAuthClientSecretConfigured:      updatedSettings.GitHubOAuthClientSecretConfigured,
+		GitHubOAuthRedirectURL:                 updatedSettings.GitHubOAuthRedirectURL,
+		GitHubOAuthFrontendRedirectURL:         updatedSettings.GitHubOAuthFrontendRedirectURL,
+		GoogleOAuthEnabled:                     updatedSettings.GoogleOAuthEnabled,
+		GoogleOAuthClientID:                    updatedSettings.GoogleOAuthClientID,
+		GoogleOAuthClientSecretConfigured:      updatedSettings.GoogleOAuthClientSecretConfigured,
+		GoogleOAuthRedirectURL:                 updatedSettings.GoogleOAuthRedirectURL,
+		GoogleOAuthFrontendRedirectURL:         updatedSettings.GoogleOAuthFrontendRedirectURL,
 		SiteName:                               updatedSettings.SiteName,
 		SiteLogo:                               updatedSettings.SiteLogo,
 		SiteSubtitle:                           updatedSettings.SiteSubtitle,
@@ -1910,6 +2052,36 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.OIDCConnectUserInfoUsernamePath != after.OIDCConnectUserInfoUsernamePath {
 		changed = append(changed, "oidc_connect_userinfo_username_path")
 	}
+	if before.GitHubOAuthEnabled != after.GitHubOAuthEnabled {
+		changed = append(changed, "github_oauth_enabled")
+	}
+	if before.GitHubOAuthClientID != after.GitHubOAuthClientID {
+		changed = append(changed, "github_oauth_client_id")
+	}
+	if req.GitHubOAuthClientSecret != "" {
+		changed = append(changed, "github_oauth_client_secret")
+	}
+	if before.GitHubOAuthRedirectURL != after.GitHubOAuthRedirectURL {
+		changed = append(changed, "github_oauth_redirect_url")
+	}
+	if before.GitHubOAuthFrontendRedirectURL != after.GitHubOAuthFrontendRedirectURL {
+		changed = append(changed, "github_oauth_frontend_redirect_url")
+	}
+	if before.GoogleOAuthEnabled != after.GoogleOAuthEnabled {
+		changed = append(changed, "google_oauth_enabled")
+	}
+	if before.GoogleOAuthClientID != after.GoogleOAuthClientID {
+		changed = append(changed, "google_oauth_client_id")
+	}
+	if req.GoogleOAuthClientSecret != "" {
+		changed = append(changed, "google_oauth_client_secret")
+	}
+	if before.GoogleOAuthRedirectURL != after.GoogleOAuthRedirectURL {
+		changed = append(changed, "google_oauth_redirect_url")
+	}
+	if before.GoogleOAuthFrontendRedirectURL != after.GoogleOAuthFrontendRedirectURL {
+		changed = append(changed, "google_oauth_frontend_redirect_url")
+	}
 	if before.SiteName != after.SiteName {
 		changed = append(changed, "site_name")
 	}
@@ -2096,6 +2268,8 @@ func appendAuthSourceDefaultChanges(changed []string, before *service.AuthSource
 		{name: "linuxdo", before: before.LinuxDo, after: after.LinuxDo},
 		{name: "oidc", before: before.OIDC, after: after.OIDC},
 		{name: "wechat", before: before.WeChat, after: after.WeChat},
+		{name: "github", before: before.GitHub, after: after.GitHub},
+		{name: "google", before: before.Google, after: after.Google},
 	}
 	for _, field := range fields {
 		if field.before.Balance != field.after.Balance {
@@ -2210,6 +2384,16 @@ func systemSettingsResponseData(settings dto.SystemSettings, authSourceDefaults 
 	data["auth_source_default_wechat_subscriptions"] = authSourceDefaults.WeChat.Subscriptions
 	data["auth_source_default_wechat_grant_on_signup"] = authSourceDefaults.WeChat.GrantOnSignup
 	data["auth_source_default_wechat_grant_on_first_bind"] = authSourceDefaults.WeChat.GrantOnFirstBind
+	data["auth_source_default_github_balance"] = authSourceDefaults.GitHub.Balance
+	data["auth_source_default_github_concurrency"] = authSourceDefaults.GitHub.Concurrency
+	data["auth_source_default_github_subscriptions"] = authSourceDefaults.GitHub.Subscriptions
+	data["auth_source_default_github_grant_on_signup"] = authSourceDefaults.GitHub.GrantOnSignup
+	data["auth_source_default_github_grant_on_first_bind"] = authSourceDefaults.GitHub.GrantOnFirstBind
+	data["auth_source_default_google_balance"] = authSourceDefaults.Google.Balance
+	data["auth_source_default_google_concurrency"] = authSourceDefaults.Google.Concurrency
+	data["auth_source_default_google_subscriptions"] = authSourceDefaults.Google.Subscriptions
+	data["auth_source_default_google_grant_on_signup"] = authSourceDefaults.Google.GrantOnSignup
+	data["auth_source_default_google_grant_on_first_bind"] = authSourceDefaults.Google.GrantOnFirstBind
 	data["force_email_on_third_party_signup"] = authSourceDefaults.ForceEmailOnThirdPartySignup
 
 	return data

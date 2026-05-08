@@ -20,7 +20,13 @@ type DefaultSubscriptionInput = Partial<DefaultSubscriptionSetting> & {
   group_id?: number | null;
 };
 
-export type AuthSourceType = "email" | "linuxdo" | "oidc" | "wechat";
+export type AuthSourceType =
+  | "email"
+  | "linuxdo"
+  | "oidc"
+  | "wechat"
+  | "github"
+  | "google";
 
 export interface AuthSourceDefaultsValue {
   balance: number;
@@ -60,9 +66,18 @@ const AUTH_SOURCE_TYPES: AuthSourceType[] = [
   "linuxdo",
   "oidc",
   "wechat",
+  "github",
+  "google",
 ];
 const AUTH_SOURCE_DEFAULT_BALANCE = 0;
 const AUTH_SOURCE_DEFAULT_CONCURRENCY = 5;
+const DEFAULT_AUTH_SOURCE_DEFAULTS: AuthSourceDefaultsValue = {
+  balance: AUTH_SOURCE_DEFAULT_BALANCE,
+  concurrency: AUTH_SOURCE_DEFAULT_CONCURRENCY,
+  subscriptions: [],
+  grant_on_signup: false,
+  grant_on_first_bind: false,
+};
 const PAYMENT_VISIBLE_METHOD_SOURCE_OPTIONS: Record<
   PaymentVisibleMethod,
   PaymentVisibleMethodSourceOption[]
@@ -196,7 +211,8 @@ export function appendAuthSourceDefaultsToUpdateRequest(
   const target = payload as Record<string, unknown>;
 
   for (const source of AUTH_SOURCE_TYPES) {
-    const current = authSourceDefaults[source];
+    const current =
+      authSourceDefaults[source] ?? DEFAULT_AUTH_SOURCE_DEFAULTS;
     target[`auth_source_default_${source}_balance`] =
       Number(current.balance) || 0;
     target[`auth_source_default_${source}_concurrency`] = Math.max(
@@ -344,6 +360,16 @@ export interface SystemSettings {
   auth_source_default_wechat_subscriptions?: DefaultSubscriptionSetting[];
   auth_source_default_wechat_grant_on_signup?: boolean;
   auth_source_default_wechat_grant_on_first_bind?: boolean;
+  auth_source_default_github_balance?: number;
+  auth_source_default_github_concurrency?: number;
+  auth_source_default_github_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_github_grant_on_signup?: boolean;
+  auth_source_default_github_grant_on_first_bind?: boolean;
+  auth_source_default_google_balance?: number;
+  auth_source_default_google_concurrency?: number;
+  auth_source_default_google_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_google_grant_on_signup?: boolean;
+  auth_source_default_google_grant_on_first_bind?: boolean;
   force_email_on_third_party_signup?: boolean;
   // OEM settings
   site_name: string;
@@ -426,6 +452,16 @@ export interface SystemSettings {
   oidc_connect_userinfo_email_path: string;
   oidc_connect_userinfo_id_path: string;
   oidc_connect_userinfo_username_path: string;
+  github_oauth_enabled: boolean;
+  github_oauth_client_id: string;
+  github_oauth_client_secret_configured: boolean;
+  github_oauth_redirect_url: string;
+  github_oauth_frontend_redirect_url: string;
+  google_oauth_enabled: boolean;
+  google_oauth_client_id: string;
+  google_oauth_client_secret_configured: boolean;
+  google_oauth_redirect_url: string;
+  google_oauth_frontend_redirect_url: string;
 
   // Model fallback configuration
   enable_model_fallback: boolean;
@@ -537,6 +573,16 @@ export interface UpdateSettingsRequest {
   auth_source_default_wechat_subscriptions?: DefaultSubscriptionSetting[];
   auth_source_default_wechat_grant_on_signup?: boolean;
   auth_source_default_wechat_grant_on_first_bind?: boolean;
+  auth_source_default_github_balance?: number;
+  auth_source_default_github_concurrency?: number;
+  auth_source_default_github_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_github_grant_on_signup?: boolean;
+  auth_source_default_github_grant_on_first_bind?: boolean;
+  auth_source_default_google_balance?: number;
+  auth_source_default_google_concurrency?: number;
+  auth_source_default_google_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_google_grant_on_signup?: boolean;
+  auth_source_default_google_grant_on_first_bind?: boolean;
   force_email_on_third_party_signup?: boolean;
   site_name?: string;
   site_logo?: string;
@@ -610,6 +656,16 @@ export interface UpdateSettingsRequest {
   oidc_connect_userinfo_email_path?: string;
   oidc_connect_userinfo_id_path?: string;
   oidc_connect_userinfo_username_path?: string;
+  github_oauth_enabled?: boolean;
+  github_oauth_client_id?: string;
+  github_oauth_client_secret?: string;
+  github_oauth_redirect_url?: string;
+  github_oauth_frontend_redirect_url?: string;
+  google_oauth_enabled?: boolean;
+  google_oauth_client_id?: string;
+  google_oauth_client_secret?: string;
+  google_oauth_redirect_url?: string;
+  google_oauth_frontend_redirect_url?: string;
   enable_model_fallback?: boolean;
   fallback_model_anthropic?: string;
   fallback_model_openai?: string;

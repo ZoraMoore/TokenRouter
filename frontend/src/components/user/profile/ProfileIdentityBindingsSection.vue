@@ -212,6 +212,7 @@ import { useAppStore, useAuthStore } from '@/stores'
 import type { User, UserAuthBindingStatus, UserAuthProvider } from '@/types'
 
 type BindableProvider = Exclude<UserAuthProvider, 'email'>
+type ConfigurableBindingProvider = 'linuxdo' | 'oidc' | 'wechat'
 
 const props = withDefaults(
   defineProps<{
@@ -402,7 +403,7 @@ function getDisplayableEmail(user: User | null | undefined): string {
   return email
 }
 
-function isProviderEnabledForBinding(provider: BindableProvider): boolean {
+function isProviderEnabledForBinding(provider: ConfigurableBindingProvider): boolean {
   if (provider === 'linuxdo') {
     return props.linuxdoEnabled
   }

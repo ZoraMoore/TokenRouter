@@ -36,7 +36,7 @@ export interface NotifyEmailEntry {
 
 // ==================== User & Auth Types ====================
 
-export type UserAuthProvider = 'email' | 'linuxdo' | 'oidc' | 'wechat'
+export type UserAuthProvider = 'email' | 'linuxdo' | 'oidc' | 'wechat' | 'github' | 'google'
 
 export interface UserAuthBindingStatus {
   bound?: boolean
@@ -192,6 +192,8 @@ export interface PublicSettings {
   wechat_oauth_mobile_enabled?: boolean
   oidc_oauth_enabled: boolean
   oidc_oauth_provider_name: string
+  github_oauth_enabled: boolean
+  google_oauth_enabled: boolean
   backend_mode_enabled: boolean
   version: string
   balance_unit_name: string

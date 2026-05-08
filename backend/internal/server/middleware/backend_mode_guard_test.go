@@ -247,6 +247,30 @@ func TestBackendModeAuthGuard(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
+			name:       "enabled_blocks_github_oauth_start",
+			enabled:    "true",
+			path:       "/api/v1/auth/oauth/github/start",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "enabled_allows_github_oauth_callback",
+			enabled:    "true",
+			path:       "/api/v1/auth/oauth/github/callback",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "enabled_blocks_google_oauth_start",
+			enabled:    "true",
+			path:       "/api/v1/auth/oauth/google/start",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "enabled_allows_google_oauth_callback",
+			enabled:    "true",
+			path:       "/api/v1/auth/oauth/google/callback",
+			wantStatus: http.StatusOK,
+		},
+		{
 			name:       "enabled_allows_oauth_pending_exchange",
 			enabled:    "true",
 			path:       "/api/v1/auth/oauth/pending/exchange",
@@ -286,6 +310,12 @@ func TestBackendModeAuthGuard(t *testing.T) {
 			name:       "enabled_allows_legacy_complete_registration",
 			enabled:    "true",
 			path:       "/api/v1/auth/oauth/linuxdo/complete-registration",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "enabled_allows_email_oauth_complete_registration",
+			enabled:    "true",
+			path:       "/api/v1/auth/oauth/github/complete-registration",
 			wantStatus: http.StatusOK,
 		},
 		{

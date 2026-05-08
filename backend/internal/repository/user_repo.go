@@ -1238,7 +1238,7 @@ func userSignupSourceOrDefault(signupSource string) string {
 	switch strings.TrimSpace(strings.ToLower(signupSource)) {
 	case "", "email":
 		return "email"
-	case "linuxdo", "wechat", "oidc":
+	case "linuxdo", "wechat", "oidc", "github", "google":
 		return strings.TrimSpace(strings.ToLower(signupSource))
 	default:
 		return "email"

@@ -116,6 +116,23 @@ func TestMigration123BackfillsLegacyAuthSourceGrantDefaultsSafely(t *testing.T) 
 	require.Contains(t, sql, "auth_identity_migration_reports")
 }
 
+func TestMigration134AllowsEmailOAuthProviderTypes(t *testing.T) {
+	content, err := FS.ReadFile("134_allow_email_oauth_provider_types.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "users_signup_source_check")
+	require.Contains(t, sql, "auth_identities_provider_type_check")
+	require.Contains(t, sql, "auth_identity_channels_provider_type_check")
+	require.Contains(t, sql, "pending_auth_sessions_provider_type_check")
+	require.Contains(t, sql, "user_provider_default_grants_provider_type_check")
+	require.Contains(t, sql, "'github'")
+	require.Contains(t, sql, "'google'")
+	require.Contains(t, sql, "github_oauth_frontend_redirect_url")
+	require.Contains(t, sql, "google_oauth_frontend_redirect_url")
+	require.Contains(t, sql, "ON CONFLICT (key) DO NOTHING")
+}
+
 func TestMigration124BackfillsLegacyOIDCSecurityFlagsSafely(t *testing.T) {
 	content, err := FS.ReadFile("124_backfill_legacy_oidc_security_flags.sql")
 	require.NoError(t, err)

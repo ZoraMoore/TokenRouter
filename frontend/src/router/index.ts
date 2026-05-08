@@ -87,6 +87,16 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/auth/oauth/callback',
+    name: 'EmailOAuthCallback',
+    component: () => import('@/views/auth/OAuthCallbackView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'Email OAuth Callback',
+      titleKey: 'auth.oauthCallbackPageTitle'
+    }
+  },
+  {
     path: '/auth/linuxdo/callback',
     name: 'LinuxDoOAuthCallback',
     component: () => import('@/views/auth/LinuxDoCallbackView.vue'),
@@ -582,6 +592,7 @@ let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
 const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/models', '/payment/result']
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
+  '/auth/oauth/callback',
   '/auth/linuxdo/callback',
   '/auth/oidc/callback',
   '/auth/wechat/callback',

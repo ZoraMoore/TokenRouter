@@ -2658,6 +2658,9 @@ func (r *oauthPendingFlowUserRepo) Create(ctx context.Context, user *service.Use
 		SetSignupSource(user.SignupSource).
 		SetNillableLastLoginAt(user.LastLoginAt).
 		SetNillableLastActiveAt(user.LastActiveAt).
+		SetReferralCode(user.ReferralCode).
+		SetNillableReferredByUserID(user.ReferredByUserID).
+		SetReferralRewardAmount(user.ReferralRewardAmount).
 		Save(ctx)
 	if err != nil {
 		return err
@@ -2930,7 +2933,7 @@ func (r *oauthPendingFlowUserRepo) EnsureReferralCode(ctx context.Context, userI
 	if code != "" {
 		return code, nil
 	}
-	code = "OAUTHFLOW"
+	code = service.NormalizeReferralCode("OAUTHFLOW")
 	if err := r.client.User.UpdateOneID(userID).SetReferralCode(code).Exec(ctx); err != nil {
 		return "", err
 	}
@@ -3018,24 +3021,27 @@ func oauthPendingFlowServiceUser(entity *dbent.User) *service.User {
 		return nil
 	}
 	return &service.User{
-		ID:                  entity.ID,
-		Email:               entity.Email,
-		Username:            entity.Username,
-		Notes:               entity.Notes,
-		PasswordHash:        entity.PasswordHash,
-		Role:                entity.Role,
-		Balance:             entity.Balance,
-		Concurrency:         entity.Concurrency,
-		Status:              entity.Status,
-		SignupSource:        entity.SignupSource,
-		LastLoginAt:         entity.LastLoginAt,
-		LastActiveAt:        entity.LastActiveAt,
-		TotpSecretEncrypted: entity.TotpSecretEncrypted,
-		TotpEnabled:         entity.TotpEnabled,
-		TotpEnabledAt:       entity.TotpEnabledAt,
-		TotalRecharged:      entity.TotalRecharged,
-		CreatedAt:           entity.CreatedAt,
-		UpdatedAt:           entity.UpdatedAt,
+		ID:                   entity.ID,
+		Email:                entity.Email,
+		Username:             entity.Username,
+		Notes:                entity.Notes,
+		PasswordHash:         entity.PasswordHash,
+		Role:                 entity.Role,
+		Balance:              entity.Balance,
+		Concurrency:          entity.Concurrency,
+		Status:               entity.Status,
+		SignupSource:         entity.SignupSource,
+		LastLoginAt:          entity.LastLoginAt,
+		LastActiveAt:         entity.LastActiveAt,
+		TotpSecretEncrypted:  entity.TotpSecretEncrypted,
+		TotpEnabled:          entity.TotpEnabled,
+		TotpEnabledAt:        entity.TotpEnabledAt,
+		TotalRecharged:       entity.TotalRecharged,
+		ReferralCode:         entity.ReferralCode,
+		ReferredByUserID:     entity.ReferredByUserID,
+		ReferralRewardAmount: entity.ReferralRewardAmount,
+		CreatedAt:            entity.CreatedAt,
+		UpdatedAt:            entity.UpdatedAt,
 	}
 }
 

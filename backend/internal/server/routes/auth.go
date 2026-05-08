@@ -154,6 +154,22 @@ func RegisterAuthRoutes(
 			}),
 			h.Auth.CompleteOIDCOAuthRegistration,
 		)
+		auth.GET("/oauth/github/start", h.Auth.GitHubOAuthStart)
+		auth.GET("/oauth/github/callback", h.Auth.GitHubOAuthCallback)
+		auth.POST("/oauth/github/complete-registration",
+			rateLimiter.LimitWithOptions("oauth-github-complete", 10, time.Minute, middleware.RateLimitOptions{
+				FailureMode: middleware.RateLimitFailClose,
+			}),
+			h.Auth.CompleteGitHubOAuthRegistration,
+		)
+		auth.GET("/oauth/google/start", h.Auth.GoogleOAuthStart)
+		auth.GET("/oauth/google/callback", h.Auth.GoogleOAuthCallback)
+		auth.POST("/oauth/google/complete-registration",
+			rateLimiter.LimitWithOptions("oauth-google-complete", 10, time.Minute, middleware.RateLimitOptions{
+				FailureMode: middleware.RateLimitFailClose,
+			}),
+			h.Auth.CompleteGoogleOAuthRegistration,
+		)
 		auth.POST("/oauth/oidc/bind-login",
 			rateLimiter.LimitWithOptions("oauth-oidc-bind-login", 20, time.Minute, middleware.RateLimitOptions{
 				FailureMode: middleware.RateLimitFailClose,

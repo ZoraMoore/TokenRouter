@@ -268,7 +268,7 @@ func TestRegisterOAuthEmailAccountFallsBackUnknownSignupSourceToEmail(t *testing
 		"secret-123",
 		"246810",
 		"",
-		"github",
+		"twitter",
 	)
 
 	require.NoError(t, err)
