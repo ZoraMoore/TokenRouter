@@ -25,6 +25,9 @@ var semverPattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 // menuItemIDPattern validates custom menu item IDs: alphanumeric, hyphens, underscores only.
 var menuItemIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
+// markdownMenuSlugPattern 校验自定义 Markdown 页面 slug，需与页面读取接口保持一致。
+var markdownMenuSlugPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+
 // generateMenuItemID generates a short random hex ID for a custom menu item.
 func generateMenuItemID() (string, error) {
 	b := make([]byte, 8)
@@ -1026,18 +1029,34 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 				response.BadRequest(c, "Custom menu item label is too long (max 50 characters)")
 				return
 			}
-			if strings.TrimSpace(item.URL) == "" {
-				response.BadRequest(c, "Custom menu item URL is required")
-				return
+			urlTrimmed := strings.TrimSpace(item.URL)
+			if strings.HasPrefix(urlTrimmed, "md:") {
+				// Markdown 页面模式使用 md:<slug>，slug 规则与 /api/v1/pages/:slug 保持一致。
+				slug := strings.TrimPrefix(urlTrimmed, "md:")
+				if slug == "" {
+					response.BadRequest(c, "Custom menu item markdown slug cannot be empty (use md:slug format)")
+					return
+				}
+				if len(slug) > 64 || !markdownMenuSlugPattern.MatchString(slug) {
+					response.BadRequest(c, "Custom menu item markdown slug contains invalid characters")
+					return
+				}
+			} else {
+				if urlTrimmed == "" {
+					response.BadRequest(c, "Custom menu item URL is required (use md:slug for markdown pages)")
+					return
+				}
+				if len(urlTrimmed) > maxMenuItemURLLen {
+					response.BadRequest(c, "Custom menu item URL is too long (max 2048 characters)")
+					return
+				}
+				if err := config.ValidateAbsoluteHTTPURL(urlTrimmed); err != nil {
+					response.BadRequest(c, "Custom menu item URL must be an absolute http(s) URL or md:<slug>")
+					return
+				}
 			}
-			if len(item.URL) > maxMenuItemURLLen {
-				response.BadRequest(c, "Custom menu item URL is too long (max 2048 characters)")
-				return
-			}
-			if err := config.ValidateAbsoluteHTTPURL(strings.TrimSpace(item.URL)); err != nil {
-				response.BadRequest(c, "Custom menu item URL must be an absolute http(s) URL")
-				return
-			}
+			// 保存规范化后的 URL，避免前后空白导致运行时 md: 页面识别失败。
+			items[i].URL = urlTrimmed
 			if item.Visibility != "user" && item.Visibility != "admin" {
 				response.BadRequest(c, "Custom menu item visibility must be 'user' or 'admin'")
 				return
