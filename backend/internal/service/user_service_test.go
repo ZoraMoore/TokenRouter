@@ -709,6 +709,26 @@ func TestNewUserService_FieldsAssignment(t *testing.T) {
 	require.Equal(t, cache, svc.billingCache)
 }
 
+func TestUpdateProfile_RejectsEmailChange(t *testing.T) {
+	repo := &mockUserRepo{
+		getByIDUser: &User{
+			ID:       7,
+			Email:    "current@example.com",
+			Username: "current-user",
+		},
+	}
+	svc := NewUserService(repo, nil, nil, nil)
+	newEmail := "new@example.com"
+
+	_, err := svc.UpdateProfile(context.Background(), 7, UpdateProfileRequest{
+		Email: &newEmail,
+	})
+
+	require.ErrorIs(t, err, ErrProfileEmailChangeForbidden)
+	require.Zero(t, repo.updateCalls)
+	require.Equal(t, "current@example.com", repo.getByIDUser.Email)
+}
+
 func TestUpdateProfile_StoresInlineAvatarWithinLimit(t *testing.T) {
 	raw := []byte("small-avatar")
 	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(raw)

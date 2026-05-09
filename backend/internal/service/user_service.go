@@ -29,16 +29,17 @@ import (
 )
 
 var (
-	ErrUserNotFound             = infraerrors.NotFound("USER_NOT_FOUND", "user not found")
-	ErrPasswordIncorrect        = infraerrors.BadRequest("PASSWORD_INCORRECT", "current password is incorrect")
-	ErrInsufficientPerms        = infraerrors.Forbidden("INSUFFICIENT_PERMISSIONS", "insufficient permissions")
-	ErrNotifyCodeUserRateLimit  = infraerrors.TooManyRequests("NOTIFY_CODE_USER_RATE_LIMIT", "too many verification codes requested, please try again later")
-	ErrAvatarInvalid            = infraerrors.BadRequest("AVATAR_INVALID", "avatar must be a valid image data URL or http(s) URL")
-	ErrAvatarTooLarge           = infraerrors.BadRequest("AVATAR_TOO_LARGE", "avatar image must be 100KB or smaller")
-	ErrAvatarNotImage           = infraerrors.BadRequest("AVATAR_NOT_IMAGE", "avatar content must be an image")
-	ErrIdentityProviderInvalid  = infraerrors.BadRequest("IDENTITY_PROVIDER_INVALID", "identity provider is invalid")
-	ErrIdentityRedirectInvalid  = infraerrors.BadRequest("IDENTITY_REDIRECT_INVALID", "identity redirect path is invalid")
-	ErrIdentityUnbindLastMethod = infraerrors.Conflict(
+	ErrUserNotFound                = infraerrors.NotFound("USER_NOT_FOUND", "user not found")
+	ErrPasswordIncorrect           = infraerrors.BadRequest("PASSWORD_INCORRECT", "current password is incorrect")
+	ErrInsufficientPerms           = infraerrors.Forbidden("INSUFFICIENT_PERMISSIONS", "insufficient permissions")
+	ErrNotifyCodeUserRateLimit     = infraerrors.TooManyRequests("NOTIFY_CODE_USER_RATE_LIMIT", "too many verification codes requested, please try again later")
+	ErrAvatarInvalid               = infraerrors.BadRequest("AVATAR_INVALID", "avatar must be a valid image data URL or http(s) URL")
+	ErrAvatarTooLarge              = infraerrors.BadRequest("AVATAR_TOO_LARGE", "avatar image must be 100KB or smaller")
+	ErrAvatarNotImage              = infraerrors.BadRequest("AVATAR_NOT_IMAGE", "avatar content must be an image")
+	ErrProfileEmailChangeForbidden = infraerrors.BadRequest("EMAIL_PROFILE_UPDATE_FORBIDDEN", "email must be changed through verified email binding")
+	ErrIdentityProviderInvalid     = infraerrors.BadRequest("IDENTITY_PROVIDER_INVALID", "identity provider is invalid")
+	ErrIdentityRedirectInvalid     = infraerrors.BadRequest("IDENTITY_REDIRECT_INVALID", "identity redirect path is invalid")
+	ErrIdentityUnbindLastMethod    = infraerrors.Conflict(
 		"IDENTITY_UNBIND_LAST_METHOD",
 		"bind another sign-in method before unbinding this provider",
 	)
@@ -171,7 +172,7 @@ type StartUserIdentityBindingResult struct {
 }
 
 const (
-	userIdentityNoteEmailManagedFromProfile = "profile.authBindings.notes.emailManagedFromProfile"
+	userIdentityNoteEmailManagedByBinding   = "profile.authBindings.notes.emailManagedByBinding"
 	userIdentityNoteCanUnbind               = "profile.authBindings.notes.canUnbind"
 	userIdentityNoteBindAnotherBeforeUnbind = "profile.authBindings.notes.bindAnotherBeforeUnbind"
 )
@@ -444,29 +445,13 @@ func (s *UserService) updateProfile(ctx context.Context, userID int64, req Updat
 		return nil, 0, fmt.Errorf("get user: %w", err)
 	}
 	oldConcurrency := user.Concurrency
-	normalizedEmail := ""
-	emailChanged := false
 
-	// 更新字段
+	// 主邮箱属于登录身份，不能在普通资料更新中无验证修改。
 	if req.Email != nil {
-		emailChanged = *req.Email != user.Email
-		if emailChanged {
-			if s.isRegistrationEmailNormalizationEnabled(ctx) {
-				normalizedEmail = NormalizeRegistrationEmailAddress(*req.Email)
-			}
-			if normalizedEmail == "" {
-				exists, err := s.userRepo.ExistsByEmail(ctx, *req.Email)
-				if err != nil {
-					return nil, oldConcurrency, fmt.Errorf("check email exists: %w", err)
-				}
-				if exists {
-					return nil, oldConcurrency, ErrEmailExists
-				}
-			}
-		}
-		user.Email = *req.Email
+		return nil, oldConcurrency, ErrProfileEmailChangeForbidden
 	}
 
+	// 更新字段
 	if req.Username != nil {
 		user.Username = *req.Username
 	}
@@ -494,14 +479,7 @@ func (s *UserService) updateProfile(ctx context.Context, userID int64, req Updat
 		}
 	}
 
-	updateUser := s.userRepo.Update
-	if emailChanged && normalizedEmail != "" {
-		updateUser = func(updateCtx context.Context, updateUser *User) error {
-			return s.userRepo.UpdateWithNormalizedEmailGuard(updateCtx, updateUser, normalizedEmail)
-		}
-	}
-
-	if err := updateUser(ctx, user); err != nil {
+	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, oldConcurrency, fmt.Errorf("update user: %w", err)
 	}
 
@@ -660,8 +638,8 @@ func (s *UserService) buildEmailIdentitySummary(user *User, records []UserAuthId
 		Provider:  "email",
 		CanBind:   false,
 		CanUnbind: false,
-		NoteKey:   userIdentityNoteEmailManagedFromProfile,
-		Note:      "Primary account email is managed from the profile form.",
+		NoteKey:   userIdentityNoteEmailManagedByBinding,
+		Note:      "Primary account email is managed through verified email binding.",
 	}
 	if user == nil {
 		return summary
@@ -961,17 +939,6 @@ func maskOpaqueIdentity(value string) string {
 	default:
 		return string(runes[:3]) + "***" + string(runes[len(runes)-3:])
 	}
-}
-
-func (s *UserService) isRegistrationEmailNormalizationEnabled(ctx context.Context) bool {
-	if s.settingRepo == nil {
-		return false
-	}
-	value, err := s.settingRepo.GetValue(ctx, SettingKeyRegistrationEmailNormalization)
-	if err != nil {
-		return false
-	}
-	return value == "true"
 }
 
 // ChangePassword 修改密码

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/TokenFlux/TokenRouter/internal/handler/dto"
@@ -43,11 +44,11 @@ type ChangePasswordRequest struct {
 
 // UpdateProfileRequest represents the update profile request payload
 type UpdateProfileRequest struct {
-	Email                  *string  `json:"email" binding:"omitempty,email"`
-	Username               *string  `json:"username"`
-	AvatarURL              *string  `json:"avatar_url"`
-	BalanceNotifyEnabled   *bool    `json:"balance_notify_enabled"`
-	BalanceNotifyThreshold *float64 `json:"balance_notify_threshold"`
+	Email                  json.RawMessage `json:"email"`
+	Username               *string         `json:"username"`
+	AvatarURL              *string         `json:"avatar_url"`
+	BalanceNotifyEnabled   *bool           `json:"balance_notify_enabled"`
+	BalanceNotifyThreshold *float64        `json:"balance_notify_threshold"`
 }
 
 type userProfileResponse struct {
@@ -156,17 +157,13 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	if req.Email != nil {
-		email := strings.TrimSpace(*req.Email)
-		if email == "" {
-			response.BadRequest(c, "Invalid request: email cannot be empty")
-			return
-		}
-		req.Email = &email
+	if len(req.Email) > 0 {
+		// 主邮箱会影响登录身份，必须走验证码绑定/换绑流程，不能通过资料接口直接修改。
+		response.ErrorFrom(c, service.ErrProfileEmailChangeForbidden)
+		return
 	}
 
 	svcReq := service.UpdateProfileRequest{
-		Email:                  req.Email,
 		Username:               req.Username,
 		AvatarURL:              req.AvatarURL,
 		BalanceNotifyEnabled:   req.BalanceNotifyEnabled,

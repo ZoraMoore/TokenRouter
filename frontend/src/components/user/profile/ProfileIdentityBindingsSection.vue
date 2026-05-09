@@ -301,7 +301,9 @@ const emailSubmitActionLabel = computed(() =>
 )
 const legacyBindingNoteKeys: Record<string, string> = {
   'Primary account email is managed from the profile form.':
-    'profile.authBindings.notes.emailManagedFromProfile',
+    'profile.authBindings.notes.emailManagedByBinding',
+  'Primary account email is managed through verified email binding.':
+    'profile.authBindings.notes.emailManagedByBinding',
   'You can unbind this sign-in method.': 'profile.authBindings.notes.canUnbind',
   'Bind another sign-in method before unbinding.':
     'profile.authBindings.notes.bindAnotherBeforeUnbind',

@@ -1052,6 +1052,7 @@ export default {
     role: '角色',
     enterUsername: '输入用户名',
     editProfile: '编辑个人资料',
+    emailChangeRequiresVerification: '更换邮箱需要在下方登录方式绑定中完成验证码验证。',
     updateProfile: '更新资料',
     updating: '更新中...',
     updateSuccess: '资料更新成功',
@@ -1198,7 +1199,7 @@ export default {
         wechat: '微信',
       },
       notes: {
-        emailManagedFromProfile: '主邮箱在资料表单中管理',
+        emailManagedByBinding: '主邮箱通过验证码绑定流程管理',
         canUnbind: '你可以解绑这个登录方式。',
         bindAnotherBeforeUnbind: '请先绑定其他登录方式，再解除当前绑定。',
       },

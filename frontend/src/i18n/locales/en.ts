@@ -1048,6 +1048,7 @@ export default {
     role: 'Role',
     enterUsername: 'Enter username',
     editProfile: 'Edit Profile',
+    emailChangeRequiresVerification: 'Change email from the sign-in methods section after verification.',
     updateProfile: 'Update Profile',
     updating: 'Updating...',
     updateSuccess: 'Profile updated successfully',
@@ -1194,7 +1195,7 @@ export default {
         wechat: 'WeChat',
       },
       notes: {
-        emailManagedFromProfile: 'Primary email is managed in the profile form',
+        emailManagedByBinding: 'Primary email is managed through verified email binding',
         canUnbind: 'You can unbind this sign-in method',
         bindAnotherBeforeUnbind: 'Bind another sign-in method before unbinding',
       },

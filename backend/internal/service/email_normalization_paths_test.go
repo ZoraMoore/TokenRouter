@@ -283,7 +283,7 @@ func TestAuthService_Register_SkipsNormalizedLookupWhenDisabled(t *testing.T) {
 	require.Empty(t, repo.existsByNormalizedCalls)
 }
 
-func TestUserService_UpdateProfile_UsesNormalizedEmailGuardWhenEnabled(t *testing.T) {
+func TestUserService_UpdateProfile_RejectsEmailWhenNormalizationEnabled(t *testing.T) {
 	repo := &emailNormalizationRepoStub{
 		user: &User{
 			ID:          7,
@@ -298,21 +298,20 @@ func TestUserService_UpdateProfile_UsesNormalizedEmailGuardWhenEnabled(t *testin
 	newEmail := "Y.o.u.r.N.a.m.e+promo@example.com"
 	newUsername := "new-name"
 
-	updated, err := svc.UpdateProfile(context.Background(), 7, UpdateProfileRequest{
+	_, err := svc.UpdateProfile(context.Background(), 7, UpdateProfileRequest{
 		Email:    &newEmail,
 		Username: &newUsername,
 	})
-	require.NoError(t, err)
-	require.Equal(t, newEmail, updated.Email)
+	require.ErrorIs(t, err, ErrProfileEmailChangeForbidden)
 	require.Empty(t, repo.existsByEmailCalls)
-	require.Equal(t, []string{"yourname@example.com"}, repo.normalizedUpdateCalls)
-	require.Len(t, repo.normalizedUpdateUsers, 1)
-	require.Equal(t, newEmail, repo.normalizedUpdateUsers[0].Email)
-	require.Equal(t, newUsername, repo.normalizedUpdateUsers[0].Username)
+	require.Empty(t, repo.normalizedUpdateCalls)
+	require.Empty(t, repo.normalizedUpdateUsers)
 	require.Empty(t, repo.updateCalls)
+	require.Equal(t, "old@example.com", repo.user.Email)
+	require.Equal(t, "old-name", repo.user.Username)
 }
 
-func TestUserService_UpdateProfile_UsesExactEmailCheckWhenNormalizationDisabled(t *testing.T) {
+func TestUserService_UpdateProfile_RejectsEmailWhenNormalizationDisabled(t *testing.T) {
 	repo := &emailNormalizationRepoStub{
 		user: &User{
 			ID:    8,
@@ -324,8 +323,8 @@ func TestUserService_UpdateProfile_UsesExactEmailCheckWhenNormalizationDisabled(
 	newEmail := "duplicate@example.com"
 
 	_, err := svc.UpdateProfile(context.Background(), 8, UpdateProfileRequest{Email: &newEmail})
-	require.ErrorIs(t, err, ErrEmailExists)
-	require.Equal(t, []string{"duplicate@example.com"}, repo.existsByEmailCalls)
+	require.ErrorIs(t, err, ErrProfileEmailChangeForbidden)
+	require.Empty(t, repo.existsByEmailCalls)
 	require.Empty(t, repo.normalizedUpdateCalls)
 	require.Empty(t, repo.updateCalls)
 }

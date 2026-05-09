@@ -199,6 +199,43 @@ func TestUserHandlerUpdateProfileReturnsAvatarURL(t *testing.T) {
 	require.Equal(t, "handler-avatar", resp.Data.Username)
 }
 
+func TestUserHandlerUpdateProfileRejectsEmailField(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	repo := &userHandlerRepoStub{
+		user: &service.User{
+			ID:       11,
+			Email:    "current@example.com",
+			Username: "current-user",
+			Role:     service.RoleUser,
+			Status:   service.StatusActive,
+		},
+	}
+	handler := NewUserHandler(service.NewUserService(repo, nil, nil, nil), nil, nil, nil)
+
+	body := []byte(`{"email":"attacker@example.com","username":"current-user"}`)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/user", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 11})
+
+	handler.UpdateProfile(c)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Equal(t, "current@example.com", repo.user.Email)
+
+	var resp struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Reason  string `json:"reason"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+	require.Equal(t, "EMAIL_PROFILE_UPDATE_FORBIDDEN", resp.Reason)
+	require.Equal(t, "email must be changed through verified email binding", resp.Message)
+}
+
 func TestUserHandlerGetProfileReturnsIdentitySummaries(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -354,7 +391,7 @@ func TestUserHandlerGetProfileReturnsLegacyCompatibilityFields(t *testing.T) {
 	emailBinding, ok := identityBindings["email"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, true, emailBinding["bound"])
-	require.Equal(t, "profile.authBindings.notes.emailManagedFromProfile", emailBinding["note_key"])
+	require.Equal(t, "profile.authBindings.notes.emailManagedByBinding", emailBinding["note_key"])
 
 	linuxdoCompatBinding, ok := identityBindings["linuxdo"].(map[string]any)
 	require.True(t, ok)

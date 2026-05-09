@@ -16,16 +16,18 @@
           </p>
         </div>
         <div>
-          <label for="email" class="input-label">
+          <p class="input-label">
             {{ t('auth.emailLabel') }}
-          </label>
-          <input
-            id="email"
-            v-model="email"
-            type="email"
-            class="input"
-            :placeholder="t('auth.emailPlaceholder')"
-          />
+          </p>
+          <div
+            data-testid="profile-email-readonly"
+            class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:border-dark-700 dark:bg-dark-800/70 dark:text-gray-200"
+          >
+            {{ emailDisplay }}
+          </div>
+          <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('profile.emailChangeRequiresVerification') }}
+          </p>
         </div>
 
         <div>
@@ -52,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, withDefaults } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
@@ -70,25 +72,17 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 const appStore = useAppStore()
 
-const email = ref(props.initialEmail)
 const username = ref(props.initialUsername)
 const loading = ref(false)
-
-watch(() => props.initialEmail, (val) => {
-  email.value = val
-})
 
 watch(() => props.initialUsername, (val) => {
   username.value = val
 })
 
-const handleUpdateProfile = async () => {
-  const trimmedEmail = email.value.trim()
-  if (!trimmedEmail) {
-    appStore.showError(t('auth.emailRequired'))
-    return
-  }
+// 主邮箱只读展示，实际更换必须走带验证码的邮箱绑定流程。
+const emailDisplay = computed(() => props.initialEmail.trim() || '-')
 
+const handleUpdateProfile = async () => {
   const trimmedUsername = username.value.trim()
   if (!trimmedUsername) {
     appStore.showError(t('profile.usernameRequired'))
@@ -98,7 +92,6 @@ const handleUpdateProfile = async () => {
   loading.value = true
   try {
     const updatedUser = await userAPI.updateProfile({
-      email: trimmedEmail,
       username: trimmedUsername
     })
     authStore.user = updatedUser

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUpdateProfile_DoesNotReturnPartialSuccessFromEmailIdentityResync(t *testing.T) {
+func TestUpdateProfile_RejectsEmailBeforeEmailIdentityResync(t *testing.T) {
 	repo := &emailSyncRepoStub{
 		user: &User{
 			ID:          19,
@@ -22,13 +22,12 @@ func TestUpdateProfile_DoesNotReturnPartialSuccessFromEmailIdentityResync(t *tes
 	svc := NewUserService(repo, nil, nil, nil)
 
 	newEmail := "profile-after@example.com"
-	updated, err := svc.UpdateProfile(context.Background(), 19, UpdateProfileRequest{
+	_, err := svc.UpdateProfile(context.Background(), 19, UpdateProfileRequest{
 		Email: &newEmail,
 	})
-	require.NoError(t, err)
-	require.NotNil(t, updated)
-	require.Equal(t, newEmail, updated.Email)
-	require.Equal(t, 1, repo.updateCalls)
+	require.ErrorIs(t, err, ErrProfileEmailChangeForbidden)
+	require.Equal(t, 0, repo.updateCalls)
 	require.Empty(t, repo.replaceCalls)
 	require.Empty(t, repo.ensureCalls)
+	require.Equal(t, "profile-before@example.com", repo.user.Email)
 }

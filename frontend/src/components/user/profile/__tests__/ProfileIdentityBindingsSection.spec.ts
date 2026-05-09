@@ -64,8 +64,8 @@ vi.mock('vue-i18n', async (importOriginal) => {
         if (key === 'profile.authBindings.codeSentTo') return `Code sent to ${params?.email || ''}`.trim()
         if (key === 'profile.authBindings.bindSuccess') return 'Bind success'
         if (key === 'profile.authBindings.replaceSuccess') return 'Primary email updated'
-        if (key === 'profile.authBindings.notes.emailManagedFromProfile')
-          return 'Primary email is managed in the profile form'
+        if (key === 'profile.authBindings.notes.emailManagedByBinding')
+          return 'Primary email is managed through verified email binding'
         if (key === 'profile.authBindings.notes.canUnbind')
           return 'You can unbind this sign-in method'
         if (key === 'profile.authBindings.notes.bindAnotherBeforeUnbind')
@@ -421,8 +421,8 @@ describe('ProfileIdentityBindingsSection', () => {
               bound: true,
               display_name: 'alice@example.com',
               subject_hint: 'a***e@example.com',
-              note_key: 'profile.authBindings.notes.emailManagedFromProfile',
-              note: 'Primary account email is managed from the profile form.',
+              note_key: 'profile.authBindings.notes.emailManagedByBinding',
+              note: 'Primary account email is managed through verified email binding.',
             } as any,
           },
         }),
@@ -434,7 +434,7 @@ describe('ProfileIdentityBindingsSection', () => {
 
     expect(wrapper.text().match(/alice@example\.com/g)).toHaveLength(1)
     expect(wrapper.text()).not.toContain('a***e@example.com')
-    expect(wrapper.text()).toContain('Primary email is managed in the profile form')
+    expect(wrapper.text()).toContain('Primary email is managed through verified email binding')
   })
 
   it('keeps the email form available for replacing a bound primary email', async () => {
