@@ -150,16 +150,18 @@ const refreshAttempts = ref(0)
 /** 基础金额优先使用订单原始金额；旧订单缺少拆分字段时按历史费率兜底。 */
 const baseAmount = computed(() => {
   if (!order.value) return 0
+  const feeRate = Number(order.value.fee_rate) || 0
   if ((order.value.fee_amount || 0) > 0) return Math.round((order.value.pay_amount - order.value.fee_amount) * 100) / 100
-  if (order.value.fee_rate <= 0) return order.value.pay_amount
-  return Math.round((order.value.pay_amount / (1 + order.value.fee_rate / 100)) * 100) / 100
+  if (feeRate <= 0) return order.value.pay_amount ?? 0
+  return Math.round((order.value.pay_amount / (1 + feeRate / 100)) * 100) / 100
 })
 
 /** 手续费优先使用新字段，老订单按实付与基础金额差值兜底。 */
 const feeAmount = computed(() => {
   if (!order.value) return 0
+  const feeRate = Number(order.value.fee_rate) || 0
   if ((order.value.fee_amount || 0) > 0) return order.value.fee_amount
-  if (order.value.fee_rate <= 0) return 0
+  if (feeRate <= 0) return 0
   return Math.round((order.value.pay_amount - baseAmount.value) * 100) / 100
 })
 
