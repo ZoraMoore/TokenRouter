@@ -140,16 +140,18 @@ const props = defineProps<{
 /** 基础金额优先使用订单拆分字段；旧订单按历史费率倒推。 */
 const baseAmount = computed(() => {
   if (!props.order) return 0
+  const feeRate = Number(props.order.fee_rate) || 0
   if ((props.order.fee_amount || 0) > 0) return props.order.pay_amount - props.order.fee_amount
-  if (props.order.fee_rate <= 0) return props.order.pay_amount
-  return props.order.pay_amount / (1 + props.order.fee_rate / 100)
+  if (feeRate <= 0) return props.order.pay_amount
+  return props.order.pay_amount / (1 + feeRate / 100)
 })
 
 /** 手续费优先使用新字段，老订单按差值兜底。 */
 const feeAmount = computed(() => {
   if (!props.order) return 0
+  const feeRate = Number(props.order.fee_rate) || 0
   if ((props.order.fee_amount || 0) > 0) return props.order.fee_amount
-  if (props.order.fee_rate <= 0) return 0
+  if (feeRate <= 0) return 0
   return props.order.pay_amount - baseAmount.value
 })
 
