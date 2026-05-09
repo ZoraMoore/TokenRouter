@@ -22,18 +22,30 @@
       </span>
     </div>
 
-    <!-- Right: rate pill + checkmark (vertically centered to first row) -->
-    <div class="flex shrink-0 items-center gap-2 pt-0.5">
+    <!-- Right: rate pill + capacity + checkmark -->
+    <div class="flex shrink-0 items-start gap-2 pt-0.5">
+      <div class="flex flex-col items-end gap-1">
       <!-- Rate pill (platform color) -->
-      <span v-if="rateMultiplier !== undefined" :class="['inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold', ratePillClass]">
-        <template v-if="hasCustomRate">
-          <span class="mr-1 line-through opacity-50">{{ rateMultiplier }}x</span>
-          <span class="font-bold">{{ userRateMultiplier }}x</span>
-        </template>
-        <template v-else>
-          {{ rateMultiplier }}x 倍率
-        </template>
-      </span>
+        <span v-if="rateMultiplier !== undefined" :class="['inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold', ratePillClass]">
+          <template v-if="hasCustomRate">
+            <span class="mr-1 line-through opacity-50">{{ rateMultiplier }}x</span>
+            <span class="font-bold">{{ userRateMultiplier }}x</span>
+          </template>
+          <template v-else>
+            {{ rateMultiplier }}x 倍率
+          </template>
+        </span>
+        <GroupCapacityBadge
+          v-if="capacity"
+          layout="horizontal"
+          :concurrency-used="capacity.concurrency_used"
+          :concurrency-max="capacity.concurrency_max"
+          :sessions-used="capacity.sessions_used"
+          :sessions-max="capacity.sessions_max"
+          :rpm-used="capacity.rpm_used"
+          :rpm-max="capacity.rpm_max"
+        />
+      </div>
       <!-- Checkmark -->
       <svg
         v-if="showCheckmark && selected"
@@ -52,7 +64,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import GroupBadge from './GroupBadge.vue'
-import type { GroupPlatform } from '@/types'
+import GroupCapacityBadge from './GroupCapacityBadge.vue'
+import type { GroupPlatform, MarketplaceGroupCapacity } from '@/types'
 import { resolveProviderBrand } from '@/utils/providerBrand'
 
 interface Props {
@@ -62,6 +75,7 @@ interface Props {
   rateMultiplier?: number
   userRateMultiplier?: number | null
   description?: string | null
+  capacity?: MarketplaceGroupCapacity
   selected?: boolean
   showCheckmark?: boolean
 }

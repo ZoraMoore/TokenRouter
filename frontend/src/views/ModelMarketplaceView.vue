@@ -172,6 +172,24 @@
                   <span class="rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 dark:border-dark-700 dark:bg-dark-900 dark:text-dark-200">
                     {{ group.model_count }} {{ t('marketplace.modelsStat') }}
                   </span>
+                  <div
+                    v-if="group.capacity"
+                    class="flex items-center gap-2 rounded-lg border border-gray-200 bg-white/80 px-2.5 py-1.5 dark:border-dark-700 dark:bg-dark-950/80"
+                    :title="t('marketplace.capacityHint')"
+                  >
+                    <span class="text-xs font-semibold text-gray-500 dark:text-dark-400">
+                      {{ t('marketplace.capacity') }}
+                    </span>
+                    <GroupCapacityBadge
+                      layout="horizontal"
+                      :concurrency-used="group.capacity.concurrency_used"
+                      :concurrency-max="group.capacity.concurrency_max"
+                      :sessions-used="group.capacity.sessions_used"
+                      :sessions-max="group.capacity.sessions_max"
+                      :rpm-used="group.capacity.rpm_used"
+                      :rpm-max="group.capacity.rpm_max"
+                    />
+                  </div>
                   <span
                     v-if="hasOfficialPriceRatio(group.official_price_ratio)"
                     class="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
@@ -354,6 +372,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
+import GroupCapacityBadge from '@/components/common/GroupCapacityBadge.vue'
 import ProviderIcon from '@/components/common/ProviderIcon.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import SearchInput from '@/components/common/SearchInput.vue'

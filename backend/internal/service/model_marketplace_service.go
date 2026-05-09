@@ -23,6 +23,7 @@ type ModelMarketplaceGroup struct {
 	RateMultiplier             float64
 	OfficialPriceRatio         *float64
 	OfficialPriceRMBEquivalent *float64
+	Capacity                   *GroupCapacitySummary
 	ModelCount                 int
 	Models                     []ModelMarketplaceModel
 }
@@ -34,10 +35,11 @@ type ModelMarketplaceModel struct {
 }
 
 type ModelMarketplaceService struct {
-	groupRepo      GroupRepository
-	settingRepo    SettingRepository
-	gatewayService *GatewayService
-	billingService *BillingService
+	groupRepo       GroupRepository
+	settingRepo     SettingRepository
+	gatewayService  *GatewayService
+	billingService  *BillingService
+	capacityService *GroupCapacityService
 }
 
 func NewModelMarketplaceService(
@@ -45,12 +47,14 @@ func NewModelMarketplaceService(
 	settingRepo SettingRepository,
 	gatewayService *GatewayService,
 	billingService *BillingService,
+	capacityService *GroupCapacityService,
 ) *ModelMarketplaceService {
 	return &ModelMarketplaceService{
-		groupRepo:      groupRepo,
-		settingRepo:    settingRepo,
-		gatewayService: gatewayService,
-		billingService: billingService,
+		groupRepo:       groupRepo,
+		settingRepo:     settingRepo,
+		gatewayService:  gatewayService,
+		billingService:  billingService,
+		capacityService: capacityService,
 	}
 }
 
@@ -61,6 +65,7 @@ func (s *ModelMarketplaceService) ListPublic(ctx context.Context) ([]ModelMarket
 	}
 
 	discountConfig, showDiscount := s.getOfficialPriceRatioConfig(ctx)
+	capacityMap := s.getPublicCapacityMap(ctx, groups)
 	out := make([]ModelMarketplaceGroup, 0, len(groups))
 	for i := range groups {
 		group := &groups[i]
@@ -89,12 +94,49 @@ func (s *ModelMarketplaceService) ListPublic(ctx context.Context) ([]ModelMarket
 			RateMultiplier:             group.RateMultiplier,
 			OfficialPriceRatio:         officialPriceRatio,
 			OfficialPriceRMBEquivalent: officialPriceRMBEquivalent,
+			Capacity:                   marketplaceGroupCapacity(capacityMap, group.ID),
 			ModelCount:                 len(models),
 			Models:                     models,
 		})
 	}
 
 	return out, nil
+}
+
+func (s *ModelMarketplaceService) getPublicCapacityMap(ctx context.Context, groups []Group) map[int64]GroupCapacitySummary {
+	if s.capacityService == nil || len(groups) == 0 {
+		return nil
+	}
+
+	groupIDs := make([]int64, 0, len(groups))
+	for i := range groups {
+		group := &groups[i]
+		if group.IsExclusive || group.ActiveAccountCount <= 0 {
+			continue
+		}
+		groupIDs = append(groupIDs, group.ID)
+	}
+	if len(groupIDs) == 0 {
+		return nil
+	}
+
+	// 容量是模型广场的辅助负载信息，获取失败时不影响模型和价格展示。
+	capacityMap, err := s.capacityService.GetGroupCapacityByIDs(ctx, groupIDs)
+	if err != nil {
+		return nil
+	}
+	return capacityMap
+}
+
+func marketplaceGroupCapacity(capacityMap map[int64]GroupCapacitySummary, groupID int64) *GroupCapacitySummary {
+	if len(capacityMap) == 0 {
+		return nil
+	}
+	capacity, ok := capacityMap[groupID]
+	if !ok {
+		return nil
+	}
+	return &capacity
 }
 
 func marketplaceGroupDisplayBrand(group *Group) string {

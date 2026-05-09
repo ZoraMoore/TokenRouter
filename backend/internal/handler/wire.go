@@ -78,6 +78,13 @@ func ProvideSettingHandler(settingService *service.SettingService, buildInfo Bui
 	return NewSettingHandler(settingService, buildInfo.Version)
 }
 
+// ProvideAPIKeyHandler creates APIKeyHandler and injects optional group capacity display data.
+func ProvideAPIKeyHandler(apiKeyService *service.APIKeyService, groupCapacityService *service.GroupCapacityService) *APIKeyHandler {
+	handler := NewAPIKeyHandler(apiKeyService)
+	handler.SetGroupCapacityService(groupCapacityService)
+	return handler
+}
+
 // ProvideHandlers creates the Handlers struct
 func ProvideHandlers(
 	authHandler *AuthHandler,
@@ -122,7 +129,7 @@ var ProviderSet = wire.NewSet(
 	// Top-level handlers
 	NewAuthHandler,
 	NewUserHandler,
-	NewAPIKeyHandler,
+	ProvideAPIKeyHandler,
 	NewUsageHandler,
 	NewRedeemHandler,
 	NewSubscriptionHandler,

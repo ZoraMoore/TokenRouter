@@ -51,18 +51,28 @@ type ModelMarketplaceModel struct {
 	Pricing     ModelMarketplacePricing `json:"pricing"`
 }
 
+type ModelMarketplaceCapacity struct {
+	ConcurrencyUsed int `json:"concurrency_used"`
+	ConcurrencyMax  int `json:"concurrency_max"`
+	SessionsUsed    int `json:"sessions_used"`
+	SessionsMax     int `json:"sessions_max"`
+	RPMUsed         int `json:"rpm_used"`
+	RPMMax          int `json:"rpm_max"`
+}
+
 type ModelMarketplaceGroup struct {
-	ID                         int64                   `json:"id"`
-	Name                       string                  `json:"name"`
-	Description                string                  `json:"description"`
-	Platform                   string                  `json:"platform"`
-	DisplayBrand               string                  `json:"display_brand"`
-	SortOrder                  int                     `json:"sort_order"`
-	RateMultiplier             float64                 `json:"rate_multiplier"`
-	OfficialPriceRatio         *float64                `json:"official_price_ratio,omitempty"`
-	OfficialPriceRMBEquivalent *float64                `json:"official_price_rmb_equivalent,omitempty"`
-	ModelCount                 int                     `json:"model_count"`
-	Models                     []ModelMarketplaceModel `json:"models"`
+	ID                         int64                     `json:"id"`
+	Name                       string                    `json:"name"`
+	Description                string                    `json:"description"`
+	Platform                   string                    `json:"platform"`
+	DisplayBrand               string                    `json:"display_brand"`
+	SortOrder                  int                       `json:"sort_order"`
+	RateMultiplier             float64                   `json:"rate_multiplier"`
+	OfficialPriceRatio         *float64                  `json:"official_price_ratio,omitempty"`
+	OfficialPriceRMBEquivalent *float64                  `json:"official_price_rmb_equivalent,omitempty"`
+	Capacity                   *ModelMarketplaceCapacity `json:"capacity,omitempty"`
+	ModelCount                 int                       `json:"model_count"`
+	Models                     []ModelMarketplaceModel   `json:"models"`
 }
 
 func ModelMarketplaceGroupsFromService(groups []service.ModelMarketplaceGroup) []ModelMarketplaceGroup {
@@ -87,12 +97,28 @@ func ModelMarketplaceGroupsFromService(groups []service.ModelMarketplaceGroup) [
 			RateMultiplier:             group.RateMultiplier,
 			OfficialPriceRatio:         group.OfficialPriceRatio,
 			OfficialPriceRMBEquivalent: group.OfficialPriceRMBEquivalent,
+			Capacity:                   modelMarketplaceCapacityFromService(group.Capacity),
 			ModelCount:                 group.ModelCount,
 			Models:                     models,
 		})
 	}
 
 	return out
+}
+
+// modelMarketplaceCapacityFromService 将分组容量快照转换为公开 DTO。
+func modelMarketplaceCapacityFromService(capacity *service.GroupCapacitySummary) *ModelMarketplaceCapacity {
+	if capacity == nil {
+		return nil
+	}
+	return &ModelMarketplaceCapacity{
+		ConcurrencyUsed: capacity.ConcurrencyUsed,
+		ConcurrencyMax:  capacity.ConcurrencyMax,
+		SessionsUsed:    capacity.SessionsUsed,
+		SessionsMax:     capacity.SessionsMax,
+		RPMUsed:         capacity.RPMUsed,
+		RPMMax:          capacity.RPMMax,
+	}
 }
 
 // modelMarketplacePricingFromService 将服务层价格快照转换为接口 DTO。

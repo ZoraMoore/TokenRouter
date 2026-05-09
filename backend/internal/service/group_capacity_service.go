@@ -62,6 +62,38 @@ func (s *GroupCapacityService) GetAllGroupCapacity(ctx context.Context) ([]Group
 	return results, nil
 }
 
+// GetGroupCapacityByIDs 返回指定分组的容量摘要；单个分组失败时跳过，避免影响其它分组展示。
+func (s *GroupCapacityService) GetGroupCapacityByIDs(ctx context.Context, groupIDs []int64) (map[int64]GroupCapacitySummary, error) {
+	results := make(map[int64]GroupCapacitySummary, len(groupIDs))
+	if s == nil || len(groupIDs) == 0 {
+		return results, nil
+	}
+
+	seen := make(map[int64]struct{}, len(groupIDs))
+	for _, groupID := range groupIDs {
+		if groupID <= 0 {
+			continue
+		}
+		if _, ok := seen[groupID]; ok {
+			continue
+		}
+		seen[groupID] = struct{}{}
+
+		if err := ctx.Err(); err != nil {
+			return results, err
+		}
+
+		capacity, err := s.getGroupCapacity(ctx, groupID)
+		if err != nil {
+			continue
+		}
+		capacity.GroupID = groupID
+		results[groupID] = capacity
+	}
+
+	return results, nil
+}
+
 func (s *GroupCapacityService) getGroupCapacity(ctx context.Context, groupID int64) (GroupCapacitySummary, error) {
 	accounts, err := s.accountRepo.ListSchedulableByGroupID(ctx, groupID)
 	if err != nil {
@@ -95,8 +127,11 @@ func (s *GroupCapacityService) getGroupCapacity(ctx context.Context, groupID int
 		}
 	}
 
-	// Batch query runtime data from Redis
-	concurrencyMap, _ := s.concurrencyService.GetAccountConcurrencyBatch(ctx, accountIDs)
+	// 批量查询运行时容量数据；缓存异常只影响当前指标，不阻断容量展示。
+	concurrencyMap := map[int64]int{}
+	if s.concurrencyService != nil {
+		concurrencyMap, _ = s.concurrencyService.GetAccountConcurrencyBatch(ctx, accountIDs)
+	}
 
 	var sessionsMap map[int64]int
 	if sessionsMax > 0 && s.sessionLimitCache != nil {
@@ -108,7 +143,7 @@ func (s *GroupCapacityService) getGroupCapacity(ctx context.Context, groupID int
 		rpmMap, _ = s.rpmCache.GetRPMBatch(ctx, accountIDs)
 	}
 
-	// Aggregate
+	// 聚合账号级容量为分组级容量。
 	var concurrencyUsed, sessionsUsed, rpmUsed int
 	for _, id := range accountIDs {
 		concurrencyUsed += concurrencyMap[id]

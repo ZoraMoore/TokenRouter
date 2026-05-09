@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col gap-1">
+  <div :class="layoutClass">
     <!-- 并发槽位 -->
     <div class="flex items-center gap-1">
       <span
@@ -54,7 +54,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+
 interface Props {
+  layout?: 'vertical' | 'horizontal'
   concurrencyUsed: number
   concurrencyMax: number
   sessionsUsed: number
@@ -63,7 +66,8 @@ interface Props {
   rpmMax: number
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
+  layout: 'vertical',
   concurrencyUsed: 0,
   concurrencyMax: 0,
   sessionsUsed: 0,
@@ -71,6 +75,13 @@ withDefaults(defineProps<Props>(), {
   rpmUsed: 0,
   rpmMax: 0
 })
+
+// 模型广场需要横向展示，分组管理表格默认保持竖向展示。
+const layoutClass = computed(() =>
+  props.layout === 'horizontal'
+    ? 'flex flex-row flex-wrap items-center gap-1'
+    : 'flex flex-col gap-1'
+)
 
 function capacityClass(used: number, max: number): string {
   if (max > 0 && used >= max) {

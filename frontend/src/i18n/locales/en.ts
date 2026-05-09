@@ -434,6 +434,8 @@ export default {
     platformsStat: 'Brands',
     groupsStat: 'groups',
     modelsStat: 'models',
+    capacity: 'Capacity',
+    capacityHint: 'Aggregated group load: concurrency / sessions / RPM',
     rateMultiplier: 'Group Multiplier',
     officialPriceDiscount: 'As low as {discount}/10 of official price',
     usdRmbEquivalent: 'As low as {amount} CNY equals 1 USD',

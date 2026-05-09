@@ -86,15 +86,16 @@ type APIKey struct {
 }
 
 type Group struct {
-	ID             int64   `json:"id"`
-	Name           string  `json:"name"`
-	Description    string  `json:"description"`
-	Platform       string  `json:"platform"`
-	DisplayBrand   string  `json:"display_brand"`
-	RateMultiplier float64 `json:"rate_multiplier"`
-	IsExclusive    bool    `json:"is_exclusive"`
-	IsDefault      bool    `json:"is_default"`
-	Status         string  `json:"status"`
+	ID             int64          `json:"id"`
+	Name           string         `json:"name"`
+	Description    string         `json:"description"`
+	Platform       string         `json:"platform"`
+	DisplayBrand   string         `json:"display_brand"`
+	RateMultiplier float64        `json:"rate_multiplier"`
+	Capacity       *GroupCapacity `json:"capacity,omitempty"`
+	IsExclusive    bool           `json:"is_exclusive"`
+	IsDefault      bool           `json:"is_default"`
+	Status         string         `json:"status"`
 
 	// 图片生成计费配置（仅 antigravity 平台使用）
 	AllowImageGeneration bool     `json:"allow_image_generation"`
@@ -122,6 +123,15 @@ type Group struct {
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type GroupCapacity struct {
+	ConcurrencyUsed int `json:"concurrency_used"`
+	ConcurrencyMax  int `json:"concurrency_max"`
+	SessionsUsed    int `json:"sessions_used"`
+	SessionsMax     int `json:"sessions_max"`
+	RPMUsed         int `json:"rpm_used"`
+	RPMMax          int `json:"rpm_max"`
 }
 
 type SubscriptionPlan struct {

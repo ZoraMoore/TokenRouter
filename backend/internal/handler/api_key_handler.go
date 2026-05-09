@@ -18,7 +18,8 @@ import (
 
 // APIKeyHandler handles API key-related requests
 type APIKeyHandler struct {
-	apiKeyService *service.APIKeyService
+	apiKeyService        *service.APIKeyService
+	groupCapacityService *service.GroupCapacityService
 }
 
 // NewAPIKeyHandler creates a new APIKeyHandler
@@ -26,6 +27,11 @@ func NewAPIKeyHandler(apiKeyService *service.APIKeyService) *APIKeyHandler {
 	return &APIKeyHandler{
 		apiKeyService: apiKeyService,
 	}
+}
+
+// SetGroupCapacityService 注入分组容量服务，用于用户侧分组选择展示聚合负载。
+func (h *APIKeyHandler) SetGroupCapacityService(groupCapacityService *service.GroupCapacityService) {
+	h.groupCapacityService = groupCapacityService
 }
 
 // CreateAPIKeyRequest represents the create API key request payload
@@ -286,10 +292,32 @@ func (h *APIKeyHandler) GetAvailableGroups(c *gin.Context) {
 	}
 
 	out := make([]dto.Group, 0, len(groups))
+	capacityMap := h.getAvailableGroupCapacityMap(c.Request.Context(), groups)
 	for i := range groups {
-		out = append(out, *dto.GroupFromService(&groups[i]))
+		groupDTO := dto.GroupFromService(&groups[i])
+		if capacity, ok := capacityMap[groups[i].ID]; ok {
+			groupDTO.Capacity = dto.GroupCapacityFromService(&capacity)
+		}
+		out = append(out, *groupDTO)
 	}
 	response.Success(c, out)
+}
+
+func (h *APIKeyHandler) getAvailableGroupCapacityMap(ctx context.Context, groups []service.Group) map[int64]service.GroupCapacitySummary {
+	if h.groupCapacityService == nil || len(groups) == 0 {
+		return nil
+	}
+	groupIDs := make([]int64, 0, len(groups))
+	for i := range groups {
+		groupIDs = append(groupIDs, groups[i].ID)
+	}
+
+	// 容量只作为分组选项的辅助负载信息，失败时保持原分组列表可用。
+	capacityMap, err := h.groupCapacityService.GetGroupCapacityByIDs(ctx, groupIDs)
+	if err != nil {
+		return nil
+	}
+	return capacityMap
 }
 
 // GetUserGroupRates 获取当前用户的专属分组倍率配置

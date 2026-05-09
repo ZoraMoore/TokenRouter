@@ -434,6 +434,8 @@ export default {
     platformsStat: '个品牌',
     groupsStat: '个分组',
     modelsStat: '个模型',
+    capacity: '容量',
+    capacityHint: '当前分组聚合负载：并发 / 会话 / RPM',
     rateMultiplier: '分组倍率',
     officialPriceDiscount: '最低至官方价格的{discount}折',
     usdRmbEquivalent: '最低 {amount} 元相当于 1 美元',

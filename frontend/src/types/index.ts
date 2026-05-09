@@ -516,6 +516,16 @@ export interface MarketplaceModel {
   pricing: MarketplaceModelPricing
 }
 
+// 模型广场公开展示的分组容量快照，仅包含聚合后的负载数字。
+export interface MarketplaceGroupCapacity {
+  concurrency_used: number
+  concurrency_max: number
+  sessions_used: number
+  sessions_max: number
+  rpm_used: number
+  rpm_max: number
+}
+
 export interface MarketplaceGroup {
   id: number
   name: string
@@ -526,6 +536,7 @@ export interface MarketplaceGroup {
   rate_multiplier: number
   official_price_ratio?: number
   official_price_rmb_equivalent?: number
+  capacity?: MarketplaceGroupCapacity
   model_count: number
   models: MarketplaceModel[]
 }
@@ -550,6 +561,7 @@ export interface Group {
   platform: GroupPlatform
   display_brand?: string
   rate_multiplier: number
+  capacity?: MarketplaceGroupCapacity
   rpm_limit?: number // Group-level RPM cap (0 = unlimited); overrides user-level rpm_limit when set
   is_exclusive: boolean
   is_default?: boolean

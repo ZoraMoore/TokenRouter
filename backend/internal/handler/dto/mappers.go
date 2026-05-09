@@ -146,6 +146,21 @@ func GroupFromService(g *service.Group) *Group {
 	return GroupFromServiceShallow(g)
 }
 
+// GroupCapacityFromService 将分组容量快照转换为用户可见的聚合容量 DTO。
+func GroupCapacityFromService(capacity *service.GroupCapacitySummary) *GroupCapacity {
+	if capacity == nil {
+		return nil
+	}
+	return &GroupCapacity{
+		ConcurrencyUsed: capacity.ConcurrencyUsed,
+		ConcurrencyMax:  capacity.ConcurrencyMax,
+		SessionsUsed:    capacity.SessionsUsed,
+		SessionsMax:     capacity.SessionsMax,
+		RPMUsed:         capacity.RPMUsed,
+		RPMMax:          capacity.RPMMax,
+	}
+}
+
 func SubscriptionPlanFromServiceShallow(plan *service.SubscriptionPlan) *SubscriptionPlan {
 	if plan == nil {
 		return nil
