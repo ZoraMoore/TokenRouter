@@ -264,5 +264,6 @@ export interface DashboardStats {
   avg_amount: number
   daily_series: { date: string; amount: number; count: number }[]
   payment_methods: { type: string; amount: number; count: number }[]
+  purchase_distribution: { type: OrderType; label: string; plan_id?: number; amount: number; count: number }[]
   top_users: { user_id: number; email: string; amount: number }[]
 }

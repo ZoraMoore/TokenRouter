@@ -155,9 +155,10 @@ type DashboardStats struct {
 	AvgAmount     float64 `json:"avg_amount"`
 	PendingOrders int     `json:"pending_orders"`
 
-	DailySeries    []DailyStats        `json:"daily_series"`
-	PaymentMethods []PaymentMethodStat `json:"payment_methods"`
-	TopUsers       []TopUserStat       `json:"top_users"`
+	DailySeries          []DailyStats               `json:"daily_series"`
+	PaymentMethods       []PaymentMethodStat        `json:"payment_methods"`
+	PurchaseDistribution []PurchaseDistributionStat `json:"purchase_distribution"`
+	TopUsers             []TopUserStat              `json:"top_users"`
 }
 
 type DailyStats struct {
@@ -168,6 +169,14 @@ type DailyStats struct {
 
 type PaymentMethodStat struct {
 	Type   string  `json:"type"`
+	Amount float64 `json:"amount"`
+	Count  int     `json:"count"`
+}
+
+type PurchaseDistributionStat struct {
+	Type   string  `json:"type"`
+	Label  string  `json:"label"`
+	PlanID *int64  `json:"plan_id,omitempty"`
 	Amount float64 `json:"amount"`
 	Count  int     `json:"count"`
 }

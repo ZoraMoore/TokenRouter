@@ -2,9 +2,11 @@ package admin
 
 import (
 	"strconv"
+	"time"
 
 	dbent "github.com/TokenFlux/TokenRouter/ent"
 	"github.com/TokenFlux/TokenRouter/internal/pkg/response"
+	"github.com/TokenFlux/TokenRouter/internal/pkg/timezone"
 	"github.com/TokenFlux/TokenRouter/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -29,6 +31,20 @@ func NewPaymentHandler(paymentService *service.PaymentService, configService *se
 // GetDashboard returns payment dashboard statistics.
 // GET /api/v1/admin/payment/dashboard
 func (h *PaymentHandler) GetDashboard(c *gin.Context) {
+	if c.Query("start_date") != "" || c.Query("end_date") != "" {
+		startTime, endTime, ok := parsePaymentDashboardRange(c)
+		if !ok {
+			return
+		}
+		stats, err := h.paymentService.GetDashboardStatsWithRange(c.Request.Context(), startTime, endTime)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		response.Success(c, stats)
+		return
+	}
+
 	days := 30
 	if d := c.Query("days"); d != "" {
 		if v, err := strconv.Atoi(d); err == nil && v > 0 {
@@ -41,6 +57,35 @@ func (h *PaymentHandler) GetDashboard(c *gin.Context) {
 		return
 	}
 	response.Success(c, stats)
+}
+
+func parsePaymentDashboardRange(c *gin.Context) (time.Time, time.Time, bool) {
+	userTZ := c.Query("timezone")
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
+	if startDate == "" || endDate == "" {
+		response.BadRequest(c, "start_date and end_date are required")
+		return time.Time{}, time.Time{}, false
+	}
+	startTime, _, err := timezone.ParseDateTimeInUserLocation(startDate, userTZ)
+	if err != nil {
+		response.BadRequest(c, "Invalid start_date format, use YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss")
+		return time.Time{}, time.Time{}, false
+	}
+	endTime, dateOnly, err := timezone.ParseDateTimeInUserLocation(endDate, userTZ)
+	if err != nil {
+		response.BadRequest(c, "Invalid end_date format, use YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss")
+		return time.Time{}, time.Time{}, false
+	}
+	// 日期型结束时间按闭区间处理，让 2026-05-09 能包含当天全部订单。
+	if dateOnly {
+		endTime = endTime.AddDate(0, 0, 1)
+	}
+	if !endTime.After(startTime) {
+		response.BadRequest(c, "end_date must be later than start_date")
+		return time.Time{}, time.Time{}, false
+	}
+	return startTime, endTime, true
 }
 
 // --- Orders ---
