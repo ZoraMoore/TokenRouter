@@ -47,6 +47,19 @@
         />
       </div>
 
+      <div>
+        <label class="input-label">{{ t('admin.accounts.dataImportPasteData') }}</label>
+        <textarea
+          v-model="pastedDataText"
+          class="input min-h-40 resize-y font-mono text-xs leading-5"
+          :placeholder="t('admin.accounts.dataImportPastePlaceholder')"
+          spellcheck="false"
+        />
+        <div class="mt-1 text-xs text-gray-500 dark:text-dark-400">
+          {{ t('admin.accounts.dataImportPasteHint') }}
+        </div>
+      </div>
+
       <div
         v-if="result"
         class="space-y-2 rounded-xl border border-gray-200 p-4 dark:border-dark-700"
@@ -117,6 +130,7 @@ const appStore = useAppStore()
 
 const importing = ref(false)
 const file = ref<File | null>(null)
+const pastedDataText = ref('')
 const result = ref<AdminDataImportResult | null>(null)
 
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -129,6 +143,7 @@ watch(
   (open) => {
     if (open) {
       file.value = null
+      pastedDataText.value = ''
       result.value = null
       if (fileInput.value) {
         fileInput.value.value = ''
@@ -169,15 +184,29 @@ const readFileAsText = async (sourceFile: File): Promise<string> => {
   })
 }
 
-const handleImport = async () => {
-  if (!file.value) {
-    appStore.showError(t('admin.accounts.dataImportSelectFile'))
-    return
+const readImportSourceText = async (): Promise<string | null> => {
+  // 粘贴内容优先，便于用户覆盖已选择的文件内容。
+  const pastedText = pastedDataText.value.trim()
+  if (pastedText) {
+    return pastedText
   }
 
+  if (file.value) {
+    return readFileAsText(file.value)
+  }
+
+  return null
+}
+
+const handleImport = async () => {
   importing.value = true
   try {
-    const text = await readFileAsText(file.value)
+    const text = await readImportSourceText()
+    if (!text) {
+      appStore.showError(t('admin.accounts.dataImportSelectSource'))
+      return
+    }
+
     const dataPayload = JSON.parse(text)
 
     const res = await adminAPI.accounts.importData({

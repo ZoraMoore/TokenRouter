@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
+import { adminAPI } from '@/api/admin'
 
 const showError = vi.fn()
 const showSuccess = vi.fn()
@@ -35,13 +36,16 @@ vi.mock('vue-i18n', () => ({
 }))
 
 describe('ImportDataModal', () => {
+  const importData = vi.mocked(adminAPI.accounts.importData)
+
   beforeEach(() => {
     showError.mockReset()
     showSuccess.mockReset()
+    importData.mockReset()
   })
 
-  it('未选择文件时提示错误', async () => {
-    const wrapper = mount(ImportDataModal, {
+  const mountModal = () => {
+    return mount(ImportDataModal, {
       props: { show: true },
       global: {
         stubs: {
@@ -49,20 +53,40 @@ describe('ImportDataModal', () => {
         }
       }
     })
+  }
+
+  const successResult = {
+    proxy_created: 0,
+    proxy_reused: 0,
+    proxy_failed: 0,
+    account_created: 1,
+    account_failed: 0,
+    errors: []
+  }
+
+  it('未提供导入来源时提示错误', async () => {
+    const wrapper = mountModal()
 
     await wrapper.find('form').trigger('submit')
-    expect(showError).toHaveBeenCalledWith('admin.accounts.dataImportSelectFile')
+    await flushPromises()
+
+    expect(showError).toHaveBeenCalledWith('admin.accounts.dataImportSelectSource')
+    expect(importData).not.toHaveBeenCalled()
   })
 
-  it('无效 JSON 时提示解析失败', async () => {
-    const wrapper = mount(ImportDataModal, {
-      props: { show: true },
-      global: {
-        stubs: {
-          BaseDialog: { template: '<div><slot /><slot name="footer" /></div>' }
-        }
-      }
-    })
+  it('粘贴无效 JSON 时提示解析失败', async () => {
+    const wrapper = mountModal()
+
+    await wrapper.find('textarea').setValue('invalid json')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(showError).toHaveBeenCalledWith('admin.accounts.dataImportParseFailed')
+    expect(importData).not.toHaveBeenCalled()
+  })
+
+  it('选择文件中的无效 JSON 时提示解析失败', async () => {
+    const wrapper = mountModal()
 
     const input = wrapper.find('input[type="file"]')
     const file = new File(['invalid json'], 'data.json', { type: 'application/json' })
@@ -75,8 +99,51 @@ describe('ImportDataModal', () => {
 
     await input.trigger('change')
     await wrapper.find('form').trigger('submit')
-    await Promise.resolve()
+    await flushPromises()
 
     expect(showError).toHaveBeenCalledWith('admin.accounts.dataImportParseFailed')
+    expect(importData).not.toHaveBeenCalled()
+  })
+
+  it('粘贴有效 JSON 时提交解析后的数据', async () => {
+    const wrapper = mountModal()
+    const payload = { accounts: [{ name: 'pasted-account' }], proxies: [] }
+    importData.mockResolvedValue(successResult)
+
+    await wrapper.find('textarea').setValue(JSON.stringify(payload))
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(importData).toHaveBeenCalledWith({
+      data: payload,
+      skip_default_group_bind: true
+    })
+    expect(showSuccess).toHaveBeenCalledWith('admin.accounts.dataImportSuccess')
+  })
+
+  it('同时存在文件和粘贴内容时优先使用粘贴内容', async () => {
+    const wrapper = mountModal()
+    const filePayload = { accounts: [{ name: 'file-account' }], proxies: [] }
+    const pastedPayload = { accounts: [{ name: 'pasted-account' }], proxies: [] }
+    importData.mockResolvedValue(successResult)
+
+    const input = wrapper.find('input[type="file"]')
+    const file = new File([JSON.stringify(filePayload)], 'data.json', { type: 'application/json' })
+    Object.defineProperty(file, 'text', {
+      value: () => Promise.resolve(JSON.stringify(filePayload))
+    })
+    Object.defineProperty(input.element, 'files', {
+      value: [file]
+    })
+
+    await input.trigger('change')
+    await wrapper.find('textarea').setValue(JSON.stringify(pastedPayload))
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(importData).toHaveBeenCalledWith({
+      data: pastedPayload,
+      skip_default_group_bind: true
+    })
   })
 })
