@@ -69,19 +69,42 @@ func TestApplyToolNameRewriteToBody_RenamesToolsAndToolChoice(t *testing.T) {
 	require.NotNil(t, rw)
 	require.Contains(t, rw.Forward, "sessions_list")
 	require.Contains(t, rw.Forward, "session_get")
-	// web_search is a server tool, not rewritten
+	// web_search 是 server tool，不参与改写。
 	require.NotContains(t, rw.Forward, "web_search")
 
 	out := applyToolNameRewriteToBody(body, rw)
 
-	// tools[0].name and tools[1].name rewritten; tools[2].name untouched
+	// tools[0].name 和 tools[1].name 会改写，tools[2].name 保持不变。
 	require.Equal(t, "cc_sess_list", gjson.GetBytes(out, "tools.0.name").String())
 	require.Equal(t, "cc_ses_get", gjson.GetBytes(out, "tools.1.name").String())
 	require.Equal(t, "web_search", gjson.GetBytes(out, "tools.2.name").String())
 
-	// tool_choice.name rewritten
+	// tool_choice.name 同步改写。
 	require.Equal(t, "cc_sess_list", gjson.GetBytes(out, "tool_choice.name").String())
 	require.Equal(t, "tool", gjson.GetBytes(out, "tool_choice.type").String())
+}
+
+func TestApplyToolNameRewriteToBody_RenamesToolUseInMessages(t *testing.T) {
+	// sessions_list 通过静态前缀映射改成 cc_sess_list。
+	// web_search 是 server tool（type != ""），不参与改写。
+	// 历史消息里的 tool_use.name 必须同步改写，才能和 tools[] 保持一致。
+	body := []byte(`{"tools":[{"name":"sessions_list","input_schema":{}},{"name":"web_search","type":"web_search_20250305"}],"messages":[{"role":"user","content":[{"type":"text","text":"hi"}]},{"role":"assistant","content":[{"type":"tool_use","id":"tu_01","name":"sessions_list","input":{}},{"type":"text","text":"thinking"}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"tu_01","content":"ok"}]}]}`)
+	rw := buildToolNameRewriteFromBody(body)
+	require.NotNil(t, rw)
+	require.Equal(t, "cc_sess_list", rw.Forward["sessions_list"])
+
+	out := applyToolNameRewriteToBody(body, rw)
+
+	// tools[0].name 已改写。
+	require.Equal(t, "cc_sess_list", gjson.GetBytes(out, "tools.0.name").String())
+	// tools[1].name 是 server tool，保持不变。
+	require.Equal(t, "web_search", gjson.GetBytes(out, "tools.1.name").String())
+	// messages[1].content[0].name（tool_use）也要改写成 tools[] 中的假名。
+	require.Equal(t, "cc_sess_list", gjson.GetBytes(out, "messages.1.content.0.name").String())
+	// messages[1].content[1] 是 text，保持不变。
+	require.Equal(t, "thinking", gjson.GetBytes(out, "messages.1.content.1.text").String())
+	// messages[2].content[0] 是 tool_result，不应额外写入 name 字段。
+	require.Equal(t, "ok", gjson.GetBytes(out, "messages.2.content.0.content").String())
 }
 
 func TestApplyToolsLastCacheBreakpoint_InjectsDefault(t *testing.T) {
