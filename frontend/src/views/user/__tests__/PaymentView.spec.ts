@@ -184,6 +184,27 @@ function stripeCheckoutInfoWithFeeFixture() {
   }
 }
 
+function stripeCheckoutInfoWithCurrencyFeeFixture(currency: string, fixedFee: number, feeRate: number) {
+  return {
+    data: {
+      ...stripeCheckoutInfoFixture().data,
+      methods: {
+        stripe: {
+          daily_limit: 0,
+          daily_used: 0,
+          daily_remaining: 0,
+          single_min: 0,
+          single_max: 0,
+          fee_fixed: fixedFee,
+          fee_rate: feeRate,
+          currency,
+          available: true,
+        },
+      },
+    },
+  }
+}
+
 function jsapiOrderFixture(resumeToken: string) {
   return {
     order_id: 123,
@@ -527,6 +548,48 @@ describe('PaymentView Stripe billing form', () => {
     expect(wrapper.text()).toContain('payment.feeTotal')
     expect(wrapper.text()).toContain('¥4.70')
     expect(wrapper.text()).toContain('¥104.70')
+  })
+
+  it('calculates fee preview with three-decimal payment currencies', async () => {
+    getCheckoutInfo.mockReset().mockResolvedValue(stripeCheckoutInfoWithCurrencyFeeFixture('KWD', 0, 1))
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<main><slot /></main>' },
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.getComponent({ name: 'AmountInput' }).vm.$emit('update:modelValue', 12.345)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('KWD 0.124')
+    expect(wrapper.text()).toContain('KWD 12.469')
+    expect(wrapper.text()).not.toContain('KWD 12.470')
+  })
+
+  it('calculates fee preview with zero-decimal payment currencies', async () => {
+    getCheckoutInfo.mockReset().mockResolvedValue(stripeCheckoutInfoWithCurrencyFeeFixture('JPY', 0, 2.5))
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<main><slot /></main>' },
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.getComponent({ name: 'AmountInput' }).vm.$emit('update:modelValue', 100)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('¥3')
+    expect(wrapper.text()).toContain('¥103')
+    expect(wrapper.text()).not.toContain('¥102')
   })
 })
 

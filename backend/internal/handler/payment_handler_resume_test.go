@@ -105,6 +105,9 @@ func TestVerifyOrderPublicReturnsLegacyOrderState(t *testing.T) {
 		SetAmount(88).
 		SetPayAmount(90.64).
 		SetFeeRate(0.03).
+		SetFeeFixed(1.1).
+		SetFeeRateAmount(1.54).
+		SetFeeAmount(2.64).
 		SetRechargeCode("PUBLIC-VERIFY").
 		SetOutTradeNo("legacy-order-no").
 		SetPaymentType(payment.TypeAlipay).
@@ -142,6 +145,9 @@ func TestVerifyOrderPublicReturnsLegacyOrderState(t *testing.T) {
 			Amount       float64 `json:"amount"`
 			PayAmount    float64 `json:"pay_amount"`
 			FeeRate      float64 `json:"fee_rate"`
+			FeeFixed     float64 `json:"fee_fixed"`
+			FeeRateAmt   float64 `json:"fee_rate_amount"`
+			FeeAmount    float64 `json:"fee_amount"`
 			Currency     string  `json:"currency"`
 			PaymentType  string  `json:"payment_type"`
 			OrderType    string  `json:"order_type"`
@@ -157,6 +163,9 @@ func TestVerifyOrderPublicReturnsLegacyOrderState(t *testing.T) {
 	require.Equal(t, "legacy-order-no", resp.Data.OutTradeNo)
 	require.Equal(t, 90.64, resp.Data.PayAmount)
 	require.Equal(t, 0.03, resp.Data.FeeRate)
+	require.Equal(t, 1.1, resp.Data.FeeFixed)
+	require.Equal(t, 1.54, resp.Data.FeeRateAmt)
+	require.Equal(t, 2.64, resp.Data.FeeAmount)
 	require.Equal(t, "HKD", resp.Data.Currency)
 	require.Equal(t, payment.TypeAlipay, resp.Data.PaymentType)
 	require.Equal(t, payment.OrderTypeBalance, resp.Data.OrderType)
@@ -195,6 +204,9 @@ func TestResolveOrderPublicByResumeTokenReturnsFrontendContractFields(t *testing
 		SetAmount(100).
 		SetPayAmount(103).
 		SetFeeRate(0.03).
+		SetFeeFixed(1.25).
+		SetFeeRateAmount(1.75).
+		SetFeeAmount(3).
 		SetRechargeCode("PUBLIC-RESOLVE").
 		SetOutTradeNo("resolve-order-no").
 		SetPaymentType(payment.TypeAlipay).
@@ -246,6 +258,9 @@ func TestResolveOrderPublicByResumeTokenReturnsFrontendContractFields(t *testing
 	require.Equal(t, 100.0, resp.Data["amount"])
 	require.Equal(t, 103.0, resp.Data["pay_amount"])
 	require.Equal(t, 0.03, resp.Data["fee_rate"])
+	require.Equal(t, 1.25, resp.Data["fee_fixed"])
+	require.Equal(t, 1.75, resp.Data["fee_rate_amount"])
+	require.Equal(t, 3.0, resp.Data["fee_amount"])
 	require.Equal(t, "USD", resp.Data["currency"])
 	require.Equal(t, payment.TypeAlipay, resp.Data["payment_type"])
 	require.Equal(t, payment.OrderTypeBalance, resp.Data["order_type"])

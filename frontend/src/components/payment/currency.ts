@@ -5,8 +5,9 @@ export function normalizePaymentCurrency(currency?: string | null): string {
   return /^[A-Z]{3}$/.test(normalized) ? normalized : DEFAULT_PAYMENT_CURRENCY
 }
 
-function paymentCurrencyFractionDigits(currency: string): number {
+export function paymentCurrencyFractionDigits(currency: string): number {
   try {
+    // 手续费计算和金额展示共用 ISO 币种默认精度，避免零小数或三位小数币种被固定成两位。
     return new Intl.NumberFormat(undefined, {
       style: 'currency',
       currency,

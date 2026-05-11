@@ -353,7 +353,7 @@ import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
 import PaymentStatusPanel from '@/components/payment/PaymentStatusPanel.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
-import { formatPaymentAmount, normalizePaymentCurrency } from '@/components/payment/currency'
+import { formatPaymentAmount, normalizePaymentCurrency, paymentCurrencyFractionDigits } from '@/components/payment/currency'
 import type { PaymentMethodOption } from '@/components/payment/PaymentMethodSelector.vue'
 import { buildPaymentErrorToastMessage, describePaymentScenarioError } from './paymentUx'
 import { hasWechatResumeQuery, parseWechatResumeRoute, stripWechatResumeQuery } from './paymentWechatResume'
@@ -717,26 +717,37 @@ interface FeeBreakdown {
   payAmount: number
 }
 
-function roundMoney(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100
+function currencyScale(currency: string): number {
+  // 金额计算按支付币种的小数位缩放，支持 JPY 这类零小数币种和 KWD 这类三位小数币种。
+  return 10 ** paymentCurrencyFractionDigits(currency)
 }
 
-function ceilMoney(value: number): number {
-  return Math.ceil(value * 100 - 1e-9) / 100
+function roundMoneyForCurrency(value: number, currency: string): number {
+  const scale = currencyScale(currency)
+  return Math.round((value + Number.EPSILON) * scale) / scale
+}
+
+function ceilMoneyForCurrency(value: number, currency: string): number {
+  const scale = currencyScale(currency)
+  // 比例手续费向上取到最小货币单位，避免前端预览低估实际应付金额。
+  return Math.ceil(value * scale - 1e-9) / scale
 }
 
 function calculateFeeBreakdown(baseAmount: number, methodType: string): FeeBreakdown {
   const methodLimit = visibleMethods.value[methodType]
+  const currency = normalizePaymentCurrency(methodLimit?.currency)
   const fixedFee = Math.max(0, Number(methodLimit?.fee_fixed) || 0)
   const feeRate = Math.max(0, Number(methodLimit?.fee_rate) || 0)
-  const rateFee = baseAmount > 0 && feeRate > 0 ? ceilMoney((baseAmount * feeRate) / 100) : 0
-  const totalFee = roundMoney(fixedFee + rateFee)
+  const normalizedAmount = roundMoneyForCurrency(baseAmount, currency)
+  const normalizedFixedFee = roundMoneyForCurrency(fixedFee, currency)
+  const rateFee = normalizedAmount > 0 && feeRate > 0 ? ceilMoneyForCurrency((normalizedAmount * feeRate) / 100, currency) : 0
+  const totalFee = roundMoneyForCurrency(normalizedFixedFee + rateFee, currency)
   return {
-    fixedFee,
+    fixedFee: normalizedFixedFee,
     feeRate,
     rateFee,
     totalFee,
-    payAmount: roundMoney(baseAmount + totalFee),
+    payAmount: roundMoneyForCurrency(normalizedAmount + totalFee, currency),
   }
 }
 
