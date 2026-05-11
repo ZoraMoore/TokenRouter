@@ -25,25 +25,36 @@ type FeeBreakdown struct {
 // to 2 decimal places. The returned string is formatted to exactly 2 decimal places.
 // If feeRate <= 0, the amount is returned as-is (formatted to 2 decimal places).
 func CalculatePayAmount(rechargeAmount float64, feeRate float64) string {
-	return CalculatePayAmountWithFee(rechargeAmount, FeeConfig{FeeRate: feeRate}).PayAmountString()
+	return CalculatePayAmountForCurrency(rechargeAmount, feeRate, DefaultPaymentCurrency)
+}
+
+// CalculatePayAmountForCurrency 按币种精度计算比例手续费后的应付金额。
+func CalculatePayAmountForCurrency(rechargeAmount float64, feeRate float64, currency string) string {
+	return CalculatePayAmountWithFeeForCurrency(rechargeAmount, FeeConfig{FeeRate: feeRate}, currency).PayAmountStringForCurrency(currency)
 }
 
 // CalculatePayAmountWithFee 计算固定手续费和比例手续费拆分后的实付金额。
 func CalculatePayAmountWithFee(baseAmount float64, cfg FeeConfig) FeeBreakdown {
-	amount := decimal.NewFromFloat(baseAmount).Round(2)
+	return CalculatePayAmountWithFeeForCurrency(baseAmount, cfg, DefaultPaymentCurrency)
+}
+
+// CalculatePayAmountWithFeeForCurrency 按币种精度计算固定手续费和比例手续费拆分后的实付金额。
+func CalculatePayAmountWithFeeForCurrency(baseAmount float64, cfg FeeConfig, currency string) FeeBreakdown {
+	fractionDigits := int32(CurrencyMaxFractionDigits(currency))
+	amount := decimal.NewFromFloat(baseAmount).Round(fractionDigits)
 	fixedFee := decimal.Zero
 	if cfg.FixedFee > 0 {
-		fixedFee = decimal.NewFromFloat(cfg.FixedFee).Round(2)
+		fixedFee = decimal.NewFromFloat(cfg.FixedFee).Round(fractionDigits)
 	}
 
 	rateAmount := decimal.Zero
 	if cfg.FeeRate > 0 {
 		rate := decimal.NewFromFloat(cfg.FeeRate)
-		rateAmount = amount.Mul(rate).Div(decimal.NewFromInt(100)).RoundUp(2)
+		rateAmount = amount.Mul(rate).Div(decimal.NewFromInt(100)).RoundUp(fractionDigits)
 	}
 
-	feeAmount := fixedFee.Add(rateAmount).Round(2)
-	payAmount := amount.Add(feeAmount).Round(2)
+	feeAmount := fixedFee.Add(rateAmount).Round(fractionDigits)
+	payAmount := amount.Add(feeAmount).Round(fractionDigits)
 	return FeeBreakdown{
 		BaseAmount:    decimalToFloat(amount),
 		FixedFee:      decimalToFloat(fixedFee),
@@ -54,9 +65,14 @@ func CalculatePayAmountWithFee(baseAmount float64, cfg FeeConfig) FeeBreakdown {
 	}
 }
 
-// PayAmountString 返回支付网关需要的两位小数字符串金额。
+// PayAmountString 返回默认币种支付网关需要的字符串金额。
 func (b FeeBreakdown) PayAmountString() string {
-	return decimal.NewFromFloat(b.PayAmount).StringFixed(2)
+	return b.PayAmountStringForCurrency(DefaultPaymentCurrency)
+}
+
+// PayAmountStringForCurrency 按币种精度返回支付网关需要的字符串金额。
+func (b FeeBreakdown) PayAmountStringForCurrency(currency string) string {
+	return decimal.NewFromFloat(b.PayAmount).StringFixed(int32(CurrencyMaxFractionDigits(currency)))
 }
 
 func decimalToFloat(v decimal.Decimal) float64 {

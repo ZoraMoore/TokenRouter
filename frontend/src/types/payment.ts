@@ -18,7 +18,7 @@ export type OrderStatus =
   | 'REFUNDED'
   | 'REFUND_FAILED'
 
-export type PaymentType = 'alipay' | 'wxpay' | 'alipay_direct' | 'wxpay_direct' | 'stripe' | 'easypay' | 'card' | 'link'
+export type PaymentType = 'alipay' | 'wxpay' | 'alipay_direct' | 'wxpay_direct' | 'stripe' | 'easypay' | 'card' | 'link' | 'airwallex'
 
 export type OrderType = 'balance' | 'subscription'
 
@@ -48,6 +48,7 @@ export interface MethodFeeConfig {
 }
 
 export interface MethodLimit {
+  currency?: string
   daily_limit: number
   daily_used: number
   daily_remaining: number
@@ -87,6 +88,7 @@ export interface PaymentOrder {
   user_id: number
   amount: number
   pay_amount: number
+  currency?: string
   fee_rate: number
   fee_fixed: number
   fee_rate_amount: number
@@ -230,6 +232,10 @@ export interface CreateOrderResult {
   invoice_url?: string
   invoice_pdf?: string
   invoice_status?: string
+  intent_id?: string
+  currency?: string
+  country_code?: string
+  payment_env?: string
   pay_amount: number
   fee_rate: number
   fee_fixed: number

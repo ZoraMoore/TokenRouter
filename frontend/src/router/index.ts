@@ -325,6 +325,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/payment/airwallex',
+    name: 'AirwallexPayment',
+    component: () => import('@/views/user/AirwallexPaymentView.vue'),
+    meta: {
+      requiresAuth: false,
+      requiresAdmin: false,
+      title: 'Airwallex Payment',
+      titleKey: 'payment.airwallexPay',
+      requiresPayment: false
+    }
+  },
+  {
     path: '/payment/stripe-popup',
     name: 'StripePopup',
     component: () => import('@/views/user/StripePopupView.vue'),
@@ -598,7 +610,7 @@ const navigationLoading = useNavigationLoadingState()
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
 // 后端模式下这些公开页面仍需直达访问，模型广场属于公开入口。
-const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/models', '/payment/result', '/legal']
+const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/models', '/payment/result', '/payment/airwallex', '/legal']
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
   '/auth/oauth/callback',

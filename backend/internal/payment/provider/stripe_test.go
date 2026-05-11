@@ -19,7 +19,7 @@ func TestBuildStripeInvoiceCreateParamsUsesHostedInvoiceMode(t *testing.T) {
 		OrderID:   "sub2_order_123",
 		Subject:   "TokenRouter Balance",
 		ExpiresAt: expiresAt,
-	}, []string{"card", "link", "wechat_pay"}, "42")
+	}, []string{"card", "link", "wechat_pay"}, "42", "CNY")
 
 	if params.Customer == nil || *params.Customer != "cus_123" {
 		t.Fatalf("customer = %#v, want cus_123", params.Customer)
@@ -53,10 +53,19 @@ func TestBuildStripeInvoiceCreateParamsOmitsPaymentSettingsWhenMethodsEmpty(t *t
 	params := buildStripeInvoiceCreateParams("cus_123", payment.CreatePaymentRequest{
 		OrderID: "sub2_order_123",
 		Subject: "TokenRouter Balance",
-	}, nil, "42")
+	}, nil, "42", "CNY")
 
 	if params.PaymentSettings != nil {
 		t.Fatalf("payment settings = %#v, want nil", params.PaymentSettings)
+	}
+}
+
+func TestBuildStripeInvoiceCreateParamsUsesConfiguredCurrency(t *testing.T) {
+	t.Parallel()
+
+	params := buildStripeInvoiceCreateParams("cus_123", payment.CreatePaymentRequest{}, nil, "42", "HKD")
+	if params.Currency == nil || *params.Currency != "hkd" {
+		t.Fatalf("currency = %#v, want hkd", params.Currency)
 	}
 }
 
@@ -83,7 +92,7 @@ func TestBuildStripeInvoiceCreateParamsUsesConfiguredSubMethods(t *testing.T) {
 		Subject:            "TokenRouter Balance",
 		InstanceSubMethods: "card,alipay,wxpay,link",
 	}
-	params := buildStripeInvoiceCreateParams("cus_123", req, stripeInvoicePaymentMethodTypes(req.InstanceSubMethods), "42")
+	params := buildStripeInvoiceCreateParams("cus_123", req, stripeInvoicePaymentMethodTypes(req.InstanceSubMethods), "42", "CNY")
 
 	if params.PaymentSettings == nil || len(params.PaymentSettings.PaymentMethodTypes) != 4 {
 		t.Fatalf("payment method types = %#v, want 4 methods", params.PaymentSettings)
@@ -114,7 +123,7 @@ func TestBuildStripeInvoiceCreateParamsFallsBackToOneDayDue(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			params := buildStripeInvoiceCreateParams("cus_123", tt.req, []string{"card"}, "")
+			params := buildStripeInvoiceCreateParams("cus_123", tt.req, []string{"card"}, "", "CNY")
 			if params.DueDate != nil {
 				t.Fatalf("due_date should be empty without a usable order expiry")
 			}

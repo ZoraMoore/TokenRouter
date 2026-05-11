@@ -20,6 +20,7 @@ const (
 	TypeCard         PaymentType = "card"
 	TypeLink         PaymentType = "link"
 	TypeEasyPay      PaymentType = "easypay"
+	TypeAirwallex    PaymentType = "airwallex"
 )
 
 // Order status constants shared across payment and service layers.
@@ -85,6 +86,8 @@ func GetBasePaymentType(t string) string {
 	switch {
 	case t == TypeEasyPay:
 		return TypeEasyPay
+	case t == TypeAirwallex:
+		return TypeAirwallex
 	case t == TypeStripe || t == TypeCard || t == TypeLink:
 		return TypeStripe
 	case len(t) >= len(TypeAlipay) && t[:len(TypeAlipay)] == TypeAlipay:
@@ -99,15 +102,15 @@ func GetBasePaymentType(t string) string {
 // CreatePaymentRequest 保存创建支付单时传给支付渠道的参数。
 type CreatePaymentRequest struct {
 	OrderID            string    // 本地订单号
-	Amount             string    // 以元为单位的实付金额，保留两位小数
-	PaymentType        string    // 支付方式，例如 "alipay"、"wxpay"、"stripe"
+	Amount             string    // 按服务商实例配置币种解释的实付金额
+	PaymentType        string    // 支付方式，例如 "alipay"、"wxpay"、"stripe"、"airwallex"
 	Subject            string    // 商品或订单描述
 	NotifyURL          string    // 支付渠道回调地址
 	ReturnURL          string    // 浏览器支付完成后的返回地址
 	OpenID             string    // 微信 JSAPI 支付使用的付款人 OpenID
 	ClientIP           string    // 付款人 IP
 	IsMobile           bool      // 请求是否来自移动端
-	InstanceSubMethods string    // Stripe 实例 supported_types 中配置的子支付方式
+	InstanceSubMethods string    // 支付实例 supported_types 中配置的子支付方式
 	ExpiresAt          time.Time // 本地订单过期时间，用于同步渠道账单到期时间
 	UserEmail          string    // 从本地用户资料复制的付款人邮箱
 	BillingInfo        *BillingInfo
@@ -172,6 +175,10 @@ type CreatePaymentResponse struct {
 	InvoiceURL    string                  // 托管账单页面 URL
 	InvoicePDF    string                  // 账单 PDF URL
 	InvoiceStatus string                  // 支付渠道账单状态
+	IntentID      string                  // 前端 SDK 需要的服务商支付意图 ID
+	Currency      string                  // 服务商支付币种
+	CountryCode   string                  // 服务商收银台国家/地区代码
+	PaymentEnv    string                  // 服务商前端环境标识
 	ResultType    CreatePaymentResultType // Typed result contract for frontend flows
 	OAuth         *WechatOAuthInfo        // WeChat OAuth bootstrap payload when required
 	JSAPI         *WechatJSAPIPayload     // WeChat JSAPI invocation payload when ready
@@ -181,7 +188,7 @@ type CreatePaymentResponse struct {
 type QueryOrderResponse struct {
 	TradeNo  string
 	Status   string  // "pending", "paid", "failed", "refunded"
-	Amount   float64 // Amount in CNY
+	Amount   float64 // 按服务商返回币种解释的金额
 	PaidAt   string  // RFC3339 timestamp or empty
 	Metadata map[string]string
 }

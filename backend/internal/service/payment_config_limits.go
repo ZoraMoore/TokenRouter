@@ -8,6 +8,7 @@ import (
 	dbent "github.com/TokenFlux/TokenRouter/ent"
 	"github.com/TokenFlux/TokenRouter/ent/paymentproviderinstance"
 	"github.com/TokenFlux/TokenRouter/internal/payment"
+	infraerrors "github.com/TokenFlux/TokenRouter/internal/pkg/errors"
 )
 
 // GetAvailableMethodLimits collects all payment types from enabled provider
@@ -29,8 +30,13 @@ func (s *PaymentConfigService) GetAvailableMethodLimits(ctx context.Context) (*M
 		Methods: make(map[string]MethodLimits, len(typeInstances)),
 	}
 	for pt, insts := range typeInstances {
+		currency, ok := s.pcAggregateMethodCurrency(insts)
+		if !ok {
+			continue
+		}
 		ml := pcAggregateMethodLimits(pt, insts)
 		ml = pcApplyEffectiveMethodFee(cfg, ml)
+		ml.Currency = currency
 		resp.Methods[ml.PaymentType] = ml
 	}
 	resp.GlobalMin, resp.GlobalMax = pcComputeGlobalRange(resp.Methods)
@@ -91,7 +97,14 @@ func (s *PaymentConfigService) GetMethodLimits(ctx context.Context, types []stri
 				matching = append(matching, inst)
 			}
 		}
-		result = append(result, pcApplyEffectiveMethodFee(cfg, pcAggregateMethodLimits(pt, matching)))
+		currency, ok := s.pcAggregateMethodCurrency(matching)
+		if !ok {
+			continue
+		}
+		ml := pcAggregateMethodLimits(pt, matching)
+		ml = pcApplyEffectiveMethodFee(cfg, ml)
+		ml.Currency = currency
+		result = append(result, ml)
 	}
 	return result, nil
 }
@@ -101,6 +114,70 @@ func pcApplyEffectiveMethodFee(cfg *PaymentConfig, ml MethodLimits) MethodLimits
 	ml.FixedFee = fee.FixedFee
 	ml.FeeRate = fee.FeeRate
 	return ml
+}
+
+func (s *PaymentConfigService) ValidateMethodCurrencyConsistency(ctx context.Context, paymentType string) (string, error) {
+	method := NormalizeVisibleMethod(paymentType)
+	if method == "" || s == nil || s.entClient == nil {
+		return payment.DefaultPaymentCurrency, nil
+	}
+
+	instances, err := s.entClient.PaymentProviderInstance.Query().
+		Where(paymentproviderinstance.EnabledEQ(true)).All(ctx)
+	if err != nil {
+		return "", fmt.Errorf("query provider instances: %w", err)
+	}
+
+	typeInstances := pcGroupByPaymentType(instances)
+	typeInstances = s.pcApplyEnabledVisibleMethodInstances(ctx, typeInstances, instances)
+	matching := typeInstances[method]
+	if len(matching) == 0 {
+		return payment.DefaultPaymentCurrency, nil
+	}
+
+	currency, ok := s.pcAggregateMethodCurrency(matching)
+	if !ok {
+		return "", infraerrors.ServiceUnavailable(
+			"PAYMENT_METHOD_CURRENCY_CONFLICT",
+			"payment method has enabled provider instances with mixed currencies",
+		).WithMetadata(map[string]string{"payment_type": method})
+	}
+	return currency, nil
+}
+
+func (s *PaymentConfigService) pcAggregateMethodCurrency(instances []*dbent.PaymentProviderInstance) (string, bool) {
+	currency := ""
+	for _, inst := range instances {
+		next := s.pcInstancePaymentCurrency(inst)
+		if next == "" {
+			continue
+		}
+		if currency == "" {
+			currency = next
+			continue
+		}
+		if currency != next {
+			return "", false
+		}
+	}
+	if currency == "" {
+		return payment.DefaultPaymentCurrency, true
+	}
+	return currency, true
+}
+
+func (s *PaymentConfigService) pcInstancePaymentCurrency(inst *dbent.PaymentProviderInstance) string {
+	if inst == nil {
+		return payment.DefaultPaymentCurrency
+	}
+	cfg := map[string]string{}
+	if s != nil {
+		decrypted, err := s.decryptConfig(inst.Config)
+		if err == nil && decrypted != nil {
+			cfg = decrypted
+		}
+	}
+	return paymentProviderConfigCurrency(inst.ProviderKey, cfg)
 }
 
 // pcGroupByPaymentType groups instances by user-facing payment type.

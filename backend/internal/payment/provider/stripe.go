@@ -15,7 +15,6 @@ import (
 
 // Stripe constants.
 const (
-	stripeCurrency            = "cny"
 	stripeEventPaymentSuccess = "payment_intent.succeeded"
 	stripeEventPaymentFailed  = "payment_intent.payment_failed"
 	stripeEventInvoicePaid    = "invoice.paid"
@@ -37,9 +36,15 @@ func NewStripe(instanceID string, config map[string]string) (*Stripe, error) {
 	if config["secretKey"] == "" {
 		return nil, fmt.Errorf("stripe config missing required key: secretKey")
 	}
+	cfg := cloneStringMap(config)
+	currency, err := payment.NormalizePaymentCurrency(cfg["currency"])
+	if err != nil {
+		return nil, fmt.Errorf("stripe config currency: %w", err)
+	}
+	cfg["currency"] = currency
 	return &Stripe{
 		instanceID: instanceID,
-		config:     config,
+		config:     cfg,
 	}, nil
 }
 
@@ -63,11 +68,30 @@ func (s *Stripe) SupportedTypes() []payment.PaymentType {
 	return []payment.PaymentType{payment.TypeStripe}
 }
 
+func (s *Stripe) MerchantIdentityMetadata() map[string]string {
+	if s == nil {
+		return nil
+	}
+	return map[string]string{"currency": s.currency()}
+}
+
+func (s *Stripe) currency() string {
+	if s == nil {
+		return payment.DefaultPaymentCurrency
+	}
+	currency, err := payment.NormalizePaymentCurrency(s.config["currency"])
+	if err != nil {
+		return payment.DefaultPaymentCurrency
+	}
+	return currency
+}
+
 // CreatePayment 使用 Stripe Invoice 创建可开具账单的支付单。
 func (s *Stripe) CreatePayment(ctx context.Context, req payment.CreatePaymentRequest) (*payment.CreatePaymentResponse, error) {
 	s.ensureInit()
 
-	amountInCents, err := payment.YuanToFen(req.Amount)
+	currency := s.currency()
+	amountInMinorUnit, err := payment.AmountToMinorUnit(req.Amount, currency)
 	if err != nil {
 		return nil, fmt.Errorf("stripe create payment: %w", err)
 	}
@@ -80,7 +104,7 @@ func (s *Stripe) CreatePayment(ctx context.Context, req payment.CreatePaymentReq
 		return nil, fmt.Errorf("stripe create customer: %w", err)
 	}
 
-	invoiceParams := buildStripeInvoiceCreateParams(customer.ID, req, stripeInvoicePaymentMethodTypes(req.InstanceSubMethods), s.instanceID)
+	invoiceParams := buildStripeInvoiceCreateParams(customer.ID, req, stripeInvoicePaymentMethodTypes(req.InstanceSubMethods), s.instanceID, currency)
 	invoiceParams.SetIdempotencyKey(fmt.Sprintf("in-%s", req.OrderID))
 	invoice, err := s.sc.V1Invoices.Create(ctx, invoiceParams)
 	if err != nil {
@@ -88,8 +112,8 @@ func (s *Stripe) CreatePayment(ctx context.Context, req payment.CreatePaymentReq
 	}
 
 	itemParams := &stripe.InvoiceItemCreateParams{
-		Amount:      stripe.Int64(amountInCents),
-		Currency:    stripe.String(stripeCurrency),
+		Amount:      stripe.Int64(amountInMinorUnit),
+		Currency:    stripe.String(strings.ToLower(currency)),
 		Customer:    stripe.String(customer.ID),
 		Invoice:     stripe.String(invoice.ID),
 		Description: stripe.String(req.Subject),
@@ -124,13 +148,18 @@ func (s *Stripe) CreatePayment(ctx context.Context, req payment.CreatePaymentReq
 		InvoiceURL:    finalized.HostedInvoiceURL,
 		InvoicePDF:    finalized.InvoicePDF,
 		InvoiceStatus: string(finalized.Status),
+		Currency:      currency,
 	}, nil
 }
 
-func buildStripeInvoiceCreateParams(customerID string, req payment.CreatePaymentRequest, methods []string, instanceID string) *stripe.InvoiceCreateParams {
+func buildStripeInvoiceCreateParams(customerID string, req payment.CreatePaymentRequest, methods []string, instanceID string, currency string) *stripe.InvoiceCreateParams {
+	normalizedCurrency, err := payment.NormalizePaymentCurrency(currency)
+	if err != nil {
+		normalizedCurrency = payment.DefaultPaymentCurrency
+	}
 	params := &stripe.InvoiceCreateParams{
 		Customer:                    stripe.String(customerID),
-		Currency:                    stripe.String(stripeCurrency),
+		Currency:                    stripe.String(strings.ToLower(normalizedCurrency)),
 		CollectionMethod:            stripe.String(string(stripe.InvoiceCollectionMethodSendInvoice)),
 		AutoAdvance:                 stripe.Bool(false),
 		PendingInvoiceItemsBehavior: stripe.String("exclude"),
@@ -227,10 +256,14 @@ func (s *Stripe) QueryOrder(ctx context.Context, tradeNo string) (*payment.Query
 		status = payment.ProviderStatusFailed
 	}
 
+	currency := stripeIntentCurrency(pi.Currency, s.currency())
 	return &payment.QueryOrderResponse{
 		TradeNo: pi.ID,
 		Status:  status,
-		Amount:  payment.FenToYuan(pi.Amount),
+		Amount:  payment.MinorUnitToAmount(pi.Amount, currency),
+		Metadata: map[string]string{
+			"currency": currency,
+		},
 	}, nil
 }
 
@@ -265,12 +298,13 @@ func (s *Stripe) queryInvoice(ctx context.Context, invoiceID string) (*payment.Q
 	return &payment.QueryOrderResponse{
 		TradeNo: tradeNo,
 		Status:  status,
-		Amount:  payment.FenToYuan(amount),
+		Amount:  payment.MinorUnitToAmount(amount, s.currency()),
 		Metadata: map[string]string{
 			"invoice_id":     inv.ID,
 			"invoice_status": string(inv.Status),
 			"invoice_url":    inv.HostedInvoiceURL,
 			"invoice_pdf":    inv.InvoicePDF,
+			"currency":       s.currency(),
 		},
 	}, nil
 }
@@ -313,12 +347,16 @@ func parseStripePaymentIntent(event *stripe.Event, status string, rawBody string
 	if err := json.Unmarshal(event.Data.Raw, &pi); err != nil {
 		return nil, fmt.Errorf("stripe parse payment_intent: %w", err)
 	}
+	currency := stripeIntentCurrency(pi.Currency, payment.DefaultPaymentCurrency)
 	return &payment.PaymentNotification{
 		TradeNo: pi.ID,
 		OrderID: pi.Metadata["orderId"],
-		Amount:  payment.FenToYuan(pi.Amount),
+		Amount:  payment.MinorUnitToAmount(pi.Amount, currency),
 		Status:  status,
 		RawData: rawBody,
+		Metadata: map[string]string{
+			"currency": currency,
+		},
 	}, nil
 }
 
@@ -331,6 +369,7 @@ func parseStripeInvoice(event *stripe.Event, status string, rawBody string) (*pa
 	if amount <= 0 {
 		amount = inv.AmountDue
 	}
+	currency := stripeIntentCurrency(inv.Currency, payment.DefaultPaymentCurrency)
 	tradeNo := stripeInvoicePaymentIntentID(&inv)
 	if tradeNo == "" {
 		tradeNo = inv.ID
@@ -338,7 +377,7 @@ func parseStripeInvoice(event *stripe.Event, status string, rawBody string) (*pa
 	return &payment.PaymentNotification{
 		TradeNo: tradeNo,
 		OrderID: inv.Metadata["orderId"],
-		Amount:  payment.FenToYuan(amount),
+		Amount:  payment.MinorUnitToAmount(amount, currency),
 		Status:  status,
 		RawData: rawBody,
 		Metadata: map[string]string{
@@ -346,6 +385,7 @@ func parseStripeInvoice(event *stripe.Event, status string, rawBody string) (*pa
 			"invoice_status": string(inv.Status),
 			"invoice_url":    inv.HostedInvoiceURL,
 			"invoice_pdf":    inv.InvoicePDF,
+			"currency":       currency,
 		},
 	}, nil
 }
@@ -354,7 +394,7 @@ func parseStripeInvoice(event *stripe.Event, status string, rawBody string) (*pa
 func (s *Stripe) Refund(ctx context.Context, req payment.RefundRequest) (*payment.RefundResponse, error) {
 	s.ensureInit()
 
-	amountInCents, err := payment.YuanToFen(req.Amount)
+	amountInMinorUnit, err := payment.AmountToMinorUnit(req.Amount, s.currency())
 	if err != nil {
 		return nil, fmt.Errorf("stripe refund: %w", err)
 	}
@@ -372,7 +412,7 @@ func (s *Stripe) Refund(ctx context.Context, req payment.RefundRequest) (*paymen
 
 	params := &stripe.RefundCreateParams{
 		PaymentIntent: stripe.String(paymentIntentID),
-		Amount:        stripe.Int64(amountInCents),
+		Amount:        stripe.Int64(amountInMinorUnit),
 		Reason:        stripe.String(string(stripe.RefundReasonRequestedByCustomer)),
 	}
 	params.Context = ctx
@@ -391,6 +431,18 @@ func (s *Stripe) Refund(ctx context.Context, req payment.RefundRequest) (*paymen
 		RefundID: r.ID,
 		Status:   refundStatus,
 	}, nil
+}
+
+func stripeIntentCurrency(raw stripe.Currency, fallback string) string {
+	currency, err := payment.NormalizePaymentCurrency(string(raw))
+	if err != nil || currency == payment.DefaultPaymentCurrency && strings.TrimSpace(string(raw)) == "" {
+		normalizedFallback, fallbackErr := payment.NormalizePaymentCurrency(fallback)
+		if fallbackErr == nil {
+			return normalizedFallback
+		}
+		return payment.DefaultPaymentCurrency
+	}
+	return currency
 }
 
 // CancelPayment 对新 Invoice 订单执行 void，对旧 PaymentIntent 订单执行 cancel。
@@ -628,7 +680,8 @@ func (s *Stripe) findInvoicePaymentIntentID(ctx context.Context, invoiceID strin
 
 // Ensure interface compliance.
 var (
-	_ payment.Provider           = (*Stripe)(nil)
-	_ payment.CancelableProvider = (*Stripe)(nil)
-	_ payment.DocumentProvider   = (*Stripe)(nil)
+	_ payment.Provider                 = (*Stripe)(nil)
+	_ payment.CancelableProvider       = (*Stripe)(nil)
+	_ payment.DocumentProvider         = (*Stripe)(nil)
+	_ payment.MerchantIdentityProvider = (*Stripe)(nil)
 )
