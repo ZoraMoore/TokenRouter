@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TokenFlux/TokenRouter/internal/pkg/proxyurl"
+	"github.com/TokenFlux/TokenRouter/internal/pkg/proxyutil"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -142,8 +144,8 @@ func vertexServiceAccountCacheKey(account *Account, key *vertexServiceAccountKey
 	return "vertex:service_account:" + fingerprint
 }
 
-// getVertexServiceAccountAccessToken obtains an access token for a Vertex service account,
-// using the shared cache and distributed lock to avoid redundant exchanges.
+// getVertexServiceAccountAccessToken 获取 Vertex 服务账号访问令牌。
+// 这里复用共享缓存和分布式锁，避免并发请求重复换取令牌。
 func getVertexServiceAccountAccessToken(ctx context.Context, cache GeminiTokenCache, account *Account) (string, error) {
 	key, err := parseVertexServiceAccountKey(account)
 	if err != nil {
@@ -173,7 +175,7 @@ func getVertexServiceAccountAccessToken(ctx context.Context, cache GeminiTokenCa
 		}
 	}
 
-	accessToken, ttl, err := exchangeVertexServiceAccountToken(ctx, key)
+	accessToken, ttl, err := exchangeVertexServiceAccountToken(ctx, key, vertexServiceAccountProxyURL(account))
 	if err != nil {
 		return "", err
 	}
@@ -183,7 +185,39 @@ func getVertexServiceAccountAccessToken(ctx context.Context, cache GeminiTokenCa
 	return accessToken, nil
 }
 
-func exchangeVertexServiceAccountToken(ctx context.Context, key *vertexServiceAccountKey) (string, time.Duration, error) {
+// vertexServiceAccountProxyURL 返回账号绑定的代理地址。
+func vertexServiceAccountProxyURL(account *Account) string {
+	if account == nil || account.ProxyID == nil || account.Proxy == nil {
+		return ""
+	}
+	return account.Proxy.URL()
+}
+
+// newVertexServiceAccountHTTPClient 创建用于服务账号换 token 的 HTTP 客户端。
+func newVertexServiceAccountHTTPClient(proxyURL string) (*http.Client, error) {
+	proxyURL = strings.TrimSpace(proxyURL)
+	if proxyURL == "" {
+		return &http.Client{Timeout: 15 * time.Second}, nil
+	}
+
+	_, parsedProxy, err := proxyurl.Parse(proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, fmt.Errorf("unexpected default transport type %T", http.DefaultTransport)
+	}
+	transport := defaultTransport.Clone()
+	transport.Proxy = nil
+	if err := proxyutil.ConfigureTransportProxy(transport, parsedProxy); err != nil {
+		return nil, err
+	}
+	return &http.Client{Timeout: 15 * time.Second, Transport: transport}, nil
+}
+
+// exchangeVertexServiceAccountToken 使用服务账号私钥向 Google token 端点换取访问令牌。
+func exchangeVertexServiceAccountToken(ctx context.Context, key *vertexServiceAccountKey, proxyURL string) (string, time.Duration, error) {
 	now := time.Now()
 	claims := jwt.MapClaims{
 		"iss":   key.ClientEmail,
@@ -215,7 +249,10 @@ func exchangeVertexServiceAccountToken(ctx context.Context, key *vertexServiceAc
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client, err := newVertexServiceAccountHTTPClient(proxyURL)
+	if err != nil {
+		return "", 0, fmt.Errorf("configure service account token proxy: %w", err)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", 0, fmt.Errorf("service account token request failed: %w", err)
