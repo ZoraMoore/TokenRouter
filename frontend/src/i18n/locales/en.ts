@@ -2573,7 +2573,6 @@ export default {
       dataImportWarning: 'Import will create new accounts/proxies; groups must be bound manually. Ensure existing data does not conflict.',
       dataImportFile: 'Data file',
       dataImportPasteData: 'Paste JSON data',
-      dataImportPastePlaceholder: '{\n  "accounts": [],\n  "proxies": []\n}',
       dataImportPasteHint: 'When pasted content is not empty, it will be used before the selected file.',
       dataImportButton: 'Start Import',
       dataImporting: 'Importing...',

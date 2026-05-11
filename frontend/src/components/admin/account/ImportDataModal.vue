@@ -52,7 +52,7 @@
         <textarea
           v-model="pastedDataText"
           class="input min-h-40 resize-y font-mono text-xs leading-5"
-          :placeholder="t('admin.accounts.dataImportPastePlaceholder')"
+          :placeholder="pasteDataPlaceholder"
           spellcheck="false"
         />
         <div class="mt-1 text-xs text-gray-500 dark:text-dark-400">
@@ -132,6 +132,7 @@ const importing = ref(false)
 const file = ref<File | null>(null)
 const pastedDataText = ref('')
 const result = ref<AdminDataImportResult | null>(null)
+const pasteDataPlaceholder = '{\n  "accounts": [],\n  "proxies": []\n}'
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const fileName = computed(() => file.value?.name || '')

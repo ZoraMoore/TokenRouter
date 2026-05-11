@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
 import { adminAPI } from '@/api/admin'
+import zhMessages from '@/i18n/locales/zh'
 
 const showError = vi.fn()
 const showSuccess = vi.fn()
@@ -145,5 +146,28 @@ describe('ImportDataModal', () => {
       data: pastedPayload,
       skip_default_group_bind: true
     })
+  })
+
+  it('粘贴输入框的 JSON 占位符不经过 i18n 消息编译', async () => {
+    const actualI18n = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
+    const i18n = actualI18n.createI18n({
+      legacy: false,
+      locale: 'zh',
+      messages: {
+        zh: zhMessages
+      }
+    })
+
+    const wrapper = mount(ImportDataModal, {
+      props: { show: true },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          BaseDialog: { template: '<div><slot /><slot name="footer" /></div>' }
+        }
+      }
+    })
+
+    expect(wrapper.find('textarea').attributes('placeholder')).toContain('"accounts"')
   })
 })

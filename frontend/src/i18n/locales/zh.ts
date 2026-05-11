@@ -2648,7 +2648,6 @@ export default {
       dataImportWarning: '导入将创建新账号与代理，分组需手工绑定；请确认已有数据不会冲突。',
       dataImportFile: '数据文件',
       dataImportPasteData: '粘贴 JSON 数据',
-      dataImportPastePlaceholder: '{\n  "accounts": [],\n  "proxies": []\n}',
       dataImportPasteHint: '粘贴内容非空时将优先使用粘贴数据，否则使用选择的文件。',
       dataImportButton: '开始导入',
       dataImporting: '导入中...',
