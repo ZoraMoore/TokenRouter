@@ -19,7 +19,7 @@
           ({{ t('payment.orders.fee') }} {{ row.fee_rate }}%)
         </span>
         <div v-if="row.amount !== row.pay_amount" class="text-xs text-gray-500">
-          {{ t('payment.orders.creditedAmount') }}: {{ row.order_type === 'balance' ? '$' : '¥' }}{{ row.amount.toFixed(2) }}
+          {{ t('payment.orders.creditedAmount') }}: {{ formatOrderAmount(row.amount, row.order_type) }}
         </div>
       </div>
     </template>
@@ -45,8 +45,10 @@ import type { PaymentOrder } from '@/types/payment'
 import type { Column } from '@/components/common/types'
 import DataTable from '@/components/common/DataTable.vue'
 import OrderStatusBadge from '@/components/payment/OrderStatusBadge.vue'
+import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
 
 const { t } = useI18n()
+const { formatBalanceAmount } = useBalanceDisplay()
 
 const props = defineProps<{
   orders: PaymentOrder[]
@@ -55,6 +57,11 @@ const props = defineProps<{
 }>()
 
 function formatDate(dateStr: string) { return new Date(dateStr).toLocaleString() }
+
+/** 余额到账金额使用用户配置的单位，套餐订单继续使用人民币价格。 */
+function formatOrderAmount(amount: number, orderType: string): string {
+  return orderType === 'balance' ? formatBalanceAmount(amount, { fractionDigits: 2 }) : `¥${amount.toFixed(2)}`
+}
 
 const columns = computed((): Column[] => {
   const cols: Column[] = [
