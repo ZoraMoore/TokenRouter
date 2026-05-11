@@ -11,7 +11,10 @@
       <!-- Settings Form -->
       <form v-else @submit.prevent="saveSettings" class="space-y-6" novalidate>
         <!-- Tab Navigation -->
-        <div class="sticky top-0 z-10 overflow-x-auto settings-tabs-scroll">
+        <div
+          ref="settingsTabsScrollRef"
+          class="sticky top-0 z-10 overflow-x-auto settings-tabs-scroll"
+        >
           <nav class="settings-tabs">
             <button
               v-for="tab in settingsTabs"
@@ -21,7 +24,7 @@
                 'settings-tab',
                 activeTab === tab.key && 'settings-tab-active',
               ]"
-              @click="activeTab = tab.key"
+              @click="selectSettingsTab(tab.key)"
             >
               <span class="settings-tab-icon">
                 <Icon :name="tab.icon" size="sm" />
@@ -5892,7 +5895,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from "vue";
+import { ref, reactive, computed, onMounted, nextTick, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import { adminAPI } from "@/api";
@@ -5993,7 +5996,32 @@ const initialSettingsTab = settingsTabKeys.has(route.query.tab as SettingsTab)
   ? (route.query.tab as SettingsTab)
   : "general";
 const activeTab = ref<SettingsTab>(initialSettingsTab);
+const settingsTabsScrollRef = ref<HTMLElement | null>(null);
 const { copyToClipboard } = useClipboard();
+
+// 切换或初始化标签后居中选中项，避免横向滚动时激活背景贴边裁切。
+function scrollActiveSettingsTabIntoView() {
+  void nextTick(() => {
+    const tabElement =
+      settingsTabsScrollRef.value?.querySelector<HTMLElement>(
+        ".settings-tab-active",
+      );
+    tabElement?.scrollIntoView?.({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  });
+}
+
+function selectSettingsTab(tab: SettingsTab) {
+  activeTab.value = tab;
+}
+
+watch(activeTab, scrollActiveSettingsTabIntoView, {
+  immediate: true,
+  flush: "post",
+});
 
 const loading = ref(true);
 const loadFailed = ref(false);
@@ -8543,12 +8571,14 @@ onMounted(() => {
   @apply h-[42px];
 }
 
-/* ============ Settings Tab Navigation ============ */
+/* ============ 设置页标签导航 ============ */
 
-/* Scroll container: thin scrollbar on PC, auto-hide on mobile */
+/* 横向滚动容器保留内边距，防止首尾标签的圆角背景被裁切。 */
 .settings-tabs-scroll {
+  @apply px-2 pb-1;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
+  scroll-padding-inline: 0.5rem;
 }
 .settings-tabs-scroll:hover {
   scrollbar-color: rgb(0 0 0 / 0.15) transparent;
@@ -8574,7 +8604,7 @@ onMounted(() => {
 }
 
 .settings-tabs {
-  @apply inline-flex min-w-full gap-0.5 rounded-2xl
+  @apply inline-flex w-max min-w-full gap-0.5 rounded-2xl
          border border-gray-100 bg-white/80 p-1 backdrop-blur-sm
          dark:border-dark-700/50 dark:bg-dark-800/80;
   box-shadow:
@@ -8589,11 +8619,13 @@ onMounted(() => {
 }
 
 .settings-tab {
-  @apply relative flex flex-1 items-center justify-center gap-1.5
-         whitespace-nowrap rounded-xl px-2.5 py-2
+  @apply relative flex flex-none items-center justify-center gap-1.5
+         whitespace-nowrap rounded-xl px-3 py-2
          text-sm font-medium
          text-gray-500 dark:text-dark-400
          transition-all duration-200 ease-out;
+  min-width: 7rem;
+  scroll-snap-align: center;
 }
 
 .settings-tab:hover:not(.settings-tab-active) {
