@@ -8634,14 +8634,14 @@ onMounted(() => {
 
 /* ============ 系统设置 Tab 导航 ============ */
 .settings-tabs-shell {
-  @apply sticky z-20 -mx-1 rounded-2xl border border-white/80 bg-white/90 p-1.5 backdrop-blur-xl;
+  @apply sticky z-20 -mx-1 rounded-2xl border border-white/80 bg-white/90 p-1.5 backdrop-blur-xl dark:border-dark-600/70 dark:bg-dark-900/90;
   top: 4.75rem;
   box-shadow:
     0 12px 28px rgb(15 23 42 / 0.07),
     0 1px 0 rgb(255 255 255 / 0.9) inset;
 }
 
-:global(.dark) .settings-tabs-shell {
+.dark .settings-tabs-shell {
   border-color: rgb(51 65 85 / 0.65);
   background: rgb(15 23 42 / 0.86);
   box-shadow:
@@ -8693,7 +8693,7 @@ onMounted(() => {
   opacity: 1;
 }
 
-:global(.dark) .settings-tab::before {
+.dark .settings-tab::before {
   background: linear-gradient(135deg, rgb(30 41 59 / 0.9), rgb(51 65 85 / 0.62));
 }
 
@@ -8708,7 +8708,7 @@ onMounted(() => {
     0 1px 0 rgb(255 255 255 / 0.92) inset;
 }
 
-:global(.dark) .settings-tab-active {
+.dark .settings-tab-active {
   box-shadow:
     0 12px 26px rgb(0 0 0 / 0.22),
     0 1px 0 rgb(255 255 255 / 0.08) inset;
