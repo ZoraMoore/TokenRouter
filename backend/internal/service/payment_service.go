@@ -148,12 +148,14 @@ type RefundResult struct {
 }
 
 type DashboardStats struct {
-	TodayAmount   float64 `json:"today_amount"`
-	TotalAmount   float64 `json:"total_amount"`
-	TodayCount    int     `json:"today_count"`
-	TotalCount    int     `json:"total_count"`
-	AvgAmount     float64 `json:"avg_amount"`
-	PendingOrders int     `json:"pending_orders"`
+	TodayAmount                        float64 `json:"today_amount"`
+	TotalAmount                        float64 `json:"total_amount"`
+	TodayCount                         int     `json:"today_count"`
+	TotalCount                         int     `json:"total_count"`
+	AvgAmount                          float64 `json:"avg_amount"`
+	AvgReasoningPointPurchaseUnitPrice float64 `json:"avg_reasoning_point_purchase_unit_price"`
+	ReasoningPointPurchaseOrderCount   int     `json:"reasoning_point_purchase_order_count"`
+	PendingOrders                      int     `json:"pending_orders"`
 
 	DailySeries          []DailyStats               `json:"daily_series"`
 	PaymentMethods       []PaymentMethodStat        `json:"payment_methods"`

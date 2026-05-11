@@ -2,7 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import AdminPaymentDashboardView from '../AdminPaymentDashboardView.vue'
 
-const mockGetDashboard = vi.fn()
+const { mockGetDashboard } = vi.hoisted(() => {
+  vi.stubGlobal('localStorage', {
+    getItem: vi.fn(() => null),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+  })
+
+  return {
+    mockGetDashboard: vi.fn()
+  }
+})
 
 vi.mock('@/api/admin/payment', () => ({
   default: {
@@ -71,6 +81,8 @@ describe('AdminPaymentDashboardView', () => {
         today_count: 0,
         total_count: 0,
         avg_amount: 0,
+        avg_reasoning_point_purchase_unit_price: 0,
+        reasoning_point_purchase_order_count: 0,
         daily_series: [],
         payment_methods: [],
         purchase_distribution: [],

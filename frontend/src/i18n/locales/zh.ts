@@ -6614,6 +6614,7 @@ export default {
       todayOrders: '今日订单',
       orderCount: '订单数',
       avgAmount: '平均金额',
+      avgBalanceUnitPurchaseUnitPrice: '平均{unitName}购买单价',
       revenue: '收入',
       dailyRevenue: '每日收入',
       paymentDistribution: '支付方式分布',

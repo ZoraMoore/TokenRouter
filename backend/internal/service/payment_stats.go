@@ -61,6 +61,7 @@ func (s *PaymentService) GetDashboardStatsWithRange(ctx context.Context, start, 
 
 	st.DailySeries = buildDailySeries(orders, start, end)
 	st.PaymentMethods = buildMethodDistribution(orders)
+	computeReasoningPointPurchaseUnitPrice(st, orders)
 	planNames, err := s.loadPaymentDashboardPlanNames(ctx, orders)
 	if err != nil {
 		return nil, err
@@ -108,6 +109,42 @@ func computeBasicStats(st *DashboardStats, orders []*dbent.PaymentOrder, todaySt
 	st.TodayCount = todayCount
 	if st.TotalCount > 0 {
 		st.AvgAmount = math.Round(totalAmount/float64(st.TotalCount)*100) / 100
+	}
+}
+
+func computeReasoningPointPurchaseUnitPrice(st *DashboardStats, orders []*dbent.PaymentOrder) {
+	var totalPrincipal, totalReasoningPoints float64
+	var orderCount int
+	for _, o := range orders {
+		principal, points, ok := paymentDashboardReasoningPointPurchase(o)
+		if !ok {
+			continue
+		}
+		totalPrincipal += principal
+		totalReasoningPoints += points
+		orderCount++
+	}
+	st.ReasoningPointPurchaseOrderCount = orderCount
+	if totalReasoningPoints > 0 {
+		st.AvgReasoningPointPurchaseUnitPrice = math.Round(totalPrincipal/totalReasoningPoints*10000) / 10000
+	}
+}
+
+func paymentDashboardReasoningPointPurchase(o *dbent.PaymentOrder) (principal float64, points float64, ok bool) {
+	switch o.OrderType {
+	case payment.OrderTypeSubscription:
+		// 订阅订单只按月额度快照折算推理积分，避免日/周/无限额套餐混入口径。
+		if o.PlanSnapshot.MonthlyLimitUSD == nil || *o.PlanSnapshot.MonthlyLimitUSD <= 0 || o.Amount <= 0 {
+			return 0, 0, false
+		}
+		return o.Amount, *o.PlanSnapshot.MonthlyLimitUSD, true
+	default:
+		// 余额充值的 amount 是到账推理积分，pay_amount 扣除手续费后得到充值本金。
+		principal = o.PayAmount - o.FeeAmount
+		if principal <= 0 || o.Amount <= 0 {
+			return 0, 0, false
+		}
+		return principal, o.Amount, true
 	}
 }
 

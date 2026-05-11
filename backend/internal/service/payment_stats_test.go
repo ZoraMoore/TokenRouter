@@ -157,6 +157,92 @@ func TestPaymentDashboardStatsWithRangeFallsBackToPlanSnapshotWhenPlanDeleted(t 
 	require.Equal(t, 1, stats.PurchaseDistribution[0].Count)
 }
 
+func TestPaymentDashboardStatsWithRangeComputesReasoningPointPurchaseUnitPrice(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+
+	user, err := client.User.Create().
+		SetEmail("unit-price@example.com").
+		SetPasswordHash("hash").
+		SetUsername("unit-price-user").
+		Save(ctx)
+	require.NoError(t, err)
+
+	paidAt := time.Date(2026, 5, 2, 10, 0, 0, 0, time.UTC)
+	monthlyLimit := 120.0
+	createPaidPaymentStatsOrder(t, ctx, client, paymentStatsOrderSeed{
+		userID:      user.ID,
+		userEmail:   user.Email,
+		userName:    user.Username,
+		paymentType: payment.TypeAlipay,
+		orderType:   payment.OrderTypeBalance,
+		status:      OrderStatusCompleted,
+		amount:      200,
+		payAmount:   103,
+		feeAmount:   3,
+		paidAt:      paidAt,
+		tradeNo:     "balance-with-fee",
+	})
+	createPaidPaymentStatsOrder(t, ctx, client, paymentStatsOrderSeed{
+		userID:       user.ID,
+		userEmail:    user.Email,
+		userName:     user.Username,
+		paymentType:  payment.TypeStripe,
+		orderType:    payment.OrderTypeSubscription,
+		status:       OrderStatusPaid,
+		amount:       60,
+		paidAt:       paidAt.Add(time.Hour),
+		tradeNo:      "subscription-monthly-limit",
+		monthlyLimit: &monthlyLimit,
+	})
+	createPaidPaymentStatsOrder(t, ctx, client, paymentStatsOrderSeed{
+		userID:      user.ID,
+		userEmail:   user.Email,
+		userName:    user.Username,
+		paymentType: payment.TypeStripe,
+		orderType:   payment.OrderTypeSubscription,
+		status:      OrderStatusCompleted,
+		amount:      88,
+		paidAt:      paidAt.Add(2 * time.Hour),
+		tradeNo:     "subscription-no-monthly-limit",
+	})
+	createPaidPaymentStatsOrder(t, ctx, client, paymentStatsOrderSeed{
+		userID:      user.ID,
+		userEmail:   user.Email,
+		userName:    user.Username,
+		paymentType: payment.TypeWxpay,
+		orderType:   payment.OrderTypeBalance,
+		status:      OrderStatusPending,
+		amount:      999,
+		payAmount:   999,
+		paidAt:      paidAt,
+		tradeNo:     "pending-ignored-by-status",
+	})
+	createPaidPaymentStatsOrder(t, ctx, client, paymentStatsOrderSeed{
+		userID:      user.ID,
+		userEmail:   user.Email,
+		userName:    user.Username,
+		paymentType: payment.TypeWxpay,
+		orderType:   payment.OrderTypeBalance,
+		status:      OrderStatusCompleted,
+		amount:      999,
+		payAmount:   999,
+		paidAt:      paidAt.AddDate(0, 0, 4),
+		tradeNo:     "outside-range-unit-price",
+	})
+
+	svc := &PaymentService{entClient: client}
+	stats, err := svc.GetDashboardStatsWithRange(
+		ctx,
+		time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 5, 4, 0, 0, 0, 0, time.UTC),
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, stats.ReasoningPointPurchaseOrderCount)
+	require.Equal(t, 0.5, stats.AvgReasoningPointPurchaseUnitPrice)
+}
+
 func findPurchaseDistributionStat(t *testing.T, items []PurchaseDistributionStat, itemType string) PurchaseDistributionStat {
 	t.Helper()
 	for _, item := range items {
@@ -169,28 +255,36 @@ func findPurchaseDistributionStat(t *testing.T, items []PurchaseDistributionStat
 }
 
 type paymentStatsOrderSeed struct {
-	userID      int64
-	userEmail   string
-	userName    string
-	paymentType string
-	orderType   string
-	status      string
-	amount      float64
-	paidAt      time.Time
-	tradeNo     string
-	planID      *int64
-	planName    string
+	userID       int64
+	userEmail    string
+	userName     string
+	paymentType  string
+	orderType    string
+	status       string
+	amount       float64
+	payAmount    float64
+	feeAmount    float64
+	paidAt       time.Time
+	tradeNo      string
+	planID       *int64
+	planName     string
+	monthlyLimit *float64
 }
 
 func createPaidPaymentStatsOrder(t *testing.T, ctx context.Context, client *dbent.Client, seed paymentStatsOrderSeed) {
 	t.Helper()
+	payAmount := seed.payAmount
+	if payAmount == 0 {
+		payAmount = seed.amount
+	}
 	create := client.PaymentOrder.Create().
 		SetUserID(seed.userID).
 		SetUserEmail(seed.userEmail).
 		SetUserName(seed.userName).
 		SetAmount(seed.amount).
-		SetPayAmount(seed.amount).
+		SetPayAmount(payAmount).
 		SetFeeRate(0).
+		SetFeeAmount(seed.feeAmount).
 		SetRechargeCode("PAY-" + seed.tradeNo).
 		SetOutTradeNo(seed.tradeNo).
 		SetPaymentType(seed.paymentType).
@@ -202,12 +296,15 @@ func createPaidPaymentStatsOrder(t *testing.T, ctx context.Context, client *dben
 		SetClientIP("127.0.0.1").
 		SetSrcHost("api.example.com")
 	if seed.planID != nil {
-		create.SetPlanID(*seed.planID).
-			SetPlanSnapshot(domain.SubscriptionPlanSnapshot{
-				Name:         seed.planName,
-				Price:        seed.amount,
-				ValidityDays: 30,
-			})
+		create.SetPlanID(*seed.planID)
+	}
+	if seed.orderType == payment.OrderTypeSubscription || seed.planID != nil || seed.planName != "" || seed.monthlyLimit != nil {
+		create.SetPlanSnapshot(domain.SubscriptionPlanSnapshot{
+			Name:            seed.planName,
+			Price:           seed.amount,
+			ValidityDays:    30,
+			MonthlyLimitUSD: seed.monthlyLimit,
+		})
 	}
 	_, err := create.Save(ctx)
 	require.NoError(t, err)

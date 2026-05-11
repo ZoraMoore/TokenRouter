@@ -262,6 +262,8 @@ export interface DashboardStats {
   today_count: number
   total_count: number
   avg_amount: number
+  avg_reasoning_point_purchase_unit_price: number
+  reasoning_point_purchase_order_count: number
   daily_series: { date: string; amount: number; count: number }[]
   payment_methods: { type: string; amount: number; count: number }[]
   purchase_distribution: { type: OrderType; label: string; plan_id?: number; amount: number; count: number }[]

@@ -6430,6 +6430,7 @@ export default {
       todayOrders: 'Today Orders',
       orderCount: 'Order Count',
       avgAmount: 'Average Amount',
+      avgBalanceUnitPurchaseUnitPrice: 'Avg {unitName} Purchase Unit Price',
       revenue: 'Revenue',
       dailyRevenue: 'Daily Revenue',
       paymentDistribution: 'Payment Distribution',
