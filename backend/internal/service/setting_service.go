@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/TokenFlux/TokenRouter/internal/config"
+	"github.com/TokenFlux/TokenRouter/internal/pkg/antigravity"
 	infraerrors "github.com/TokenFlux/TokenRouter/internal/pkg/errors"
 	"github.com/imroc/req/v3"
 	"golang.org/x/sync/singleflight"
@@ -104,6 +105,16 @@ const gatewayForwardingCacheTTL = 60 * time.Second
 const gatewayForwardingErrorTTL = 5 * time.Second
 const gatewayForwardingDBTimeout = 5 * time.Second
 
+// cachedAntigravityUserAgentVersion 缓存 Antigravity UA 版本号（进程内缓存，60s TTL）。
+type cachedAntigravityUserAgentVersion struct {
+	version   string
+	expiresAt int64 // unix nano
+}
+
+const antigravityUserAgentVersionCacheTTL = 60 * time.Second
+const antigravityUserAgentVersionErrorTTL = 5 * time.Second
+const antigravityUserAgentVersionDBTimeout = 5 * time.Second
+
 // DefaultSubscriptionPlanReader validates plan references used by default subscriptions.
 type DefaultSubscriptionPlanReader interface {
 	GetByID(ctx context.Context, id int64) (*SubscriptionPlan, error)
@@ -115,13 +126,15 @@ type WebSearchManagerBuilder func(cfg *WebSearchEmulationConfig, proxyURLs map[i
 
 // SettingService 系统设置服务
 type SettingService struct {
-	settingRepo             SettingRepository
-	defaultSubPlanReader    DefaultSubscriptionPlanReader
-	proxyRepo               ProxyRepository // for resolving websearch provider proxy URLs
-	cfg                     *config.Config
-	onUpdate                func() // Callback when settings are updated (for cache invalidation)
-	version                 string // Application version
-	webSearchManagerBuilder WebSearchManagerBuilder
+	settingRepo               SettingRepository
+	defaultSubPlanReader      DefaultSubscriptionPlanReader
+	proxyRepo                 ProxyRepository // for resolving websearch provider proxy URLs
+	cfg                       *config.Config
+	onUpdate                  func() // Callback when settings are updated (for cache invalidation)
+	version                   string // Application version
+	webSearchManagerBuilder   WebSearchManagerBuilder
+	antigravityUAVersionCache atomic.Value // *cachedAntigravityUserAgentVersion
+	antigravityUAVersionSF    singleflight.Group
 }
 
 type ProviderDefaultGrantSettings struct {
@@ -878,6 +891,55 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 	}, nil
 }
 
+// GetAntigravityUserAgentVersion 返回 Antigravity 上游请求使用的版本号。
+// 后台设置优先；为空、缺失或非法时回退到 ANTIGRAVITY_USER_AGENT_VERSION / 内置默认值。
+func (s *SettingService) GetAntigravityUserAgentVersion(ctx context.Context) string {
+	fallback := antigravity.GetDefaultUserAgentVersion()
+	if s == nil || s.settingRepo == nil {
+		return fallback
+	}
+	if cached, ok := s.antigravityUAVersionCache.Load().(*cachedAntigravityUserAgentVersion); ok && cached != nil {
+		if time.Now().UnixNano() < cached.expiresAt {
+			return cached.version
+		}
+	}
+
+	result, _, _ := s.antigravityUAVersionSF.Do("antigravity_user_agent_version", func() (any, error) {
+		if cached, ok := s.antigravityUAVersionCache.Load().(*cachedAntigravityUserAgentVersion); ok && cached != nil {
+			if time.Now().UnixNano() < cached.expiresAt {
+				return cached.version, nil
+			}
+		}
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), antigravityUserAgentVersionDBTimeout)
+		defer cancel()
+		value, err := s.settingRepo.GetValue(dbCtx, SettingKeyAntigravityUserAgentVersion)
+		if err != nil && !errors.Is(err, ErrSettingNotFound) {
+			slog.Warn("failed to get antigravity user agent version setting", "error", err)
+			s.antigravityUAVersionCache.Store(&cachedAntigravityUserAgentVersion{
+				version:   fallback,
+				expiresAt: time.Now().Add(antigravityUserAgentVersionErrorTTL).UnixNano(),
+			})
+			return fallback, nil
+		}
+		version := antigravity.NormalizeUserAgentVersion(value)
+		if version == "" {
+			version = fallback
+		}
+		s.antigravityUAVersionCache.Store(&cachedAntigravityUserAgentVersion{
+			version:   version,
+			expiresAt: time.Now().Add(antigravityUserAgentVersionCacheTTL).UnixNano(),
+		})
+		return version, nil
+	})
+	if version, ok := result.(string); ok && version != "" {
+		return version
+	}
+	return fallback
+}
+
 // SetOnUpdateCallback sets a callback function to be called when settings are updated
 // This is used for cache invalidation (e.g., HTML cache in frontend server)
 func (s *SettingService) SetOnUpdateCallback(callback func()) {
@@ -1553,6 +1615,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyEnableCCHSigning] = strconv.FormatBool(settings.EnableCCHSigning)
 	updates[SettingKeyEnableAnthropicCacheTTL1hInjection] = strconv.FormatBool(settings.EnableAnthropicCacheTTL1hInjection)
 	updates[SettingKeyRewriteMessageCacheControl] = strconv.FormatBool(settings.RewriteMessageCacheControl)
+	updates[SettingKeyAntigravityUserAgentVersion] = antigravity.NormalizeUserAgentVersion(settings.AntigravityUserAgentVersion)
 	updates[SettingPaymentVisibleMethodAlipaySource] = settings.PaymentVisibleMethodAlipaySource
 	updates[SettingPaymentVisibleMethodWxpaySource] = settings.PaymentVisibleMethodWxpaySource
 	updates[SettingPaymentVisibleMethodAlipayEnabled] = strconv.FormatBool(settings.PaymentVisibleMethodAlipayEnabled)
@@ -1626,6 +1689,15 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		anthropicCacheTTL1hInjection: settings.EnableAnthropicCacheTTL1hInjection,
 		rewriteMessageCacheControl:   settings.RewriteMessageCacheControl,
 		expiresAt:                    time.Now().Add(gatewayForwardingCacheTTL).UnixNano(),
+	})
+	s.antigravityUAVersionSF.Forget("antigravity_user_agent_version")
+	antigravityUserAgentVersion := antigravity.NormalizeUserAgentVersion(settings.AntigravityUserAgentVersion)
+	if antigravityUserAgentVersion == "" {
+		antigravityUserAgentVersion = antigravity.GetDefaultUserAgentVersion()
+	}
+	s.antigravityUAVersionCache.Store(&cachedAntigravityUserAgentVersion{
+		version:   antigravityUserAgentVersion,
+		expiresAt: time.Now().Add(antigravityUserAgentVersionCacheTTL).UnixNano(),
 	})
 	openAIAdvancedSchedulerSettingSF.Forget(openAIAdvancedSchedulerSettingKey)
 	openAIAdvancedSchedulerSettingCache.Store(&cachedOpenAIAdvancedSchedulerSetting{
@@ -2269,6 +2341,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyAllowUngroupedKeyScheduling:        "false",
 		SettingKeyEnableAnthropicCacheTTL1hInjection: "false",
 		SettingKeyRewriteMessageCacheControl:         strconv.FormatBool(s.defaultRewriteMessageCacheControl()),
+		SettingKeyAntigravityUserAgentVersion:        "",
 		SettingPaymentVisibleMethodAlipaySource:      "",
 		SettingPaymentVisibleMethodWxpaySource:       "",
 		SettingPaymentVisibleMethodAlipayEnabled:     "false",
@@ -2647,6 +2720,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	} else {
 		result.RewriteMessageCacheControl = s.defaultRewriteMessageCacheControl()
 	}
+	result.AntigravityUserAgentVersion = antigravity.NormalizeUserAgentVersion(settings[SettingKeyAntigravityUserAgentVersion])
 
 	// Web search emulation: quick enabled check from the JSON config
 	if raw := settings[SettingKeyWebSearchEmulationConfig]; raw != "" {

@@ -8,6 +8,7 @@ import (
 	dbent "github.com/TokenFlux/TokenRouter/ent"
 	"github.com/TokenFlux/TokenRouter/internal/config"
 	"github.com/TokenFlux/TokenRouter/internal/payment"
+	"github.com/TokenFlux/TokenRouter/internal/pkg/antigravity"
 	"github.com/TokenFlux/TokenRouter/internal/pkg/logger"
 	"github.com/google/wire"
 	"github.com/redis/go-redis/v9"
@@ -423,6 +424,7 @@ func ProvideSettingService(settingRepo SettingRepository, paymentConfigService *
 	svc := NewSettingService(settingRepo, cfg)
 	svc.SetDefaultSubscriptionPlanReader(paymentConfigService)
 	svc.SetProxyRepository(proxyRepo)
+	antigravity.SetUserAgentVersionResolver(svc.GetAntigravityUserAgentVersion)
 	return svc
 }
 
