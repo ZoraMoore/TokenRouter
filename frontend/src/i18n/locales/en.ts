@@ -6458,6 +6458,11 @@ export default {
     subscribeNow: 'Subscribe Now',
     renewNow: 'Renew',
     selectPlan: 'Select Plan',
+    duplicatePlan: {
+      title: 'Duplicate Purchase Notice',
+      message: 'You already have the "{plan}" plan. Buying the same plan again will extend its expiration date automatically instead of adding a separate subscription.',
+      continue: 'Continue Purchase',
+    },
     planFeatures: 'Features',
     planCard: {
       rate: 'Rate',

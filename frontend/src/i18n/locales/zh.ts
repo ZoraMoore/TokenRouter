@@ -6642,6 +6642,11 @@ export default {
     subscribeNow: '立即开通',
     renewNow: '续费',
     selectPlan: '选择套餐',
+    duplicatePlan: {
+      title: '重复购买提醒',
+      message: '您已经拥有「{plan}」套餐。重复购买同一套餐后，有效期将自动顺延，不会叠加新的独立订阅。',
+      continue: '继续购买',
+    },
     planFeatures: '功能特性',
     planCard: {
       rate: '倍率',

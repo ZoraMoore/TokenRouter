@@ -3,6 +3,39 @@ import { flushPromises, shallowMount } from '@vue/test-utils'
 import PaymentView from '../PaymentView.vue'
 import { PAYMENT_RECOVERY_STORAGE_KEY } from '@/components/payment/paymentFlow'
 
+function createMemoryStorage(): Storage {
+  let store: Record<string, string> = {}
+  return {
+    get length() {
+      return Object.keys(store).length
+    },
+    clear: vi.fn(() => {
+      store = {}
+    }),
+    getItem: vi.fn((key: string) => store[key] ?? null),
+    key: vi.fn((index: number) => Object.keys(store)[index] ?? null),
+    removeItem: vi.fn((key: string) => {
+      delete store[key]
+    }),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = String(value)
+    }),
+  }
+}
+
+// Vitest 在当前 Node 环境没有注入 window.localStorage，支付恢复逻辑测试需要一个可控实现。
+if (!window.localStorage) {
+  const storage = createMemoryStorage()
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: storage,
+  })
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: storage,
+  })
+}
+
 const routeState = vi.hoisted(() => ({
   path: '/purchase',
   query: {} as Record<string, unknown>,
@@ -14,6 +47,7 @@ const routerResolve = vi.hoisted(() => vi.fn(() => ({ href: '/payment/stripe?moc
 const createOrder = vi.hoisted(() => vi.fn())
 const refreshUser = vi.hoisted(() => vi.fn())
 const fetchActiveSubscriptions = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const activeSubscriptionsState = vi.hoisted(() => ({ value: [] as Array<Record<string, unknown>> }))
 const showError = vi.hoisted(() => vi.fn())
 const showInfo = vi.hoisted(() => vi.fn())
 const showWarning = vi.hoisted(() => vi.fn())
@@ -62,7 +96,7 @@ vi.mock('@/stores/payment', () => ({
 
 vi.mock('@/stores/subscriptions', () => ({
   useSubscriptionStore: () => ({
-    activeSubscriptions: [],
+    activeSubscriptions: activeSubscriptionsState.value,
     fetchActiveSubscriptions,
   }),
 }))
@@ -263,6 +297,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
     showWarning.mockReset()
     getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture())
     bridgeInvoke.mockReset()
+    activeSubscriptionsState.value = []
     window.localStorage.clear()
     ;(window as Window & { WeixinJSBridge?: { invoke: typeof bridgeInvoke } }).WeixinJSBridge = {
       invoke: bridgeInvoke,
@@ -497,6 +532,7 @@ describe('PaymentView Stripe billing form', () => {
     showWarning.mockReset()
     getCheckoutInfo.mockReset().mockResolvedValue(stripeCheckoutInfoFixture())
     bridgeInvoke.mockReset()
+    activeSubscriptionsState.value = []
     window.localStorage.clear()
   })
 
@@ -593,6 +629,57 @@ describe('PaymentView Stripe billing form', () => {
   })
 })
 
+describe('PaymentView duplicate subscription notice', () => {
+  beforeEach(() => {
+    routeState.path = '/purchase'
+    routeState.query = { tab: 'subscription' }
+    routerReplace.mockReset().mockResolvedValue(undefined)
+    routerPush.mockReset().mockResolvedValue(undefined)
+    routerResolve.mockClear()
+    createOrder.mockReset()
+    refreshUser.mockReset()
+    showError.mockReset()
+    showInfo.mockReset()
+    showWarning.mockReset()
+    activeSubscriptionsState.value = [{
+      id: 99,
+      plan_id: 7,
+      status: 'active',
+    }]
+    fetchActiveSubscriptions.mockReset().mockResolvedValue(activeSubscriptionsState.value)
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoWithPlansFixture())
+    bridgeInvoke.mockReset()
+    window.localStorage.clear()
+  })
+
+  it('requires confirmation before selecting an already active plan', async () => {
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<main><slot /></main>' },
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.getComponent({ name: 'SubscriptionPlanCard' }).vm.$emit('select', checkoutInfoWithPlansFixture().data.plans[0])
+    await flushPromises()
+
+    const dialog = wrapper.getComponent({ name: 'ConfirmDialog' })
+    expect(dialog.props('show')).toBe(true)
+    expect(dialog.props('title')).toBe('payment.duplicatePlan.title')
+    expect(wrapper.findAllComponents({ name: 'SubscriptionPlanCard' })).toHaveLength(1)
+
+    await dialog.vm.$emit('confirm')
+    await flushPromises()
+
+    expect(wrapper.findAllComponents({ name: 'SubscriptionPlanCard' })).toHaveLength(0)
+    expect(wrapper.text()).toContain('payment.createOrder')
+  })
+})
+
 describe('PaymentView payment help text', () => {
   beforeEach(() => {
     routeState.path = '/purchase'
@@ -613,6 +700,7 @@ describe('PaymentView payment help text', () => {
       },
     })
     bridgeInvoke.mockReset()
+    activeSubscriptionsState.value = []
     window.localStorage.clear()
   })
 

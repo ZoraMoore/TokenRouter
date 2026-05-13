@@ -307,6 +307,15 @@
         </div>
       </Transition>
     </Teleport>
+    <ConfirmDialog
+      :show="duplicatePlanDialogPlan !== null"
+      :title="t('payment.duplicatePlan.title')"
+      :message="duplicatePlanDialogMessage"
+      :confirm-text="t('payment.duplicatePlan.continue')"
+      :cancel-text="t('common.cancel')"
+      @confirm="confirmDuplicatePlanPurchase"
+      @cancel="closeDuplicatePlanDialog"
+    />
     <!-- Image Preview Overlay -->
     <Teleport to="body">
       <Transition name="modal">
@@ -351,6 +360,7 @@ import {
 import { platformAccentBarClass, platformTextClass } from '@/utils/platformColors'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
 import PaymentStatusPanel from '@/components/payment/PaymentStatusPanel.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
 import { formatPaymentAmount, normalizePaymentCurrency, paymentCurrencyFractionDigits } from '@/components/payment/currency'
@@ -390,6 +400,9 @@ const amount = ref<number | null>(null)
 const selectedMethod = ref('')
 const selectedPlan = ref<SubscriptionPlan | null>(null)
 const previewImage = ref('')
+const duplicatePlanDialogPlan = ref<SubscriptionPlan | null>(null)
+const duplicatePlanDialogConfirm = ref<(() => void) | null>(null)
+const duplicatePlanAcknowledgedId = ref<number | null>(null)
 const billingInfo = reactive({
   name: '',
   email: '',
@@ -839,9 +852,53 @@ const planValiditySuffix = computed(() => {
   return `${selectedPlan.value.validity_days}${t('payment.days')}`
 })
 
-function selectPlan(plan: SubscriptionPlan) {
+const duplicatePlanDialogMessage = computed(() => t('payment.duplicatePlan.message', {
+  plan: duplicatePlanDialogPlan.value?.name || t('payment.confirmSubscription'),
+}))
+
+async function loadActiveSubscriptionsForSelection(): Promise<UserSubscription[]> {
+  try {
+    const subscriptions = await subscriptionStore.fetchActiveSubscriptions(true)
+    return Array.isArray(subscriptions) ? subscriptions : activeSubscriptions.value
+  } catch {
+    return activeSubscriptions.value
+  }
+}
+
+async function hasActivePlan(planId: number): Promise<boolean> {
+  const subscriptions = await loadActiveSubscriptionsForSelection()
+  return subscriptions.some(sub => sub.plan_id === planId && sub.status === 'active')
+}
+
+function applySelectedPlan(plan: SubscriptionPlan, acknowledgedDuplicate = false) {
   selectedPlan.value = plan
+  duplicatePlanAcknowledgedId.value = acknowledgedDuplicate ? plan.id : null
   errorMessage.value = ''
+}
+
+function openDuplicatePlanDialog(plan: SubscriptionPlan, onConfirm: () => void) {
+  duplicatePlanDialogPlan.value = plan
+  duplicatePlanDialogConfirm.value = onConfirm
+}
+
+function closeDuplicatePlanDialog() {
+  duplicatePlanDialogPlan.value = null
+  duplicatePlanDialogConfirm.value = null
+}
+
+function confirmDuplicatePlanPurchase() {
+  const onConfirm = duplicatePlanDialogConfirm.value
+  closeDuplicatePlanDialog()
+  onConfirm?.()
+}
+
+async function selectPlan(plan: SubscriptionPlan) {
+  // 购买同一个已生效套餐只会顺延有效期，进入确认页前先提示用户。
+  if (await hasActivePlan(plan.id)) {
+    openDuplicatePlanDialog(plan, () => applySelectedPlan(plan, true))
+    return
+  }
+  applySelectedPlan(plan)
 }
 
 function findCheckoutPlan(planId: number): SubscriptionPlan | undefined {
@@ -868,11 +925,17 @@ function hasPlanQuota(value: number | null | undefined): boolean {
   return value != null && value > 0
 }
 
-function selectPlanFromModal(plan: SubscriptionPlan) {
-  showRenewalModal.value = false
-  renewGroupId.value = null
-  selectedPlan.value = plan
-  errorMessage.value = ''
+async function selectPlanFromModal(plan: SubscriptionPlan) {
+  // 续费弹窗中选中同一套餐时，也需要展示有效期顺延提醒。
+  if (await hasActivePlan(plan.id)) {
+    openDuplicatePlanDialog(plan, () => {
+      closeRenewalModal()
+      applySelectedPlan(plan, true)
+    })
+    return
+  }
+  closeRenewalModal()
+  applySelectedPlan(plan)
 }
 
 function closeRenewalModal() {
@@ -889,7 +952,16 @@ async function handleSubmitRecharge() {
 async function confirmSubscribe() {
   if (!selectedPlan.value || submitting.value) return
   if (!validateStripeBillingInfo()) return
-  await createOrder(selectedPlan.value.price, 'subscription', selectedPlan.value.id)
+  const plan = selectedPlan.value
+  // 若订阅状态在选中套餐后才刷新出来，提交订单前再兜底提醒一次。
+  if (duplicatePlanAcknowledgedId.value !== plan.id && await hasActivePlan(plan.id)) {
+    openDuplicatePlanDialog(plan, () => {
+      duplicatePlanAcknowledgedId.value = plan.id
+      void createOrder(plan.price, 'subscription', plan.id)
+    })
+    return
+  }
+  await createOrder(plan.price, 'subscription', plan.id)
 }
 
 async function createOrder(orderAmount: number, orderType: OrderType, planId?: number, options: CreateOrderOptions = {}) {
@@ -1270,13 +1342,13 @@ onMounted(async () => {
       if (planId > 0) {
         const plan = checkout.value.plans.find(item => item.id === planId)
         if (plan) {
-          selectedPlan.value = plan
+          await selectPlan(plan)
         }
       } else if (route.query.group) {
         const groupId = Number(route.query.group)
         const groupPlans = checkout.value.plans.filter(p => p.group_id === groupId)
         if (groupPlans.length === 1) {
-          selectedPlan.value = groupPlans[0]
+          await selectPlan(groupPlans[0])
         } else if (groupPlans.length > 1) {
           renewGroupId.value = groupId
           showRenewalModal.value = true
