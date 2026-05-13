@@ -182,7 +182,7 @@ func buildStripeInvoiceCreateParams(customerID string, req payment.CreatePayment
 	return params
 }
 
-// 将后台实例勾选的 Stripe 子支付方式转换为 Invoice API 的 payment_method_types。
+// 将后台实例勾选的 Stripe 子支付方式转换为 Invoice API 支持的 payment_method_types。
 func stripeInvoicePaymentMethodTypes(subMethods string) []string {
 	seen := make(map[string]struct{})
 	methods := make([]string, 0)
@@ -200,17 +200,18 @@ func stripeInvoicePaymentMethodTypes(subMethods string) []string {
 	return methods
 }
 
-// 将本系统的可见支付方式命名映射为 Stripe 侧的支付方式命名。
+// 将本系统的可见支付方式命名映射为 Stripe Invoice 侧的支付方式命名。
 func stripeInvoicePaymentMethodType(method string) string {
 	switch strings.TrimSpace(method) {
 	case payment.TypeCard:
-		return payment.TypeCard
+		return string(stripe.InvoicePaymentSettingsPaymentMethodTypeCard)
 	case payment.TypeAlipay:
+		// 当前 stripe-go 的 Invoice 枚举未覆盖 Alipay，但 Stripe Invoicing API 使用的名称仍是 alipay。
 		return payment.TypeAlipay
 	case payment.TypeWxpay, "wechat_pay":
-		return "wechat_pay"
+		return string(stripe.InvoicePaymentSettingsPaymentMethodTypeWeChatPay)
 	case payment.TypeLink:
-		return payment.TypeLink
+		return string(stripe.InvoicePaymentSettingsPaymentMethodTypeLink)
 	default:
 		// 旧数据可能保存了 "stripe" 或其它未知值，这些不是 Stripe Invoice 的具体支付方式。
 		return ""
