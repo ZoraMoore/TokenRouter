@@ -1,11 +1,11 @@
 <template>
   <div class="flex min-w-0 flex-1 items-start justify-between gap-3">
-    <!-- Left: name + description -->
+    <!-- 左侧：分组名称与描述 -->
     <div
       class="flex min-w-0 flex-1 flex-col items-start"
       :title="description || undefined"
     >
-      <!-- Row 1: platform badge (name bold) -->
+      <!-- 第一行：平台/品牌标签，分组名称加粗 -->
       <GroupBadge
         :name="name"
         :platform="platform"
@@ -13,7 +13,7 @@
         :show-rate="false"
         class="groupOptionItemBadge"
       />
-      <!-- Row 2: description with top spacing -->
+      <!-- 第二行：分组描述，和标题保持轻微间距 -->
       <span
         v-if="description"
         class="mt-1.5 w-full text-left text-xs leading-relaxed text-gray-500 dark:text-gray-400 line-clamp-2"
@@ -22,31 +22,30 @@
       </span>
     </div>
 
-    <!-- Right: rate pill + capacity + checkmark -->
-    <div class="flex shrink-0 items-start gap-2 pt-0.5">
-      <div class="flex flex-col items-end gap-1">
-      <!-- Rate pill (platform color) -->
-        <span v-if="rateMultiplier !== undefined" :class="['inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold', ratePillClass]">
-          <template v-if="hasCustomRate">
-            <span class="mr-1 line-through opacity-50">{{ rateMultiplier }}x</span>
-            <span class="font-bold">{{ userRateMultiplier }}x</span>
-          </template>
-          <template v-else>
-            {{ rateMultiplier }}x 倍率
-          </template>
-        </span>
-        <GroupCapacityBadge
-          v-if="capacity"
-          layout="horizontal"
-          :concurrency-used="capacity.concurrency_used"
-          :concurrency-max="capacity.concurrency_max"
-          :sessions-used="capacity.sessions_used"
-          :sessions-max="capacity.sessions_max"
-          :rpm-used="capacity.rpm_used"
-          :rpm-max="capacity.rpm_max"
-        />
-      </div>
-      <!-- Checkmark -->
+    <!-- 右侧：负载、倍率、勾选同一行，避免负载胶囊下沉到第二行。 -->
+    <div class="flex shrink-0 flex-wrap items-start justify-end gap-2 pt-0.5">
+      <GroupCapacityBadge
+        v-if="capacity"
+        class="max-w-[11rem] justify-end"
+        layout="horizontal"
+        :concurrency-used="capacity.concurrency_used"
+        :concurrency-max="capacity.concurrency_max"
+        :sessions-used="capacity.sessions_used"
+        :sessions-max="capacity.sessions_max"
+        :rpm-used="capacity.rpm_used"
+        :rpm-max="capacity.rpm_max"
+      />
+      <!-- 倍率标签使用平台/品牌配色 -->
+      <span v-if="rateMultiplier !== undefined" :class="['inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold', ratePillClass]">
+        <template v-if="hasCustomRate">
+          <span class="mr-1 line-through opacity-50">{{ rateMultiplier }}x</span>
+          <span class="font-bold">{{ userRateMultiplier }}x</span>
+        </template>
+        <template v-else>
+          {{ rateMultiplier }}x 倍率
+        </template>
+      </span>
+      <!-- 选中勾 -->
       <svg
         v-if="showCheckmark && selected"
         class="h-4 w-4 shrink-0 text-primary-600 dark:text-primary-400"
@@ -88,7 +87,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const brandName = computed(() => props.displayBrand?.trim() || '')
 
-// Whether user has a custom rate different from default
+// 是否存在不同于默认倍率的用户专属倍率。
 const hasCustomRate = computed(() => {
   return (
     props.userRateMultiplier !== null &&
@@ -117,7 +116,7 @@ const ratePillClass = computed(() => {
 </script>
 
 <style scoped>
-/* Bold the group name inside GroupBadge when used in dropdown option */
+/* 下拉选项里的分组名称需要比普通标签更醒目。 */
 .groupOptionItemBadge :deep(span.truncate) {
   font-weight: 600;
 }
