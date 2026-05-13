@@ -1,6 +1,10 @@
 package admin
 
 import (
+	"fmt"
+	"net/http"
+	"strings"
+
 	"github.com/TokenFlux/TokenRouter/internal/pkg/response"
 	"github.com/TokenFlux/TokenRouter/internal/server/middleware"
 	"github.com/TokenFlux/TokenRouter/internal/service"
@@ -19,7 +23,46 @@ func NewBackupHandler(backupService *service.BackupService, userService *service
 	}
 }
 
-// ─── S3 配置 ───
+// ─── 存储配置 ───
+
+func (h *BackupHandler) GetStorageConfig(c *gin.Context) {
+	cfg, err := h.backupService.GetStorageConfig(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
+func (h *BackupHandler) UpdateStorageConfig(c *gin.Context) {
+	var req service.BackupStorageConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	cfg, err := h.backupService.UpdateStorageConfig(c.Request.Context(), req)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
+func (h *BackupHandler) TestStorageConnection(c *gin.Context) {
+	var req service.BackupStorageConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	err := h.backupService.TestStorageConnection(c.Request.Context(), req)
+	if err != nil {
+		response.Success(c, gin.H{"ok": false, "message": err.Error()})
+		return
+	}
+	response.Success(c, gin.H{"ok": true, "message": "connection successful"})
+}
+
+// ─── S3 配置（兼容旧接口） ───
 
 func (h *BackupHandler) GetS3Config(c *gin.Context) {
 	cfg, err := h.backupService.GetS3Config(c.Request.Context())
@@ -151,12 +194,42 @@ func (h *BackupHandler) GetDownloadURL(c *gin.Context) {
 		response.BadRequest(c, "backup ID is required")
 		return
 	}
+	record, err := h.backupService.GetBackupRecord(c.Request.Context(), backupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if record.StorageType == service.BackupStorageTypeLocal || (record.StorageType == "" && record.S3Key == "") {
+		response.Success(c, gin.H{"url": fmt.Sprintf("/api/v1/admin/backups/%s/download", backupID)})
+		return
+	}
 	url, err := h.backupService.GetBackupDownloadURL(c.Request.Context(), backupID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 	response.Success(c, gin.H{"url": url})
+}
+
+func (h *BackupHandler) DownloadBackup(c *gin.Context) {
+	backupID := c.Param("id")
+	if backupID == "" {
+		response.BadRequest(c, "backup ID is required")
+		return
+	}
+	body, record, err := h.backupService.OpenBackupDownload(c.Request.Context(), backupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	defer func() { _ = body.Close() }()
+
+	fileName := strings.TrimSpace(record.FileName)
+	if fileName == "" {
+		fileName = backupID + ".sql.gz"
+	}
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
+	c.DataFromReader(http.StatusOK, record.SizeBytes, "application/gzip", body, nil)
 }
 
 // ─── 恢复操作（需要重新输入管理员密码） ───

@@ -10,6 +10,14 @@ export interface BackupS3Config {
   force_path_style: boolean
 }
 
+export type BackupStorageType = 'local' | 's3'
+
+export interface BackupStorageConfig {
+  type: BackupStorageType
+  local_path: string
+  s3: BackupS3Config
+}
+
 export interface BackupScheduleConfig {
   enabled: boolean
   cron_expr: string
@@ -21,6 +29,8 @@ export interface BackupRecord {
   id: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   backup_type: string
+  storage_type?: BackupStorageType
+  storage_key?: string
   file_name: string
   s3_key: string
   size_bytes: number
@@ -44,7 +54,23 @@ export interface TestS3Response {
   message: string
 }
 
-// S3 Config
+// 存储配置
+export async function getStorageConfig(): Promise<BackupStorageConfig> {
+  const { data } = await apiClient.get<BackupStorageConfig>('/admin/backups/storage-config')
+  return data
+}
+
+export async function updateStorageConfig(config: BackupStorageConfig): Promise<BackupStorageConfig> {
+  const { data } = await apiClient.put<BackupStorageConfig>('/admin/backups/storage-config', config)
+  return data
+}
+
+export async function testStorageConnection(config: BackupStorageConfig): Promise<TestS3Response> {
+  const { data } = await apiClient.post<TestS3Response>('/admin/backups/storage-config/test', config)
+  return data
+}
+
+// S3 配置
 export async function getS3Config(): Promise<BackupS3Config> {
   const { data } = await apiClient.get<BackupS3Config>('/admin/backups/s3-config')
   return data
@@ -60,7 +86,7 @@ export async function testS3Connection(config: BackupS3Config): Promise<TestS3Re
   return data
 }
 
-// Schedule
+// 定时备份
 export async function getSchedule(): Promise<BackupScheduleConfig> {
   const { data } = await apiClient.get<BackupScheduleConfig>('/admin/backups/schedule')
   return data
@@ -71,7 +97,7 @@ export async function updateSchedule(config: BackupScheduleConfig): Promise<Back
   return data
 }
 
-// Backup operations
+// 备份操作
 export async function createBackup(req?: CreateBackupRequest): Promise<BackupRecord> {
   const { data } = await apiClient.post<BackupRecord>('/admin/backups', req || {})
   return data
@@ -96,13 +122,23 @@ export async function getDownloadURL(id: string): Promise<{ url: string }> {
   return data
 }
 
-// Restore
+export async function downloadBackupFile(id: string): Promise<Blob> {
+  const { data } = await apiClient.get<BlobPart>(`/admin/backups/${id}/download`, {
+    responseType: 'blob',
+  })
+  return data instanceof Blob ? data : new Blob([data], { type: 'application/gzip' })
+}
+
+// 恢复操作
 export async function restoreBackup(id: string, password: string): Promise<BackupRecord> {
   const { data } = await apiClient.post<BackupRecord>(`/admin/backups/${id}/restore`, { password })
   return data
 }
 
 export const backupAPI = {
+  getStorageConfig,
+  updateStorageConfig,
+  testStorageConnection,
   getS3Config,
   updateS3Config,
   testS3Connection,
@@ -113,6 +149,7 @@ export const backupAPI = {
   getBackup,
   deleteBackup,
   getDownloadURL,
+  downloadBackupFile,
   restoreBackup,
 }
 

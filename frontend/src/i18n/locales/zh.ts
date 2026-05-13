@@ -1561,7 +1561,19 @@ export default {
 
     backup: {
       title: '数据库备份',
-      description: '全量数据库备份到 S3 兼容存储，支持定时备份与恢复',
+      description: '全量数据库备份到本地或 S3 兼容存储，支持定时备份与恢复',
+      storage: {
+        title: '备份存储配置',
+        description: '选择新备份写入本地目录或远程 S3/R2 存储',
+        local: '本地',
+        remote: 'S3/R2',
+        localPath: '本地备份目录',
+        localHint: '目录由后端自动管理，Docker 部署中通常挂载到 /app/data/backups。',
+        testConnection: '测试存储',
+        testSuccess: '存储连接测试成功',
+        testFailed: '存储连接测试失败',
+        saved: '备份存储配置已保存'
+      },
       s3: {
         title: 'S3 存储配置',
         description: '配置 S3 兼容存储（支持 Cloudflare R2）',
@@ -1608,6 +1620,7 @@ export default {
       },
       columns: {
         status: '状态',
+        storage: '存储',
         fileName: '文件名',
         size: '大小',
         expiresAt: '过期时间',

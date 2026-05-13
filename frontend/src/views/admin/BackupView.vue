@@ -1,20 +1,51 @@
 <template>
     <div class="space-y-6">
-      <!-- S3 Storage Config -->
+      <!-- 备份存储配置 -->
       <div class="card p-6">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 class="text-base font-semibold text-gray-900 dark:text-white">
-              {{ t('admin.backup.s3.title') }}
+              {{ t('admin.backup.storage.title') }}
             </h3>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              {{ t('admin.backup.s3.descriptionPrefix') }}
-              <button type="button" class="text-primary-600 underline hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300" @click="showR2Guide = true">Cloudflare R2</button>
-              {{ t('admin.backup.s3.descriptionSuffix') }}
+              {{ t('admin.backup.storage.description') }}
             </p>
           </div>
         </div>
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="mb-4 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-sm dark:border-dark-700 dark:bg-dark-900">
+          <button
+            type="button"
+            class="rounded-md px-3 py-1.5 font-medium transition"
+            :class="storageForm.type === 'local' ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-700 dark:text-primary-300' : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'"
+            @click="storageForm.type = 'local'"
+          >
+            {{ t('admin.backup.storage.local') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-md px-3 py-1.5 font-medium transition"
+            :class="storageForm.type === 's3' ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-700 dark:text-primary-300' : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'"
+            @click="storageForm.type = 's3'"
+          >
+            {{ t('admin.backup.storage.remote') }}
+          </button>
+        </div>
+
+        <div v-if="storageForm.type === 'local'" class="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.storage.localPath') }}</label>
+            <input :value="storageForm.local_path || '-'" class="input w-full bg-gray-50 font-mono text-sm dark:bg-dark-900" readonly />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.storage.localHint') }}</p>
+          </div>
+        </div>
+
+        <div v-else>
+          <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
+            {{ t('admin.backup.s3.descriptionPrefix') }}
+            <button type="button" class="text-primary-600 underline hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300" @click="showR2Guide = true">Cloudflare R2</button>
+            {{ t('admin.backup.s3.descriptionSuffix') }}
+          </p>
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.endpoint') }}</label>
             <input v-model="s3Form.endpoint" class="input w-full" placeholder="https://<account_id>.r2.cloudflarestorage.com" />
@@ -43,18 +74,19 @@
             <input v-model="s3Form.force_path_style" type="checkbox" />
             <span>{{ t('admin.backup.s3.forcePathStyle') }}</span>
           </label>
+          </div>
         </div>
         <div class="mt-4 flex flex-wrap gap-2">
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="testingS3" @click="testS3">
-            {{ testingS3 ? t('common.loading') : t('admin.backup.s3.testConnection') }}
+          <button type="button" class="btn btn-secondary btn-sm" :disabled="testingStorage" @click="testStorage">
+            {{ testingStorage ? t('common.loading') : t('admin.backup.storage.testConnection') }}
           </button>
-          <button type="button" class="btn btn-primary btn-sm" :disabled="savingS3" @click="saveS3Config">
-            {{ savingS3 ? t('common.loading') : t('common.save') }}
+          <button type="button" class="btn btn-primary btn-sm" :disabled="savingStorage" @click="saveStorageConfig">
+            {{ savingStorage ? t('common.loading') : t('common.save') }}
           </button>
         </div>
       </div>
 
-      <!-- Schedule Config -->
+      <!-- 定时备份配置 -->
       <div class="card p-6">
         <div class="mb-4">
           <h3 class="text-base font-semibold text-gray-900 dark:text-white">
@@ -92,7 +124,7 @@
         </div>
       </div>
 
-      <!-- Backup Operations -->
+      <!-- 备份操作 -->
       <div class="card p-6">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -123,6 +155,7 @@
               <tr class="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-dark-700 dark:text-gray-400">
                 <th class="py-2 pr-4">ID</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.status') }}</th>
+                <th class="py-2 pr-4">{{ t('admin.backup.columns.storage') }}</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.fileName') }}</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.size') }}</th>
                 <th class="py-2 pr-4">{{ t('admin.backup.columns.expiresAt') }}</th>
@@ -144,6 +177,7 @@
                       : t(`admin.backup.status.${record.status}`) }}
                   </span>
                 </td>
+                <td class="py-3 pr-4 text-xs">{{ storageLabel(record) }}</td>
                 <td class="py-3 pr-4 text-xs">{{ record.file_name }}</td>
                 <td class="py-3 pr-4 text-xs">{{ formatSize(record.size_bytes) }}</td>
                 <td class="py-3 pr-4 text-xs">
@@ -183,7 +217,7 @@
                 </td>
               </tr>
               <tr v-if="backups.length === 0">
-                <td colspan="8" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                <td colspan="9" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
                   {{ t('admin.backup.empty') }}
                 </td>
               </tr>
@@ -193,7 +227,7 @@
       </div>
     </div>
 
-    <!-- Cloudflare R2 Setup Guide Modal -->
+    <!-- Cloudflare R2 配置教程弹窗 -->
     <teleport to="body">
       <transition name="modal">
         <div v-if="showR2Guide" class="fixed inset-0 z-50 flex items-center justify-center p-4" @mousedown.self="showR2Guide = false">
@@ -206,7 +240,7 @@
             <h2 class="mb-4 text-lg font-bold text-gray-900 dark:text-white">{{ t('admin.backup.r2Guide.title') }}</h2>
             <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.backup.r2Guide.intro') }}</p>
 
-            <!-- Step 1 -->
+            <!-- 步骤 1 -->
             <div class="mb-5">
               <h3 class="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
                 <span class="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">1</span>
@@ -219,7 +253,7 @@
               </ol>
             </div>
 
-            <!-- Step 2 -->
+            <!-- 步骤 2 -->
             <div class="mb-5">
               <h3 class="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
                 <span class="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">2</span>
@@ -236,7 +270,7 @@
               </div>
             </div>
 
-            <!-- Step 3 -->
+            <!-- 步骤 3 -->
             <div class="mb-5">
               <h3 class="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
                 <span class="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">3</span>
@@ -246,7 +280,7 @@
               <code class="ml-8 mt-1 block rounded bg-gray-100 px-3 py-2 text-xs text-gray-800 dark:bg-dark-700 dark:text-gray-200">https://&lt;{{ t('admin.backup.r2Guide.step3.accountId') }}&gt;.r2.cloudflarestorage.com</code>
             </div>
 
-            <!-- Step 4: Fill form -->
+            <!-- 步骤 4：填写表单 -->
             <div class="mb-5">
               <h3 class="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
                 <span class="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">4</span>
@@ -264,7 +298,7 @@
               </div>
             </div>
 
-            <!-- Free tier note -->
+            <!-- 免费额度说明 -->
             <div class="rounded-lg bg-green-50 p-3 text-xs text-green-700 dark:bg-green-900/20 dark:text-green-300">
               {{ t('admin.backup.r2Guide.freeTier') }}
             </div>
@@ -283,12 +317,25 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api'
 import { useAppStore } from '@/stores'
-import type { BackupS3Config, BackupScheduleConfig, BackupRecord } from '@/api/admin/backup'
+import type { BackupS3Config, BackupScheduleConfig, BackupRecord, BackupStorageConfig } from '@/api/admin/backup'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 
-// S3 config
+// 存储配置
+const storageForm = ref<BackupStorageConfig>({
+  type: 'local',
+  local_path: '',
+  s3: {
+    endpoint: '',
+    region: 'auto',
+    bucket: '',
+    access_key_id: '',
+    secret_access_key: '',
+    prefix: 'backups/',
+    force_path_style: false,
+  },
+})
 const s3Form = ref<BackupS3Config>({
   endpoint: '',
   region: 'auto',
@@ -299,10 +346,10 @@ const s3Form = ref<BackupS3Config>({
   force_path_style: false,
 })
 const s3SecretConfigured = ref(false)
-const savingS3 = ref(false)
-const testingS3 = ref(false)
+const savingStorage = ref(false)
+const testingStorage = ref(false)
 
-// Schedule config
+// 定时备份配置
 const scheduleForm = ref<BackupScheduleConfig>({
   enabled: false,
   cron_expr: '0 2 * * *',
@@ -311,14 +358,14 @@ const scheduleForm = ref<BackupScheduleConfig>({
 })
 const savingSchedule = ref(false)
 
-// Backups
+// 备份记录
 const backups = ref<BackupRecord[]>([])
 const loadingBackups = ref(false)
 const creatingBackup = ref(false)
 const restoringId = ref('')
 const manualExpireDays = ref(14)
 
-// Polling
+// 轮询状态
 const pollingTimer = ref<ReturnType<typeof setInterval> | null>(null)
 const restoringPollingTimer = ref<ReturnType<typeof setInterval> | null>(null)
 const MAX_POLL_COUNT = 900
@@ -423,7 +470,7 @@ function handleVisibilityChange() {
   }
 }
 
-// R2 guide
+// R2 配置教程
 const showR2Guide = ref(false)
 const r2ConfigRows = computed(() => [
   { field: t('admin.backup.s3.endpoint'), value: 'https://<account_id>.r2.cloudflarestorage.com' },
@@ -435,50 +482,70 @@ const r2ConfigRows = computed(() => [
   { field: t('admin.backup.s3.forcePathStyle'), value: t('admin.backup.r2Guide.step4.unchecked') },
 ])
 
-async function loadS3Config() {
+function normalizeS3Form(cfg?: Partial<BackupS3Config>): BackupS3Config {
+  return {
+    endpoint: cfg?.endpoint || '',
+    region: cfg?.region || 'auto',
+    bucket: cfg?.bucket || '',
+    access_key_id: cfg?.access_key_id || '',
+    secret_access_key: '',
+    prefix: cfg?.prefix || 'backups/',
+    force_path_style: Boolean(cfg?.force_path_style),
+  }
+}
+
+function buildStoragePayload(): BackupStorageConfig {
+  // 提交时必须保留用户在密码框中输入的新 Secret，只有服务端回填表单时才清空。
+  const s3Payload = normalizeS3Form(s3Form.value)
+  s3Payload.secret_access_key = s3Form.value.secret_access_key || ''
+  return {
+    type: storageForm.value.type,
+    local_path: storageForm.value.local_path,
+    s3: s3Payload,
+  }
+}
+
+async function loadStorageConfig() {
   try {
-    const cfg = await adminAPI.backup.getS3Config()
-    s3Form.value = {
-      endpoint: cfg.endpoint || '',
-      region: cfg.region || 'auto',
-      bucket: cfg.bucket || '',
-      access_key_id: cfg.access_key_id || '',
-      secret_access_key: '',
-      prefix: cfg.prefix || 'backups/',
-      force_path_style: cfg.force_path_style,
+    const cfg = await adminAPI.backup.getStorageConfig()
+    storageForm.value = {
+      type: cfg.type || 'local',
+      local_path: cfg.local_path || '',
+      s3: normalizeS3Form(cfg.s3),
     }
-    s3SecretConfigured.value = Boolean(cfg.access_key_id)
+    s3Form.value = normalizeS3Form(cfg.s3)
+    s3SecretConfigured.value = Boolean(cfg.s3?.access_key_id)
   } catch (error) {
     appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
   }
 }
 
-async function saveS3Config() {
-  savingS3.value = true
+async function saveStorageConfig() {
+  savingStorage.value = true
   try {
-    await adminAPI.backup.updateS3Config(s3Form.value)
-    appStore.showSuccess(t('admin.backup.s3.saved'))
-    await loadS3Config()
+    await adminAPI.backup.updateStorageConfig(buildStoragePayload())
+    appStore.showSuccess(t('admin.backup.storage.saved'))
+    await loadStorageConfig()
   } catch (error) {
     appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
   } finally {
-    savingS3.value = false
+    savingStorage.value = false
   }
 }
 
-async function testS3() {
-  testingS3.value = true
+async function testStorage() {
+  testingStorage.value = true
   try {
-    const result = await adminAPI.backup.testS3Connection(s3Form.value)
+    const result = await adminAPI.backup.testStorageConnection(buildStoragePayload())
     if (result.ok) {
-      appStore.showSuccess(result.message || t('admin.backup.s3.testSuccess'))
+      appStore.showSuccess(result.message || t('admin.backup.storage.testSuccess'))
     } else {
-      appStore.showError(result.message || t('admin.backup.s3.testFailed'))
+      appStore.showError(result.message || t('admin.backup.storage.testFailed'))
     }
   } catch (error) {
     appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
   } finally {
-    testingS3.value = false
+    testingStorage.value = false
   }
 }
 
@@ -539,8 +606,21 @@ async function createBackup() {
 
 async function downloadBackup(id: string) {
   try {
+    const record = backups.value.find(item => item.id === id)
+    if (recordStorageType(record) === 'local') {
+      const blob = await adminAPI.backup.downloadBackupFile(id)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = record?.file_name || `${id}.sql.gz`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      return
+    }
     const result = await adminAPI.backup.getDownloadURL(id)
-    window.open(result.url, '_blank')
+    window.open(result.url, '_blank', 'noopener')
   } catch (error) {
     appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
   }
@@ -589,6 +669,18 @@ function statusClass(status: string): string {
   }
 }
 
+function recordStorageType(record?: BackupRecord): 'local' | 's3' {
+  if (!record) return 's3'
+  if (record.storage_type === 'local' || (!record.storage_type && !record.s3_key)) return 'local'
+  return 's3'
+}
+
+function storageLabel(record: BackupRecord): string {
+  return recordStorageType(record) === 'local'
+    ? t('admin.backup.storage.local')
+    : t('admin.backup.storage.remote')
+}
+
 function formatSize(bytes: number): string {
   if (!bytes || bytes <= 0) return '-'
   if (bytes < 1024) return `${bytes} B`
@@ -605,7 +697,7 @@ function formatDate(value?: string): string {
 
 onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
-  await Promise.all([loadS3Config(), loadSchedule(), loadBackups()])
+  await Promise.all([loadStorageConfig(), loadSchedule(), loadBackups()])
 
   // 如果有正在 running 的备份，恢复轮询
   const runningBackup = backups.value.find(r => r.status === 'running')

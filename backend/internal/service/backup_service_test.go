@@ -4,6 +4,7 @@ package service
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -203,7 +204,8 @@ func (m *mockObjectStore) HeadBucket(_ context.Context) error {
 	return nil
 }
 
-func newTestBackupService(repo *mockSettingRepo, dumper DBDumper, store *mockObjectStore) *BackupService {
+func newTestBackupService(t *testing.T, repo *mockSettingRepo, dumper DBDumper, store *mockObjectStore) *BackupService {
+	t.Helper()
 	cfg := &config.Config{
 		Database: config.DatabaseConfig{
 			Host:   "localhost",
@@ -215,7 +217,9 @@ func newTestBackupService(repo *mockSettingRepo, dumper DBDumper, store *mockObj
 	factory := func(_ context.Context, _ *BackupS3Config) (BackupObjectStore, error) {
 		return store, nil
 	}
-	return NewBackupService(repo, cfg, &plainEncryptor{}, factory, dumper)
+	svc := NewBackupService(repo, cfg, &plainEncryptor{}, factory, dumper)
+	svc.localStore = NewLocalBackupStore(t.TempDir())
+	return svc
 }
 
 func seedS3Config(t *testing.T, repo *mockSettingRepo) {
@@ -230,11 +234,29 @@ func seedS3Config(t *testing.T, repo *mockSettingRepo) {
 	require.NoError(t, repo.Set(context.Background(), settingKeyBackupS3Config, string(data)))
 }
 
+func seedStorageS3Config(t *testing.T, repo *mockSettingRepo) {
+	t.Helper()
+	s3Cfg := BackupS3Config{
+		Bucket:          "test-bucket",
+		AccessKeyID:     "AKID",
+		SecretAccessKey: "ENC:secret123",
+		Prefix:          "backups",
+	}
+	cfg := BackupStorageConfig{
+		Type: BackupStorageTypeS3,
+		S3:   s3Cfg,
+	}
+	data, _ := json.Marshal(cfg)
+	require.NoError(t, repo.Set(context.Background(), settingKeyBackupStorageConfig, string(data)))
+	s3Data, _ := json.Marshal(s3Cfg)
+	require.NoError(t, repo.Set(context.Background(), settingKeyBackupS3Config, string(s3Data)))
+}
+
 // ─── Tests ───
 
 func TestBackupService_S3ConfigEncryption(t *testing.T) {
 	repo := newMockSettingRepo()
-	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
 
 	// 保存配置 -> SecretAccessKey 应被加密
 	_, err := svc.UpdateS3Config(context.Background(), BackupS3Config{
@@ -265,7 +287,7 @@ func TestBackupService_S3ConfigEncryption(t *testing.T) {
 
 func TestBackupService_S3ConfigKeepExistingSecret(t *testing.T) {
 	repo := newMockSettingRepo()
-	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
 
 	// 先保存一个有 secret 的配置
 	_, err := svc.UpdateS3Config(context.Background(), BackupS3Config{
@@ -290,7 +312,7 @@ func TestBackupService_S3ConfigKeepExistingSecret(t *testing.T) {
 
 func TestBackupService_SaveRecordConcurrency(t *testing.T) {
 	repo := newMockSettingRepo()
-	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
 
 	var wg sync.WaitGroup
 	n := 20
@@ -315,7 +337,7 @@ func TestBackupService_SaveRecordConcurrency(t *testing.T) {
 
 func TestBackupService_LoadRecords_Empty(t *testing.T) {
 	repo := newMockSettingRepo()
-	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
 
 	records, err := svc.loadRecords(context.Background())
 	require.NoError(t, err)
@@ -325,7 +347,7 @@ func TestBackupService_LoadRecords_Empty(t *testing.T) {
 func TestBackupService_LoadRecords_Corrupted(t *testing.T) {
 	repo := newMockSettingRepo()
 	_ = repo.Set(context.Background(), settingKeyBackupRecords, "not valid json{{{")
-	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
 
 	records, err := svc.loadRecords(context.Background())
 	require.Error(t, err) // 损坏数据应返回错误
@@ -334,12 +356,12 @@ func TestBackupService_LoadRecords_Corrupted(t *testing.T) {
 
 func TestBackupService_CreateBackup_Streaming(t *testing.T) {
 	repo := newMockSettingRepo()
-	seedS3Config(t, repo)
+	seedStorageS3Config(t, repo)
 
 	dumpContent := "-- PostgreSQL dump\nCREATE TABLE test (id int);\n"
 	dumper := &mockDumper{dumpData: []byte(dumpContent)}
 	store := newMockObjectStore()
-	svc := newTestBackupService(repo, dumper, store)
+	svc := newTestBackupService(t, repo, dumper, store)
 
 	record, err := svc.CreateBackup(context.Background(), "manual", 14)
 	require.NoError(t, err)
@@ -355,11 +377,11 @@ func TestBackupService_CreateBackup_Streaming(t *testing.T) {
 
 func TestBackupService_CreateBackup_DumpFailure(t *testing.T) {
 	repo := newMockSettingRepo()
-	seedS3Config(t, repo)
+	seedStorageS3Config(t, repo)
 
 	dumper := &mockDumper{dumpErr: fmt.Errorf("pg_dump failed")}
 	store := newMockObjectStore()
-	svc := newTestBackupService(repo, dumper, store)
+	svc := newTestBackupService(t, repo, dumper, store)
 
 	record, err := svc.CreateBackup(context.Background(), "manual", 14)
 	require.Error(t, err)
@@ -367,22 +389,89 @@ func TestBackupService_CreateBackup_DumpFailure(t *testing.T) {
 	require.Contains(t, record.ErrorMsg, "pg_dump")
 }
 
-func TestBackupService_CreateBackup_NoS3Config(t *testing.T) {
+func TestBackupService_CreateBackup_DefaultLocalStorage(t *testing.T) {
 	repo := newMockSettingRepo()
-	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	dumper := &mockDumper{dumpData: []byte("local data")}
+	svc := newTestBackupService(t, repo, dumper, newMockObjectStore())
 
-	_, err := svc.CreateBackup(context.Background(), "manual", 14)
-	require.ErrorIs(t, err, ErrBackupS3NotConfigured)
+	record, err := svc.CreateBackup(context.Background(), "manual", 14)
+	require.NoError(t, err)
+	require.Equal(t, "completed", record.Status)
+	require.Equal(t, BackupStorageTypeLocal, record.StorageType)
+	require.NotEmpty(t, record.StorageKey)
+	require.Empty(t, record.S3Key)
+
+	body, _, err := svc.OpenBackupDownload(context.Background(), record.ID)
+	require.NoError(t, err)
+	defer func() { _ = body.Close() }()
+
+	gzReader, err := gzip.NewReader(body)
+	require.NoError(t, err)
+	restored, err := io.ReadAll(gzReader)
+	require.NoError(t, err)
+	require.Equal(t, "local data", string(restored))
+}
+
+func TestBackupService_UpdateStorageConfig_LocalPreservesS3Config(t *testing.T) {
+	repo := newMockSettingRepo()
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
+
+	_, err := svc.UpdateStorageConfig(context.Background(), BackupStorageConfig{
+		Type: BackupStorageTypeS3,
+		S3: BackupS3Config{
+			Bucket:          "remote-bucket",
+			AccessKeyID:     "AKID",
+			SecretAccessKey: "remote-secret",
+			Prefix:          "backups",
+		},
+	})
+	require.NoError(t, err)
+
+	// 切到本地只改变当前写入目标，不能清空已配置的远程存储参数。
+	_, err = svc.UpdateStorageConfig(context.Background(), BackupStorageConfig{Type: BackupStorageTypeLocal})
+	require.NoError(t, err)
+
+	cfg, err := svc.GetStorageConfig(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, BackupStorageTypeLocal, cfg.Type)
+	require.Equal(t, "remote-bucket", cfg.S3.Bucket)
+	require.Equal(t, "AKID", cfg.S3.AccessKeyID)
+	require.Empty(t, cfg.S3.SecretAccessKey)
+
+	raw, err := repo.GetValue(context.Background(), settingKeyBackupStorageConfig)
+	require.NoError(t, err)
+	var stored BackupStorageConfig
+	require.NoError(t, json.Unmarshal([]byte(raw), &stored))
+	require.Equal(t, BackupStorageTypeLocal, stored.Type)
+	require.Equal(t, "ENC:remote-secret", stored.S3.SecretAccessKey)
+}
+
+func TestBackupService_GetStorageConfig_MergesLegacyS3WhenUnifiedConfigEmpty(t *testing.T) {
+	repo := newMockSettingRepo()
+	seedS3Config(t, repo)
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
+
+	data, err := json.Marshal(BackupStorageConfig{Type: BackupStorageTypeLocal})
+	require.NoError(t, err)
+	require.NoError(t, repo.Set(context.Background(), settingKeyBackupStorageConfig, string(data)))
+
+	// 兼容曾经保存过空 S3 字段的统一配置，继续从旧 S3 key 回填远程参数。
+	cfg, err := svc.GetStorageConfig(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, BackupStorageTypeLocal, cfg.Type)
+	require.Equal(t, "test-bucket", cfg.S3.Bucket)
+	require.Equal(t, "AKID", cfg.S3.AccessKeyID)
+	require.Empty(t, cfg.S3.SecretAccessKey)
 }
 
 func TestBackupService_CreateBackup_ConcurrentBlocked(t *testing.T) {
 	repo := newMockSettingRepo()
-	seedS3Config(t, repo)
+	seedStorageS3Config(t, repo)
 
 	// 使用一个慢速 dumper 来模拟正在进行的备份
 	dumper := &mockDumper{dumpData: []byte("data")}
 	store := newMockObjectStore()
-	svc := newTestBackupService(repo, dumper, store)
+	svc := newTestBackupService(t, repo, dumper, store)
 
 	// 手动设置 backingUp 标志
 	svc.opMu.Lock()
@@ -395,12 +484,12 @@ func TestBackupService_CreateBackup_ConcurrentBlocked(t *testing.T) {
 
 func TestBackupService_RestoreBackup_Streaming(t *testing.T) {
 	repo := newMockSettingRepo()
-	seedS3Config(t, repo)
+	seedStorageS3Config(t, repo)
 
 	dumpContent := "-- PostgreSQL dump\nCREATE TABLE test (id int);\n"
 	dumper := &mockDumper{dumpData: []byte(dumpContent)}
 	store := newMockObjectStore()
-	svc := newTestBackupService(repo, dumper, store)
+	svc := newTestBackupService(t, repo, dumper, store)
 
 	// 先创建一个备份
 	record, err := svc.CreateBackup(context.Background(), "manual", 14)
@@ -416,8 +505,8 @@ func TestBackupService_RestoreBackup_Streaming(t *testing.T) {
 
 func TestBackupService_RestoreBackup_NotCompleted(t *testing.T) {
 	repo := newMockSettingRepo()
-	seedS3Config(t, repo)
-	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	seedStorageS3Config(t, repo)
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
 
 	// 手动插入一条 failed 记录
 	_ = svc.saveRecord(context.Background(), &BackupRecord{
@@ -431,12 +520,12 @@ func TestBackupService_RestoreBackup_NotCompleted(t *testing.T) {
 
 func TestBackupService_DeleteBackup(t *testing.T) {
 	repo := newMockSettingRepo()
-	seedS3Config(t, repo)
+	seedStorageS3Config(t, repo)
 
 	dumpContent := "data"
 	dumper := &mockDumper{dumpData: []byte(dumpContent)}
 	store := newMockObjectStore()
-	svc := newTestBackupService(repo, dumper, store)
+	svc := newTestBackupService(t, repo, dumper, store)
 
 	record, err := svc.CreateBackup(context.Background(), "manual", 14)
 	require.NoError(t, err)
@@ -460,13 +549,56 @@ func TestBackupService_DeleteBackup(t *testing.T) {
 	require.ErrorIs(t, err, ErrBackupNotFound)
 }
 
+func TestBackupService_DeleteLocalBackupAfterSwitchToS3(t *testing.T) {
+	repo := newMockSettingRepo()
+
+	dumper := &mockDumper{dumpData: []byte("local data")}
+	store := newMockObjectStore()
+	svc := newTestBackupService(t, repo, dumper, store)
+
+	record, err := svc.CreateBackup(context.Background(), "manual", 14)
+	require.NoError(t, err)
+	require.Equal(t, BackupStorageTypeLocal, record.StorageType)
+
+	seedStorageS3Config(t, repo)
+	err = svc.DeleteBackup(context.Background(), record.ID)
+	require.NoError(t, err)
+
+	_, err = svc.GetBackupRecord(context.Background(), record.ID)
+	require.ErrorIs(t, err, ErrBackupNotFound)
+	store.mu.Lock()
+	require.Len(t, store.objects, 0)
+	store.mu.Unlock()
+}
+
+func TestBackupService_RestoreS3BackupAfterSwitchToLocal(t *testing.T) {
+	repo := newMockSettingRepo()
+	seedStorageS3Config(t, repo)
+
+	dumpContent := "remote data"
+	dumper := &mockDumper{dumpData: []byte(dumpContent)}
+	store := newMockObjectStore()
+	svc := newTestBackupService(t, repo, dumper, store)
+
+	record, err := svc.CreateBackup(context.Background(), "manual", 14)
+	require.NoError(t, err)
+	require.Equal(t, BackupStorageTypeS3, record.StorageType)
+
+	_, err = svc.UpdateStorageConfig(context.Background(), BackupStorageConfig{Type: BackupStorageTypeLocal})
+	require.NoError(t, err)
+
+	err = svc.RestoreBackup(context.Background(), record.ID)
+	require.NoError(t, err)
+	require.Equal(t, dumpContent, string(dumper.restored))
+}
+
 func TestBackupService_GetDownloadURL(t *testing.T) {
 	repo := newMockSettingRepo()
-	seedS3Config(t, repo)
+	seedStorageS3Config(t, repo)
 
 	dumper := &mockDumper{dumpData: []byte("data")}
 	store := newMockObjectStore()
-	svc := newTestBackupService(repo, dumper, store)
+	svc := newTestBackupService(t, repo, dumper, store)
 
 	record, err := svc.CreateBackup(context.Background(), "manual", 14)
 	require.NoError(t, err)
@@ -478,7 +610,7 @@ func TestBackupService_GetDownloadURL(t *testing.T) {
 
 func TestBackupService_ListBackups_Sorted(t *testing.T) {
 	repo := newMockSettingRepo()
-	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
 
 	now := time.Now()
 	for i := 0; i < 3; i++ {
@@ -500,7 +632,7 @@ func TestBackupService_ListBackups_Sorted(t *testing.T) {
 func TestBackupService_TestS3Connection(t *testing.T) {
 	repo := newMockSettingRepo()
 	store := newMockObjectStore()
-	svc := newTestBackupService(repo, &mockDumper{}, store)
+	svc := newTestBackupService(t, repo, &mockDumper{}, store)
 
 	err := svc.TestS3Connection(context.Background(), BackupS3Config{
 		Bucket:          "test",
@@ -512,7 +644,7 @@ func TestBackupService_TestS3Connection(t *testing.T) {
 
 func TestBackupService_TestS3Connection_Incomplete(t *testing.T) {
 	repo := newMockSettingRepo()
-	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
 
 	err := svc.TestS3Connection(context.Background(), BackupS3Config{
 		Bucket: "test",
@@ -523,7 +655,7 @@ func TestBackupService_TestS3Connection_Incomplete(t *testing.T) {
 
 func TestBackupService_Schedule_CronValidation(t *testing.T) {
 	repo := newMockSettingRepo()
-	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
 	svc.cronSched = nil // 未初始化 cron
 
 	// 启用但 cron 为空
@@ -544,7 +676,7 @@ func TestBackupService_Schedule_CronValidation(t *testing.T) {
 func TestBackupService_LoadS3Config_Corrupted(t *testing.T) {
 	repo := newMockSettingRepo()
 	_ = repo.Set(context.Background(), settingKeyBackupS3Config, "not json!!!!")
-	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
 
 	cfg, err := svc.loadS3Config(context.Background())
 	require.Error(t, err)
@@ -555,11 +687,11 @@ func TestBackupService_LoadS3Config_Corrupted(t *testing.T) {
 
 func TestStartBackup_ReturnsImmediately(t *testing.T) {
 	repo := newMockSettingRepo()
-	seedS3Config(t, repo)
+	seedStorageS3Config(t, repo)
 
 	dumper := &blockingDumper{blockCh: make(chan struct{}), data: []byte("data")}
 	store := newMockObjectStore()
-	svc := newTestBackupService(repo, dumper, store)
+	svc := newTestBackupService(t, repo, dumper, store)
 
 	record, err := svc.StartBackup(context.Background(), "manual", 14)
 	require.NoError(t, err)
@@ -579,11 +711,11 @@ func TestStartBackup_ReturnsImmediately(t *testing.T) {
 
 func TestStartBackup_ConcurrentBlocked(t *testing.T) {
 	repo := newMockSettingRepo()
-	seedS3Config(t, repo)
+	seedStorageS3Config(t, repo)
 
 	dumper := &blockingDumper{blockCh: make(chan struct{}), data: []byte("data")}
 	store := newMockObjectStore()
-	svc := newTestBackupService(repo, dumper, store)
+	svc := newTestBackupService(t, repo, dumper, store)
 
 	// 第一次启动
 	_, err := svc.StartBackup(context.Background(), "manual", 14)
@@ -599,8 +731,8 @@ func TestStartBackup_ConcurrentBlocked(t *testing.T) {
 
 func TestStartBackup_ShuttingDown(t *testing.T) {
 	repo := newMockSettingRepo()
-	seedS3Config(t, repo)
-	svc := newTestBackupService(repo, &mockDumper{dumpData: []byte("data")}, newMockObjectStore())
+	seedStorageS3Config(t, repo)
+	svc := newTestBackupService(t, repo, &mockDumper{dumpData: []byte("data")}, newMockObjectStore())
 
 	svc.shuttingDown.Store(true)
 
@@ -611,7 +743,7 @@ func TestStartBackup_ShuttingDown(t *testing.T) {
 
 func TestRecoverStaleRecords(t *testing.T) {
 	repo := newMockSettingRepo()
-	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+	svc := newTestBackupService(t, repo, &mockDumper{}, newMockObjectStore())
 
 	// 模拟一条孤立的 running 记录
 	_ = svc.saveRecord(context.Background(), &BackupRecord{
@@ -640,11 +772,11 @@ func TestRecoverStaleRecords(t *testing.T) {
 
 func TestGracefulShutdown(t *testing.T) {
 	repo := newMockSettingRepo()
-	seedS3Config(t, repo)
+	seedStorageS3Config(t, repo)
 
 	dumper := &blockingDumper{blockCh: make(chan struct{}), data: []byte("data")}
 	store := newMockObjectStore()
-	svc := newTestBackupService(repo, dumper, store)
+	svc := newTestBackupService(t, repo, dumper, store)
 
 	_, err := svc.StartBackup(context.Background(), "manual", 14)
 	require.NoError(t, err)
@@ -678,12 +810,12 @@ func TestGracefulShutdown(t *testing.T) {
 
 func TestStartRestore_Async(t *testing.T) {
 	repo := newMockSettingRepo()
-	seedS3Config(t, repo)
+	seedStorageS3Config(t, repo)
 
 	dumpContent := "-- PostgreSQL dump\nCREATE TABLE test (id int);\n"
 	dumper := &mockDumper{dumpData: []byte(dumpContent)}
 	store := newMockObjectStore()
-	svc := newTestBackupService(repo, dumper, store)
+	svc := newTestBackupService(t, repo, dumper, store)
 
 	// 先创建一个备份（同步方式）
 	record, err := svc.CreateBackup(context.Background(), "manual", 14)

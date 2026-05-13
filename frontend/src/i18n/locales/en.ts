@@ -1540,7 +1540,19 @@ export default {
 
     backup: {
       title: 'Database Backup',
-      description: 'Full database backup to S3-compatible storage with scheduled backup and restore',
+      description: 'Full database backup to local or S3-compatible storage with scheduled backup and restore',
+      storage: {
+        title: 'Backup Storage Configuration',
+        description: 'Choose whether new backups are written to a local directory or remote S3/R2 storage',
+        local: 'Local',
+        remote: 'S3/R2',
+        localPath: 'Local Backup Directory',
+        localHint: 'The backend manages this directory automatically. Docker deployments usually persist it at /app/data/backups.',
+        testConnection: 'Test Storage',
+        testSuccess: 'Storage test successful',
+        testFailed: 'Storage test failed',
+        saved: 'Backup storage configuration saved'
+      },
       s3: {
         title: 'S3 Storage Configuration',
         description: 'Configure S3-compatible storage (supports Cloudflare R2)',
@@ -1587,6 +1599,7 @@ export default {
       },
       columns: {
         status: 'Status',
+        storage: 'Storage',
         fileName: 'File Name',
         size: 'Size',
         expiresAt: 'Expires At',
