@@ -21,7 +21,7 @@ func NewPgDumper(cfg *config.Config) service.DBDumper {
 }
 
 // Dump executes pg_dump and returns a streaming reader of the output
-func (d *PgDumper) Dump(ctx context.Context) (io.ReadCloser, error) {
+func (d *PgDumper) Dump(ctx context.Context, opts service.BackupDumpOptions) (io.ReadCloser, error) {
 	args := []string{
 		"-h", d.cfg.Host,
 		"-p", fmt.Sprintf("%d", d.cfg.Port),
@@ -31,6 +31,10 @@ func (d *PgDumper) Dump(ctx context.Context) (io.ReadCloser, error) {
 		"--no-acl",
 		"--clean",
 		"--if-exists",
+	}
+	for _, tablePattern := range opts.ExcludeTableData {
+		// 只跳过表数据，保留结构、约束和索引，避免恢复后缺表。
+		args = append(args, "--exclude-table-data="+tablePattern)
 	}
 
 	cmd := exec.CommandContext(ctx, "pg_dump", args...)

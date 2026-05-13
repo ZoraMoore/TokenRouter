@@ -62,6 +62,31 @@ func (h *BackupHandler) TestStorageConnection(c *gin.Context) {
 	response.Success(c, gin.H{"ok": true, "message": "connection successful"})
 }
 
+// ─── 内容配置 ───
+
+func (h *BackupHandler) GetContentConfig(c *gin.Context) {
+	cfg, err := h.backupService.GetContentConfig(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
+func (h *BackupHandler) UpdateContentConfig(c *gin.Context) {
+	var req service.BackupContentConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	cfg, err := h.backupService.UpdateContentConfig(c.Request.Context(), req)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
 // ─── S3 配置（兼容旧接口） ───
 
 func (h *BackupHandler) GetS3Config(c *gin.Context) {

@@ -86,6 +86,39 @@
         </div>
       </div>
 
+      <!-- 备份内容配置 -->
+      <div class="card p-6">
+        <div class="mb-4">
+          <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+            {{ t('admin.backup.content.title') }}
+          </h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {{ t('admin.backup.content.description') }}
+          </p>
+        </div>
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <label
+            v-for="option in contentOptions"
+            :key="option.key"
+            class="flex items-start gap-3 rounded-lg border border-gray-200 p-3 text-sm dark:border-dark-700"
+          >
+            <input v-model="contentForm[option.key]" type="checkbox" class="mt-1" />
+            <span>
+              <span class="block font-medium text-gray-800 dark:text-gray-200">{{ option.title }}</span>
+              <span class="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400">{{ option.description }}</span>
+            </span>
+          </label>
+        </div>
+        <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          {{ t('admin.backup.content.excludedCount', { count: contentExcludedCount }) }}
+        </p>
+        <div class="mt-4">
+          <button type="button" class="btn btn-primary btn-sm" :disabled="savingContent" @click="saveContentConfig">
+            {{ savingContent ? t('common.loading') : t('common.save') }}
+          </button>
+        </div>
+      </div>
+
       <!-- 定时备份配置 -->
       <div class="card p-6">
         <div class="mb-4">
@@ -317,7 +350,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api'
 import { useAppStore } from '@/stores'
-import type { BackupS3Config, BackupScheduleConfig, BackupRecord, BackupStorageConfig } from '@/api/admin/backup'
+import type { BackupContentConfig, BackupS3Config, BackupScheduleConfig, BackupRecord, BackupStorageConfig } from '@/api/admin/backup'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -348,6 +381,50 @@ const s3Form = ref<BackupS3Config>({
 const s3SecretConfigured = ref(false)
 const savingStorage = ref(false)
 const testingStorage = ref(false)
+
+// 备份内容配置
+const contentForm = ref<BackupContentConfig>({
+  include_usage_records: false,
+  include_ops_logs: false,
+  include_audit_logs: false,
+  include_runtime_data: false,
+  excluded_table_data: [],
+})
+const savingContent = ref(false)
+type BackupContentOptionKey = keyof Pick<BackupContentConfig, 'include_usage_records' | 'include_ops_logs' | 'include_audit_logs' | 'include_runtime_data'>
+const contentTablePatternCounts: Record<BackupContentOptionKey, number> = {
+  include_usage_records: 10,
+  include_ops_logs: 9,
+  include_audit_logs: 5,
+  include_runtime_data: 6,
+}
+const contentOptions = computed<Array<{ key: BackupContentOptionKey, title: string, description: string }>>(() => [
+  {
+    key: 'include_usage_records',
+    title: t('admin.backup.content.usageRecords.title'),
+    description: t('admin.backup.content.usageRecords.description'),
+  },
+  {
+    key: 'include_ops_logs',
+    title: t('admin.backup.content.opsLogs.title'),
+    description: t('admin.backup.content.opsLogs.description'),
+  },
+  {
+    key: 'include_audit_logs',
+    title: t('admin.backup.content.auditLogs.title'),
+    description: t('admin.backup.content.auditLogs.description'),
+  },
+  {
+    key: 'include_runtime_data',
+    title: t('admin.backup.content.runtimeData.title'),
+    description: t('admin.backup.content.runtimeData.description'),
+  },
+])
+const contentExcludedCount = computed(() => (
+  contentOptions.value.reduce((total, option) => (
+    contentForm.value[option.key] ? total : total + contentTablePatternCounts[option.key]
+  ), 0)
+))
 
 // 定时备份配置
 const scheduleForm = ref<BackupScheduleConfig>({
@@ -549,6 +626,38 @@ async function testStorage() {
   }
 }
 
+function normalizeContentConfig(cfg?: Partial<BackupContentConfig>): BackupContentConfig {
+  return {
+    include_usage_records: Boolean(cfg?.include_usage_records),
+    include_ops_logs: Boolean(cfg?.include_ops_logs),
+    include_audit_logs: Boolean(cfg?.include_audit_logs),
+    include_runtime_data: Boolean(cfg?.include_runtime_data),
+    excluded_table_data: cfg?.excluded_table_data || [],
+  }
+}
+
+async function loadContentConfig() {
+  try {
+    const cfg = await adminAPI.backup.getContentConfig()
+    contentForm.value = normalizeContentConfig(cfg)
+  } catch (error) {
+    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+  }
+}
+
+async function saveContentConfig() {
+  savingContent.value = true
+  try {
+    const cfg = await adminAPI.backup.updateContentConfig(normalizeContentConfig(contentForm.value))
+    contentForm.value = normalizeContentConfig(cfg)
+    appStore.showSuccess(t('admin.backup.content.saved'))
+  } catch (error) {
+    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+  } finally {
+    savingContent.value = false
+  }
+}
+
 async function loadSchedule() {
   try {
     const cfg = await adminAPI.backup.getSchedule()
@@ -697,7 +806,7 @@ function formatDate(value?: string): string {
 
 onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
-  await Promise.all([loadStorageConfig(), loadSchedule(), loadBackups()])
+  await Promise.all([loadStorageConfig(), loadContentConfig(), loadSchedule(), loadBackups()])
 
   // 如果有正在 running 的备份，恢复轮询
   const runningBackup = backups.value.find(r => r.status === 'running')

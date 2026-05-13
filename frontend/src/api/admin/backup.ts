@@ -18,6 +18,14 @@ export interface BackupStorageConfig {
   s3: BackupS3Config
 }
 
+export interface BackupContentConfig {
+  include_usage_records: boolean
+  include_ops_logs: boolean
+  include_audit_logs: boolean
+  include_runtime_data: boolean
+  excluded_table_data?: string[]
+}
+
 export interface BackupScheduleConfig {
   enabled: boolean
   cron_expr: string
@@ -67,6 +75,17 @@ export async function updateStorageConfig(config: BackupStorageConfig): Promise<
 
 export async function testStorageConnection(config: BackupStorageConfig): Promise<TestS3Response> {
   const { data } = await apiClient.post<TestS3Response>('/admin/backups/storage-config/test', config)
+  return data
+}
+
+// 内容配置
+export async function getContentConfig(): Promise<BackupContentConfig> {
+  const { data } = await apiClient.get<BackupContentConfig>('/admin/backups/content-config')
+  return data
+}
+
+export async function updateContentConfig(config: BackupContentConfig): Promise<BackupContentConfig> {
+  const { data } = await apiClient.put<BackupContentConfig>('/admin/backups/content-config', config)
   return data
 }
 
@@ -139,6 +158,8 @@ export const backupAPI = {
   getStorageConfig,
   updateStorageConfig,
   testStorageConnection,
+  getContentConfig,
+  updateContentConfig,
   getS3Config,
   updateS3Config,
   testS3Connection,

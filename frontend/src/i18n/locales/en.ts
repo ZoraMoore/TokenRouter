@@ -1553,6 +1553,28 @@ export default {
         testFailed: 'Storage test failed',
         saved: 'Backup storage configuration saved'
       },
+      content: {
+        title: 'Backup Content',
+        description: 'Core business data is always backed up. Optionally include historical data that can grow quickly. Unchecked tables keep schema only and skip row data.',
+        saved: 'Backup content configuration saved',
+        excludedCount: 'Data from {count} table or partition patterns will be skipped.',
+        usageRecords: {
+          title: 'Usage and Billing Records',
+          description: 'Includes usage_logs, billing entries, dashboard aggregates, and deduplication records. This usually grows with request volume.'
+        },
+        opsLogs: {
+          title: 'Ops Logs and Error Details',
+          description: 'Includes system logs, error logs, request body snapshots, retry records, and ops metrics. This is often the largest backup source.'
+        },
+        auditLogs: {
+          title: 'Audit and Risk History',
+          description: 'Includes payment audits, moderation logs, announcement read history, and migration reports.'
+        },
+        runtimeData: {
+          title: 'Runtime Jobs and Temporary Data',
+          description: 'Includes idempotency cache, scheduler outbox, pending auth sessions, cleanup tasks, and scheduled test results.'
+        }
+      },
       s3: {
         title: 'S3 Storage Configuration',
         description: 'Configure S3-compatible storage (supports Cloudflare R2)',

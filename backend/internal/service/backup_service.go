@@ -26,6 +26,7 @@ import (
 const (
 	settingKeyBackupS3Config      = "backup_s3_config"
 	settingKeyBackupStorageConfig = "backup_storage_config"
+	settingKeyBackupContentConfig = "backup_content_config"
 	settingKeyBackupSchedule      = "backup_schedule"
 	settingKeyBackupRecords       = "backup_records"
 
@@ -44,14 +45,61 @@ var (
 	ErrBackupRecordsCorrupt       = infraerrors.InternalServer("BACKUP_RECORDS_CORRUPT", "backup records data is corrupted")
 	ErrBackupS3ConfigCorrupt      = infraerrors.InternalServer("BACKUP_S3_CONFIG_CORRUPT", "backup S3 config data is corrupted")
 	ErrBackupStorageConfigCorrupt = infraerrors.InternalServer("BACKUP_STORAGE_CONFIG_CORRUPT", "backup storage config data is corrupted")
+	ErrBackupContentConfigCorrupt = infraerrors.InternalServer("BACKUP_CONTENT_CONFIG_CORRUPT", "backup content config data is corrupted")
 )
+
+var backupContentTableDataGroups = map[string][]string{
+	"usage_records": {
+		"public.usage_logs",
+		"public.usage_logs_*",
+		"public.billing_usage_entries",
+		"public.usage_billing_dedup",
+		"public.usage_billing_dedup_archive",
+		"public.usage_dashboard_hourly",
+		"public.usage_dashboard_daily",
+		"public.usage_dashboard_hourly_users",
+		"public.usage_dashboard_daily_users",
+		"public.usage_dashboard_aggregation_watermark",
+	},
+	"ops_logs": {
+		"public.ops_system_logs",
+		"public.ops_error_logs",
+		"public.ops_retry_attempts",
+		"public.ops_system_metrics",
+		"public.ops_metrics_hourly",
+		"public.ops_metrics_daily",
+		"public.ops_alert_events",
+		"public.ops_job_heartbeats",
+		"public.ops_system_log_cleanup_audits",
+	},
+	"audit_logs": {
+		"public.payment_audit_logs",
+		"public.content_moderation_logs",
+		"public.announcement_reads",
+		"public.orphan_allowed_groups_audit",
+		"public.auth_identity_migration_reports",
+	},
+	"runtime_data": {
+		"public.idempotency_records",
+		"public.scheduler_outbox",
+		"public.pending_auth_sessions",
+		"public.identity_adoption_decisions",
+		"public.usage_cleanup_tasks",
+		"public.scheduled_test_results",
+	},
+}
 
 // ─── 接口定义 ───
 
 // DBDumper 抽象数据库导出和恢复操作。
 type DBDumper interface {
-	Dump(ctx context.Context) (io.ReadCloser, error)
+	Dump(ctx context.Context, opts BackupDumpOptions) (io.ReadCloser, error)
 	Restore(ctx context.Context, data io.Reader) error
+}
+
+// BackupDumpOptions 控制 pg_dump 的导出范围。
+type BackupDumpOptions struct {
+	ExcludeTableData []string
 }
 
 // BackupObjectStore 抽象备份文件存储后端。
@@ -73,6 +121,15 @@ type BackupStorageConfig struct {
 	Type      string         `json:"type"`
 	LocalPath string         `json:"local_path"`
 	S3        BackupS3Config `json:"s3"`
+}
+
+// BackupContentConfig 控制备份文件中包含哪些非核心历史数据。
+type BackupContentConfig struct {
+	IncludeUsageRecords bool     `json:"include_usage_records"`
+	IncludeOpsLogs      bool     `json:"include_ops_logs"`
+	IncludeAuditLogs    bool     `json:"include_audit_logs"`
+	IncludeRuntimeData  bool     `json:"include_runtime_data"`
+	ExcludedTableData   []string `json:"excluded_table_data,omitempty"`
 }
 
 // BackupS3Config S3 兼容存储配置（支持 Cloudflare R2）
@@ -326,6 +383,30 @@ func (s *BackupService) TestStorageConnection(ctx context.Context, cfg BackupSto
 	}
 }
 
+// ─── 备份内容配置管理 ───
+
+func (s *BackupService) GetContentConfig(ctx context.Context) (*BackupContentConfig, error) {
+	cfg, err := s.loadContentConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cfg.ExcludedTableData = s.buildExcludedTableData(cfg)
+	return cfg, nil
+}
+
+func (s *BackupService) UpdateContentConfig(ctx context.Context, cfg BackupContentConfig) (*BackupContentConfig, error) {
+	normalized := normalizeBackupContentConfig(cfg)
+	data, err := json.Marshal(normalized)
+	if err != nil {
+		return nil, fmt.Errorf("marshal content config: %w", err)
+	}
+	if err := s.settingRepo.Set(ctx, settingKeyBackupContentConfig, string(data)); err != nil {
+		return nil, fmt.Errorf("save content config: %w", err)
+	}
+	normalized.ExcludedTableData = s.buildExcludedTableData(&normalized)
+	return &normalized, nil
+}
+
 // ─── S3 配置管理（兼容旧接口） ───
 
 func (s *BackupService) GetS3Config(ctx context.Context) (*BackupS3Config, error) {
@@ -561,8 +642,17 @@ func (s *BackupService) CreateBackup(ctx context.Context, triggeredBy string, ex
 		ExpiresAt:   expiresAt,
 	}
 
+	dumpOptions, err := s.buildDumpOptions(ctx)
+	if err != nil {
+		record.Status = "failed"
+		record.ErrorMsg = fmt.Sprintf("load backup content config failed: %v", err)
+		record.FinishedAt = time.Now().Format(time.RFC3339)
+		_ = s.saveRecord(ctx, record)
+		return record, err
+	}
+
 	// 流式执行: pg_dump -> gzip -> S3 upload
-	dumpReader, err := s.dumper.Dump(ctx)
+	dumpReader, err := s.dumper.Dump(ctx, dumpOptions)
 	if err != nil {
 		record.Status = "failed"
 		record.ErrorMsg = fmt.Sprintf("pg_dump failed: %v", err)
@@ -665,6 +755,11 @@ func (s *BackupService) StartBackup(ctx context.Context, triggeredBy string, exp
 		expiresAt = now.AddDate(0, 0, expireDays).Format(time.RFC3339)
 	}
 
+	dumpOptions, err := s.buildDumpOptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	record := &BackupRecord{
 		ID:          backupID,
 		Status:      "running",
@@ -705,14 +800,14 @@ func (s *BackupService) StartBackup(ctx context.Context, triggeredBy string, exp
 				_ = s.saveRecord(context.Background(), record)
 			}
 		}()
-		s.executeBackup(record, objectStore)
+		s.executeBackup(record, objectStore, dumpOptions)
 	}()
 
 	return &result, nil
 }
 
 // executeBackup 后台执行备份（独立于 HTTP context）
-func (s *BackupService) executeBackup(record *BackupRecord, objectStore BackupObjectStore) {
+func (s *BackupService) executeBackup(record *BackupRecord, objectStore BackupObjectStore, dumpOptions BackupDumpOptions) {
 	ctx, cancel := context.WithTimeout(s.bgCtx, 30*time.Minute)
 	defer cancel()
 
@@ -720,7 +815,7 @@ func (s *BackupService) executeBackup(record *BackupRecord, objectStore BackupOb
 	record.Progress = "dumping"
 	_ = s.saveRecord(ctx, record)
 
-	dumpReader, err := s.dumper.Dump(ctx)
+	dumpReader, err := s.dumper.Dump(ctx, dumpOptions)
 	if err != nil {
 		record.Status = "failed"
 		record.ErrorMsg = fmt.Sprintf("pg_dump failed: %v", err)
@@ -1092,6 +1187,52 @@ func (s *BackupService) loadStorageConfig(ctx context.Context) (*BackupStorageCo
 	return &cfg, nil
 }
 
+func (s *BackupService) loadContentConfig(ctx context.Context) (*BackupContentConfig, error) {
+	raw, err := s.settingRepo.GetValue(ctx, settingKeyBackupContentConfig)
+	if err != nil || raw == "" {
+		cfg := defaultBackupContentConfig()
+		return &cfg, nil
+	}
+	var cfg BackupContentConfig
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return nil, ErrBackupContentConfigCorrupt
+	}
+	normalized := normalizeBackupContentConfig(cfg)
+	return &normalized, nil
+}
+
+func (s *BackupService) buildDumpOptions(ctx context.Context) (BackupDumpOptions, error) {
+	cfg, err := s.loadContentConfig(ctx)
+	if err != nil {
+		return BackupDumpOptions{}, err
+	}
+	return BackupDumpOptions{
+		ExcludeTableData: s.buildExcludedTableData(cfg),
+	}, nil
+}
+
+func (s *BackupService) buildExcludedTableData(cfg *BackupContentConfig) []string {
+	if cfg == nil {
+		defaultCfg := defaultBackupContentConfig()
+		cfg = &defaultCfg
+	}
+
+	var excluded []string
+	if !cfg.IncludeUsageRecords {
+		excluded = append(excluded, backupContentTableDataGroups["usage_records"]...)
+	}
+	if !cfg.IncludeOpsLogs {
+		excluded = append(excluded, backupContentTableDataGroups["ops_logs"]...)
+	}
+	if !cfg.IncludeAuditLogs {
+		excluded = append(excluded, backupContentTableDataGroups["audit_logs"]...)
+	}
+	if !cfg.IncludeRuntimeData {
+		excluded = append(excluded, backupContentTableDataGroups["runtime_data"]...)
+	}
+	return uniqueSortedStrings(excluded)
+}
+
 func (s *BackupService) prepareS3ConfigForSave(ctx context.Context, cfg BackupS3Config) (*BackupS3Config, error) {
 	// 如果没提供 secret，优先保留统一配置中的旧值，其次保留旧 S3 配置。
 	if cfg.SecretAccessKey == "" {
@@ -1374,18 +1515,6 @@ func (s *BackupService) cleanupOldBackups(ctx context.Context, schedule *BackupS
 	return nil
 }
 
-func (s *BackupService) deleteS3Object(ctx context.Context, key string) error {
-	s3Cfg, err := s.loadS3Config(ctx)
-	if err != nil || s3Cfg == nil {
-		return nil
-	}
-	objectStore, err := s.getOrCreateStore(ctx, s3Cfg)
-	if err != nil {
-		return err
-	}
-	return objectStore.Delete(ctx, key)
-}
-
 func defaultBackupLocalPath() string {
 	return filepath.Join(resolveBackupDataDir(), "backups")
 }
@@ -1416,6 +1545,40 @@ func normalizeBackupStorageType(value string) string {
 	default:
 		return ""
 	}
+}
+
+func defaultBackupContentConfig() BackupContentConfig {
+	return BackupContentConfig{}
+}
+
+func normalizeBackupContentConfig(cfg BackupContentConfig) BackupContentConfig {
+	return BackupContentConfig{
+		IncludeUsageRecords: cfg.IncludeUsageRecords,
+		IncludeOpsLogs:      cfg.IncludeOpsLogs,
+		IncludeAuditLogs:    cfg.IncludeAuditLogs,
+		IncludeRuntimeData:  cfg.IncludeRuntimeData,
+	}
+}
+
+func uniqueSortedStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func backupS3ConfigHasValue(cfg BackupS3Config) bool {

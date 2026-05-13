@@ -114,12 +114,14 @@ type mockDumper struct {
 	dumpErr  error
 	restored []byte
 	restErr  error
+	opts     BackupDumpOptions
 }
 
-func (m *mockDumper) Dump(_ context.Context) (io.ReadCloser, error) {
+func (m *mockDumper) Dump(_ context.Context, opts BackupDumpOptions) (io.ReadCloser, error) {
 	if m.dumpErr != nil {
 		return nil, m.dumpErr
 	}
+	m.opts = opts
 	return io.NopCloser(bytes.NewReader(m.dumpData)), nil
 }
 
@@ -140,14 +142,16 @@ type blockingDumper struct {
 	blockCh chan struct{}
 	data    []byte
 	restErr error
+	opts    BackupDumpOptions
 }
 
-func (d *blockingDumper) Dump(ctx context.Context) (io.ReadCloser, error) {
+func (d *blockingDumper) Dump(ctx context.Context, opts BackupDumpOptions) (io.ReadCloser, error) {
 	select {
 	case <-d.blockCh:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	d.opts = opts
 	return io.NopCloser(bytes.NewReader(d.data)), nil
 }
 
@@ -462,6 +466,52 @@ func TestBackupService_GetStorageConfig_MergesLegacyS3WhenUnifiedConfigEmpty(t *
 	require.Equal(t, "test-bucket", cfg.S3.Bucket)
 	require.Equal(t, "AKID", cfg.S3.AccessKeyID)
 	require.Empty(t, cfg.S3.SecretAccessKey)
+}
+
+func TestBackupService_ContentConfigDefaultsExcludeLargeHistory(t *testing.T) {
+	repo := newMockSettingRepo()
+	dumper := &mockDumper{dumpData: []byte("data")}
+	svc := newTestBackupService(t, repo, dumper, newMockObjectStore())
+
+	cfg, err := svc.GetContentConfig(context.Background())
+	require.NoError(t, err)
+	require.False(t, cfg.IncludeUsageRecords)
+	require.False(t, cfg.IncludeOpsLogs)
+	require.False(t, cfg.IncludeAuditLogs)
+	require.False(t, cfg.IncludeRuntimeData)
+	require.Contains(t, cfg.ExcludedTableData, "public.ops_error_logs")
+	require.Contains(t, cfg.ExcludedTableData, "public.usage_logs")
+	require.Contains(t, cfg.ExcludedTableData, "public.pending_auth_sessions")
+	require.Contains(t, cfg.ExcludedTableData, "public.identity_adoption_decisions")
+
+	_, err = svc.CreateBackup(context.Background(), "manual", 14)
+	require.NoError(t, err)
+	require.Contains(t, dumper.opts.ExcludeTableData, "public.ops_error_logs")
+	require.Contains(t, dumper.opts.ExcludeTableData, "public.usage_billing_dedup")
+	require.Contains(t, dumper.opts.ExcludeTableData, "public.identity_adoption_decisions")
+}
+
+func TestBackupService_ContentConfigCanIncludeSelectedData(t *testing.T) {
+	repo := newMockSettingRepo()
+	dumper := &mockDumper{dumpData: []byte("data")}
+	svc := newTestBackupService(t, repo, dumper, newMockObjectStore())
+
+	cfg, err := svc.UpdateContentConfig(context.Background(), BackupContentConfig{
+		IncludeUsageRecords: true,
+		IncludeOpsLogs:      false,
+		IncludeAuditLogs:    true,
+		IncludeRuntimeData:  false,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, cfg.ExcludedTableData, "public.usage_logs")
+	require.NotContains(t, cfg.ExcludedTableData, "public.payment_audit_logs")
+	require.Contains(t, cfg.ExcludedTableData, "public.ops_error_logs")
+	require.Contains(t, cfg.ExcludedTableData, "public.scheduler_outbox")
+
+	_, err = svc.CreateBackup(context.Background(), "manual", 14)
+	require.NoError(t, err)
+	require.NotContains(t, dumper.opts.ExcludeTableData, "public.usage_logs")
+	require.Contains(t, dumper.opts.ExcludeTableData, "public.ops_system_logs")
 }
 
 func TestBackupService_CreateBackup_ConcurrentBlocked(t *testing.T) {

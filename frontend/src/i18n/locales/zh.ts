@@ -1574,6 +1574,28 @@ export default {
         testFailed: '存储连接测试失败',
         saved: '备份存储配置已保存'
       },
+      content: {
+        title: '备份内容',
+        description: '核心业务数据始终会备份，可按需额外包含容易变大的历史数据。未勾选的表只备份结构，不导出数据。',
+        saved: '备份内容配置已保存',
+        excludedCount: '当前将跳过 {count} 个表/分区模式的数据。',
+        usageRecords: {
+          title: '用量与计费流水',
+          description: '包含 usage_logs、计费明细、用量看板聚合和去重记录，通常会随请求量快速增长。'
+        },
+        opsLogs: {
+          title: '运维日志与错误详情',
+          description: '包含系统日志、错误日志、请求体快照、重试记录和运维指标，是备份体积最常见来源。'
+        },
+        auditLogs: {
+          title: '审计与风控历史',
+          description: '包含支付审计、内容风控记录、公告已读记录和迁移报告等历史追踪数据。'
+        },
+        runtimeData: {
+          title: '运行时任务与临时数据',
+          description: '包含幂等缓存、调度 outbox、待完成登录会话、清理任务和定时测试结果。'
+        }
+      },
       s3: {
         title: 'S3 存储配置',
         description: '配置 S3 兼容存储（支持 Cloudflare R2）',
