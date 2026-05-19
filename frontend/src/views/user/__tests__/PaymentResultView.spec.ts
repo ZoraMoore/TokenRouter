@@ -451,6 +451,32 @@ describe('PaymentResultView', () => {
     expect(wrapper.text()).toContain(formatPaymentAmount(103, 'HKD'))
   })
 
+  it('shows the redeem code returned by the payment result API', async () => {
+    routeState.query = {
+      resume_token: 'resume-redeem-code',
+    }
+    resolveOrderPublicByResumeToken.mockResolvedValue({
+      data: {
+        ...orderFactory('COMPLETED'),
+        payment_type: 'usdt_bep20',
+        redeem_code: 'PAY-CODE-999',
+      },
+    })
+
+    const wrapper = mount(PaymentResultView, {
+      global: {
+        stubs: {
+          OrderStatusBadge: true,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('payment.result.redeemCode')
+    expect(wrapper.text()).toContain('PAY-CODE-999')
+  })
+
   it('normalizes aliased payment methods before rendering the label', async () => {
     routeState.query = {
       resume_token: 'resume-88',

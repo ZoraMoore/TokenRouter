@@ -5453,8 +5453,8 @@
                   }}</label>
                   <textarea
                     class="input min-h-[92px]"
-                    :value="(form.payment_allowed_emails || []).join('\n')"
-                    @input="form.payment_allowed_emails = ($event.target as HTMLTextAreaElement).value.split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean)"
+                    :value="formatPaymentAllowedEmails(form.payment_allowed_emails)"
+                    @input="updatePaymentAllowedEmails"
                     :placeholder="t('admin.settings.payment.allowedEmailsPlaceholder')"
                   ></textarea>
                   <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
@@ -6294,6 +6294,49 @@ function loginAgreementRoutePath(
   const id =
     normalizeLoginAgreementDocumentId(doc.id || doc.title) || `doc-${index + 1}`;
   return `/legal/${id}`;
+}
+
+function normalizeDelimitedStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item).trim())
+      .filter((item) => item !== "");
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[\n,;]+/)
+      .map((item) => item.trim())
+      .filter((item) => item !== "");
+  }
+  return [];
+}
+
+function normalizeSettingsPayload(
+  settings: Record<string, unknown>,
+): Record<string, unknown> {
+  const rawAllowedEmails = settings["payment_allowed_emails"];
+  if (rawAllowedEmails !== null && rawAllowedEmails !== undefined) {
+    settings["payment_allowed_emails"] =
+      normalizeDelimitedStringArray(rawAllowedEmails);
+  }
+
+  const rawEnabledTypes = settings["payment_enabled_types"];
+  if (rawEnabledTypes !== null && rawEnabledTypes !== undefined) {
+    settings["payment_enabled_types"] =
+      normalizeDelimitedStringArray(rawEnabledTypes);
+  }
+
+  return settings;
+}
+
+function formatPaymentAllowedEmails(value: unknown): string {
+  return normalizeDelimitedStringArray(value).join("\n");
+}
+
+function updatePaymentAllowedEmails(event: Event) {
+  form.payment_allowed_emails = normalizeDelimitedStringArray(
+    (event.target as HTMLTextAreaElement | null)?.value,
+  );
 }
 
 interface DefaultSubscriptionPlanOption {
@@ -7144,7 +7187,9 @@ async function loadSettings() {
   loading.value = true;
   loadFailed.value = false;
   try {
-    const settings = await adminAPI.settings.getSettings();
+    const settings = normalizeSettingsPayload(
+      (await adminAPI.settings.getSettings()) as unknown as Record<string, unknown>,
+    ) as unknown as SystemSettings;
     settings.payment_load_balance_strategy =
       settings.payment_load_balance_strategy || "round-robin";
     // Only assign non-null values from backend (null means unconfigured, keep defaults)
@@ -7671,8 +7716,12 @@ async function saveSettings() {
         Number(form.payment_balance_recharge_multiplier) || 1,
       payment_recharge_fee_rate: Number(form.payment_recharge_fee_rate) || 0,
       payment_method_fees: form.payment_method_fees,
-      payment_enabled_types: form.payment_enabled_types,
-      payment_allowed_emails: form.payment_allowed_emails || [],
+      payment_enabled_types: normalizeDelimitedStringArray(
+        form.payment_enabled_types,
+      ),
+      payment_allowed_emails: normalizeDelimitedStringArray(
+        form.payment_allowed_emails,
+      ),
       payment_load_balance_strategy: form.payment_load_balance_strategy,
       payment_product_name_prefix: form.payment_product_name_prefix,
       payment_product_name_suffix: form.payment_product_name_suffix,
@@ -7729,7 +7778,9 @@ async function saveSettings() {
 
     appendAuthSourceDefaultsToUpdateRequest(payload, authSourceDefaults);
 
-    const updated = await adminAPI.settings.updateSettings(payload);
+    const updated = normalizeSettingsPayload(
+      (await adminAPI.settings.updateSettings(payload)) as unknown as Record<string, unknown>,
+    ) as unknown as SystemSettings;
     for (const [key, value] of Object.entries(updated)) {
       if (key === "openai_fast_policy_settings") continue;
       if (value !== null && value !== undefined) {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html"
 	"log/slog"
 	"math"
 	"strconv"
@@ -251,6 +250,10 @@ func paymentOrderUsesRedeemCodeDelivery(o *dbent.PaymentOrder) bool {
 	return strings.EqualFold(payment.GetBasePaymentType(o.PaymentType), payment.TypeUSDTBEP20)
 }
 
+func PaymentOrderUsesRedeemCodeDelivery(o *dbent.PaymentOrder) bool {
+	return paymentOrderUsesRedeemCodeDelivery(o)
+}
+
 func (s *PaymentService) ExecuteBalanceFulfillment(ctx context.Context, oid int64) error {
 	o, err := s.entClient.PaymentOrder.Get(ctx, oid)
 	if err != nil {
@@ -362,10 +365,7 @@ func (s *PaymentService) doRedeemCodeDelivery(ctx context.Context, o *dbent.Paym
 	if redeemCode.IsUsed() {
 		return s.markCompleted(ctx, o, "REDEEM_CODE_USED")
 	}
-	if err := s.sendRedeemCodeDeliveryEmail(ctx, o, redeemCode); err != nil {
-		return fmt.Errorf("send redeem code email: %w", err)
-	}
-	return s.markCompleted(ctx, o, "REDEEM_CODE_DELIVERED")
+	return s.markCompleted(ctx, o, "REDEEM_CODE_CREATED")
 }
 
 func (s *PaymentService) ensurePaymentRedeemCode(ctx context.Context, o *dbent.PaymentOrder) (*RedeemCode, error) {
@@ -400,60 +400,6 @@ func (s *PaymentService) ensurePaymentRedeemCode(ctx context.Context, o *dbent.P
 		return nil, fmt.Errorf("create redeem code: %w", err)
 	}
 	return code, nil
-}
-
-func (s *PaymentService) sendRedeemCodeDeliveryEmail(ctx context.Context, o *dbent.PaymentOrder, code *RedeemCode) error {
-	if s.configService == nil || s.configService.settingRepo == nil {
-		return ErrEmailNotConfigured
-	}
-	to := strings.TrimSpace(o.UserEmail)
-	if to == "" {
-		return fmt.Errorf("order %d missing user email", o.ID)
-	}
-	settings, _ := s.configService.settingRepo.GetMultiple(ctx, []string{SettingKeySiteName, SettingKeyFrontendURL})
-	siteName := strings.TrimSpace(settings[SettingKeySiteName])
-	if siteName == "" {
-		siteName = "TokenRouter"
-	}
-	redeemURL := strings.TrimRight(strings.TrimSpace(settings[SettingKeyFrontendURL]), "/")
-	if redeemURL != "" {
-		redeemURL += "/redeem"
-	}
-
-	subject := fmt.Sprintf("[%s] 兑换码已发放", siteName)
-	body := buildRedeemCodeDeliveryEmailBody(siteName, redeemURL, o, code)
-	return NewEmailService(s.configService.settingRepo, nil).SendEmail(ctx, to, subject, body)
-}
-
-func buildRedeemCodeDeliveryEmailBody(siteName, redeemURL string, o *dbent.PaymentOrder, code *RedeemCode) string {
-	redeemLine := ""
-	if redeemURL != "" {
-		redeemLine = fmt.Sprintf(`<p>兑换入口：<a href="%s">%s</a></p>`, html.EscapeString(redeemURL), html.EscapeString(redeemURL))
-	}
-	orderType := "余额充值"
-	if o.OrderType == payment.OrderTypeSubscription {
-		orderType = "套餐兑换"
-	}
-	return fmt.Sprintf(`<!doctype html>
-<html>
-<body>
-  <p>%s 支付已确认，系统已为你生成兑换码。</p>
-  <p>兑换码：<strong style="font-size:18px;letter-spacing:1px;">%s</strong></p>
-  <p>订单号：%s</p>
-  <p>订单类型：%s</p>
-  <p>支付金额：%.2f %s</p>
-  %s
-  <p>请登录网站后手动使用该兑换码完成权益兑换。</p>
-</body>
-</html>`,
-		html.EscapeString(siteName),
-		html.EscapeString(code.Code),
-		html.EscapeString(o.OutTradeNo),
-		html.EscapeString(orderType),
-		o.PayAmount,
-		html.EscapeString(PaymentOrderCurrency(o)),
-		redeemLine,
-	)
 }
 
 func (s *PaymentService) markCompleted(ctx context.Context, o *dbent.PaymentOrder, auditAction string) error {

@@ -109,6 +109,7 @@ export interface PaymentOrder {
   refund_request_reason?: string
   plan_id?: number
   provider_instance_id?: string
+  redeem_code?: string
   payment_customer_id?: string
   payment_invoice_id?: string
   payment_invoice_url?: string

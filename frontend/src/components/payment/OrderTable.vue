@@ -26,6 +26,10 @@
     <template #cell-payment_type="{ value }">
       <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('payment.methods.' + value, value) }}</span>
     </template>
+    <template #cell-redeem_code="{ value }">
+      <code v-if="value" class="break-all rounded bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 dark:bg-green-900/20 dark:text-green-300">{{ value }}</code>
+      <span v-else class="text-xs text-gray-400">-</span>
+    </template>
     <template #cell-status="{ value }">
       <OrderStatusBadge :status="value" />
     </template>
@@ -74,6 +78,11 @@ const columns = computed((): Column[] => {
   cols.push(
     { key: 'pay_amount', label: t('payment.orders.payAmount') },
     { key: 'payment_type', label: t('payment.orders.paymentMethod') },
+  )
+  if (props.orders.some((order) => Boolean(order.redeem_code))) {
+    cols.push({ key: 'redeem_code', label: t('payment.orders.redeemCode') })
+  }
+  cols.push(
     { key: 'status', label: t('payment.orders.status') },
     { key: 'created_at', label: t('payment.orders.createdAt') },
     { key: 'actions', label: t('common.actions') },

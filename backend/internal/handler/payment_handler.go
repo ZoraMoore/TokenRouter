@@ -530,10 +530,15 @@ type PublicOrderResult struct {
 	RefundRequestedBy   *string    `json:"refund_requested_by,omitempty"`
 	RefundRequestReason *string    `json:"refund_request_reason,omitempty"`
 	PlanID              *int64     `json:"plan_id,omitempty"`
+	RedeemCode          string     `json:"redeem_code,omitempty"`
 }
 
 func buildPublicOrderResult(order *dbent.PaymentOrder) PublicOrderResult {
-	return PublicOrderResult{
+	return buildPublicOrderResultWithRedeemCode(order, false)
+}
+
+func buildPublicOrderResultWithRedeemCode(order *dbent.PaymentOrder, includeRedeemCode bool) PublicOrderResult {
+	result := PublicOrderResult{
 		ID:                  order.ID,
 		OutTradeNo:          order.OutTradeNo,
 		Amount:              order.Amount,
@@ -557,6 +562,10 @@ func buildPublicOrderResult(order *dbent.PaymentOrder) PublicOrderResult {
 		RefundRequestReason: order.RefundRequestReason,
 		PlanID:              order.PlanID,
 	}
+	if includeRedeemCode && shouldExposePaymentRedeemCode(order) {
+		result.RedeemCode = order.RechargeCode
+	}
+	return result
 }
 
 // VerifyOrderPublic keeps the legacy anonymous out_trade_no lookup available as
@@ -574,7 +583,7 @@ func (h *PaymentHandler) VerifyOrderPublic(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, buildPublicOrderResult(order))
+	response.Success(c, buildPublicOrderResultWithRedeemCode(order, true))
 }
 
 // ResolveOrderPublicByResumeToken resolves a payment order from a signed resume token.
@@ -658,6 +667,7 @@ type PaymentOrderResult struct {
 	RefundRequestReason *string    `json:"refund_request_reason,omitempty"`
 	PlanID              *int64     `json:"plan_id,omitempty"`
 	ProviderInstanceID  *string    `json:"provider_instance_id,omitempty"`
+	RedeemCode          string     `json:"redeem_code,omitempty"`
 }
 
 func sanitizePaymentOrdersForResponse(orders []*dbent.PaymentOrder) []PaymentOrderResult {
@@ -674,7 +684,7 @@ func sanitizePaymentOrderForResponse(order *dbent.PaymentOrder) *PaymentOrderRes
 	if order == nil {
 		return nil
 	}
-	return &PaymentOrderResult{
+	result := &PaymentOrderResult{
 		ID:                  order.ID,
 		UserID:              order.UserID,
 		Amount:              order.Amount,
@@ -700,8 +710,22 @@ func sanitizePaymentOrderForResponse(order *dbent.PaymentOrder) *PaymentOrderRes
 		PlanID:              order.PlanID,
 		ProviderInstanceID:  order.ProviderInstanceID,
 	}
+	if shouldExposePaymentRedeemCode(order) {
+		result.RedeemCode = order.RechargeCode
+	}
+	return result
 }
 
 func isWeChatBrowser(c *gin.Context) bool {
 	return strings.Contains(strings.ToLower(c.GetHeader("User-Agent")), "micromessenger")
+}
+
+func shouldExposePaymentRedeemCode(order *dbent.PaymentOrder) bool {
+	if order == nil || strings.TrimSpace(order.RechargeCode) == "" {
+		return false
+	}
+	if order.Status != service.OrderStatusCompleted {
+		return false
+	}
+	return service.PaymentOrderUsesRedeemCodeDelivery(order)
 }

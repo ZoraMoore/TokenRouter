@@ -75,6 +75,11 @@
               <span class="text-gray-500 dark:text-gray-400">{{ t('payment.orders.status') }}</span>
               <OrderStatusBadge :status="order.status" />
             </div>
+            <div v-if="order.redeem_code && isSuccess" class="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
+              <p class="text-xs font-medium text-green-700 dark:text-green-300">{{ t('payment.result.redeemCode') }}</p>
+              <p class="mt-1 break-all font-mono text-base font-semibold text-green-900 dark:text-green-100">{{ order.redeem_code }}</p>
+              <p class="mt-1 text-xs text-green-700 dark:text-green-300">{{ t('payment.result.redeemCodeHint') }}</p>
+            </div>
           </div>
         </div>
         <!-- EasyPay return info (when no order loaded) -->

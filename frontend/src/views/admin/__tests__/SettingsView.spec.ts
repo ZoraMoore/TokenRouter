@@ -606,6 +606,39 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(wrapper.text()).not.toContain("支付来源");
   });
 
+  it("normalizes legacy string payment whitelist settings before rendering and saving", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      payment_allowed_emails: "dicardoteam@gmail.com; buyer@example.com",
+      payment_enabled_types: "usdt_bep20",
+    });
+
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openPaymentTab(wrapper);
+
+    const whitelistInput = wrapper.findAll("textarea").find((node) =>
+      (node.element as HTMLTextAreaElement).value.includes(
+        "dicardoteam@gmail.com",
+      ),
+    );
+    expect(whitelistInput).toBeDefined();
+    expect((whitelistInput?.element as HTMLTextAreaElement).value).toBe(
+      "dicardoteam@gmail.com\nbuyer@example.com",
+    );
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    const payload = updateSettings.mock.calls[0]?.[0];
+    expect(payload.payment_allowed_emails).toEqual([
+      "dicardoteam@gmail.com",
+      "buyer@example.com",
+    ]);
+    expect(payload.payment_enabled_types).toEqual(["usdt_bep20"]);
+  });
+
   it("links payment guidance to README sections instead of removed payment docs", async () => {
     const wrapper = mountView();
 

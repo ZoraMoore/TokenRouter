@@ -137,6 +137,36 @@ describe('PaymentStatusPanel', () => {
     expect(wrapper.text()).not.toContain('$88.00')
   })
 
+  it('shows the generated redeem code after a successful BEpusdt order', async () => {
+    pollOrderStatus.mockResolvedValue({
+      ...orderFactory('COMPLETED'),
+      payment_type: 'usdt_bep20',
+      redeem_code: 'PAY-CODE-123',
+    })
+
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: 'https://pay.example.com/qr/42',
+        expiresAt: '2099-01-01T12:30:00Z',
+        paymentType: 'usdt_bep20',
+        orderType: 'balance',
+      },
+      global: {
+        stubs: {
+          Icon: true,
+        },
+      },
+    })
+
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('payment.result.redeemCode')
+    expect(wrapper.text()).toContain('PAY-CODE-123')
+  })
+
   it('shows reopen button in QR mode when payUrl is also available', async () => {
     const openSpy = vi.spyOn(window, 'open').mockReturnValue({ closed: false } as Window)
 
