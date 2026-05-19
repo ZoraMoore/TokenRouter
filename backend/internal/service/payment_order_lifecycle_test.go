@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -20,11 +21,14 @@ import (
 )
 
 type paymentOrderLifecycleQueryProvider struct {
-	lastQueryTradeNo string
-	queryCalls       int
-	cancelCalls      int
-	responses        []*payment.QueryOrderResponse
-	resp             *payment.QueryOrderResponse
+	lastQueryTradeNo  string
+	lastCancelTradeNo string
+	queryCalls        int
+	cancelCalls       int
+	providerKey       string
+	queryErr          error
+	responses         []*payment.QueryOrderResponse
+	resp              *payment.QueryOrderResponse
 }
 
 type paymentOrderLifecycleRedeemRepo struct {
@@ -41,10 +45,15 @@ func (p *paymentOrderLifecycleQueryProvider) Name() string {
 	return "payment-order-lifecycle-query-provider"
 }
 
-func (p *paymentOrderLifecycleQueryProvider) ProviderKey() string { return payment.TypeAlipay }
+func (p *paymentOrderLifecycleQueryProvider) ProviderKey() string {
+	if p.providerKey != "" {
+		return p.providerKey
+	}
+	return payment.TypeAlipay
+}
 
 func (p *paymentOrderLifecycleQueryProvider) SupportedTypes() []payment.PaymentType {
-	return []payment.PaymentType{payment.TypeAlipay}
+	return []payment.PaymentType{payment.PaymentType(p.ProviderKey())}
 }
 
 func (p *paymentOrderLifecycleQueryProvider) CreatePayment(context.Context, payment.CreatePaymentRequest) (*payment.CreatePaymentResponse, error) {
@@ -54,6 +63,9 @@ func (p *paymentOrderLifecycleQueryProvider) CreatePayment(context.Context, paym
 func (p *paymentOrderLifecycleQueryProvider) QueryOrder(_ context.Context, tradeNo string) (*payment.QueryOrderResponse, error) {
 	p.lastQueryTradeNo = tradeNo
 	p.queryCalls++
+	if p.queryErr != nil {
+		return nil, p.queryErr
+	}
 	if len(p.responses) > 0 {
 		resp := p.responses[0]
 		if len(p.responses) > 1 {
@@ -72,7 +84,8 @@ func (p *paymentOrderLifecycleQueryProvider) Refund(context.Context, payment.Ref
 	panic("unexpected call")
 }
 
-func (p *paymentOrderLifecycleQueryProvider) CancelPayment(context.Context, string) error {
+func (p *paymentOrderLifecycleQueryProvider) CancelPayment(_ context.Context, tradeNo string) error {
+	p.lastCancelTradeNo = tradeNo
 	p.cancelCalls++
 	return nil
 }
@@ -630,6 +643,57 @@ func TestVerifyOrderByOutTradeNoDoesNotCancelPendingUpstreamOrder(t *testing.T) 
 	require.Equal(t, OrderStatusPending, got.Status)
 	require.Equal(t, 1, provider.queryCalls)
 	require.Equal(t, 0, provider.cancelCalls)
+}
+
+func TestCancelOrderCancelsBEPUSDTUpstreamWhenQueryUnsupported(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentOrderLifecycleTestClient(t)
+
+	user, err := client.User.Create().
+		SetEmail("cancel-bepusdt@example.com").
+		SetPasswordHash("hash").
+		SetUsername("cancel-bepusdt-user").
+		Save(ctx)
+	require.NoError(t, err)
+
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(10).
+		SetPayAmount(10).
+		SetFeeRate(0).
+		SetRechargeCode("CANCEL-BEPUSDT").
+		SetOutTradeNo("sub2_cancel_bepusdt").
+		SetPaymentType(payment.TypeBEPUSDT).
+		SetPaymentTradeNo("bepusdt-trade-1").
+		SetOrderType(payment.OrderTypeBalance).
+		SetStatus(OrderStatusPending).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("api.example.com").
+		Save(ctx)
+	require.NoError(t, err)
+
+	registry := payment.NewRegistry()
+	provider := &paymentOrderLifecycleQueryProvider{
+		providerKey: payment.TypeBEPUSDT,
+		queryErr:    errors.New("bepusdt query order is not supported"),
+	}
+	registry.Register(provider)
+
+	svc := &PaymentService{
+		entClient:       client,
+		registry:        registry,
+		providersLoaded: true,
+	}
+
+	msg, err := svc.CancelOrder(ctx, order.ID, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, checkPaidResultCancelled, msg)
+	require.Equal(t, 1, provider.queryCalls)
+	require.Equal(t, 1, provider.cancelCalls)
+	require.Equal(t, "bepusdt-trade-1", provider.lastCancelTradeNo)
 }
 
 func TestPaymentOrderAllowsRegistryFallbackOnlyForLegacyOrdersWithoutPinnedProviderState(t *testing.T) {

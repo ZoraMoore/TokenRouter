@@ -152,6 +152,9 @@ func (s *PaymentService) checkPaidAndMaybeCancel(ctx context.Context, o *dbent.P
 	resp, err := prov.QueryOrder(ctx, queryRef)
 	if err != nil {
 		slog.Warn("query upstream failed", "orderID", o.ID, "error", err)
+		if cancelUnpaid && canCancelWithoutQuery(prov) {
+			cancelUpstreamPayment(ctx, prov, queryRef)
+		}
 		return ""
 	}
 	if resp.Status == payment.ProviderStatusPaid {
@@ -190,10 +193,28 @@ func (s *PaymentService) checkPaidAndMaybeCancel(ctx context.Context, o *dbent.P
 	if !cancelUnpaid {
 		return ""
 	}
-	if cp, ok := prov.(payment.CancelableProvider); ok {
-		_ = cp.CancelPayment(ctx, queryRef)
-	}
+	cancelUpstreamPayment(ctx, prov, queryRef)
 	return ""
+}
+
+func canCancelWithoutQuery(prov payment.Provider) bool {
+	if prov == nil {
+		return false
+	}
+
+	key := strings.TrimSpace(prov.ProviderKey())
+	return key == payment.TypeBEPUSDT || payment.GetBasePaymentType(key) == payment.TypeUSDTBEP20
+}
+
+func cancelUpstreamPayment(ctx context.Context, prov payment.Provider, queryRef string) {
+	cp, ok := prov.(payment.CancelableProvider)
+	if !ok {
+		return
+	}
+
+	if err := cp.CancelPayment(ctx, queryRef); err != nil {
+		slog.Warn("cancel upstream failed", "provider", prov.ProviderKey(), "queryRef", queryRef, "error", err)
+	}
 }
 
 func requeryPaidOrderOnce(ctx context.Context, prov payment.Provider, queryRef string) (*payment.QueryOrderResponse, bool) {

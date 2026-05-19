@@ -166,6 +166,36 @@ func (b *BEPUSDT) QueryOrder(context.Context, string) (*payment.QueryOrderRespon
 	return nil, fmt.Errorf("bepusdt query order is not supported")
 }
 
+func (b *BEPUSDT) CancelPayment(ctx context.Context, tradeNo string) error {
+	tradeNo = strings.TrimSpace(tradeNo)
+	if tradeNo == "" {
+		return fmt.Errorf("bepusdt cancel missing trade no")
+	}
+
+	params := map[string]any{
+		"trade_id": tradeNo,
+	}
+	params["signature"] = bepusdtSignValues(params, b.config["apiToken"])
+
+	body, err := b.postJSON(ctx, b.config["apiBase"]+"/api/v1/order/cancel-transaction", params)
+	if err != nil {
+		return fmt.Errorf("bepusdt cancel: %w", err)
+	}
+
+	var resp struct {
+		StatusCode int    `json:"status_code"`
+		Message    string `json:"message"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return fmt.Errorf("bepusdt parse cancel: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bepusdt cancel error: %s", resp.Message)
+	}
+
+	return nil
+}
+
 func (b *BEPUSDT) VerifyNotification(_ context.Context, rawBody string, _ map[string]string) (*payment.PaymentNotification, error) {
 	params, err := bepusdtNotificationParams(rawBody)
 	if err != nil {

@@ -80,6 +80,50 @@ func TestBEPUSDTCreatePaymentUsesBEP20TradeType(t *testing.T) {
 	}
 }
 
+func TestBEPUSDTCancelPaymentCallsCancelTransaction(t *testing.T) {
+	const token = "test-token"
+	var captured map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/v1/order/cancel-transaction" {
+			t.Fatalf("path = %s, want /api/v1/order/cancel-transaction", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if captured["trade_id"] != "trade-1" {
+			t.Fatalf("trade_id = %q, want trade-1", captured["trade_id"])
+		}
+		if captured["signature"] != bepusdtSignValues(captured, token) {
+			t.Fatalf("signature mismatch")
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status_code": http.StatusOK,
+			"message":     "success",
+			"data": map[string]any{
+				"trade_id": captured["trade_id"],
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider, err := NewBEPUSDT("1", map[string]string{
+		"apiBase":   server.URL,
+		"apiToken":  token,
+		"notifyUrl": "https://tokenrouter.example/api/v1/payment/webhook/bepusdt",
+		"returnUrl": "https://tokenrouter.example/payment/result",
+	})
+	if err != nil {
+		t.Fatalf("NewBEPUSDT: %v", err)
+	}
+
+	if err := provider.CancelPayment(context.Background(), "trade-1"); err != nil {
+		t.Fatalf("CancelPayment: %v", err)
+	}
+}
+
 func TestBEPUSDTVerifyNotificationPaid(t *testing.T) {
 	const token = "test-token"
 	provider, err := NewBEPUSDT("1", map[string]string{
