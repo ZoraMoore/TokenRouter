@@ -127,6 +127,10 @@ jobs:
 
           mkdir -p "$DEPLOY_PATH"
 
+          if [ -f /etc/cron.d/sub2api-update ]; then
+            mv /etc/cron.d/sub2api-update "/etc/cron.d/sub2api-update.disabled.$(date +%Y%m%d%H%M%S)"
+          fi
+
           if [ -f /tmp/tokenrouter_ghcr_username ] && [ -f /tmp/tokenrouter_ghcr_token ]; then
             export GHCR_USERNAME="$(cat /tmp/tokenrouter_ghcr_username)"
             export GHCR_TOKEN="$(cat /tmp/tokenrouter_ghcr_token)"
