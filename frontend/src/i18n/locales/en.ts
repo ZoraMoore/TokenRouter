@@ -5366,7 +5366,7 @@ export default {
         providerAirwallex: 'Airwallex',
         providerBepusdt: 'BEpusdt',
         allowedEmails: 'Payment Access Emails',
-        allowedEmailsPlaceholder: 'dicardoteam@gmail.com',
+        allowedEmailsPlaceholder: "dicardoteam{'@'}gmail.com",
         allowedEmailsHint: 'One email per line. Admins always have access; other users only see recharge and order pages when their email is listed here.',
         typeDisabled: 'type disabled',
         enableTypesFirst: 'Enable at least one payment type above first',

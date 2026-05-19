@@ -5526,7 +5526,7 @@ export default {
         providerAirwallex: 'Airwallex',
         providerBepusdt: 'BEpusdt',
         allowedEmails: '支付访问邮箱',
-        allowedEmailsPlaceholder: 'dicardoteam@gmail.com',
+        allowedEmailsPlaceholder: "dicardoteam{'@'}gmail.com",
         allowedEmailsHint: '每行一个邮箱。管理员始终可见；普通用户只有邮箱在列表中时才显示充值和订单入口。',
         typeDisabled: '类型已禁用',
         enableTypesFirst: '请先在上方启用至少一种服务商',
