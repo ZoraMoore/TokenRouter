@@ -191,6 +191,7 @@ export interface PublicSettings {
   home_content: string
   hide_ccs_import_button: boolean
   payment_enabled: boolean
+  payment_allowed_emails?: string[]
   table_default_page_size: number
   table_page_size_options: number[]
   usage_ranking_limit: number

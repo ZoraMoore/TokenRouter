@@ -198,6 +198,7 @@ type SystemSettings struct {
 	PaymentOrderTimeoutMin           int                       `json:"payment_order_timeout_minutes"`
 	PaymentMaxPendingOrders          int                       `json:"payment_max_pending_orders"`
 	PaymentEnabledTypes              []string                  `json:"payment_enabled_types"`
+	PaymentAllowedEmails             []string                  `json:"payment_allowed_emails"`
 	PaymentBalanceDisabled           bool                      `json:"payment_balance_disabled"`
 	PaymentBalanceRechargeMultiplier float64                   `json:"payment_balance_recharge_multiplier"`
 	PaymentRechargeFeeRate           float64                   `json:"payment_recharge_fee_rate"`
@@ -279,6 +280,7 @@ type PublicSettings struct {
 	SoraClientEnabled                bool                     `json:"sora_client_enabled"`
 	BackendModeEnabled               bool                     `json:"backend_mode_enabled"`
 	PaymentEnabled                   bool                     `json:"payment_enabled"`
+	PaymentAllowedEmails             []string                 `json:"payment_allowed_emails"`
 	Version                          string                   `json:"version"`
 	BalanceUnitName                  string                   `json:"balance_unit_name"`
 	BalanceUnitSymbol                string                   `json:"balance_unit_symbol"`

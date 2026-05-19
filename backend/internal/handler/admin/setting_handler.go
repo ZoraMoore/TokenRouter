@@ -257,6 +257,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PaymentOrderTimeoutMin:                 paymentCfg.OrderTimeoutMin,
 		PaymentMaxPendingOrders:                paymentCfg.MaxPendingOrders,
 		PaymentEnabledTypes:                    paymentCfg.EnabledTypes,
+		PaymentAllowedEmails:                   paymentCfg.AllowedEmails,
 		PaymentBalanceDisabled:                 paymentCfg.BalanceDisabled,
 		PaymentBalanceRechargeMultiplier:       paymentCfg.BalanceRechargeMultiplier,
 		PaymentRechargeFeeRate:                 paymentCfg.RechargeFeeRate,
@@ -597,6 +598,7 @@ type UpdateSettingsRequest struct {
 	PaymentOrderTimeoutMin           *int                      `json:"payment_order_timeout_minutes"`
 	PaymentMaxPendingOrders          *int                      `json:"payment_max_pending_orders"`
 	PaymentEnabledTypes              []string                  `json:"payment_enabled_types"`
+	PaymentAllowedEmails             []string                  `json:"payment_allowed_emails"`
 	PaymentBalanceDisabled           *bool                     `json:"payment_balance_disabled"`
 	PaymentBalanceRechargeMultiplier *float64                  `json:"payment_balance_recharge_multiplier"`
 	PaymentRechargeFeeRate           *float64                  `json:"payment_recharge_fee_rate"`
@@ -1699,6 +1701,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			OrderTimeoutMin:           req.PaymentOrderTimeoutMin,
 			MaxPendingOrders:          req.PaymentMaxPendingOrders,
 			EnabledTypes:              req.PaymentEnabledTypes,
+			AllowedEmails:             req.PaymentAllowedEmails,
 			BalanceDisabled:           req.PaymentBalanceDisabled,
 			BalanceRechargeMultiplier: req.PaymentBalanceRechargeMultiplier,
 			RechargeFeeRate:           req.PaymentRechargeFeeRate,
@@ -1910,6 +1913,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentProductNameSuffix:               updatedPaymentCfg.ProductNameSuffix,
 		PaymentHelpImageURL:                    updatedPaymentCfg.HelpImageURL,
 		PaymentHelpText:                        updatedPaymentCfg.HelpText,
+		PaymentAllowedEmails:                   updatedPaymentCfg.AllowedEmails,
 		PaymentCancelRateLimitEnabled:          updatedPaymentCfg.CancelRateLimitEnabled,
 		PaymentCancelRateLimitMax:              updatedPaymentCfg.CancelRateLimitMax,
 		PaymentCancelRateLimitWindow:           updatedPaymentCfg.CancelRateLimitWindow,
@@ -1929,7 +1933,7 @@ func hasPaymentFields(req UpdateSettingsRequest) bool {
 	return req.PaymentEnabled != nil || req.PaymentMinAmount != nil ||
 		req.PaymentMaxAmount != nil || req.PaymentDailyLimit != nil ||
 		req.PaymentOrderTimeoutMin != nil || req.PaymentMaxPendingOrders != nil ||
-		req.PaymentEnabledTypes != nil || req.PaymentBalanceDisabled != nil ||
+		req.PaymentEnabledTypes != nil || req.PaymentAllowedEmails != nil || req.PaymentBalanceDisabled != nil ||
 		req.PaymentBalanceRechargeMultiplier != nil || req.PaymentRechargeFeeRate != nil || req.PaymentMethodFees != nil ||
 		req.PaymentLoadBalanceStrat != nil || req.PaymentProductNamePrefix != nil ||
 		req.PaymentProductNameSuffix != nil || req.PaymentHelpImageURL != nil ||

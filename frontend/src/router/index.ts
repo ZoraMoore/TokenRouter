@@ -11,6 +11,17 @@ import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { resolveDocumentTitle } from './title'
 
+function canCurrentUserAccessPayment(authStore: ReturnType<typeof useAuthStore>, appStore: ReturnType<typeof useAppStore>): boolean {
+  if (authStore.isAdmin) return true
+  const settings = appStore.cachedPublicSettings
+  if (settings?.payment_enabled !== true) return false
+  const allowed = settings.payment_allowed_emails?.length
+    ? settings.payment_allowed_emails
+    : ['dicardoteam@gmail.com']
+  const email = authStore.user?.email?.trim().toLowerCase() || ''
+  return email !== '' && allowed.some(item => item.trim().toLowerCase() === email)
+}
+
 /**
  * Route definitions with lazy loading
  */
@@ -718,8 +729,7 @@ router.beforeEach((to, _from, next) => {
 
   // Check payment requirement (internal payment system only)
   if (to.meta.requiresPayment) {
-    const paymentEnabled = appStore.cachedPublicSettings?.payment_enabled
-    if (!paymentEnabled) {
+    if (!canCurrentUserAccessPayment(authStore, appStore)) {
       next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
       return
     }

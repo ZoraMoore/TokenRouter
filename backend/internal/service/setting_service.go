@@ -752,6 +752,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyWeChatConnectFrontendRedirectURL,
 		SettingKeyBackendModeEnabled,
 		SettingPaymentEnabled,
+		SettingPaymentAllowedEmails,
 		SettingKeyOIDCConnectEnabled,
 		SettingKeyOIDCConnectProviderName,
 		SettingKeyGitHubOAuthEnabled,
@@ -876,6 +877,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		WeChatOAuthMobileEnabled:         weChatMobileEnabled,
 		BackendModeEnabled:               settings[SettingKeyBackendModeEnabled] == "true",
 		PaymentEnabled:                   settings[SettingPaymentEnabled] == "true",
+		PaymentAllowedEmails:             ParsePaymentAllowedEmails(settings[SettingPaymentAllowedEmails]),
 		OIDCOAuthEnabled:                 oidcEnabled,
 		OIDCOAuthProviderName:            oidcProviderName,
 		GitHubOAuthEnabled:               gitHubOAuthEnabled,
@@ -1003,6 +1005,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		WeChatOAuthMobileEnabled         bool                     `json:"wechat_oauth_mobile_enabled"`
 		BackendModeEnabled               bool                     `json:"backend_mode_enabled"`
 		PaymentEnabled                   bool                     `json:"payment_enabled"`
+		PaymentAllowedEmails             []string                 `json:"payment_allowed_emails"`
 		OIDCOAuthEnabled                 bool                     `json:"oidc_oauth_enabled"`
 		OIDCOAuthProviderName            string                   `json:"oidc_oauth_provider_name"`
 		GitHubOAuthEnabled               bool                     `json:"github_oauth_enabled"`
@@ -1059,6 +1062,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		WeChatOAuthMobileEnabled:         settings.WeChatOAuthMobileEnabled,
 		BackendModeEnabled:               settings.BackendModeEnabled,
 		PaymentEnabled:                   settings.PaymentEnabled,
+		PaymentAllowedEmails:             settings.PaymentAllowedEmails,
 		OIDCOAuthEnabled:                 settings.OIDCOAuthEnabled,
 		OIDCOAuthProviderName:            settings.OIDCOAuthProviderName,
 		GitHubOAuthEnabled:               settings.GitHubOAuthEnabled,

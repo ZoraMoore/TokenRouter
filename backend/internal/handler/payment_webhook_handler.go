@@ -67,6 +67,12 @@ func (h *PaymentWebhookHandler) AirwallexWebhook(c *gin.Context) {
 	h.handleNotify(c, payment.TypeAirwallex)
 }
 
+// BEPUSDTWebhook handles BEpusdt payment notifications.
+// POST /api/v1/payment/webhook/bepusdt
+func (h *PaymentWebhookHandler) BEPUSDTWebhook(c *gin.Context) {
+	h.handleNotify(c, payment.TypeBEPUSDT)
+}
+
 // handleNotify is the shared logic for all provider webhook handlers.
 func (h *PaymentWebhookHandler) handleNotify(c *gin.Context, providerKey string) {
 	var rawBody string
@@ -161,6 +167,19 @@ func extractOutTradeNo(rawBody, providerKey string) string {
 		}
 		if err := json.Unmarshal([]byte(rawBody), &payload); err == nil {
 			return strings.TrimSpace(payload.Data.Object.MerchantOrderID)
+		}
+	case payment.TypeBEPUSDT:
+		if strings.HasPrefix(strings.TrimSpace(rawBody), "{") {
+			var payload struct {
+				OrderID string `json:"order_id"`
+			}
+			if err := json.Unmarshal([]byte(rawBody), &payload); err == nil {
+				return strings.TrimSpace(payload.OrderID)
+			}
+		}
+		values, err := url.ParseQuery(rawBody)
+		if err == nil {
+			return strings.TrimSpace(values.Get("order_id"))
 		}
 	}
 	// 其他直连渠道无法在验签前稳定解析订单号，继续走候选实例兜底。

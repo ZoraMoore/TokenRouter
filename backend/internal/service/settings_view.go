@@ -250,6 +250,7 @@ type PublicSettings struct {
 	WeChatOAuthMobileEnabled bool
 	BackendModeEnabled       bool
 	PaymentEnabled           bool
+	PaymentAllowedEmails     []string
 	OIDCOAuthEnabled         bool
 	OIDCOAuthProviderName    string
 	GitHubOAuthEnabled       bool

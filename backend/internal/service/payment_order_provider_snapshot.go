@@ -18,6 +18,7 @@ type paymentOrderProviderSnapshot struct {
 	MerchantAppID      string
 	MerchantID         string
 	Currency           string
+	TradeType          string
 }
 
 func psOrderProviderSnapshot(order *dbent.PaymentOrder) *paymentOrderProviderSnapshot {
@@ -33,6 +34,7 @@ func psOrderProviderSnapshot(order *dbent.PaymentOrder) *paymentOrderProviderSna
 		MerchantAppID:      psSnapshotStringValue(order.ProviderSnapshot["merchant_app_id"]),
 		MerchantID:         psSnapshotStringValue(order.ProviderSnapshot["merchant_id"]),
 		Currency:           psSnapshotStringValue(order.ProviderSnapshot["currency"]),
+		TradeType:          psSnapshotStringValue(order.ProviderSnapshot["trade_type"]),
 	}
 	if snapshot.SchemaVersion == 0 &&
 		snapshot.ProviderInstanceID == "" &&
@@ -40,7 +42,8 @@ func psOrderProviderSnapshot(order *dbent.PaymentOrder) *paymentOrderProviderSna
 		snapshot.PaymentMode == "" &&
 		snapshot.MerchantAppID == "" &&
 		snapshot.MerchantID == "" &&
-		snapshot.Currency == "" {
+		snapshot.Currency == "" &&
+		snapshot.TradeType == "" {
 		return nil
 	}
 	return snapshot
@@ -219,6 +222,25 @@ func validateProviderSnapshotMetadata(order *dbent.PaymentOrder, providerKey str
 		}
 		if actual := strings.TrimSpace(metadata["status"]); actual != "" && !strings.EqualFold(actual, "SUCCEEDED") {
 			return fmt.Errorf("airwallex status mismatch: expected SUCCEEDED, got %s", actual)
+		}
+	case payment.TypeBEPUSDT:
+		if expected := strings.TrimSpace(snapshot.Currency); expected != "" {
+			actual := strings.ToUpper(strings.TrimSpace(metadata["currency"]))
+			if actual == "" {
+				return fmt.Errorf("bepusdt notification missing currency")
+			}
+			if !strings.EqualFold(expected, actual) {
+				return fmt.Errorf("bepusdt currency mismatch: expected %s, got %s", expected, actual)
+			}
+		}
+		if expected := strings.TrimSpace(snapshot.TradeType); expected != "" {
+			actual := strings.TrimSpace(metadata["trade_type"])
+			if actual == "" {
+				return fmt.Errorf("bepusdt notification missing trade_type")
+			}
+			if !strings.EqualFold(expected, actual) {
+				return fmt.Errorf("bepusdt trade_type mismatch: expected %s, got %s", expected, actual)
+			}
 		}
 	}
 

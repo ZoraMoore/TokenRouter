@@ -36,6 +36,9 @@ func NewPaymentHandler(paymentService *service.PaymentService, configService *se
 // GetPaymentConfig returns the payment system configuration.
 // GET /api/v1/payment/config
 func (h *PaymentHandler) GetPaymentConfig(c *gin.Context) {
+	if _, ok := h.requirePaymentAccess(c); !ok {
+		return
+	}
 	cfg, err := h.configService.GetPaymentConfig(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -47,6 +50,9 @@ func (h *PaymentHandler) GetPaymentConfig(c *gin.Context) {
 // GetPlans returns subscription plans available for sale.
 // GET /api/v1/payment/plans
 func (h *PaymentHandler) GetPlans(c *gin.Context) {
+	if _, ok := h.requirePaymentAccess(c); !ok {
+		return
+	}
 	plans, err := h.configService.ListPlansForSale(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -93,6 +99,9 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 // GetChannels returns enabled payment channels.
 // GET /api/v1/payment/channels
 func (h *PaymentHandler) GetChannels(c *gin.Context) {
+	if _, ok := h.requirePaymentAccess(c); !ok {
+		return
+	}
 	channels, _, err := h.channelService.List(c.Request.Context(), pagination.PaginationParams{Page: 1, PageSize: 1000}, "active", "")
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -106,6 +115,9 @@ func (h *PaymentHandler) GetChannels(c *gin.Context) {
 // GET /api/v1/payment/checkout-info
 func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 	ctx := c.Request.Context()
+	if _, ok := h.requirePaymentAccess(c); !ok {
+		return
+	}
 
 	// Fetch limits (methods + global range)
 	limitsResp, err := h.configService.GetAvailableMethodLimits(ctx)
@@ -209,6 +221,9 @@ func parseFeatures(raw string) []string {
 // GetLimits returns per-payment-type limits derived from enabled provider instances.
 // GET /api/v1/payment/limits
 func (h *PaymentHandler) GetLimits(c *gin.Context) {
+	if _, ok := h.requirePaymentAccess(c); !ok {
+		return
+	}
 	resp, err := h.configService.GetAvailableMethodLimits(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -237,7 +252,7 @@ type CreateOrderRequest struct {
 // CreateOrder creates a new payment order.
 // POST /api/v1/payment/orders
 func (h *PaymentHandler) CreateOrder(c *gin.Context) {
-	subject, ok := requireAuth(c)
+	subject, ok := h.requirePaymentAccess(c)
 	if !ok {
 		return
 	}
@@ -327,7 +342,7 @@ func applyWeChatPaymentResumeClaims(req *CreateOrderRequest, claims *service.WeC
 // GetMyOrders returns the authenticated user's orders.
 // GET /api/v1/payment/orders/my
 func (h *PaymentHandler) GetMyOrders(c *gin.Context) {
-	subject, ok := requireAuth(c)
+	subject, ok := h.requirePaymentAccess(c)
 	if !ok {
 		return
 	}
@@ -350,7 +365,7 @@ func (h *PaymentHandler) GetMyOrders(c *gin.Context) {
 // GetOrder returns a single order for the authenticated user.
 // GET /api/v1/payment/orders/:id
 func (h *PaymentHandler) GetOrder(c *gin.Context) {
-	subject, ok := requireAuth(c)
+	subject, ok := h.requirePaymentAccess(c)
 	if !ok {
 		return
 	}
@@ -372,7 +387,7 @@ func (h *PaymentHandler) GetOrder(c *gin.Context) {
 // GetOrderInvoice 返回当前用户订单的 invoice 或历史 receipt 链接。
 // GET /api/v1/payment/orders/:id/invoice
 func (h *PaymentHandler) GetOrderInvoice(c *gin.Context) {
-	subject, ok := requireAuth(c)
+	subject, ok := h.requirePaymentAccess(c)
 	if !ok {
 		return
 	}
@@ -394,7 +409,7 @@ func (h *PaymentHandler) GetOrderInvoice(c *gin.Context) {
 // CancelOrder cancels a pending order for the authenticated user.
 // POST /api/v1/payment/orders/:id/cancel
 func (h *PaymentHandler) CancelOrder(c *gin.Context) {
-	subject, ok := requireAuth(c)
+	subject, ok := h.requirePaymentAccess(c)
 	if !ok {
 		return
 	}
@@ -421,7 +436,7 @@ type RefundRequestBody struct {
 // RequestRefund submits a refund request for a completed order.
 // POST /api/v1/payment/orders/:id/refund-request
 func (h *PaymentHandler) RequestRefund(c *gin.Context) {
-	subject, ok := requireAuth(c)
+	subject, ok := h.requirePaymentAccess(c)
 	if !ok {
 		return
 	}
@@ -447,6 +462,9 @@ func (h *PaymentHandler) RequestRefund(c *gin.Context) {
 
 // GetRefundEligibleProviders returns provider instance IDs that allow user refund.
 func (h *PaymentHandler) GetRefundEligibleProviders(c *gin.Context) {
+	if _, ok := h.requirePaymentAccess(c); !ok {
+		return
+	}
 	ids, err := h.configService.GetUserRefundEligibleInstanceIDs(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -468,7 +486,7 @@ type ResolveOrderByResumeTokenRequest struct {
 // if payment was made, and processes it if so.
 // POST /api/v1/payment/orders/verify
 func (h *PaymentHandler) VerifyOrder(c *gin.Context) {
-	subject, ok := requireAuth(c)
+	subject, ok := h.requirePaymentAccess(c)
 	if !ok {
 		return
 	}
@@ -582,6 +600,23 @@ func requireAuth(c *gin.Context) (middleware2.AuthSubject, bool) {
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
+		return middleware2.AuthSubject{}, false
+	}
+	return subject, true
+}
+
+func (h *PaymentHandler) requirePaymentAccess(c *gin.Context) (middleware2.AuthSubject, bool) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return middleware2.AuthSubject{}, false
+	}
+	allowed, err := h.paymentService.CanUserAccessPayment(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return middleware2.AuthSubject{}, false
+	}
+	if !allowed {
+		response.Forbidden(c, "payment module is not available for this account")
 		return middleware2.AuthSubject{}, false
 	}
 	return subject, true

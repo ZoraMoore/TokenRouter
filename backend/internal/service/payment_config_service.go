@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/mail"
 	"strconv"
 	"strings"
 
@@ -16,33 +17,35 @@ import (
 )
 
 const (
-	SettingPaymentEnabled      = "payment_enabled"
-	SettingMinRechargeAmount   = "MIN_RECHARGE_AMOUNT"
-	SettingMaxRechargeAmount   = "MAX_RECHARGE_AMOUNT"
-	SettingDailyRechargeLimit  = "DAILY_RECHARGE_LIMIT"
-	SettingOrderTimeoutMinutes = "ORDER_TIMEOUT_MINUTES"
-	SettingMaxPendingOrders    = "MAX_PENDING_ORDERS"
-	SettingEnabledPaymentTypes = "ENABLED_PAYMENT_TYPES"
-	SettingLoadBalanceStrategy = "LOAD_BALANCE_STRATEGY"
-	SettingBalancePayDisabled  = "BALANCE_PAYMENT_DISABLED"
-	SettingBalanceRechargeMult = "BALANCE_RECHARGE_MULTIPLIER"
-	SettingRechargeFeeRate     = "RECHARGE_FEE_RATE"
-	SettingPaymentMethodFees   = "PAYMENT_METHOD_FEES"
-	SettingProductNamePrefix   = "PRODUCT_NAME_PREFIX"
-	SettingProductNameSuffix   = "PRODUCT_NAME_SUFFIX"
-	SettingHelpImageURL        = "PAYMENT_HELP_IMAGE_URL"
-	SettingHelpText            = "PAYMENT_HELP_TEXT"
-	SettingCancelRateLimitOn   = "CANCEL_RATE_LIMIT_ENABLED"
-	SettingCancelRateLimitMax  = "CANCEL_RATE_LIMIT_MAX"
-	SettingCancelWindowSize    = "CANCEL_RATE_LIMIT_WINDOW"
-	SettingCancelWindowUnit    = "CANCEL_RATE_LIMIT_UNIT"
-	SettingCancelWindowMode    = "CANCEL_RATE_LIMIT_WINDOW_MODE"
+	SettingPaymentEnabled       = "payment_enabled"
+	SettingMinRechargeAmount    = "MIN_RECHARGE_AMOUNT"
+	SettingMaxRechargeAmount    = "MAX_RECHARGE_AMOUNT"
+	SettingDailyRechargeLimit   = "DAILY_RECHARGE_LIMIT"
+	SettingOrderTimeoutMinutes  = "ORDER_TIMEOUT_MINUTES"
+	SettingMaxPendingOrders     = "MAX_PENDING_ORDERS"
+	SettingEnabledPaymentTypes  = "ENABLED_PAYMENT_TYPES"
+	SettingLoadBalanceStrategy  = "LOAD_BALANCE_STRATEGY"
+	SettingBalancePayDisabled   = "BALANCE_PAYMENT_DISABLED"
+	SettingBalanceRechargeMult  = "BALANCE_RECHARGE_MULTIPLIER"
+	SettingRechargeFeeRate      = "RECHARGE_FEE_RATE"
+	SettingPaymentMethodFees    = "PAYMENT_METHOD_FEES"
+	SettingPaymentAllowedEmails = "PAYMENT_ALLOWED_EMAILS"
+	SettingProductNamePrefix    = "PRODUCT_NAME_PREFIX"
+	SettingProductNameSuffix    = "PRODUCT_NAME_SUFFIX"
+	SettingHelpImageURL         = "PAYMENT_HELP_IMAGE_URL"
+	SettingHelpText             = "PAYMENT_HELP_TEXT"
+	SettingCancelRateLimitOn    = "CANCEL_RATE_LIMIT_ENABLED"
+	SettingCancelRateLimitMax   = "CANCEL_RATE_LIMIT_MAX"
+	SettingCancelWindowSize     = "CANCEL_RATE_LIMIT_WINDOW"
+	SettingCancelWindowUnit     = "CANCEL_RATE_LIMIT_UNIT"
+	SettingCancelWindowMode     = "CANCEL_RATE_LIMIT_WINDOW_MODE"
 )
 
 // Default values for payment configuration settings.
 const (
-	defaultOrderTimeoutMin  = 30
-	defaultMaxPendingOrders = 3
+	defaultOrderTimeoutMin     = 30
+	defaultMaxPendingOrders    = 3
+	defaultPaymentAllowedEmail = "dicardoteam@gmail.com"
 )
 
 // PaymentConfig holds the payment system configuration.
@@ -58,6 +61,7 @@ type PaymentConfig struct {
 	BalanceRechargeMultiplier float64           `json:"balance_recharge_multiplier"`
 	RechargeFeeRate           float64           `json:"recharge_fee_rate"`
 	MethodFees                MethodFeeSettings `json:"method_fees"`
+	AllowedEmails             []string          `json:"allowed_emails"`
 	LoadBalanceStrategy       string            `json:"load_balance_strategy"`
 	ProductNamePrefix         string            `json:"product_name_prefix"`
 	ProductNameSuffix         string            `json:"product_name_suffix"`
@@ -86,6 +90,7 @@ type UpdatePaymentConfigRequest struct {
 	BalanceRechargeMultiplier *float64          `json:"balance_recharge_multiplier"`
 	RechargeFeeRate           *float64          `json:"recharge_fee_rate"`
 	MethodFees                MethodFeeSettings `json:"method_fees"`
+	AllowedEmails             []string          `json:"allowed_emails"`
 	LoadBalanceStrategy       *string           `json:"load_balance_strategy"`
 	ProductNamePrefix         *string           `json:"product_name_prefix"`
 	ProductNameSuffix         *string           `json:"product_name_suffix"`
@@ -266,6 +271,7 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 		SettingPaymentEnabled, SettingMinRechargeAmount, SettingMaxRechargeAmount,
 		SettingDailyRechargeLimit, SettingOrderTimeoutMinutes, SettingMaxPendingOrders,
 		SettingEnabledPaymentTypes, SettingBalancePayDisabled, SettingBalanceRechargeMult, SettingRechargeFeeRate, SettingPaymentMethodFees, SettingLoadBalanceStrategy,
+		SettingPaymentAllowedEmails,
 		SettingProductNamePrefix, SettingProductNameSuffix,
 		SettingHelpImageURL, SettingHelpText,
 		SettingCancelRateLimitOn, SettingCancelRateLimitMax,
@@ -295,6 +301,7 @@ func (s *PaymentConfigService) parsePaymentConfig(vals map[string]string) *Payme
 		BalanceRechargeMultiplier: normalizeBalanceRechargeMultiplier(pcParseFloat(vals[SettingBalanceRechargeMult], defaultBalanceRechargeMultiplier)),
 		RechargeFeeRate:           pcParseFloat(vals[SettingRechargeFeeRate], 0),
 		MethodFees:                parseMethodFeeSettings(vals[SettingPaymentMethodFees]),
+		AllowedEmails:             ParsePaymentAllowedEmails(vals[SettingPaymentAllowedEmails]),
 		LoadBalanceStrategy:       vals[SettingLoadBalanceStrategy],
 		ProductNamePrefix:         vals[SettingProductNamePrefix],
 		ProductNameSuffix:         vals[SettingProductNameSuffix],
@@ -413,11 +420,82 @@ func validateMethodFeeSettings(settings MethodFeeSettings) error {
 func isSupportedMethodFeeMethod(method string) bool {
 	// 手续费配置只开放给用户可见的支付渠道，避免 easypay 等内部来源被误配。
 	switch NormalizeVisibleMethod(method) {
-	case payment.TypeStripe, payment.TypeAlipay, payment.TypeWxpay:
+	case payment.TypeStripe, payment.TypeAlipay, payment.TypeWxpay, payment.TypeUSDTBEP20:
 		return true
 	default:
 		return false
 	}
+}
+
+func ParsePaymentAllowedEmails(raw string) []string {
+	emails := normalizePaymentAllowedEmails(splitPaymentAllowedEmails(raw))
+	if len(emails) == 0 {
+		return []string{defaultPaymentAllowedEmail}
+	}
+	return emails
+}
+
+func splitPaymentAllowedEmails(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	if strings.HasPrefix(raw, "[") {
+		var arr []string
+		if err := json.Unmarshal([]byte(raw), &arr); err == nil {
+			return arr
+		}
+	}
+	return strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
+	})
+}
+
+func normalizePaymentAllowedEmails(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(items))
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		email := normalizePaymentAllowedEmail(item)
+		if email == "" {
+			continue
+		}
+		if _, ok := seen[email]; ok {
+			continue
+		}
+		seen[email] = struct{}{}
+		out = append(out, email)
+	}
+	return out
+}
+
+func normalizePaymentAllowedEmail(raw string) string {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	if raw == "" || strings.ContainsAny(raw, ",;\r\n\t") {
+		return ""
+	}
+	addr, err := mail.ParseAddress(raw)
+	if err != nil || addr == nil || addr.Address == "" || strings.TrimSpace(addr.Name) != "" {
+		return ""
+	}
+	if !strings.EqualFold(addr.Address, raw) {
+		return ""
+	}
+	return strings.ToLower(addr.Address)
+}
+
+func validatePaymentAllowedEmails(items []string) error {
+	for _, item := range items {
+		if strings.TrimSpace(item) == "" {
+			continue
+		}
+		if normalizePaymentAllowedEmail(item) == "" {
+			return infraerrors.BadRequest("INVALID_PAYMENT_ALLOWED_EMAILS", "payment allowed emails contain invalid address")
+		}
+	}
+	return nil
 }
 
 func pcValidMoney2(v float64) bool {
@@ -474,6 +552,11 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 			return err
 		}
 	}
+	if req.AllowedEmails != nil {
+		if err := validatePaymentAllowedEmails(req.AllowedEmails); err != nil {
+			return err
+		}
+	}
 	m := map[string]string{
 		SettingPaymentEnabled:                    formatBoolOrEmpty(req.Enabled),
 		SettingMinRechargeAmount:                 formatPositiveFloat(req.MinAmount),
@@ -499,6 +582,9 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 		SettingPaymentVisibleMethodWxpaySource:   derefStr(req.VisibleMethodWxpaySource),
 		SettingPaymentVisibleMethodAlipayEnabled: formatBoolOrEmpty(req.VisibleMethodAlipayEnabled),
 		SettingPaymentVisibleMethodWxpayEnabled:  formatBoolOrEmpty(req.VisibleMethodWxpayEnabled),
+	}
+	if req.AllowedEmails != nil {
+		m[SettingPaymentAllowedEmails] = strings.Join(normalizePaymentAllowedEmails(req.AllowedEmails), ",")
 	}
 	if req.EnabledTypes != nil {
 		m[SettingEnabledPaymentTypes] = strings.Join(req.EnabledTypes, ",")

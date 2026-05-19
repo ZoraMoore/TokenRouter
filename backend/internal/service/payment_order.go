@@ -319,6 +319,10 @@ func buildPaymentOrderProviderSnapshot(sel *payment.InstanceSelection, req Creat
 		}
 		snapshot["currency"] = paymentProviderConfigCurrency(providerKey, sel.Config)
 	}
+	if providerKey == payment.TypeBEPUSDT {
+		snapshot["currency"] = paymentProviderConfigCurrency(providerKey, sel.Config)
+		snapshot["trade_type"] = "usdt.bep20"
+	}
 
 	if len(snapshot) == 1 {
 		return nil

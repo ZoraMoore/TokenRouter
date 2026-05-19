@@ -5447,6 +5447,20 @@
                     </a>
                   </p>
                 </div>
+                <div>
+                  <label class="input-label">{{
+                    t("admin.settings.payment.allowedEmails")
+                  }}</label>
+                  <textarea
+                    class="input min-h-[92px]"
+                    :value="(form.payment_allowed_emails || []).join('\n')"
+                    @input="form.payment_allowed_emails = ($event.target as HTMLTextAreaElement).value.split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean)"
+                    :placeholder="t('admin.settings.payment.allowedEmailsPlaceholder')"
+                  ></textarea>
+                  <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    {{ t("admin.settings.payment.allowedEmailsHint") }}
+                  </p>
+                </div>
                 <!-- Row 5: Help image + text -->
                 <div class="grid grid-cols-2 gap-3">
                   <div>
@@ -6147,6 +6161,7 @@ const registrationEmailSuffixWhitelistDraft = ref("");
 const tablePageSizeOptionsInput = ref("10, 20, 50, 100");
 const paymentMethodFeeOptions = [
   { value: "stripe", label: "Stripe" },
+  { value: "usdt_bep20", label: "USDT-BEP20" },
   { value: "alipay", label: "支付宝" },
   { value: "wxpay", label: "微信支付" },
 ] as const;
@@ -6362,6 +6377,7 @@ const form = reactive<SettingsForm>({
   payment_recharge_fee_rate: 0,
   payment_method_fees: {},
   payment_enabled_types: [],
+  payment_allowed_emails: ["dicardoteam@gmail.com"],
   payment_help_image_url: "",
   payment_help_text: "",
   payment_product_name_prefix: "",
@@ -7656,6 +7672,7 @@ async function saveSettings() {
       payment_recharge_fee_rate: Number(form.payment_recharge_fee_rate) || 0,
       payment_method_fees: form.payment_method_fees,
       payment_enabled_types: form.payment_enabled_types,
+      payment_allowed_emails: form.payment_allowed_emails || [],
       payment_load_balance_strategy: form.payment_load_balance_strategy,
       payment_product_name_prefix: form.payment_product_name_prefix,
       payment_product_name_suffix: form.payment_product_name_suffix,
@@ -8282,6 +8299,7 @@ const allPaymentTypes = computed(() => [
   { value: "wxpay", label: t("payment.methods.wxpay") },
   { value: "stripe", label: t("payment.methods.stripe") },
   { value: "airwallex", label: t("payment.methods.airwallex") },
+  { value: "usdt_bep20", label: t("payment.methods.usdt_bep20") },
 ]);
 
 function isPaymentTypeEnabled(type: string): boolean {
@@ -8306,7 +8324,10 @@ function togglePaymentType(type: string) {
 
 async function disableProvidersByType(type: string) {
   const matching = providers.value.filter(
-    (p) => p.provider_key === type && p.enabled,
+    (p) =>
+      (p.provider_key === type ||
+        (type === "usdt_bep20" && p.provider_key === "bepusdt")) &&
+      p.enabled,
   );
   for (const p of matching) {
     try {
@@ -8358,11 +8379,16 @@ const providerKeyOptions = computed(() => [
   { value: "wxpay", label: t("admin.settings.payment.providerWxpay") },
   { value: "stripe", label: t("admin.settings.payment.providerStripe") },
   { value: "airwallex", label: t("admin.settings.payment.providerAirwallex") },
+  { value: "bepusdt", label: t("admin.settings.payment.providerBepusdt") },
 ]);
 
 const enabledProviderKeyOptions = computed(() => {
   const enabled = form.payment_enabled_types;
-  return providerKeyOptions.value.filter((opt) => enabled.includes(opt.value));
+  return providerKeyOptions.value.filter((opt) =>
+    opt.value === "bepusdt"
+      ? enabled.includes("usdt_bep20")
+      : enabled.includes(opt.value),
+  );
 });
 
 const loadBalanceOptions = computed(() => [

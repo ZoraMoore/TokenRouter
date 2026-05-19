@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"math"
 	"strconv"
@@ -228,10 +229,26 @@ func (s *PaymentService) executeFulfillment(ctx context.Context, oid int64) erro
 	if err != nil {
 		return fmt.Errorf("get order: %w", err)
 	}
+	if paymentOrderUsesRedeemCodeDelivery(o) {
+		return s.ExecuteRedeemCodeDeliveryFulfillment(ctx, oid)
+	}
 	if o.OrderType == payment.OrderTypeSubscription {
 		return s.ExecuteSubscriptionFulfillment(ctx, oid)
 	}
 	return s.ExecuteBalanceFulfillment(ctx, oid)
+}
+
+func paymentOrderUsesRedeemCodeDelivery(o *dbent.PaymentOrder) bool {
+	if o == nil {
+		return false
+	}
+	if snapshot := psOrderProviderSnapshot(o); snapshot != nil && strings.EqualFold(snapshot.ProviderKey, payment.TypeBEPUSDT) {
+		return true
+	}
+	if strings.EqualFold(psStringValue(o.ProviderKey), payment.TypeBEPUSDT) {
+		return true
+	}
+	return strings.EqualFold(payment.GetBasePaymentType(o.PaymentType), payment.TypeUSDTBEP20)
 }
 
 func (s *PaymentService) ExecuteBalanceFulfillment(ctx context.Context, oid int64) error {
@@ -307,6 +324,136 @@ func (s *PaymentService) doBalance(ctx context.Context, o *dbent.PaymentOrder) e
 		return fmt.Errorf("redeem balance: %w", err)
 	}
 	return s.markCompleted(ctx, o, "RECHARGE_SUCCESS")
+}
+
+func (s *PaymentService) ExecuteRedeemCodeDeliveryFulfillment(ctx context.Context, oid int64) error {
+	o, err := s.entClient.PaymentOrder.Get(ctx, oid)
+	if err != nil {
+		return infraerrors.NotFound("NOT_FOUND", "order not found")
+	}
+	if o.Status == OrderStatusCompleted {
+		return nil
+	}
+	if psIsRefundStatus(o.Status) {
+		return infraerrors.BadRequest("INVALID_STATUS", "refund-related order cannot fulfill")
+	}
+	if o.Status != OrderStatusPaid && o.Status != OrderStatusFailed {
+		return infraerrors.BadRequest("INVALID_STATUS", "order cannot fulfill in status "+o.Status)
+	}
+	c, err := s.entClient.PaymentOrder.Update().Where(paymentorder.IDEQ(oid), paymentorder.StatusIn(OrderStatusPaid, OrderStatusFailed)).SetStatus(OrderStatusRecharging).Save(ctx)
+	if err != nil {
+		return fmt.Errorf("lock: %w", err)
+	}
+	if c == 0 {
+		return nil
+	}
+	if err := s.doRedeemCodeDelivery(ctx, o); err != nil {
+		s.markFailed(ctx, oid, err)
+		return err
+	}
+	return nil
+}
+
+func (s *PaymentService) doRedeemCodeDelivery(ctx context.Context, o *dbent.PaymentOrder) error {
+	redeemCode, err := s.ensurePaymentRedeemCode(ctx, o)
+	if err != nil {
+		return err
+	}
+	if redeemCode.IsUsed() {
+		return s.markCompleted(ctx, o, "REDEEM_CODE_USED")
+	}
+	if err := s.sendRedeemCodeDeliveryEmail(ctx, o, redeemCode); err != nil {
+		return fmt.Errorf("send redeem code email: %w", err)
+	}
+	return s.markCompleted(ctx, o, "REDEEM_CODE_DELIVERED")
+}
+
+func (s *PaymentService) ensurePaymentRedeemCode(ctx context.Context, o *dbent.PaymentOrder) (*RedeemCode, error) {
+	existing, lookupErr := s.redeemService.GetByCode(ctx, o.RechargeCode)
+	if lookupErr == nil && existing != nil {
+		return existing, nil
+	}
+	if lookupErr != nil && !errors.Is(lookupErr, ErrRedeemCodeNotFound) {
+		return nil, lookupErr
+	}
+
+	code := &RedeemCode{
+		Code:    o.RechargeCode,
+		Type:    RedeemTypeBalance,
+		Value:   o.Amount,
+		Status:  StatusUnused,
+		MaxUses: 1,
+		Notes:   fmt.Sprintf("payment order %d", o.ID),
+	}
+	if o.OrderType == payment.OrderTypeSubscription {
+		if o.PlanID == nil || *o.PlanID <= 0 {
+			return nil, fmt.Errorf("order %d missing plan id", o.ID)
+		}
+		code.Type = RedeemTypeSubscription
+		code.PlanID = o.PlanID
+	}
+	if err := s.redeemService.CreateCode(ctx, code); err != nil {
+		existingAfterCreate, getErr := s.redeemService.GetByCode(ctx, o.RechargeCode)
+		if getErr == nil && existingAfterCreate != nil {
+			return existingAfterCreate, nil
+		}
+		return nil, fmt.Errorf("create redeem code: %w", err)
+	}
+	return code, nil
+}
+
+func (s *PaymentService) sendRedeemCodeDeliveryEmail(ctx context.Context, o *dbent.PaymentOrder, code *RedeemCode) error {
+	if s.configService == nil || s.configService.settingRepo == nil {
+		return ErrEmailNotConfigured
+	}
+	to := strings.TrimSpace(o.UserEmail)
+	if to == "" {
+		return fmt.Errorf("order %d missing user email", o.ID)
+	}
+	settings, _ := s.configService.settingRepo.GetMultiple(ctx, []string{SettingKeySiteName, SettingKeyFrontendURL})
+	siteName := strings.TrimSpace(settings[SettingKeySiteName])
+	if siteName == "" {
+		siteName = "TokenRouter"
+	}
+	redeemURL := strings.TrimRight(strings.TrimSpace(settings[SettingKeyFrontendURL]), "/")
+	if redeemURL != "" {
+		redeemURL += "/redeem"
+	}
+
+	subject := fmt.Sprintf("[%s] 兑换码已发放", siteName)
+	body := buildRedeemCodeDeliveryEmailBody(siteName, redeemURL, o, code)
+	return NewEmailService(s.configService.settingRepo, nil).SendEmail(ctx, to, subject, body)
+}
+
+func buildRedeemCodeDeliveryEmailBody(siteName, redeemURL string, o *dbent.PaymentOrder, code *RedeemCode) string {
+	redeemLine := ""
+	if redeemURL != "" {
+		redeemLine = fmt.Sprintf(`<p>兑换入口：<a href="%s">%s</a></p>`, html.EscapeString(redeemURL), html.EscapeString(redeemURL))
+	}
+	orderType := "余额充值"
+	if o.OrderType == payment.OrderTypeSubscription {
+		orderType = "套餐兑换"
+	}
+	return fmt.Sprintf(`<!doctype html>
+<html>
+<body>
+  <p>%s 支付已确认，系统已为你生成兑换码。</p>
+  <p>兑换码：<strong style="font-size:18px;letter-spacing:1px;">%s</strong></p>
+  <p>订单号：%s</p>
+  <p>订单类型：%s</p>
+  <p>支付金额：%.2f %s</p>
+  %s
+  <p>请登录网站后手动使用该兑换码完成权益兑换。</p>
+</body>
+</html>`,
+		html.EscapeString(siteName),
+		html.EscapeString(code.Code),
+		html.EscapeString(o.OutTradeNo),
+		html.EscapeString(orderType),
+		o.PayAmount,
+		html.EscapeString(PaymentOrderCurrency(o)),
+		redeemLine,
+	)
 }
 
 func (s *PaymentService) markCompleted(ctx context.Context, o *dbent.PaymentOrder, auditAction string) error {

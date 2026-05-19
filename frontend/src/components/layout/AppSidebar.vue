@@ -211,6 +211,16 @@ const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
 const isAdmin = computed(() => authStore.isAdmin)
 const { isDark, toggleTheme } = useTheme()
+const canUsePayment = computed(() => {
+  if (authStore.isAdmin) return true
+  const settings = appStore.cachedPublicSettings
+  if (settings?.payment_enabled !== true) return false
+  const allowed = settings.payment_allowed_emails?.length
+    ? settings.payment_allowed_emails
+    : ['dicardoteam@gmail.com']
+  const email = authStore.user?.email?.trim().toLowerCase() || ''
+  return email !== '' && allowed.some(item => item.trim().toLowerCase() === email)
+})
 
 // Track which parent nav groups are expanded
 const expandedGroups = ref<Set<string>>(new Set())
@@ -607,7 +617,7 @@ const userNavItems = computed((): NavItem[] => {
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
-    ...(appStore.cachedPublicSettings?.payment_enabled
+    ...(canUsePayment.value
       ? [
           {
             path: '/purchase',
@@ -617,7 +627,7 @@ const userNavItems = computed((): NavItem[] => {
           },
         ]
       : []),
-    ...(appStore.cachedPublicSettings?.payment_enabled
+    ...(canUsePayment.value
       ? [
           {
             path: '/orders',
@@ -647,7 +657,7 @@ const personalNavItems = computed((): NavItem[] => {
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
-    ...(appStore.cachedPublicSettings?.payment_enabled
+    ...(canUsePayment.value
       ? [
           {
             path: '/purchase',
@@ -657,7 +667,7 @@ const personalNavItems = computed((): NavItem[] => {
           },
         ]
       : []),
-    ...(appStore.cachedPublicSettings?.payment_enabled
+    ...(canUsePayment.value
       ? [
           {
             path: '/orders',

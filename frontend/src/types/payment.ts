@@ -18,7 +18,7 @@ export type OrderStatus =
   | 'REFUNDED'
   | 'REFUND_FAILED'
 
-export type PaymentType = 'alipay' | 'wxpay' | 'alipay_direct' | 'wxpay_direct' | 'stripe' | 'easypay' | 'card' | 'link' | 'airwallex'
+export type PaymentType = 'alipay' | 'wxpay' | 'alipay_direct' | 'wxpay_direct' | 'stripe' | 'easypay' | 'card' | 'link' | 'airwallex' | 'bepusdt' | 'usdt_bep20'
 
 export type OrderType = 'balance' | 'subscription'
 
@@ -35,6 +35,7 @@ export interface PaymentConfig {
   balance_recharge_multiplier: number
   recharge_fee_rate: number
   method_fees: Record<string, MethodFeeConfig>
+  allowed_emails?: string[]
   enabled_payment_types: PaymentType[]
   help_image_url: string
   help_text: string

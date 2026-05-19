@@ -79,6 +79,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		GoogleOAuthEnabled:               settings.GoogleOAuthEnabled,
 		BackendModeEnabled:               settings.BackendModeEnabled,
 		PaymentEnabled:                   settings.PaymentEnabled,
+		PaymentAllowedEmails:             settings.PaymentAllowedEmails,
 		Version:                          h.version,
 		BalanceUnitName:                  settings.BalanceUnitName,
 		BalanceUnitSymbol:                settings.BalanceUnitSymbol,
