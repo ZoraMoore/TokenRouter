@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -100,17 +101,21 @@ func (b *BEPUSDT) CreatePayment(ctx context.Context, req payment.CreatePaymentRe
 			timeoutSec = parsed
 		}
 	}
-	params := map[string]string{
+	amount, err := strconv.ParseFloat(strings.TrimSpace(req.Amount), 64)
+	if err != nil || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return nil, fmt.Errorf("bepusdt invalid amount: %s", req.Amount)
+	}
+	params := map[string]any{
 		"order_id":     req.OrderID,
-		"amount":       req.Amount,
+		"amount":       amount,
 		"fiat":         strings.ToUpper(strings.TrimSpace(b.config["fiat"])),
 		"trade_type":   bepusdtTradeTypeUSDTBEP20,
 		"name":         req.Subject,
 		"notify_url":   firstNonEmpty(req.NotifyURL, b.config["notifyUrl"]),
 		"redirect_url": firstNonEmpty(req.ReturnURL, b.config["returnUrl"]),
-		"timeout":      strconv.Itoa(timeoutSec),
+		"timeout":      timeoutSec,
 	}
-	params["signature"] = bepusdtSign(params, b.config["apiToken"])
+	params["signature"] = bepusdtSignValues(params, b.config["apiToken"])
 
 	body, err := b.postJSON(ctx, b.config["apiBase"]+"/api/v1/order/create-transaction", params)
 	if err != nil {
@@ -201,7 +206,7 @@ func (b *BEPUSDT) Refund(context.Context, payment.RefundRequest) (*payment.Refun
 	return nil, fmt.Errorf("bepusdt refund is not supported")
 }
 
-func (b *BEPUSDT) postJSON(ctx context.Context, endpoint string, payload map[string]string) ([]byte, error) {
+func (b *BEPUSDT) postJSON(ctx context.Context, endpoint string, payload map[string]any) ([]byte, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -274,9 +279,17 @@ func bepusdtRawJSONValue(raw json.RawMessage) string {
 }
 
 func bepusdtSign(params map[string]string, token string) string {
+	values := make(map[string]any, len(params))
+	for key, value := range params {
+		values[key] = value
+	}
+	return bepusdtSignValues(values, token)
+}
+
+func bepusdtSignValues(params map[string]any, token string) string {
 	keys := make([]string, 0, len(params))
 	for key, value := range params {
-		if key == "signature" || strings.TrimSpace(value) == "" {
+		if key == "signature" || value == nil || strings.TrimSpace(fmt.Sprintf("%v", value)) == "" {
 			continue
 		}
 		keys = append(keys, key)
@@ -284,7 +297,7 @@ func bepusdtSign(params map[string]string, token string) string {
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
-		parts = append(parts, key+"="+params[key])
+		parts = append(parts, key+"="+fmt.Sprintf("%v", params[key]))
 	}
 	sum := md5.Sum([]byte(strings.Join(parts, "&") + token))
 	return hex.EncodeToString(sum[:])

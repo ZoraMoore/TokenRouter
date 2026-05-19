@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/TokenFlux/TokenRouter/internal/payment"
@@ -12,7 +13,7 @@ import (
 
 func TestBEPUSDTCreatePaymentUsesBEP20TradeType(t *testing.T) {
 	const token = "test-token"
-	var captured map[string]string
+	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method = %s, want POST", r.Method)
@@ -26,8 +27,14 @@ func TestBEPUSDTCreatePaymentUsesBEP20TradeType(t *testing.T) {
 		if captured["trade_type"] != "usdt.bep20" {
 			t.Fatalf("trade_type = %q, want usdt.bep20", captured["trade_type"])
 		}
-		if captured["signature"] != bepusdtSign(captured, token) {
+		if captured["signature"] != bepusdtSignValues(captured, token) {
 			t.Fatalf("signature mismatch")
+		}
+		if _, ok := captured["amount"].(float64); !ok {
+			t.Fatalf("amount type = %T, want JSON number", captured["amount"])
+		}
+		if _, ok := captured["timeout"].(float64); !ok {
+			t.Fatalf("timeout type = %T, want JSON number", captured["timeout"])
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status_code": http.StatusOK,
@@ -35,7 +42,7 @@ func TestBEPUSDTCreatePaymentUsesBEP20TradeType(t *testing.T) {
 			"data": map[string]any{
 				"trade_id":    "trade-1",
 				"order_id":    captured["order_id"],
-				"amount":      captured["amount"],
+				"amount":      strconv.FormatFloat(captured["amount"].(float64), 'f', -1, 64),
 				"payment_url": "https://pay.example.test/order/trade-1",
 				"token":       "qr-token",
 			},
