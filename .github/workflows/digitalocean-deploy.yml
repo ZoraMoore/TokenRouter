@@ -1,0 +1,170 @@
+name: Build Image and Deploy to DigitalOcean
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: digitalocean-production
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_REPOSITORY: tokenrouter
+  DEPLOY_PATH: ${{ secrets.DO_DEPLOY_PATH || '/opt/sub2api' }}
+  DO_USER: ${{ secrets.DO_USER || 'root' }}
+  DO_PORT: ${{ secrets.DO_PORT || '22' }}
+
+jobs:
+  build:
+    name: Build and push GHCR image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set image name
+        id: image
+        run: |
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          image="${REGISTRY}/${owner}/${IMAGE_REPOSITORY}"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.image.outputs.image }}:latest
+            ${{ steps.image.outputs.image }}:main
+            ${{ steps.image.outputs.image }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to DigitalOcean
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout deploy files
+        uses: actions/checkout@v6
+
+      - name: Validate deployment secrets
+        run: |
+          test -n "${{ secrets.DO_HOST }}" || { echo "Missing secret: DO_HOST"; exit 1; }
+          test -n "${{ secrets.DO_SSH_PRIVATE_KEY }}" || { echo "Missing secret: DO_SSH_PRIVATE_KEY"; exit 1; }
+
+      - name: Prepare SSH
+        env:
+          DO_HOST: ${{ secrets.DO_HOST }}
+          DO_SSH_PRIVATE_KEY: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DO_SSH_PRIVATE_KEY" > ~/.ssh/digitalocean_deploy_key
+          chmod 600 ~/.ssh/digitalocean_deploy_key
+          ssh-keyscan -p "$DO_PORT" "$DO_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload deployment files
+        env:
+          DO_HOST: ${{ secrets.DO_HOST }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          token_dir="$(mktemp -d)"
+          trap 'rm -rf "$token_dir"' EXIT
+          printf '%s' "$GHCR_USERNAME" > "$token_dir/tokenrouter_ghcr_username"
+          printf '%s' "$GHCR_TOKEN" > "$token_dir/tokenrouter_ghcr_token"
+          chmod 600 "$token_dir/tokenrouter_ghcr_username" "$token_dir/tokenrouter_ghcr_token"
+
+          ssh -i ~/.ssh/digitalocean_deploy_key -p "$DO_PORT" "${DO_USER}@${DO_HOST}" "mkdir -p '${DEPLOY_PATH}'"
+          scp -i ~/.ssh/digitalocean_deploy_key -P "$DO_PORT" \
+            deploy/docker-compose.local.yml \
+            deploy/.env.example \
+            deploy/update-from-ghcr.sh \
+            "$token_dir/tokenrouter_ghcr_username" \
+            "$token_dir/tokenrouter_ghcr_token" \
+            "${DO_USER}@${DO_HOST}:/tmp/"
+
+      - name: Deploy image on server
+        env:
+          DO_HOST: ${{ secrets.DO_HOST }}
+          TOKENROUTER_IMAGE: ${{ needs.build.outputs.image }}@${{ needs.build.outputs.digest }}
+          HEALTHCHECK_URL: ${{ secrets.DO_HEALTHCHECK_URL }}
+        run: |
+          ssh -i ~/.ssh/digitalocean_deploy_key -p "$DO_PORT" "${DO_USER}@${DO_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' TOKENROUTER_IMAGE='${TOKENROUTER_IMAGE}' HEALTHCHECK_URL='${HEALTHCHECK_URL}' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+
+          mkdir -p "$DEPLOY_PATH"
+
+          if [ -f /tmp/tokenrouter_ghcr_username ] && [ -f /tmp/tokenrouter_ghcr_token ]; then
+            export GHCR_USERNAME="$(cat /tmp/tokenrouter_ghcr_username)"
+            export GHCR_TOKEN="$(cat /tmp/tokenrouter_ghcr_token)"
+            rm -f /tmp/tokenrouter_ghcr_username /tmp/tokenrouter_ghcr_token
+          fi
+
+          if [ ! -f "$DEPLOY_PATH/docker-compose.local.yml" ]; then
+            if [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
+              compose_file="docker-compose.yml"
+            else
+              cp /tmp/docker-compose.local.yml "$DEPLOY_PATH/docker-compose.yml"
+              compose_file="docker-compose.yml"
+            fi
+          elif grep -q 'ghcr.io/tokenflux/tokenrouter:latest' "$DEPLOY_PATH/docker-compose.local.yml" && ! grep -q 'TOKENROUTER_IMAGE' "$DEPLOY_PATH/docker-compose.local.yml"; then
+            cp "$DEPLOY_PATH/docker-compose.local.yml" "$DEPLOY_PATH/docker-compose.local.yml.bak.$(date +%Y%m%d%H%M%S)"
+            cp /tmp/docker-compose.local.yml "$DEPLOY_PATH/docker-compose.local.yml"
+            compose_file="docker-compose.local.yml"
+          else
+            compose_file="docker-compose.local.yml"
+          fi
+
+          if [ ! -f "$DEPLOY_PATH/.env.example" ]; then
+            cp /tmp/.env.example "$DEPLOY_PATH/.env.example"
+          fi
+
+          if [ ! -f "$DEPLOY_PATH/.env" ]; then
+            cp /tmp/.env.example "$DEPLOY_PATH/.env"
+            chmod 600 "$DEPLOY_PATH/.env"
+
+            jwt_secret="$(openssl rand -hex 32)"
+            totp_key="$(openssl rand -hex 32)"
+            postgres_password="$(openssl rand -hex 32)"
+
+            sed -i "s/^JWT_SECRET=.*/JWT_SECRET=${jwt_secret}/" "$DEPLOY_PATH/.env"
+            sed -i "s/^TOTP_ENCRYPTION_KEY=.*/TOTP_ENCRYPTION_KEY=${totp_key}/" "$DEPLOY_PATH/.env"
+            sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=${postgres_password}/" "$DEPLOY_PATH/.env"
+          fi
+
+          install -m 0755 /tmp/update-from-ghcr.sh "$DEPLOY_PATH/update-from-ghcr.sh"
+          DEPLOY_PATH="$DEPLOY_PATH" COMPOSE_FILE="$compose_file" TOKENROUTER_IMAGE="$TOKENROUTER_IMAGE" HEALTHCHECK_URL="$HEALTHCHECK_URL" "$DEPLOY_PATH/update-from-ghcr.sh"
+          REMOTE

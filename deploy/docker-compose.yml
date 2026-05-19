@@ -16,7 +16,7 @@ services:
   # Sub2API Application
   # ===========================================================================
   sub2api:
-    image: ghcr.io/tokenflux/tokenrouter:latest
+    image: ${TOKENROUTER_IMAGE:-ghcr.io/tokenflux/tokenrouter:latest}
     container_name: sub2api
     restart: unless-stopped
     ulimits:
