@@ -115,7 +115,11 @@
                   />
                 </div>
                 <p v-if="window.window_start" class="text-xs text-gray-500 dark:text-dark-400">
-                  {{ t('userSubscriptions.resetIn', { time: formatResetTime(window.window_start, window.hours) }) }}
+                  {{
+                    window.key === 'daily'
+                      ? formatDailyUsageWindow(chain.active)
+                      : t('userSubscriptions.resetIn', { time: formatResetTime(window.window_start, window.hours) })
+                  }}
                 </p>
               </div>
 
@@ -161,6 +165,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
 import { formatDateOnly } from '@/utils/format'
+import { getRemainingDurationParts, isOneTimeDailyQuota, type RemainingDurationParts } from '@/utils/subscriptionQuota'
 
 type PlanChain = {
   plan_id: number
@@ -287,21 +292,37 @@ function getExpirationClass(expiresAt: string): string {
   return 'text-gray-700 dark:text-gray-300'
 }
 
+function formatDurationParts(parts: RemainingDurationParts): string {
+  if (parts.days > 0) {
+    return `${parts.days}d ${parts.hours}h`
+  }
+
+  if (parts.hours > 0) {
+    return `${parts.hours}h ${parts.minutes}m`
+  }
+
+  return `${parts.minutes}m`
+}
+
+function formatDailyUsageWindow(subscription: UserSubscription): string {
+  if (isOneTimeDailyQuota(subscription) && subscription.expires_at) {
+    const parts = getRemainingDurationParts(subscription.expires_at)
+    if (!parts) return t('userSubscriptions.windowNotActive')
+    return t('userSubscriptions.quotaEndsIn', { time: formatDurationParts(parts) })
+  }
+
+  return t('userSubscriptions.resetIn', {
+    time: formatResetTime(subscription.daily_window_start, 24)
+  })
+}
+
 function formatResetTime(windowStart: string | null, windowHours: number): string {
   if (!windowStart) return t('userSubscriptions.windowNotActive')
   const start = new Date(windowStart)
   const end = new Date(start.getTime() + windowHours * 60 * 60 * 1000)
-  const diff = end.getTime() - Date.now()
-  if (diff <= 0) return t('userSubscriptions.windowNotActive')
+  const parts = getRemainingDurationParts(end)
 
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-  if (hours > 24) {
-    const days = Math.floor(hours / 24)
-    return `${days}d ${hours % 24}h`
-  }
-  if (hours > 0) return `${hours}h ${minutes}m`
-  return `${minutes}m`
+  return parts ? formatDurationParts(parts) : t('userSubscriptions.windowNotActive')
 }
 
 onMounted(() => {

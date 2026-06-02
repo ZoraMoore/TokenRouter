@@ -90,6 +90,8 @@ var ProviderSet = wire.NewSet(
 	NewTLSFingerprintProfileRepository,
 	NewChannelRepository,
 	NewContentModerationRepository,
+	NewUserPlatformQuotaRepository,     // user × platform quota
+	NewUserPlatformQuotaServiceAdapter, // adapter → service.UserPlatformQuotaRepository
 
 	// Cache implementations
 	NewGatewayCache,

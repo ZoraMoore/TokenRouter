@@ -67,17 +67,31 @@ func (r *RedeemCode) IsExhausted() bool {
 }
 
 func (r *RedeemCode) IsNaturallyExpired() bool {
+	return r.IsNaturallyExpiredAt(time.Now())
+}
+
+func (r *RedeemCode) IsNaturallyExpiredAt(now time.Time) bool {
 	if r == nil || r.Type == RedeemTypeInvitation || r.ExpiresAt == nil {
 		return false
 	}
-	return !time.Now().Before(*r.ExpiresAt)
+	return !now.Before(*r.ExpiresAt)
 }
 
 func (r *RedeemCode) IsExpired() bool {
+	return r.IsExpiredAt(time.Now())
+}
+
+func (r *RedeemCode) IsExpiredAt(now time.Time) bool {
 	if r == nil {
 		return false
 	}
-	return r.Status == StatusExpired || r.IsNaturallyExpired()
+	if r.Status == StatusExpired {
+		return true
+	}
+	if r.Status == StatusUsed || r.IsExhausted() {
+		return false
+	}
+	return r.IsNaturallyExpiredAt(now)
 }
 
 func (r *RedeemCode) PersistedStatus() string {
@@ -86,6 +100,8 @@ func (r *RedeemCode) PersistedStatus() string {
 		return StatusUnused
 	case r.Status == StatusExpired:
 		return StatusExpired
+	case r.Status == StatusUsed:
+		return StatusUsed
 	case r.IsExhausted():
 		return StatusUsed
 	case r.HasBeenUsed():

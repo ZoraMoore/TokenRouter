@@ -86,6 +86,10 @@ func (r *paymentRedeemDeliveryRepo) Update(_ context.Context, code *RedeemCode) 
 	return nil
 }
 
+func (r *paymentRedeemDeliveryRepo) BatchUpdate(context.Context, []int64, RedeemCodeBatchUpdateFields) (int64, error) {
+	return 0, nil
+}
+
 func (r *paymentRedeemDeliveryRepo) Delete(_ context.Context, id int64) error {
 	for code, redeemCode := range r.codesByKey {
 		if redeemCode.ID == id {

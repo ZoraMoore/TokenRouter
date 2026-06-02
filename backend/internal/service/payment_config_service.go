@@ -39,6 +39,7 @@ const (
 	SettingCancelWindowSize     = "CANCEL_RATE_LIMIT_WINDOW"
 	SettingCancelWindowUnit     = "CANCEL_RATE_LIMIT_UNIT"
 	SettingCancelWindowMode     = "CANCEL_RATE_LIMIT_WINDOW_MODE"
+	SettingPaymentAlipayForceQR = "payment_alipay_force_qrcode"
 )
 
 // Default values for payment configuration settings.
@@ -68,6 +69,7 @@ type PaymentConfig struct {
 	HelpImageURL              string            `json:"help_image_url"`
 	HelpText                  string            `json:"help_text"`
 	StripePublishableKey      string            `json:"stripe_publishable_key,omitempty"`
+	AlipayForceQRCode         bool              `json:"alipay_force_qrcode"`
 
 	// Cancel rate limit settings
 	CancelRateLimitEnabled bool   `json:"cancel_rate_limit_enabled"`
@@ -96,6 +98,7 @@ type UpdatePaymentConfigRequest struct {
 	ProductNameSuffix         *string           `json:"product_name_suffix"`
 	HelpImageURL              *string           `json:"help_image_url"`
 	HelpText                  *string           `json:"help_text"`
+	AlipayForceQRCode         *bool             `json:"payment_alipay_force_qrcode"`
 
 	// Cancel rate limit settings
 	CancelRateLimitEnabled *bool   `json:"cancel_rate_limit_enabled"`
@@ -278,6 +281,7 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 		SettingCancelWindowSize, SettingCancelWindowUnit, SettingCancelWindowMode,
 		SettingPaymentVisibleMethodAlipayEnabled, SettingPaymentVisibleMethodAlipaySource,
 		SettingPaymentVisibleMethodWxpayEnabled, SettingPaymentVisibleMethodWxpaySource,
+		SettingPaymentAlipayForceQR,
 	}
 	vals, err := s.settingRepo.GetMultiple(ctx, keys)
 	if err != nil {
@@ -307,6 +311,7 @@ func (s *PaymentConfigService) parsePaymentConfig(vals map[string]string) *Payme
 		ProductNameSuffix:         vals[SettingProductNameSuffix],
 		HelpImageURL:              vals[SettingHelpImageURL],
 		HelpText:                  vals[SettingHelpText],
+		AlipayForceQRCode:         vals[SettingPaymentAlipayForceQR] == "true",
 
 		CancelRateLimitEnabled: vals[SettingCancelRateLimitOn] == "true",
 		CancelRateLimitMax:     pcParseInt(vals[SettingCancelRateLimitMax], 10),
@@ -573,6 +578,7 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 		SettingProductNameSuffix:                 derefStr(req.ProductNameSuffix),
 		SettingHelpImageURL:                      derefStr(req.HelpImageURL),
 		SettingHelpText:                          derefStr(req.HelpText),
+		SettingPaymentAlipayForceQR:              formatBoolOrEmpty(req.AlipayForceQRCode),
 		SettingCancelRateLimitOn:                 formatBoolOrEmpty(req.CancelRateLimitEnabled),
 		SettingCancelRateLimitMax:                formatPositiveInt(req.CancelRateLimitMax),
 		SettingCancelWindowSize:                  formatPositiveInt(req.CancelRateLimitWindow),

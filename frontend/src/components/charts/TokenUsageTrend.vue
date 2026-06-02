@@ -108,10 +108,9 @@ const chartData = computed(() => {
         fill: true,
         tension: 0.3
       },
-      {
+        {
         label: 'Cached Input %',
         data: props.trendData.map((d) => {
-          // 后端的 input_tokens 已扣除 cache_read，这里用输入侧总 token 作为命中率分母。
           const inputSideTokens = d.input_tokens + d.cache_creation_tokens + d.cache_read_tokens
           return inputSideTokens > 0 ? (d.cache_read_tokens / inputSideTokens) * 100 : 0
         }),
