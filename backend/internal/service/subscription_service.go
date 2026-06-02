@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	dbent "github.com/TokenFlux/TokenRouter/ent"
@@ -227,6 +228,37 @@ func (s *SubscriptionService) assignOrExtendSubscriptionUnlocked(ctx context.Con
 		status = SubscriptionStatusPending
 	}
 
+	if latest != nil && !latest.ExpiresAt.After(now) {
+		windowStart := startOfDay(startsAt)
+		latest.StartsAt = startsAt
+		latest.ExpiresAt = expiresAt
+		latest.Status = status
+		latest.DailyLimitUSD = template.DailyLimitUSD
+		latest.WeeklyLimitUSD = template.WeeklyLimitUSD
+		latest.MonthlyLimitUSD = template.MonthlyLimitUSD
+		latest.DailyWindowStart = &windowStart
+		latest.WeeklyWindowStart = &windowStart
+		latest.MonthlyWindowStart = &windowStart
+		latest.DailyUsageUSD = 0
+		latest.WeeklyUsageUSD = 0
+		latest.MonthlyUsageUSD = 0
+		latest.AssignedAt = now
+		latest.SourceOrderID = input.SourceOrderID
+		latest.Notes = appendSubscriptionNotes(latest.Notes, input.Notes)
+		latest.UpdatedAt = now
+		if input.AssignedBy > 0 {
+			latest.AssignedBy = &input.AssignedBy
+		}
+		if err := s.userSubRepo.Update(ctx, latest); err != nil {
+			return nil, false, err
+		}
+		updated, err := s.userSubRepo.GetByID(ctx, latest.ID)
+		if err != nil {
+			return nil, false, err
+		}
+		return updated, true, nil
+	}
+
 	sub := &UserSubscription{
 		UserID:          input.UserID,
 		PlanID:          input.PlanID,
@@ -254,6 +286,18 @@ func (s *SubscriptionService) assignOrExtendSubscriptionUnlocked(ctx context.Con
 		return nil, false, err
 	}
 	return created, queued, nil
+}
+
+func appendSubscriptionNotes(existing, incoming string) string {
+	existing = strings.TrimSpace(existing)
+	incoming = strings.TrimSpace(incoming)
+	if existing == "" {
+		return incoming
+	}
+	if incoming == "" {
+		return existing
+	}
+	return existing + "\n" + incoming
 }
 
 type BulkAssignSubscriptionInput struct {
@@ -771,23 +815,22 @@ func (s *SubscriptionService) calculateProgress(sub *UserSubscription) *Subscrip
 	if sub.Plan != nil {
 		progress.PlanName = sub.Plan.Name
 	}
-	if limit, ok := normalizedWindowProgress(sub.DailyLimitUSD, sub.DailyUsageUSD, sub.DailyWindowStart, 24*time.Hour); ok {
+	if limit, ok := normalizedWindowProgress(sub.DailyLimitUSD, sub.DailyUsageUSD, sub.DailyWindowStart, sub.DailyResetTime()); ok {
 		progress.Daily = limit
 	}
-	if limit, ok := normalizedWindowProgress(sub.WeeklyLimitUSD, sub.WeeklyUsageUSD, sub.WeeklyWindowStart, 7*24*time.Hour); ok {
+	if limit, ok := normalizedWindowProgress(sub.WeeklyLimitUSD, sub.WeeklyUsageUSD, sub.WeeklyWindowStart, sub.WeeklyResetTime()); ok {
 		progress.Weekly = limit
 	}
-	if limit, ok := normalizedWindowProgress(sub.MonthlyLimitUSD, sub.MonthlyUsageUSD, sub.MonthlyWindowStart, 30*24*time.Hour); ok {
+	if limit, ok := normalizedWindowProgress(sub.MonthlyLimitUSD, sub.MonthlyUsageUSD, sub.MonthlyWindowStart, sub.MonthlyResetTime()); ok {
 		progress.Monthly = limit
 	}
 	return progress
 }
 
-func normalizedWindowProgress(limit *float64, used float64, windowStart *time.Time, duration time.Duration) (*UsageWindowProgress, bool) {
-	if limit == nil || *limit <= 0 || windowStart == nil {
+func normalizedWindowProgress(limit *float64, used float64, windowStart *time.Time, resetsAt *time.Time) (*UsageWindowProgress, bool) {
+	if limit == nil || *limit <= 0 || windowStart == nil || resetsAt == nil {
 		return nil, false
 	}
-	resetsAt := windowStart.Add(duration)
 	remaining := *limit - used
 	if remaining < 0 {
 		remaining = 0
@@ -799,7 +842,7 @@ func normalizedWindowProgress(limit *float64, used float64, windowStart *time.Ti
 			percentage = 100
 		}
 	}
-	resetsIn := int64(time.Until(resetsAt).Seconds())
+	resetsIn := int64(time.Until(*resetsAt).Seconds())
 	if resetsIn < 0 {
 		resetsIn = 0
 	}
@@ -809,7 +852,7 @@ func normalizedWindowProgress(limit *float64, used float64, windowStart *time.Ti
 		RemainingUSD:    remaining,
 		Percentage:      percentage,
 		WindowStart:     *windowStart,
-		ResetsAt:        resetsAt,
+		ResetsAt:        *resetsAt,
 		ResetsInSeconds: resetsIn,
 	}, true
 }

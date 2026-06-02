@@ -171,6 +171,87 @@ func (r *redeemCodeRepository) Update(ctx context.Context, code *service.RedeemC
 	return nil
 }
 
+func (r *redeemCodeRepository) BatchUpdate(ctx context.Context, ids []int64, fields service.RedeemCodeBatchUpdateFields) (int64, error) {
+	if dbent.TxFromContext(ctx) != nil {
+		return r.batchUpdateInTx(ctx, ids, fields)
+	}
+
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		if errors.Is(err, dbent.ErrTxStarted) {
+			return r.batchUpdateInTx(ctx, ids, fields)
+		}
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	txCtx := dbent.NewTxContext(ctx, tx)
+	updated, err := r.batchUpdateInTx(txCtx, ids, fields)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return updated, nil
+}
+
+func (r *redeemCodeRepository) batchUpdateInTx(ctx context.Context, ids []int64, fields service.RedeemCodeBatchUpdateFields) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	client := clientFromContext(ctx, r.client)
+	models, err := client.RedeemCode.Query().
+		Where(redeemcode.IDIn(ids...)).
+		ForUpdate().
+		All(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if len(models) != len(ids) {
+		return 0, service.ErrRedeemCodeNotFound
+	}
+	if redeemBatchUpdateTouchesSensitiveFields(fields) {
+		for _, model := range models {
+			code := redeemCodeEntityToService(model)
+			if code != nil && code.IsUsed() {
+				return 0, service.ErrRedeemCodeUsed
+			}
+		}
+	}
+
+	update := client.RedeemCode.Update().Where(redeemcode.IDIn(ids...))
+	if fields.Status != nil {
+		update.SetStatus(strings.TrimSpace(*fields.Status))
+	}
+	if fields.ExpiresAt.Set {
+		if fields.ExpiresAt.Value != nil {
+			update.SetExpiresAt(*fields.ExpiresAt.Value)
+		} else {
+			update.ClearExpiresAt()
+		}
+	}
+	if fields.Notes != nil {
+		update.SetNotes(*fields.Notes)
+	}
+	if fields.PlanID.Set {
+		if fields.PlanID.Value != nil {
+			update.SetPlanID(*fields.PlanID.Value)
+		} else {
+			update.ClearPlanID()
+		}
+	}
+	updated, err := update.Save(ctx)
+	if err != nil {
+		return 0, translatePersistenceError(err, service.ErrRedeemCodeNotFound, service.ErrRedeemCodeExists)
+	}
+	return int64(updated), nil
+}
+
+func redeemBatchUpdateTouchesSensitiveFields(fields service.RedeemCodeBatchUpdateFields) bool {
+	return fields.Status != nil || fields.ExpiresAt.Set || fields.PlanID.Set || fields.Type != nil || fields.Value != nil
+}
+
 func (r *redeemCodeRepository) Delete(ctx context.Context, id int64) error {
 	client := clientFromContext(ctx, r.client)
 	_, err := client.RedeemCode.Delete().Where(redeemcode.IDEQ(id)).Exec(ctx)

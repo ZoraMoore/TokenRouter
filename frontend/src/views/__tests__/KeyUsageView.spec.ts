@@ -1,94 +1,188 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
-import { createI18n } from 'vue-i18n'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
+
 import KeyUsageView from '../KeyUsageView.vue'
-import { useAppStore } from '@/stores'
 
-const mockFetch = vi.fn()
+const { showInfo, showSuccess, showError, fetchPublicSettings } = vi.hoisted(() => ({
+  showInfo: vi.fn(),
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
+  fetchPublicSettings: vi.fn(),
+}))
 
-function createTestI18n() {
-  return createI18n({
-    legacy: false,
-    locale: 'en',
-    missingWarn: false,
-    fallbackWarn: false,
-    messages: {
-      en: {
-        keyUsage: {
-          placeholder: 'API key',
-          detailInfo: 'Detail Information',
-          remainingQuota: 'Remaining Quota',
-          subscriptionType: 'Subscription Type',
-          subscriptionExpires: 'Subscription Expires',
-          querySuccess: 'Query successful',
-          queryFailed: 'Query failed',
-          queryFailedRetry: 'Query failed, please try again later'
-        },
-        payment: {
-          planCard: {
-            unlimited: 'Unlimited'
-          }
-        }
-      }
-    }
-  })
+const messages: Record<string, string> = {
+  'keyUsage.title': 'API Key Usage',
+  'keyUsage.subtitle': 'Usage status',
+  'keyUsage.placeholder': 'sk-test',
+  'keyUsage.query': 'Query',
+  'keyUsage.querying': 'Querying...',
+  'keyUsage.privacyNote': 'Privacy note',
+  'keyUsage.dateRange': 'Date Range:',
+  'keyUsage.dateRangeToday': 'Today',
+  'keyUsage.dateRange7d': '7 Days',
+  'keyUsage.dateRange30d': '30 Days',
+  'keyUsage.dateRange90d': '90 Days',
+  'keyUsage.dateRangeCustom': 'Custom',
+  'keyUsage.apply': 'Apply',
+  'keyUsage.used': 'Used',
+  'keyUsage.detailInfo': 'Detail Information',
+  'keyUsage.tokenStats': 'Token Statistics',
+  'keyUsage.dailyDetail': 'Daily Detail',
+  'keyUsage.date': 'Date',
+  'keyUsage.requests': 'Requests',
+  'keyUsage.inputTokens': 'Input Tokens',
+  'keyUsage.outputTokens': 'Output Tokens',
+  'keyUsage.cacheReadTokens': 'Cache Read',
+  'keyUsage.cacheWriteTokens': 'Cache Write',
+  'keyUsage.cost': 'Cost',
+  'keyUsage.remainingQuota': 'Remaining Quota',
+  'keyUsage.querySuccess': 'Query successful',
+  'keyUsage.queryFailed': 'Query failed',
+  'keyUsage.queryFailedRetry': 'Query failed, please try again later',
+  'payment.planCard.unlimited': 'Unlimited',
+  'home.viewDocs': 'Docs',
+  'home.switchToLight': 'Light',
+  'home.switchToDark': 'Dark',
+  'home.footer.allRightsReserved': 'All rights reserved.',
 }
 
-async function mountView() {
-  const pinia = createPinia()
-  setActivePinia(pinia)
+vi.mock('vue-i18n', async () => {
+  const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
+  return {
+    ...actual,
+    useI18n: () => ({
+      t: (key: string) => messages[key] ?? key,
+      locale: { value: 'en' },
+    }),
+  }
+})
 
-  const appStore = useAppStore()
-  appStore.publicSettingsLoaded = true
-  appStore.showSuccess = vi.fn()
-  appStore.showError = vi.fn()
-  appStore.showInfo = vi.fn()
+vi.mock('@/stores', () => ({
+  useAppStore: () => ({
+    cachedPublicSettings: null,
+    siteName: 'Sub2API',
+    siteLogo: '',
+    docUrl: '',
+    publicSettingsLoaded: true,
+    fetchPublicSettings,
+    showInfo,
+    showSuccess,
+    showError,
+  }),
+}))
 
-  const i18n = createTestI18n()
-
+function mountView() {
   return mount(KeyUsageView, {
     global: {
-      plugins: [pinia, i18n],
       stubs: {
-        LocaleSwitcher: { template: '<div />' },
-        BalanceIcon: { template: '<span />' },
-        Icon: { template: '<span />' },
-        'router-link': { template: '<a><slot /></a>' }
-      }
-    }
+        RouterLink: { template: '<a><slot /></a>' },
+        LocaleSwitcher: true,
+        BalanceIcon: true,
+        Icon: true,
+      },
+    },
   })
 }
 
 describe('KeyUsageView', () => {
   beforeEach(() => {
-    mockFetch.mockReset()
-    vi.stubGlobal('fetch', mockFetch)
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-      callback(0)
-      return 0
-    })
+    showInfo.mockReset()
+    showSuccess.mockReset()
+    showError.mockReset()
+    fetchPublicSettings.mockReset()
+    localStorage.clear()
+
     Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      value: vi.fn().mockReturnValue({
-        matches: false,
-        media: '',
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn()
-      })
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
     })
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => window.setTimeout(() => cb(0), 0))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        mode: 'quota_limited',
+        isValid: true,
+        status: 'active',
+        quota: {
+          limit: 10,
+          used: 1,
+          remaining: 9,
+          unit: 'USD',
+        },
+        usage: {
+          today: {
+            requests: 1,
+            input_tokens: 10,
+            output_tokens: 20,
+            cache_creation_tokens: 0,
+            cache_read_tokens: 0,
+            total_tokens: 30,
+            actual_cost: 0.01,
+          },
+          total: {
+            requests: 12,
+            input_tokens: 100,
+            output_tokens: 200,
+            cache_creation_tokens: 10,
+            cache_read_tokens: 30,
+            total_tokens: 340,
+            actual_cost: 0.12,
+          },
+          rpm: 0,
+          tpm: 0,
+        },
+        daily_usage: [
+          {
+            date: '2026-05-19',
+            requests: 12,
+            input_tokens: 100,
+            output_tokens: 200,
+            cache_read_tokens: 30,
+            cache_write_tokens: 10,
+            total_tokens: 340,
+            cost: 0.15,
+            actual_cost: 0.12,
+          },
+        ],
+      }),
+    }))
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
+  it('renders daily usage detail rows after a successful query', async () => {
+    const wrapper = mountView()
+
+    await wrapper.find('input').setValue('sk-test-key')
+    await wrapper.find('input').trigger('keydown.enter')
+    await flushPromises()
+    await nextTick()
+
+    const fetchMock = vi.mocked(fetch)
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/v1/usage?'),
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer sk-test-key' },
+      })
+    )
+    expect(String(fetchMock.mock.calls[0][0])).toContain('days=30')
+
+    const text = wrapper.text()
+    expect(text).toContain('Daily Detail')
+    expect(text).toContain('Date')
+    expect(text).toContain('Cache Read')
+    expect(text).toContain('Cache Write')
+    expect(text).toContain('2026-05-19')
+    expect(text).toContain('$0.12')
+
+    wrapper.unmount()
+  })
+
   it('renders unlimited remaining quota for subscription responses with -1 sentinel', async () => {
-    mockFetch.mockResolvedValue({
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
         mode: 'unrestricted',
@@ -102,19 +196,20 @@ describe('KeyUsageView', () => {
           daily_limit_usd: 0,
           weekly_limit_usd: 0,
           monthly_limit_usd: 0,
-          expires_at: '2026-05-01T00:00:00Z'
-        }
-      })
-    })
+          expires_at: '2026-05-01T00:00:00Z',
+        },
+      }),
+    }))
 
-    const wrapper = await mountView()
+    const wrapper = mountView()
     await wrapper.find('input').setValue('sk-test')
     await wrapper.find('input').trigger('keydown.enter')
     await flushPromises()
+    await nextTick()
 
-    expect(mockFetch).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('keyUsage.remainingQuota')
-    const unlimitedNode = wrapper.findAll('span').find((node) => node.text() === 'payment.planCard.unlimited')
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('Remaining Quota')
+    const unlimitedNode = wrapper.findAll('span').find((node) => node.text() === 'Unlimited')
     expect(unlimitedNode).toBeTruthy()
     expect(unlimitedNode?.classes()).toContain('text-emerald-500')
 

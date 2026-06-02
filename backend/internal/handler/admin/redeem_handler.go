@@ -34,24 +34,51 @@ func NewRedeemHandler(adminService service.AdminService, redeemService *service.
 
 // GenerateRedeemCodesRequest represents generate redeem codes request
 type GenerateRedeemCodesRequest struct {
-	Code      string  `json:"code" binding:"omitempty,max=32"`
-	Count     int     `json:"count" binding:"required,min=1,max=100"`
-	Type      string  `json:"type" binding:"required,oneof=balance concurrency subscription invitation"`
-	Value     float64 `json:"value"`
-	MaxUses   *int    `json:"max_uses" binding:"omitempty,min=0"`
-	ExpiresAt *int64  `json:"expires_at"`
-	PlanID    *int64  `json:"plan_id"` // 订阅类型必填
+	Code          string     `json:"code" binding:"omitempty,max=32"`
+	Count         int        `json:"count" binding:"required,min=1,max=100"`
+	Type          string     `json:"type" binding:"required,oneof=balance concurrency subscription invitation"`
+	Value         float64    `json:"value"`
+	MaxUses       *int       `json:"max_uses" binding:"omitempty,min=0"`
+	PlanID        *int64     `json:"plan_id"` // 订阅类型必填
+	ExpiresAt     *time.Time `json:"expires_at"`
+	ExpiresInDays *int       `json:"expires_in_days" binding:"omitempty,min=1,max=3650"`
 }
 
 // CreateAndRedeemCodeRequest represents creating a fixed code and redeeming it for a target user.
 // Type 为 omitempty 而非 required 是为了向后兼容旧版调用方（不传 type 时默认 balance）。
 type CreateAndRedeemCodeRequest struct {
-	Code   string  `json:"code" binding:"required,min=3,max=128"`
-	Type   string  `json:"type" binding:"omitempty,oneof=balance concurrency subscription invitation"` // 不传时默认 balance（向后兼容）
-	Value  float64 `json:"value" binding:"required"`
-	UserID int64   `json:"user_id" binding:"required,gt=0"`
-	PlanID *int64  `json:"plan_id"` // subscription 类型必填
-	Notes  string  `json:"notes"`
+	Code          string     `json:"code" binding:"required,min=3,max=128"`
+	Type          string     `json:"type" binding:"omitempty,oneof=balance concurrency subscription invitation"` // 不传时默认 balance（向后兼容）
+	Value         float64    `json:"value" binding:"required"`
+	UserID        int64      `json:"user_id" binding:"required,gt=0"`
+	PlanID        *int64     `json:"plan_id"` // subscription 类型必填
+	Notes         string     `json:"notes"`
+	ExpiresAt     *time.Time `json:"expires_at"`
+	ExpiresInDays *int       `json:"expires_in_days" binding:"omitempty,min=1,max=3650"`
+}
+
+func resolveRedeemCodeExpiresAt(expiresAt *time.Time, expiresInDays *int) (*time.Time, error) {
+	if expiresAt != nil && expiresInDays != nil {
+		return nil, infraerrors.BadRequest("REDEEM_CODE_EXPIRY_CONFLICT", "expires_at and expires_in_days cannot both be set")
+	}
+
+	now := time.Now().UTC()
+	if expiresInDays != nil {
+		if *expiresInDays <= 0 {
+			return nil, infraerrors.BadRequest("REDEEM_CODE_EXPIRES_IN_DAYS_INVALID", "expires_in_days must be greater than zero")
+		}
+		expires := now.AddDate(0, 0, *expiresInDays)
+		return &expires, nil
+	}
+	if expiresAt == nil {
+		return nil, nil
+	}
+
+	expires := expiresAt.UTC()
+	if !expires.After(now) {
+		return nil, infraerrors.BadRequest("REDEEM_CODE_EXPIRES_AT_INVALID", "expires_at must be in the future")
+	}
+	return &expires, nil
 }
 
 // List handles listing all redeem codes with pagination
@@ -110,6 +137,12 @@ func (h *RedeemHandler) Generate(c *gin.Context) {
 	}
 	req.Code = strings.TrimSpace(req.Code)
 
+	expiresAt, err := resolveRedeemCodeExpiresAt(req.ExpiresAt, req.ExpiresInDays)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
 	executeAdminIdempotentJSON(c, "admin.redeem_codes.generate", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		codes, execErr := h.adminService.GenerateRedeemCodes(ctx, &service.GenerateRedeemCodesInput{
 			Code:      req.Code,
@@ -117,7 +150,7 @@ func (h *RedeemHandler) Generate(c *gin.Context) {
 			Type:      req.Type,
 			Value:     req.Value,
 			MaxUses:   req.MaxUses,
-			ExpiresAt: unixSecondsToTimePtr(req.ExpiresAt),
+			ExpiresAt: expiresAt,
 			PlanID:    req.PlanID,
 		})
 		if execErr != nil {
@@ -159,6 +192,12 @@ func (h *RedeemHandler) CreateAndRedeem(c *gin.Context) {
 		}
 	}
 
+	expiresAt, err := resolveRedeemCodeExpiresAt(req.ExpiresAt, req.ExpiresInDays)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
 	executeAdminIdempotentJSON(c, "admin.redeem_codes.create_and_redeem", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		existing, err := h.redeemService.GetByCode(ctx, req.Code)
 		if err == nil {
@@ -169,13 +208,14 @@ func (h *RedeemHandler) CreateAndRedeem(c *gin.Context) {
 		}
 
 		createErr := h.redeemService.CreateCode(ctx, &service.RedeemCode{
-			Code:    req.Code,
-			Type:    req.Type,
-			Value:   req.Value,
-			Status:  service.StatusUnused,
-			MaxUses: 1,
-			Notes:   req.Notes,
-			PlanID:  req.PlanID,
+			Code:      req.Code,
+			Type:      req.Type,
+			Value:     req.Value,
+			Status:    service.StatusUnused,
+			MaxUses:   1,
+			Notes:     req.Notes,
+			PlanID:    req.PlanID,
+			ExpiresAt: expiresAt,
 		})
 		if createErr != nil {
 			// Unique code race: if code now exists, use idempotent semantics by used_by.
@@ -200,6 +240,9 @@ func (h *RedeemHandler) resolveCreateAndRedeemExisting(ctx context.Context, exis
 	}
 
 	// If previous run created the code but crashed before redeem, redeem it now.
+	if existing.IsExpired() {
+		return nil, service.ErrRedeemCodeExpired
+	}
 	if existing.CanUse() {
 		redeemed, err := h.redeemService.Redeem(ctx, userID, existing.Code)
 		if err == nil {
@@ -270,6 +313,51 @@ func (h *RedeemHandler) BatchDelete(c *gin.Context) {
 		"deleted": deleted,
 		"message": "Redeem codes deleted successfully",
 	})
+}
+
+// BatchUpdate handles batch updating redeem codes
+// POST /api/v1/admin/redeem-codes/batch-update
+func (h *RedeemHandler) BatchUpdate(c *gin.Context) {
+	if h.redeemService == nil {
+		response.InternalError(c, "redeem service not configured")
+		return
+	}
+
+	var req dto.BatchUpdateRedeemCodesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	result, err := h.redeemService.BatchUpdate(c.Request.Context(), &service.RedeemCodeBatchUpdateInput{
+		IDs:    req.IDs,
+		Fields: redeemBatchUpdateFieldsFromDTO(req.Fields),
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{
+		"updated": result.Updated,
+		"message": "Redeem codes updated successfully",
+	})
+}
+
+func redeemBatchUpdateFieldsFromDTO(in dto.BatchUpdateRedeemCodeFields) service.RedeemCodeBatchUpdateFields {
+	out := service.RedeemCodeBatchUpdateFields{
+		Status: in.Status,
+		Notes:  in.Notes,
+		Type:   in.Type,
+		Value:  in.Value,
+	}
+	if in.ExpiresAt.Set {
+		out.ExpiresAt = service.NullableTimeUpdate{Set: true, Value: in.ExpiresAt.Value}
+	}
+	if in.PlanID.Set {
+		out.PlanID = service.NullableInt64Update{Set: true, Value: in.PlanID.Value}
+	}
+	return out
 }
 
 // Expire handles expiring a redeem code

@@ -530,19 +530,25 @@ func selectedInstanceSupportedTypes(sel *payment.InstanceSelection) string {
 }
 
 func (s *PaymentService) buildPaymentSubject(plan *dbent.SubscriptionPlan, limitAmount float64, cfg *PaymentConfig, sel *payment.InstanceSelection) string {
+	pf := strings.TrimSpace(cfg.ProductNamePrefix)
+	sf := strings.TrimSpace(cfg.ProductNameSuffix)
 	if plan != nil {
+		subject := ""
 		if plan.ProductName != "" {
-			return plan.ProductName
+			subject = plan.ProductName
+		} else {
+			subject = "Sub2API Subscription " + plan.Name
 		}
-		return "Sub2API Subscription " + plan.Name
+		if pf != "" || sf != "" {
+			return strings.TrimSpace(pf + " " + subject + " " + sf)
+		}
+		return subject
 	}
 	currency := payment.DefaultPaymentCurrency
 	if sel != nil {
 		currency = paymentProviderConfigCurrency(sel.ProviderKey, sel.Config)
 	}
 	amountStr := payment.FormatAmountForCurrency(limitAmount, currency)
-	pf := strings.TrimSpace(cfg.ProductNamePrefix)
-	sf := strings.TrimSpace(cfg.ProductNameSuffix)
 	if pf != "" || sf != "" {
 		return strings.TrimSpace(pf + " " + amountStr + " " + sf)
 	}

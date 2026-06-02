@@ -48,6 +48,7 @@ type RedeemCodeRepository interface {
 	GetByCode(ctx context.Context, code string) (*RedeemCode, error)
 	GetByCodeForUpdate(ctx context.Context, code string) (*RedeemCode, error)
 	Update(ctx context.Context, code *RedeemCode) error
+	BatchUpdate(ctx context.Context, ids []int64, fields RedeemCodeBatchUpdateFields) (int64, error)
 	Delete(ctx context.Context, id int64) error
 	Use(ctx context.Context, id, userID int64) error
 	CreateUsage(ctx context.Context, usage *RedeemCodeUsage) error
@@ -81,6 +82,35 @@ type RedeemCodeResponse struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type NullableTimeUpdate struct {
+	Set   bool
+	Value *time.Time
+}
+
+type NullableInt64Update struct {
+	Set   bool
+	Value *int64
+}
+
+type RedeemCodeBatchUpdateFields struct {
+	Status    *string
+	ExpiresAt NullableTimeUpdate
+	Notes     *string
+	PlanID    NullableInt64Update
+
+	Type  *string
+	Value *float64
+}
+
+type RedeemCodeBatchUpdateInput struct {
+	IDs    []int64
+	Fields RedeemCodeBatchUpdateFields
+}
+
+type RedeemCodeBatchUpdateResult struct {
+	Updated int64
+}
+
 // RedeemService 兑换码服务
 type RedeemService struct {
 	redeemRepo           RedeemCodeRepository
@@ -111,6 +141,67 @@ func NewRedeemService(
 		entClient:            entClient,
 		authCacheInvalidator: authCacheInvalidator,
 	}
+}
+
+func (s *RedeemService) BatchUpdate(ctx context.Context, input *RedeemCodeBatchUpdateInput) (*RedeemCodeBatchUpdateResult, error) {
+	if s == nil || s.redeemRepo == nil {
+		return nil, infraerrors.InternalServer("REDEEM_SERVICE_NOT_CONFIGURED", "redeem service not configured")
+	}
+	if input == nil {
+		return nil, infraerrors.BadRequest("INVALID_REDEEM_BATCH_UPDATE", "batch update input is required")
+	}
+	ids, err := normalizeRedeemBatchUpdateIDs(input.IDs)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateRedeemBatchUpdateFields(input.Fields); err != nil {
+		return nil, err
+	}
+	updated, err := s.redeemRepo.BatchUpdate(ctx, ids, input.Fields)
+	if err != nil {
+		return nil, err
+	}
+	return &RedeemCodeBatchUpdateResult{Updated: updated}, nil
+}
+
+func normalizeRedeemBatchUpdateIDs(ids []int64) ([]int64, error) {
+	if len(ids) == 0 {
+		return nil, infraerrors.BadRequest("REDEEM_CODE_IDS_REQUIRED", "ids are required")
+	}
+	out := make([]int64, 0, len(ids))
+	seen := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return nil, infraerrors.BadRequest("REDEEM_CODE_ID_INVALID", "redeem code id must be greater than 0")
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+func validateRedeemBatchUpdateFields(fields RedeemCodeBatchUpdateFields) error {
+	if fields.Type != nil || fields.Value != nil {
+		return infraerrors.BadRequest("REDEEM_CODE_BATCH_FIELD_IMMUTABLE", "redeem code type and value cannot be batch updated")
+	}
+	hasUpdate := fields.Status != nil || fields.ExpiresAt.Set || fields.Notes != nil || fields.PlanID.Set
+	if !hasUpdate {
+		return infraerrors.BadRequest("REDEEM_CODE_BATCH_FIELDS_REQUIRED", "at least one field is required")
+	}
+	if fields.Status != nil {
+		switch strings.TrimSpace(*fields.Status) {
+		case StatusUnused, StatusDisabled, StatusExpired:
+		default:
+			return infraerrors.BadRequest("REDEEM_CODE_STATUS_INVALID", "invalid redeem code status")
+		}
+	}
+	if fields.PlanID.Set && fields.PlanID.Value != nil && *fields.PlanID.Value <= 0 {
+		return infraerrors.BadRequest("REDEEM_CODE_PLAN_ID_INVALID", "plan_id must be greater than 0")
+	}
+	return nil
 }
 
 // GenerateRandomCode 生成随机兑换码

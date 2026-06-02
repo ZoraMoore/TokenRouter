@@ -198,6 +198,7 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 		MCPXMLInject:                g.MCPXMLInject,
 		DefaultMappedModel:          g.DefaultMappedModel,
 		MessagesDispatchModelConfig: g.MessagesDispatchModelConfig,
+		ModelsListConfig:            g.ModelsListConfig,
 		SupportedModelScopes:        g.SupportedModelScopes,
 		AccountCount:                g.AccountCount,
 		ActiveAccountCount:          g.ActiveAccountCount,
@@ -247,13 +248,15 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 	if a == nil {
 		return nil
 	}
+	redactedCreds, credsStatus := RedactCredentials(a.Credentials)
 	out := &Account{
 		ID:                      a.ID,
 		Name:                    a.Name,
 		Notes:                   a.Notes,
 		Platform:                a.Platform,
 		Type:                    a.Type,
-		Credentials:             a.Credentials,
+		Credentials:             redactedCreds,
+		CredentialsStatus:       credsStatus,
 		Extra:                   a.Extra,
 		ProxyID:                 a.ProxyID,
 		Concurrency:             a.Concurrency,
@@ -586,6 +589,9 @@ func redeemCodeFromServiceBase(rc *service.RedeemCode) RedeemCode {
 		PlanID:    rc.PlanID,
 		User:      UserFromServiceShallow(rc.User),
 	}
+	if rc.IsExpired() {
+		out.Status = service.StatusExpired
+	}
 
 	// For admin_balance/admin_concurrency types, include notes so users can see
 	// why they were charged or credited by admin
@@ -653,6 +659,10 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		FirstTokenMs:          l.FirstTokenMs,
 		ImageCount:            l.ImageCount,
 		ImageSize:             l.ImageSize,
+		ImageInputSize:        l.ImageInputSize,
+		ImageOutputSize:       l.ImageOutputSize,
+		ImageSizeSource:       l.ImageSizeSource,
+		ImageSizeBreakdown:    l.ImageSizeBreakdown,
 		MediaType:             l.MediaType,
 		UserAgent:             l.UserAgent,
 		CacheTTLOverridden:    l.CacheTTLOverridden,

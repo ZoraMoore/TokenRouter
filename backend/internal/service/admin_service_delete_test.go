@@ -320,6 +320,21 @@ func (s *groupRepoStub) UpdateSortOrders(ctx context.Context, updates []GroupSor
 	return nil
 }
 
+type deleteGroupAPIKeyRepoStub struct {
+	apiKeyRepoStubForGroupUpdate
+	keys         []string
+	listErr      error
+	listGroupIDs []int64
+}
+
+func (s *deleteGroupAPIKeyRepoStub) ListKeysByGroupID(ctx context.Context, groupID int64) ([]string, error) {
+	s.listGroupIDs = append(s.listGroupIDs, groupID)
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	return s.keys, nil
+}
+
 type proxyRepoStub struct {
 	deleteErr    error
 	countErr     error
@@ -388,6 +403,12 @@ type redeemRepoStub struct {
 	codesByID     map[int64]*RedeemCode
 	deleteErrByID map[int64]error
 	deletedIDs    []int64
+
+	batchUpdateIDs    []int64
+	batchUpdateFields RedeemCodeBatchUpdateFields
+	batchUpdateResult int64
+	batchUpdateErr    error
+	batchUpdateCalled bool
 }
 
 func (s *redeemRepoStub) Create(ctx context.Context, code *RedeemCode) error {
@@ -422,6 +443,19 @@ func (s *redeemRepoStub) GetByCodeForUpdate(ctx context.Context, code string) (*
 
 func (s *redeemRepoStub) Update(ctx context.Context, code *RedeemCode) error {
 	panic("unexpected Update call")
+}
+
+func (s *redeemRepoStub) BatchUpdate(ctx context.Context, ids []int64, fields RedeemCodeBatchUpdateFields) (int64, error) {
+	s.batchUpdateCalled = true
+	s.batchUpdateIDs = append([]int64(nil), ids...)
+	s.batchUpdateFields = fields
+	if s.batchUpdateErr != nil {
+		return 0, s.batchUpdateErr
+	}
+	if s.batchUpdateResult != 0 {
+		return s.batchUpdateResult, nil
+	}
+	return int64(len(ids)), nil
 }
 
 func (s *redeemRepoStub) Delete(ctx context.Context, id int64) error {
@@ -464,6 +498,96 @@ func (s *redeemRepoStub) ListByUserPaginated(ctx context.Context, userID int64, 
 
 func (s *redeemRepoStub) SumPositiveBalanceByUser(ctx context.Context, userID int64) (float64, error) {
 	panic("unexpected SumPositiveBalanceByUser call")
+}
+
+type subscriptionInvalidateCall struct {
+	userID  int64
+	groupID int64
+}
+
+type billingCacheStub struct {
+	invalidations chan subscriptionInvalidateCall
+}
+
+func newBillingCacheStub(buffer int) *billingCacheStub {
+	return &billingCacheStub{invalidations: make(chan subscriptionInvalidateCall, buffer)}
+}
+
+func (s *billingCacheStub) GetUserBalance(ctx context.Context, userID int64) (float64, error) {
+	panic("unexpected GetUserBalance call")
+}
+
+func (s *billingCacheStub) SetUserBalance(ctx context.Context, userID int64, balance float64) error {
+	panic("unexpected SetUserBalance call")
+}
+
+func (s *billingCacheStub) DeductUserBalance(ctx context.Context, userID int64, amount float64) error {
+	panic("unexpected DeductUserBalance call")
+}
+
+func (s *billingCacheStub) InvalidateUserBalance(ctx context.Context, userID int64) error {
+	panic("unexpected InvalidateUserBalance call")
+}
+
+func (s *billingCacheStub) GetSubscriptionCache(ctx context.Context, userID, groupID int64) (*SubscriptionCacheData, error) {
+	panic("unexpected GetSubscriptionCache call")
+}
+
+func (s *billingCacheStub) SetSubscriptionCache(ctx context.Context, userID, groupID int64, data *SubscriptionCacheData) error {
+	panic("unexpected SetSubscriptionCache call")
+}
+
+func (s *billingCacheStub) UpdateSubscriptionUsage(ctx context.Context, userID, groupID int64, cost float64) error {
+	panic("unexpected UpdateSubscriptionUsage call")
+}
+
+func (s *billingCacheStub) InvalidateSubscriptionCache(ctx context.Context, userID, groupID int64) error {
+	s.invalidations <- subscriptionInvalidateCall{userID: userID, groupID: groupID}
+	return nil
+}
+
+func (s *billingCacheStub) GetAPIKeyRateLimit(ctx context.Context, keyID int64) (*APIKeyRateLimitCacheData, error) {
+	panic("unexpected GetAPIKeyRateLimit call")
+}
+func (s *billingCacheStub) SetAPIKeyRateLimit(ctx context.Context, keyID int64, data *APIKeyRateLimitCacheData) error {
+	panic("unexpected SetAPIKeyRateLimit call")
+}
+func (s *billingCacheStub) UpdateAPIKeyRateLimitUsage(ctx context.Context, keyID int64, cost float64) error {
+	panic("unexpected UpdateAPIKeyRateLimitUsage call")
+}
+func (s *billingCacheStub) InvalidateAPIKeyRateLimit(ctx context.Context, keyID int64) error {
+	panic("unexpected InvalidateAPIKeyRateLimit call")
+}
+
+func (s *billingCacheStub) GetUserPlatformQuotaCache(ctx context.Context, userID int64, platform string) (*UserPlatformQuotaCacheEntry, bool, error) {
+	panic("unexpected GetUserPlatformQuotaCache call")
+}
+
+func (s *billingCacheStub) SetUserPlatformQuotaCache(ctx context.Context, userID int64, platform string, entry *UserPlatformQuotaCacheEntry, ttl time.Duration) error {
+	panic("unexpected SetUserPlatformQuotaCache call")
+}
+
+func (s *billingCacheStub) DeleteUserPlatformQuotaCache(ctx context.Context, userID int64, platform string) error {
+	panic("unexpected DeleteUserPlatformQuotaCache call")
+}
+
+func (s *billingCacheStub) IncrUserPlatformQuotaUsageCache(ctx context.Context, userID int64, platform string, cost float64, ttl time.Duration) error {
+	panic("unexpected IncrUserPlatformQuotaUsageCache call")
+}
+
+func waitForInvalidations(t *testing.T, ch <-chan subscriptionInvalidateCall, expected int) []subscriptionInvalidateCall {
+	t.Helper()
+	calls := make([]subscriptionInvalidateCall, 0, expected)
+	timeout := time.After(2 * time.Second)
+	for len(calls) < expected {
+		select {
+		case call := <-ch:
+			calls = append(calls, call)
+		case <-timeout:
+			t.Fatalf("timeout waiting for %d invalidations, got %d", expected, len(calls))
+		}
+	}
+	return calls
 }
 
 func TestAdminService_DeleteUser_Success(t *testing.T) {
@@ -516,6 +640,23 @@ func TestAdminService_DeleteGroup_Success(t *testing.T) {
 	err := svc.DeleteGroup(context.Background(), 5)
 	require.NoError(t, err)
 	require.Equal(t, []int64{5}, repo.deleteCalls)
+}
+
+func TestAdminService_DeleteGroup_InvalidatesAuthCacheForBoundKeys(t *testing.T) {
+	repo := &groupRepoStub{}
+	apiKeyRepo := &deleteGroupAPIKeyRepoStub{keys: []string{"k1", "k2"}}
+	invalidator := &authCacheInvalidatorStub{}
+	svc := &adminServiceImpl{
+		groupRepo:            repo,
+		apiKeyRepo:           apiKeyRepo,
+		authCacheInvalidator: invalidator,
+	}
+
+	err := svc.DeleteGroup(context.Background(), 5)
+	require.NoError(t, err)
+	require.Equal(t, []int64{5}, repo.deleteCalls)
+	require.Equal(t, []int64{5}, apiKeyRepo.listGroupIDs)
+	require.Equal(t, []string{"k1", "k2"}, invalidator.keys)
 }
 
 func TestAdminService_DeleteGroup_NotFound(t *testing.T) {
