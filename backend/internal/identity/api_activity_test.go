@@ -99,23 +99,19 @@ func TestAPIActivityConcurrentTrackingPublishingAndCounting(t *testing.T) {
 	tracker := NewAPIActivityTracker(APIActivityOptions{NodeID: "a"})
 	var workers sync.WaitGroup
 	for userID := int64(1); userID <= 6; userID++ {
-		workers.Add(1)
-		go func() {
-			defer workers.Done()
+		workers.Go(func() {
 			for range 100 {
 				finish := tracker.Track(userID)
 				_, _ = tracker.Count(context.Background())
 				finish()
 			}
-		}()
+		})
 	}
-	workers.Add(1)
-	go func() {
-		defer workers.Done()
+	workers.Go(func() {
 		for range 100 {
 			_ = tracker.Publish(context.Background())
 		}
-	}()
+	})
 	workers.Wait()
 	stats, err := tracker.Count(context.Background())
 	require.NoError(t, err)

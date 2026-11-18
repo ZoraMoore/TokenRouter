@@ -11,14 +11,14 @@ import (
 	"github.com/TokenFlux/TokenRouter/migrations"
 )
 
-// TestMigration275RemovesRedundantPricingControls 验证迁移只清除退役配置，分组协议、其他功能和价格规则保持原值；重复执行安全。
-func TestMigration275RemovesRedundantPricingControls(t *testing.T) {
-	tx := historicalTx(t, "275_")
+// TestMigration276RemovesRedundantPricingControls 检查退役配置的清理、模型映射与价格规则，以及重复执行。
+func TestMigration276RemovesRedundantPricingControls(t *testing.T) {
+	tx := historicalTx(t, "276_")
 	ctx := context.Background()
 	_, err := tx.ExecContext(ctx, `
-INSERT INTO pricing_configs(id,name,apply_pricing_to_account_stats) VALUES (97501,'migration275',true);
+INSERT INTO pricing_configs(id,name,apply_pricing_to_account_stats) VALUES (97501,'migration276',true);
 INSERT INTO groups(id,name,platform,responses_image_policy,routing_policy)
-VALUES (97501,'migration275','openai','enabled','{"enabled":true,"model_mapping":{"openai":{"alias":"gpt-test"}},"features_config":{"codex_image_generation_bridge":{"openai":false},"web_search_emulation":{"anthropic":true}}}');
+VALUES (97501,'migration276','openai','enabled','{"enabled":true,"model_mapping":{"openai":{"alias":"gpt-test"}},"features_config":{"codex_image_generation_bridge":{"openai":false},"web_search_emulation":{"anthropic":true}}}');
 INSERT INTO pricing_config_groups(pricing_config_id,group_id) VALUES (97501,97501);
 INSERT INTO pricing_config_model_pricing(id,pricing_config_id,platform,models,input_price) VALUES (97501,97501,'openai','["gpt-test"]',0);
 `)
