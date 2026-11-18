@@ -113,9 +113,17 @@ Apple container 的新栈使用 `org.tokenrouter.stack` 标签；已有的 `sub2
 相关文档：[系统架构](../architecture/system_architecture.md)、[配置](../interfaces/configuration.md)、[版本升级说明](upgrade_notes.md)、[运维目录](index.md)。
 
 
-## 本部署的安全运行版本
+## 本部署的运行版本
 
-2026 年 11 月 19 日的三个应用节点使用 `tokenrouter:0.2.10-custom-20261119-a7ef2a4d2`，镜像 ID 为 `sha256:5cc74598dd2e4d517004d715583d1f26909dac5d6873e218ec45084153da22d0`。源码来自 `ZoraMoore/TokenRouter` 的 `6f4b830b1f053fe540d6af4aea7589693f4ac716`，本机同步提交为 `a7ef2a4d279a236af1597ccab30e54b3db6d80f2`。远端快照 `e633356a3` 与本机同步前的 `1794c6bbf` 文件树相同，合并提交连接两份历史，运行代码采用远端版本。
+2026 年 11 月 19 日的三个应用节点使用 `tokenrouter:0.2.10-pelican-html-20261119-1f59a2476`，镜像 ID 为 `sha256:bab47a2cb3c78d74ea1a2ae604985347a3e3b174d7d85d11fe4966cd757861f5`，源码提交为 `1f59a24769834e18121a4a4bc2d43919d4662bb3`。绘图详情支持完整 HTML 原文的预览、代码查看和下载，保存规则见[分组鹈鹕测智](provider_maintenance.md#pelican_group_tests)。
+
+迁移 `303_pelican_raw_answer.sql` 为测试结果增加 `raw_answer` 列，历史记录使用空字符串。迁移表共 359 条，升级前 358 条记录的校验和一致。用户、API Key、分组、提供商、提供商分组关系、订单、价格配置及测试计划数量一致。发布逐节点等待现有连接结束后重建应用。三个节点的健康检查、首页及新前端资源通过验证，容器重启次数为 0。
+
+发布按用户要求跳过备份。回退镜像为 `tokenrouter:0.2.10-custom-20261119-a7ef2a4d2`，旧应用可以忽略新增的原文列，回退时保留该列与迁移记录。发布镜像、版本及验证记录位于 `/home/ubuntu/.local/state/tokenrouter-pelican-html-20261119`，临时 SSH 凭据在验证后删除。
+
+本地全量后端测试通过 211 个包，鹈鹕前端相关测试通过 47 项，历史迁移测试包及原文读写测试通过。源码提交的 [CI](https://github.com/ZoraMoore/TokenRouter/actions/runs/44403072765) 已通过。独立的 [Security Scan](https://github.com/ZoraMoore/TokenRouter/actions/runs/44403072558) 仍报告现有前后端依赖和 Go 标准库漏洞，依赖与编译器版本清单和更新前一致。
+
+同日较早一次发布使用 `tokenrouter:0.2.10-custom-20261119-a7ef2a4d2`，镜像 ID 为 `sha256:5cc74598dd2e4d517004d715583d1f26909dac5d6873e218ec45084153da22d0`。源码来自 `ZoraMoore/TokenRouter` 的 `6f4b830b1f053fe540d6af4aea7589693f4ac716`，本机同步提交为 `a7ef2a4d279a236af1597ccab30e54b3db6d80f2`。远端快照 `e633356a3` 与本机同步前的 `1794c6bbf` 文件树相同，合并提交连接两份历史，运行代码采用远端版本。
 
 镜像使用 Go 1.27.3 编译，前端由 Node 26.12.1 构建。运行层基于 `tokenrouter:0.2.10-header-activity-20261118-c7b73cb89`，更新主程序并移除 `/app/tls-ingress-observer`。构建产物、镜像归档、版本信息和节点核对记录位于 `/home/ubuntu/.local/state/tokenrouter-upgrade-20261119-6f4b830b1`。
 
