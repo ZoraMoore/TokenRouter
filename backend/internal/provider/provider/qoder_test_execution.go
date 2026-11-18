@@ -60,7 +60,7 @@ func (s *QoderProviderTest) Execute(c *TestRun, value *providercore.Record, mode
 	if sessionProvider == nil {
 		sessionProvider = NewQoderTokenProvider(qoder.SessionBuilder{})
 	}
-	if strings.TrimSpace(value.GetCredential("pat")) != "" {
+	if !c.FullAnswer && strings.TrimSpace(value.GetCredential("pat")) != "" {
 		if invalidator, ok := sessionProvider.(qoderProviderTestSessionInvalidator); ok {
 			invalidator.Invalidate(value.ID)
 		}
@@ -77,7 +77,7 @@ func (s *QoderProviderTest) Execute(c *TestRun, value *providercore.Record, mode
 	requestBody, err := json.Marshal(map[string]any{
 		"model":      testModelID,
 		"messages":   []map[string]string{{"role": "user", "content": testPrompt}},
-		"max_tokens": 16,
+		"max_tokens": c.tokenBudget(16),
 		"stream":     true,
 	})
 	if err != nil {
@@ -99,7 +99,7 @@ func (s *QoderProviderTest) Execute(c *TestRun, value *providercore.Record, mode
 	c.Begin(true)
 
 	(TestStreamOutput{}).SendEvent(c, providercore.TestEvent{Type: "test_start", Model: testModelID})
-	if site == qoder.SiteGlobal {
+	if site == qoder.SiteGlobal && !c.FullAnswer {
 		if err := s.probeQoderUserInfo(ctx, value, session); err != nil {
 			return (TestStreamOutput{}).Error(c, err.Error())
 		}
@@ -120,7 +120,7 @@ func (s *QoderProviderTest) Execute(c *TestRun, value *providercore.Record, mode
 			if err != nil {
 				return (TestStreamOutput{}).Error(c, err.Error())
 			}
-			return (TestStreamOutput{}).Qoder(c, resp.Body)
+			return c.readQoderTestResponse(resp, payloadBody, modelKey)
 		}
 	}
 	resp, err := client.StreamRequestContext(ctx, session, "", payloadBody, headers)
@@ -128,6 +128,14 @@ func (s *QoderProviderTest) Execute(c *TestRun, value *providercore.Record, mode
 		return (TestStreamOutput{}).Error(c, err.Error())
 	}
 
+	return c.readQoderTestResponse(resp, payloadBody, modelKey)
+}
+
+func (c *TestRun) readQoderTestResponse(resp *http.Response, payload []byte, modelKey string) error {
+	if c.FullAnswer {
+		defer func() { _ = resp.Body.Close() }()
+		return c.readAnswerForModel(resp, answerQoder, payload, modelKey)
+	}
 	return (TestStreamOutput{}).Qoder(c, resp.Body)
 }
 

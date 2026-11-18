@@ -68,8 +68,14 @@ func TestUpstreamResponseModelObserver_ObservesServiceTier(t *testing.T) {
 	ccObserver.ObserveOpenAI([]byte(`{"id":"chatcmpl-1","model":"gpt-5.5","service_tier":"priority","choices":[]}`), "")
 	require.Equal(t, "priority", ccObserver.ServiceTier())
 
-	// 无 model 的帧不触发 tier 观察（上游约束：tier 声明必带 model）。
+	// 兼容上游会在终态只返回档位，模型取此前的声明。
 	modelFree := &ResponseObserver{}
-	modelFree.ObserveOpenAI([]byte(`{"type":"response.completed","response":{"service_tier":"default"}}`), "response.completed")
+	modelFree.ObserveOpenAI([]byte(`{"type":"response.created","response":{"model":"first","service_tier":"priority"}}`), "")
+	require.Empty(t, modelFree.ServiceTier())
+	modelFree.ObserveOpenAI([]byte(`{"type":"response.completed","response":{"service_tier":" UltraFast "}}`), "response.completed")
+	require.Equal(t, "ultrafast", modelFree.ServiceTier())
+	require.Equal(t, "first", modelFree.Model())
+	modelFree.Reset()
+	require.Empty(t, modelFree.Model())
 	require.Empty(t, modelFree.ServiceTier())
 }

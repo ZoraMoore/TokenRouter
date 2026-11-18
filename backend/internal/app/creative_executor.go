@@ -53,6 +53,10 @@ func provideCreativeExecutor(cfg *config.Config, groups creativeprovider.Executi
 			return policy.UpstreamModel(ctx, model)
 		}
 		selection.Execute = func(ctx context.Context, run creative.CreativeRun, payload creative.CreativeRunPayload, model string) ([]creative.CreativeOutput, error) {
+			// 任务排队期间，管理员可能已经从 OAuth 名单中移除了这个图片型号。
+			if err := gatewayprovider.CheckOpenAIOAuthRequestModels(ctx, value, model, nil); err != nil {
+				return nil, err
+			}
 			return targets.ForProvider(value).ExecutePlatform(ctx, value.Record.Platform, run, payload, model)
 		}
 		selection.Report = func(model string, success bool) {

@@ -331,8 +331,9 @@ func (h *OpenAIOAuthHandler) QueryQuota(c *gin.Context) {
 // RefreshQuota 查询上游额度，并把带到期时间的重置次数快照持久化到提供商 extra。
 // POST /api/v1/admin/openai/providers/:id/quota/refresh
 func (h *OpenAIOAuthHandler) RefreshQuota(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store")
 	providerID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
+	if err != nil || providerID <= 0 {
 		response.BadRequest(c, "Invalid provider ID")
 		return
 	}
@@ -386,8 +387,9 @@ func (h *OpenAIOAuthHandler) CreateShadow(c *gin.Context) {
 // ResetQuota 消耗一次 OpenAI OAuth 提供商的上游限流重置次数。
 // POST /api/v1/admin/openai/providers/:id/reset-quota
 func (h *OpenAIOAuthHandler) ResetQuota(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store")
 	providerID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
+	if err != nil || providerID <= 0 {
 		response.BadRequest(c, "Invalid provider ID")
 		return
 	}

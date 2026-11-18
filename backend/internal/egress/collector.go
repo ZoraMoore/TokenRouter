@@ -3,21 +3,7 @@ package egress
 import (
 	"context"
 	"time"
-
-	"github.com/TokenFlux/TokenRouter/internal/pkg/tlscapture"
 )
-
-type TLSFingerprintCollectorSessionRequest struct {
-	Mode               string `json:"mode"`
-	ClientKind         string `json:"client_kind"`
-	ClientVersion      string `json:"client_version"`
-	Runtime            string `json:"runtime"`
-	RuntimeVersion     string `json:"runtime_version"`
-	OperatingSystem    string `json:"operating_system"`
-	Architecture       string `json:"architecture"`
-	TargetHost         string `json:"target_host"`
-	ColdStartConfirmed bool   `json:"cold_start_confirmed"`
-}
 
 // TLSFingerprintCollectorStatus 表示收集器当前运行状态。
 type TLSFingerprintCollectorStatus struct {
@@ -34,52 +20,47 @@ type TLSFingerprintCollectorStatus struct {
 
 // TLSFingerprintCollectorSession 表示一次短期采集会话。
 type TLSFingerprintCollectorSession struct {
-	Token              string    `json:"token"`
-	ExpiresAt          time.Time `json:"expires_at"`
-	CaptureURL         string    `json:"capture_url"`
-	ProxyURL           string    `json:"proxy_url,omitempty"`
-	Mode               string    `json:"mode"`
-	ClientKind         string    `json:"client_kind,omitempty"`
-	ClientVersion      string    `json:"client_version,omitempty"`
-	Runtime            string    `json:"runtime,omitempty"`
-	RuntimeVersion     string    `json:"runtime_version,omitempty"`
-	OperatingSystem    string    `json:"operating_system,omitempty"`
-	Architecture       string    `json:"architecture,omitempty"`
-	TargetHost         string    `json:"target_host,omitempty"`
-	ColdStartConfirmed bool      `json:"cold_start_confirmed"`
-	MinimumColdSamples int       `json:"minimum_cold_samples"`
-	CAPEM              string    `json:"ca_pem,omitempty"`
+	Token      string    `json:"token"`
+	ExpiresAt  time.Time `json:"expires_at"`
+	CaptureURL string    `json:"capture_url"`
+	CAPEM      string    `json:"ca_pem,omitempty"`
 }
 
 // TLSFingerprintCaptureRecord 表示一次采集结果。
 type TLSFingerprintCaptureRecord struct {
-	ID                  string                              `json:"id"`
-	CapturedAt          time.Time                           `json:"captured_at"`
-	ClientKind          string                              `json:"client_kind"`
-	DetectedClientKind  string                              `json:"detected_client_kind,omitempty"`
-	SourceKind          string                              `json:"source_kind"`
-	CaptureMode         string                              `json:"capture_mode"`
-	TargetHost          string                              `json:"target_host,omitempty"`
-	PromotionEligible   bool                                `json:"promotion_eligible"`
-	MatchingSampleCount int                                 `json:"matching_sample_count"`
-	BlockedReasons      []string                            `json:"blocked_reasons"`
-	ConnectionID        string                              `json:"-"`
-	RequestPath         string                              `json:"request_path"`
-	Method              string                              `json:"method"`
-	UserAgent           string                              `json:"user_agent"`
-	JA3Raw              string                              `json:"ja3_raw"`
-	JA3Hash             string                              `json:"ja3_hash"`
-	NegotiatedALPN      string                              `json:"negotiated_alpn"`
-	HTTPProto           string                              `json:"http_proto"`
-	Profile             *TLSFingerprintProfile              `json:"profile"`
-	YAML                string                              `json:"yaml"`
-	HeadersSummary      map[string]string                   `json:"headers_summary"`
-	StainlessSummary    map[string]string                   `json:"stainless_summary"`
-	RawTLSFingerprint   *CapturedClientHello                `json:"raw_tls_fingerprint,omitempty"`
-	ReplayValidation    *tlscapture.ProfileValidationReport `json:"replay_validation,omitempty"`
+	ID                string                 `json:"id"`
+	CapturedAt        time.Time              `json:"captured_at"`
+	ClientKind        string                 `json:"client_kind"`
+	RequestPath       string                 `json:"request_path"`
+	Method            string                 `json:"method"`
+	UserAgent         string                 `json:"user_agent"`
+	JA3Raw            string                 `json:"ja3_raw"`
+	JA3Hash           string                 `json:"ja3_hash"`
+	NegotiatedALPN    string                 `json:"negotiated_alpn"`
+	HTTPProto         string                 `json:"http_proto"`
+	Profile           *TLSFingerprintProfile `json:"profile"`
+	YAML              string                 `json:"yaml"`
+	HeadersSummary    map[string]string      `json:"headers_summary"`
+	StainlessSummary  map[string]string      `json:"stainless_summary"`
+	RawTLSFingerprint *CapturedClientHello   `json:"raw_tls_fingerprint,omitempty"`
 }
 
-type CapturedClientHello = tlscapture.CapturedClientHello
+// CapturedClientHello 保存诊断会话提取的握手参数和 JA3 摘要。
+type CapturedClientHello struct {
+	CipherSuites            []uint16
+	Curves                  []uint16
+	PointFormats            []uint16
+	SignatureAlgorithms     []uint16
+	SignatureAlgorithmsCert []uint16
+	ALPNProtocols           []string
+	SupportedVersions       []uint16
+	KeyShareGroups          []uint16
+	PSKModes                []uint16
+	Extensions              []uint16
+	EnableGREASE            bool
+	JA3Raw                  string
+	JA3Hash                 string
+}
 
 // Collector 是 HTTP 管理面消费的按需采集能力；监听由技术 Adapter 拥有。
 type Collector interface {

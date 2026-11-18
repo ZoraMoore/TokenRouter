@@ -3,30 +3,6 @@
     :is="isAuthenticated ? AppLayout : 'div'"
     :class="isAuthenticated ? '' : 'ba-theme-shell relative min-h-screen overflow-hidden'"
   >
-    <template v-if="isAuthenticated" #page-heading-actions>
-      <div class="model-marketplace-toolbar flex w-[calc(100vw-2rem)] max-w-full min-w-0 items-center gap-2 sm:w-auto">
-        <div class="min-w-0 flex-1 sm:w-80 sm:flex-none lg:w-[min(24rem,32vw)]">
-          <SearchInput
-            v-model="search"
-            :placeholder="t('marketplace.searchPlaceholder')"
-            :debounce-ms="120"
-          />
-        </div>
-
-        <FilterDropdown :active-count="activeFilterCount" :columns="3" keep-mounted @reset="resetPanelFilters">
-          <FilterField :label="t('marketplace.filterBrand')">
-            <Select v-model="selectedBrand" :options="brandSelectOptions" />
-          </FilterField>
-          <FilterField :label="t('marketplace.filterPricingMode')">
-            <Select v-model="selectedPricingMode" :options="pricingSelectOptions" />
-          </FilterField>
-          <FilterField :label="t('marketplace.filterGroup')">
-            <Select v-model="selectedGroupId" :options="groupSelectOptions" searchable />
-          </FilterField>
-        </FilterDropdown>
-      </div>
-    </template>
-
     <template v-if="!isAuthenticated">
       <div class="ba-theme-backdrop pointer-events-none fixed inset-0"></div>
 
@@ -83,34 +59,12 @@
         ? 'space-y-4'
         : 'relative z-10 px-4 pb-12 pt-6 sm:px-6 lg:px-8'"
     >
-      <div :class="isAuthenticated ? 'space-y-4' : 'relative mx-auto max-w-[1400px] space-y-5'">
+      <div :class="isAuthenticated ? 'space-y-4' : 'relative mx-auto max-w-[1400px] space-y-4'">
         <div v-if="!isAuthenticated" class="page-heading mb-4">
           <h1 class="page-title">{{ t('marketplace.title') }}</h1>
           <p class="page-description">{{ t('marketplace.subtitle') }}</p>
         </div>
-        <div v-if="!isAuthenticated" class="flex min-w-0 items-center gap-2">
-          <div class="min-w-0 flex-1 sm:w-80 sm:flex-none xl:w-96">
-            <SearchInput
-              v-model="search"
-              :placeholder="t('marketplace.searchPlaceholder')"
-              :debounce-ms="120"
-            />
-          </div>
-
-          <FilterDropdown :active-count="activeFilterCount" :columns="3" keep-mounted @reset="resetPanelFilters">
-            <FilterField :label="t('marketplace.filterBrand')">
-              <Select v-model="selectedBrand" :options="brandSelectOptions" />
-            </FilterField>
-            <FilterField :label="t('marketplace.filterPricingMode')">
-              <Select v-model="selectedPricingMode" :options="pricingSelectOptions" />
-            </FilterField>
-            <FilterField :label="t('marketplace.filterGroup')">
-              <Select v-model="selectedGroupId" :options="groupSelectOptions" searchable />
-            </FilterField>
-          </FilterDropdown>
-        </div>
-
-        <ModelMarketplaceSkeleton v-if="loading" />
+        <ModelMarketplaceSkeleton v-if="loading && !selectedGroup" />
 
         <div v-else-if="errorMessage" class="card border-red-200 p-6 dark:border-red-500/30">
           <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -124,38 +78,68 @@
           </div>
         </div>
 
-        <div v-else-if="!hasMarketplaceResults" class="card px-6 py-14">
-          <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-surface bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-primary-300">
-            <Icon name="inbox" size="xl" />
-          </div>
-          <h2 class="mt-6 text-center text-2xl font-semibold text-gray-950 dark:text-white">{{ t('marketplace.emptyTitle') }}</h2>
-          <p class="mx-auto mt-3 max-w-xl text-center text-sm leading-7 text-gray-600 dark:text-dark-300">
-            {{ t('marketplace.emptyDescription') }}
-          </p>
-          <div class="mt-6 text-center">
-            <button class="btn btn-secondary" type="button" @click="resetFilters">
-              {{ t('common.reset') }}
-            </button>
-          </div>
-        </div>
+        <EmptyState v-else-if="!selectedGroup" class="card" :title="t('marketplace.noPublicGroups')" />
 
-        <div v-else class="space-y-4">
+        <div v-else class="grid min-w-0 items-start gap-4 md:grid-cols-[12rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]">
+          <aside class="card min-w-0 p-4" aria-labelledby="marketplace-group-list">
+            <h2 id="marketplace-group-list" class="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-dark-50">
+              <Icon name="layers" size="sm" class="text-gray-500 dark:text-dark-400" />
+              {{ t('marketplace.modelGroups') }}
+            </h2>
+            <Select
+              v-model="selectedGroupId"
+              class="md:hidden"
+              :options="groupSelectOptions"
+              :aria-label="selectedGroup.name"
+              searchable
+            />
+            <div class="hidden min-w-0 gap-1 md:grid">
+              <button
+                v-for="item in sidebarGroups"
+                :key="item.id"
+                type="button"
+                class="flex min-h-9 w-full items-center gap-2 rounded-control border px-3 py-2 text-left text-sm focus-visible:outline-primary-500"
+                :class="item.id === selectedGroup.id
+                  ? 'border-primary-200 bg-primary-50 font-semibold text-primary-800 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-200'
+                  : 'border-transparent text-gray-700 hover:bg-gray-50 dark:text-dark-200 dark:hover:bg-dark-800'"
+                :aria-pressed="item.id === selectedGroup.id"
+                aria-controls="marketplace-models"
+                @click="selectedGroupId = item.id"
+              >
+                <ProviderIcon :brand="groupBrandSource(item)" size="18px" />
+                <span class="min-w-0 flex-1 [overflow-wrap:anywhere]">{{ item.name }}</span>
+                <span class="shrink-0 rounded-compact bg-black/5 px-2 text-xs leading-5 tabular-nums dark:bg-white/10" aria-hidden="true">{{ item.models.length }}</span>
+                <span class="sr-only">{{ t('marketplace.modelCount', item.models.length) }}</span>
+              </button>
+            </div>
+          </aside>
           <section
-            v-for="group in filteredGroups"
-            :key="group.id"
-            class="card overflow-hidden"
+            id="marketplace-models"
+            class="card min-w-0"
+            aria-labelledby="marketplace-group-name"
+            :aria-busy="loading"
             data-testid="marketplace-group-section"
           >
-            <div class="card-header flex flex-col gap-4 px-4 py-4 md:px-5 xl:flex-row xl:items-center xl:justify-between">
+            <header class="card-header flex flex-col gap-4 p-4 md:px-5 xl:flex-row xl:items-center">
               <div class="min-w-0 flex-1 space-y-3">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span :class="brandBadgeClass(group)">
-                    <ProviderIcon :brand="groupBrandSource(group)" size="14px" />
-                    {{ groupBrandLabel(group) }}
+                <div class="flex items-start gap-3">
+                  <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-surface border border-gray-200 bg-white dark:border-dark-600 dark:bg-dark-950">
+                    <ProviderIcon :brand="groupBrandSource(selectedGroup)" size="28px" />
                   </span>
-                  <!-- 分组头部展示相对官方价的最高优惠，无有效折扣数据时不渲染该标签；点击/悬停查看说明。 -->
+                  <div class="min-w-0 [overflow-wrap:anywhere]">
+                    <h2 id="marketplace-group-name" class="text-lg font-semibold text-gray-950 dark:text-white">{{ selectedGroup.name }}</h2>
+                    <p v-if="selectedGroup.description" class="mt-1 text-sm leading-6 text-gray-600 dark:text-dark-300">
+                      {{ selectedGroup.description }}
+                    </p>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span :class="brandBadgeClass(selectedGroup)">
+                    <ProviderIcon :brand="groupBrandSource(selectedGroup)" size="14px" />
+                    {{ groupBrandLabel(selectedGroup) }}
+                  </span>
                   <HelpTooltip
-                    v-if="formatMaxDiscountOff(group.official_price_ratio)"
+                    v-if="formatMaxDiscountOff(selectedGroup.official_price_ratio)"
                     trigger="both"
                     width-class="w-72"
                     :closable="false"
@@ -166,7 +150,7 @@
                         data-testid="group-max-discount-tag"
                         class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
                       >
-                        {{ formatMaxDiscountOff(group.official_price_ratio) }}
+                        {{ formatMaxDiscountOff(selectedGroup.official_price_ratio) }}
                       </span>
                     </template>
                   </HelpTooltip>
@@ -177,47 +161,48 @@
                     :content="t('marketplace.rateMultiplierHint')"
                   >
                     <template #trigger>
-                      <!-- 倍率使用中性填充，深色底与卡片拉开层次。 -->
                       <span
                         data-testid="group-rate-multiplier-tag"
                         class="rounded-full border border-gray-200/80 bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-600 dark:border-dark-600 dark:bg-dark-700/60 dark:text-dark-200"
                       >
-                        {{ formatRateMultiplierLabel(group.rate_multiplier) }}
+                        {{ formatRateMultiplierLabel(selectedGroup.rate_multiplier) }}
                       </span>
                     </template>
                   </HelpTooltip>
                 </div>
-
-                <div class="flex items-start gap-3">
-                  <span class="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-surface border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-950">
-                    <ProviderIcon :brand="groupBrandSource(group)" size="28px" />
-                  </span>
-                  <div class="min-w-0">
-                    <h2 class="text-lg font-semibold text-gray-950 dark:text-white">{{ group.name }}</h2>
-                    <p v-if="group.description" class="mt-1 text-sm leading-6 text-gray-600 dark:text-dark-300">
-                      {{ group.description }}
-                    </p>
-                  </div>
-                </div>
               </div>
               <div
-                v-if="group.availability"
-                class="w-full xl:ml-6 xl:w-[560px] xl:shrink-0"
+                v-if="selectedGroup.availability"
+                class="w-full min-w-0 xl:ml-auto xl:w-2/5 xl:max-w-[560px]"
                 data-testid="marketplace-group-availability"
               >
-                <!-- 用户侧只展示可用率，并利用释放出的空间将状态条靠右放置。 -->
-                <GroupAvailabilityBar
-                  :availability="group.availability"
-                  class="min-w-0"
-                />
+                <GroupAvailabilityBar :availability="selectedGroup.availability" />
               </div>
+            </header>
+
+            <div class="flex min-w-0 items-center gap-2 px-4 pt-4 md:px-5">
+              <label class="min-w-0 flex-1 sm:max-w-md">
+                <span class="sr-only">{{ t('marketplace.searchPlaceholder') }}</span>
+                <SearchInput v-model="search" :placeholder="t('marketplace.searchPlaceholder')" :debounce-ms="120" />
+              </label>
+              <FilterDropdown :active-count="activeFilterCount" :columns="2" keep-mounted @reset="resetPanelFilters">
+                <FilterField :label="t('marketplace.filterBrand')">
+                  <Select v-model="selectedBrand" :options="brandSelectOptions" :aria-label="t('marketplace.filterBrand')" />
+                </FilterField>
+                <FilterField :label="t('marketplace.filterPricingMode')">
+                  <Select v-model="selectedPricingMode" :options="pricingSelectOptions" :aria-label="t('marketplace.filterPricingMode')" />
+                </FilterField>
+              </FilterDropdown>
+              <p class="ml-auto shrink-0 pl-2 text-xs text-gray-500 dark:text-dark-400" role="status">
+                {{ t('marketplace.modelCount', selectedGroup.models.length) }}
+              </p>
             </div>
 
-            <div class="grid min-w-0 grid-cols-1 items-start gap-4 p-4 md:grid-cols-2 lg:grid-cols-3 md:p-5">
-              <!-- 窄屏使用单列和可收缩卡片，长定价内容在卡片内换行，大屏使用三列。 -->
+            <!-- 卡片列数取决于分组栏右侧的可用宽度。 -->
+            <div v-if="selectedGroup.models.length" class="grid min-w-0 grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] items-start gap-4 p-4 md:px-5">
               <article
-                v-for="model in group.models"
-                :key="`${group.id}-${model.id}`"
+                v-for="model in selectedGroup.models"
+                :key="`${selectedGroup.id}-${model.id}`"
                 class="group min-w-0 max-w-full rounded-surface border border-gray-100 bg-gray-50/80 p-4 transition hover:-translate-y-0.5 hover:border-black/20 hover:shadow-sm dark:border-dark-700 dark:bg-dark-950/80 dark:hover:border-primary-500/50"
               >
                 <div class="flex min-w-0 flex-wrap items-start justify-between gap-2">
@@ -278,6 +263,16 @@
                 </div>
               </article>
             </div>
+            <EmptyState
+              v-else
+              :title="hasFilters ? t('marketplace.emptyTitle') : t('marketplace.emptyGroup')"
+              :description="hasFilters
+                ? (sidebarGroups.length > 1 ? t('marketplace.otherGroupsMatch') : t('marketplace.emptyDescription'))
+                : undefined"
+              :action-text="hasFilters ? t('common.reset') : undefined"
+              :action-icon="false"
+              @action="resetFilters"
+            />
           </section>
         </div>
       </div>
@@ -304,6 +299,7 @@ import ModelPricingPanel from '@/components/marketplace/ModelPricingPanel.vue'
 import ModelProtocolChips from '@/components/marketplace/ModelProtocolChips.vue'
 import ProviderIcon from '@/components/common/ProviderIcon.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import Select from '@/components/common/Select.vue'
 import FilterDropdown from '@/components/common/FilterDropdown.vue'
@@ -320,7 +316,6 @@ import { sanitizeUrl } from '@/utils/url'
 import type { MarketplaceGroup, MarketplaceModelPricing, MarketplacePricingInterval } from '@/types'
 import { useAppStore, useAuthStore } from '@/stores'
 
-type VisibleMarketplaceGroup = MarketplaceGroup
 type PricingFilter = 'all' | 'token' | 'image' | 'unpriced'
 
 interface PricingRow {
@@ -340,9 +335,10 @@ const groups = ref<MarketplaceGroup[]>([])
 const loading = ref(true)
 const errorMessage = ref('')
 const search = ref('')
-const selectedBrand = ref<string | 'all'>('all')
+const selectedBrand = ref('all')
 const selectedPricingMode = ref<PricingFilter>('all')
-const selectedGroupId = ref<number | 'all'>('all')
+const selectedGroupId = ref<number | null>(null)
+let latestRequest = 0
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 
@@ -351,11 +347,8 @@ const siteLogo = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.site_
 const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
 
 const normalizedSearch = computed(() => search.value.trim().toLowerCase())
-const activeFilterCount = computed(() => [
-  selectedBrand.value !== 'all' ? selectedBrand.value : '',
-  selectedPricingMode.value !== 'all' ? selectedPricingMode.value : '',
-  selectedGroupId.value !== 'all' ? selectedGroupId.value : '',
-].filter(Boolean).length)
+const activeFilterCount = computed(() => [selectedBrand.value, selectedPricingMode.value].filter(value => value !== 'all').length)
+const hasFilters = computed(() => Boolean(normalizedSearch.value) || activeFilterCount.value > 0)
 
 const sortedGroups = computed(() =>
   [...groups.value].sort((left, right) => {
@@ -397,56 +390,39 @@ const pricingSelectOptions = computed(() => [
   { value: 'unpriced', label: t('marketplace.unpriced') },
 ])
 
-const groupSelectOptions = computed(() => [
-  { value: 'all', label: t('marketplace.allGroups') },
-  ...sortedGroups.value.map((group) => ({
-    value: group.id,
-    label: group.name,
-    search_terms: group.search_terms,
-  })),
-])
-
-const filteredGroups = computed<VisibleMarketplaceGroup[]>(() => {
+// 每个分组单独筛选模型，同名模型使用所在分组的报价和协议。
+const filteredGroups = computed(() => {
+  if (!hasFilters.value) return sortedGroups.value
   const keyword = normalizedSearch.value
-
-  return sortedGroups.value.flatMap((group) => {
-    if (selectedBrand.value !== 'all' && brandKey(groupBrandLabel(group)) !== brandKey(selectedBrand.value)) {
-      return []
+  const matchesKeyword = (value: string) => value?.toLowerCase().includes(keyword)
+  const brandFilter = selectedBrand.value === 'all' ? null : brandKey(selectedBrand.value)
+  return sortedGroups.value.map((group) => {
+    const brand = groupBrandLabel(group)
+    if (brandFilter && brandKey(brand) !== brandFilter) {
+      return { ...group, models: [], model_count: 0 }
     }
-
-    if (selectedGroupId.value !== 'all' && group.id !== selectedGroupId.value) {
-      return []
-    }
-
-    const groupMatchesKeyword = !keyword || [group.name, group.description, groupBrandSource(group), groupBrandLabel(group), ...(group.search_terms || [])]
-      .filter(Boolean)
-      .some((value) => value.toLowerCase().includes(keyword))
-
-    const models = group.models.filter((model) => {
-      if (selectedPricingMode.value !== 'all' && pricingKind(model.pricing) !== selectedPricingMode.value) {
-        return false
-      }
-
-      if (!keyword || groupMatchesKeyword) {
-        return true
-      }
-
-      return [model.id, model.display_name, ...(model.attributes?.search_terms || [])].some((value) => value.toLowerCase().includes(keyword))
+    const groupTerms = [group.name, group.description, groupBrandSource(group), brand, ...(group.search_terms || [])]
+    const matchesGroup = !keyword || groupTerms.some(matchesKeyword)
+    const models = group.models.filter(model => {
+      if (selectedPricingMode.value !== 'all' && pricingKind(model.pricing) !== selectedPricingMode.value) return false
+      if (matchesGroup) return true
+      const modelTerms = [model.id, model.display_name, ...(model.attributes?.search_terms || [])]
+      return modelTerms.some(matchesKeyword)
     })
-
-    if (models.length === 0) {
-      return []
-    }
-
-    return [{
-      ...group,
-      model_count: models.length,
-      models,
-    }]
+    return { ...group, models, model_count: models.length }
   })
 })
 
-const hasMarketplaceResults = computed(() => filteredGroups.value.length > 0)
+const selectedGroup = computed(() => filteredGroups.value.find(group => group.id === selectedGroupId.value))
+// 当前分组即使没有匹配模型也列在左栏，由用户选择是否切换到其他命中分组。
+const sidebarGroups = computed(() => filteredGroups.value.filter(item =>
+  !hasFilters.value || item.id === selectedGroupId.value || item.models.length > 0
+))
+const groupSelectOptions = computed(() => sidebarGroups.value.map(item => ({
+  value: item.id,
+  label: `${item.name} (${item.models.length})`,
+  search_terms: item.search_terms,
+})))
 
 function hasPositiveValue(value?: number | null): value is number {
   return typeof value === 'number' && value > 0
@@ -457,11 +433,10 @@ function hasContextIntervalPricing(pricing: MarketplaceModelPricing): boolean {
   return (pricing.context_intervals?.length ?? 0) > 0
 }
 
-// 面板内重置只清空下拉条件；空结果页的重置还会一并清空搜索词。
+// 筛选面板保留搜索词，空结果下的重置同时清空搜索词。
 function resetPanelFilters() {
   selectedBrand.value = 'all'
   selectedPricingMode.value = 'all'
-  selectedGroupId.value = 'all'
 }
 
 function resetFilters() {
@@ -666,19 +641,27 @@ function imagePricingRows(pricing: MarketplaceModelPricing): PricingRow[] {
 }
 
 async function fetchMarketplace() {
+  // 切换语言时可能同时有多个目录请求，页面以最近发出的请求为准。
+  const request = ++latestRequest
   loading.value = true
   errorMessage.value = ''
 
   try {
-    groups.value = await getMarketplaceModels()
+    const next = await getMarketplaceModels()
+    if (request !== latestRequest) return
+    groups.value = next
+    if (!next.some(item => item.id === selectedGroupId.value)) {
+      selectedGroupId.value = sortedGroups.value[0]?.id ?? null
+    }
   } catch (error) {
+    if (request !== latestRequest) return
     console.error('Failed to load marketplace models:', error)
     errorMessage.value =
       typeof error === 'object' && error !== null && 'message' in error
         ? String(error.message)
         : t('common.unknownError')
   } finally {
-    loading.value = false
+    if (request === latestRequest) loading.value = false
   }
 }
 

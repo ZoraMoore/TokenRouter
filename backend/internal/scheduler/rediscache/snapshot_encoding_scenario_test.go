@@ -89,6 +89,7 @@ func TestBuildSchedulerMetadataProvider_KeepsOpenAIAPIKeyProtocolFields(t *testi
 			"responses_ws_connection_mode":                  "per_session",
 			"openai_ws_force_http":                          true,
 			"openai_text_route_mode":                        "force_chat_completions",
+			"openai_response_tier_billing_enabled":          true,
 			"openai_responses_probe_status":                 "unsupported",
 			"openai_compact_mode":                           "force_off",
 			"openai_native_compaction_v2_mode":              "force_on",
@@ -104,6 +105,7 @@ func TestBuildSchedulerMetadataProvider_KeepsOpenAIAPIKeyProtocolFields(t *testi
 	require.Equal(t, "per_session", got.Extra["responses_ws_connection_mode"])
 	require.NotContains(t, got.Extra, "openai_ws_force_http")
 	require.Equal(t, "force_chat_completions", got.Extra["openai_text_route_mode"])
+	require.True(t, got.OpenAIResponseTierBillingEnabled())
 	require.NotContains(t, got.Extra, "openai_responses_probe_status")
 	require.Equal(t, "force_off", got.Extra["openai_compact_mode"])
 	require.Equal(t, "force_on", got.Extra["openai_native_compaction_v2_mode"])

@@ -339,6 +339,7 @@
             :allowed-models="allowedModels"
             v-model:mappings="modelMappings"
             :platform="provider.type === 'bedrock' ? 'anthropic' : provider.platform"
+            :hint="provider.platform === 'openai' && provider.type === 'oauth' ? t('admin.providers.openaiOAuthModelRestrictionHint') : undefined"
             :provider-id="provider.type === 'bedrock' ? undefined : provider.id"
             :source-placeholder="provider.type === 'bedrock' ? t('admin.providers.fromModel') : undefined"
             :target-placeholder="provider.type === 'bedrock' ? t('admin.providers.toModel') : undefined"
@@ -425,6 +426,14 @@
                 <p class="input-hint">{{ t('admin.providers.billingRateMultiplierHint') }}</p>
               </div>
             </div>
+            <SettingToggleRow
+              v-if="provider.platform === 'openai' && (provider.type === 'apikey' || provider.type === 'oauth')"
+              id="edit-openai-ultrafast-billing"
+              v-model="openAIResponseTierBillingEnabled"
+              :label="t('admin.providers.openai.ultrafastBilling')"
+              :hint="t('admin.providers.openai.ultrafastBillingDesc')"
+              testid="edit-openai-ultrafast-billing-toggle"
+            />
             <template v-if="supportsProviderSchedulingThresholdOverride">
               <SettingToggleRow
                 id="edit-provider-scheduling-threshold"
@@ -1225,6 +1234,8 @@ const customBaseUrl = ref('')
 
 // OpenAI 自动透传开关（OAuth/API Key）
 const openaiPassthroughEnabled = ref(false)
+// 编辑使用完整的 extra，切换提供商时要重读其档位计费设置。
+const openAIResponseTierBillingEnabled = ref(false)
 // OpenAI OAuth namespace 工具摊平兼容开关，缺省关闭即原样保留。
 const openaiFlattenNamespacesEnabled = ref(false)
 // OpenAI 订阅档位（Plus/Pro/Free）手动覆盖值,存于 credentials.plan_type;'' 表示清空/自动识别
@@ -1625,6 +1636,7 @@ const syncFormFromProvider = (newProvider: Provider | null) => {
 
   // 加载 OpenAI OAuth、SetupToken 和 API Key 提供商的透传设置。
   openaiPassthroughEnabled.value = false
+  openAIResponseTierBillingEnabled.value = false
   openaiFlattenNamespacesEnabled.value = false
   editPlanType.value = ''
   openAICompactMode.value = 'force_on'
@@ -1650,6 +1662,9 @@ const syncFormFromProvider = (newProvider: Provider | null) => {
       : ''
     openAICompactMode.value = normalizeOpenAICompactMode(extra?.openai_compact_mode)
     openAINativeCompactionV2Mode.value = normalizeOpenAICompactMode(extra?.openai_native_compaction_v2_mode)
+    if (newProvider.type === 'apikey' || newProvider.type === 'oauth') {
+      openAIResponseTierBillingEnabled.value = extra?.openai_response_tier_billing_enabled === true
+    }
     if (newProvider.type === 'apikey') {
       openAIResponsesContinuationSupported.value = extra?.openai_responses_continuation_supported === true
       openAIImagesURLToB64JSON.value = extra?.images_url_to_b64_json === true
@@ -2889,6 +2904,11 @@ const handleSubmit = async () => {
       clearLegacyResponsesWSSettings(newExtra)
       delete newExtra.openai_ws_enabled
       delete newExtra.openai_long_context_billing_enabled
+      if ((props.provider.type === 'apikey' || props.provider.type === 'oauth') && openAIResponseTierBillingEnabled.value) {
+        newExtra.openai_response_tier_billing_enabled = true
+      } else {
+        delete newExtra.openai_response_tier_billing_enabled
+      }
       if (openaiPassthroughEnabled.value) {
         newExtra.openai_passthrough = true
       } else {

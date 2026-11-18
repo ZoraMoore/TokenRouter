@@ -117,7 +117,7 @@ type Profile struct {
 	PointFormats        []uint16
 	EnableGREASE        bool
 	SignatureAlgorithms []uint16 // Empty uses defaultSignatureAlgorithms
-	// SignatureAlgorithmsCert 独立控制 signature_algorithms_cert；为空时沿用 SignatureAlgorithms。
+	// SignatureAlgorithmsCert 指定扩展 50 的算法列表，未填写时使用 SignatureAlgorithms。
 	SignatureAlgorithmsCert []uint16
 	ALPNProtocols           []string // Empty uses ["http/1.1"]
 	SupportedVersions       []uint16 // Empty uses [TLS1.3, TLS1.2]
@@ -179,9 +179,6 @@ func NewSOCKS5ProxyDialer(profile *Profile, proxyURL *url.URL) *SOCKS5ProxyDiale
 // DialTLSContext establishes a TLS connection through SOCKS5 proxy with the configured fingerprint.
 // Flow: SOCKS5 CONNECT to target -> TLS handshake with utls on the tunnel.
 func (d *SOCKS5ProxyDialer) DialTLSContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	if err := ValidateProfile(d.profile); err != nil {
-		return nil, fmt.Errorf("validate TLS fingerprint profile: %w", err)
-	}
 	slog.Debug("tls_fingerprint_socks5_connecting", "proxy", d.proxyURL.Host, "target", addr)
 
 	// Step 1: Create SOCKS5 dialer
@@ -230,9 +227,6 @@ func (d *SOCKS5ProxyDialer) DialTLSContext(ctx context.Context, network, addr st
 func (d *HTTPProxyDialer) DialTLSContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	if d == nil || d.proxyURL == nil {
 		return nil, errors.New("HTTP proxy dialer missing proxy URL")
-	}
-	if err := ValidateProfile(d.profile); err != nil {
-		return nil, fmt.Errorf("validate TLS fingerprint profile: %w", err)
 	}
 	slog.Debug("tls_fingerprint_http_proxy_connecting", "proxy", d.proxyURL.Host, "target", addr)
 
@@ -329,9 +323,6 @@ func (d *Dialer) DialTLSContext(ctx context.Context, network, addr string) (net.
 	if d == nil {
 		return nil, errors.New("TLS fingerprint dialer is nil")
 	}
-	if err := ValidateProfile(d.profile); err != nil {
-		return nil, fmt.Errorf("validate TLS fingerprint profile: %w", err)
-	}
 	// Establish TCP connection using base dialer (supports proxy)
 	slog.Debug("tls_fingerprint_dialing_tcp", "addr", addr)
 	conn, err := d.baseDialer(ctx, network, addr)
@@ -349,10 +340,6 @@ func (d *Dialer) DialTLSContext(ctx context.Context, network, addr string) (net.
 // It builds a ClientHello spec from the profile, applies it, and completes the handshake.
 // On failure, conn is closed and an error is returned.
 func performTLSHandshake(ctx context.Context, conn net.Conn, profile *Profile, addr string) (net.Conn, error) {
-	if err := ValidateProfile(profile); err != nil {
-		_ = conn.Close()
-		return nil, fmt.Errorf("validate TLS fingerprint profile: %w", err)
-	}
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		host = addr
@@ -512,7 +499,7 @@ func buildClientHelloSpecFromProfile(profile *Profile) *utls.ClientHelloSpec {
 		case 0xff01: // renegotiation_info
 			extensions = append(extensions, &utls.RenegotiationInfoExtension{})
 		default:
-			// 实际拨号和验证入口会先拒绝未知扩展；这里保留兜底仅维持构建函数签名兼容。
+			// 未单独实现的扩展按 ID 写入空载荷。
 			extensions = append(extensions, &utls.GenericExtension{Id: id})
 		}
 	}

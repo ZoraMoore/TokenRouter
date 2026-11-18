@@ -475,7 +475,7 @@ describe('ProviderUsageCell', () => {
     expect(getUsage).toHaveBeenCalledWith(2011, 'active', true)
   })
 
-  it('OpenAI OAuth 用量列不再显示容易误触的上游重置按钮', async () => {
+  it('OpenAI OAuth 用量列在查询到次数前禁用重置', async () => {
     getUsage.mockResolvedValue({
       five_hour: {
         utilization: 26,
@@ -527,7 +527,32 @@ describe('ProviderUsageCell', () => {
 
     expect(wrapper.text()).toContain('admin.providers.usageWindow.activeQuery')
     expect(wrapper.text()).toContain('admin.providers.openaiQuotaReset.count')
-    expect(wrapper.text()).not.toContain('admin.providers.openaiQuotaReset.reset')
+    expect(wrapper.get('[data-testid="quota-reset"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('当前账号实时查询的 5h 和 7d 覆盖旧窗口，迟到的批量快照不能覆盖实时额度', async () => {
+    const p = makeProvider({ id: 2901, platform: 'openai', type: 'oauth' })
+    const wrapper = mount(ProviderUsageCell, {
+      props: { provider: p, quotaRefreshToken: 2, requestBatchedUsage: vi.fn() },
+      global: { stubs: { UsageProgressBar: true, ProviderQuotaInfo: true } }
+    })
+    const controls = wrapper.getComponent({ name: 'OpenAIQuotaResetCell' })
+    expect(controls.props('refreshToken')).toBe(2)
+    controls.vm.$emit('invite-reset', p)
+    expect(wrapper.emitted('invite-reset')).toEqual([[p]])
+    const now = Math.floor(Date.now() / 1000)
+    controls.vm.$emit('quota-updated', {
+      fetched_at: now, rate_limit: {
+        primary_window: { used_percent: 22, limit_window_seconds: 604800, reset_at: now + 800 },
+        secondary_window: { used_percent: 3, limit_window_seconds: 18000, reset_at: now + 100 }
+      }
+    })
+    await flushPromises()
+    expect(wrapper.findAllComponents({ name: 'UsageProgressBar' }).map(bar => [bar.props('label'), bar.props('utilization')])).toEqual([['5h', 3], ['7d', 22]])
+    await wrapper.setProps({ batchedUsage: {
+      updated_at: new Date((now - 100) * 1000).toISOString(), five_hour: null, seven_day: null, seven_day_sonnet: null
+    } })
+    expect(wrapper.findAllComponents({ name: 'UsageProgressBar' })).toHaveLength(2)
   })
 
   it('OpenAI OAuth 自动暂停时会在查询按钮右侧显示暂停调度状态', async () => {

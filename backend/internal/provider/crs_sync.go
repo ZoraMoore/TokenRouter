@@ -28,9 +28,10 @@ type CRSExporter interface {
 	Fetch(context.Context, string, string, string) (*transfer.CRSExportResponse, error)
 }
 type CRSOptions struct {
-	Now     func() time.Time
-	Warn    func(string, ...any)
-	Refresh func(context.Context, *Record) error
+	Now                   func() time.Time
+	Warn                  func(string, ...any)
+	Refresh               func(context.Context, *Record) error
+	ReadOpenAIOAuthModels OpenAIOAuthModelPolicyReader
 }
 
 // CRSSync 按六类来源逐项同步和预览，通过接口执行网络登录与凭据交换。
@@ -525,8 +526,10 @@ func (s *CRSSync) SyncFromCRS(ctx context.Context, input SyncFromCRSInput) (*Syn
 				Status:      status,
 				Schedulable: src.Schedulable,
 			}
-			ApplyOpenAICreationModels(provider)
-			if err := s.providerRepo.Create(ctx, provider); err != nil {
+			if err = ApplyOpenAICreationModels(ctx, provider, s.options.ReadOpenAIOAuthModels); err == nil {
+				err = s.providerRepo.Create(ctx, provider)
+			}
+			if err != nil {
 				item.Action = "failed"
 				item.Error = "create failed: " + err.Error()
 				result.Failed++

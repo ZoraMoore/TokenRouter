@@ -14,17 +14,17 @@ import (
 
 // TestConnectionResult 测试连接结果。
 type TestConnectionResult struct {
-	Text        string // 响应文本
-	MappedModel string // 实际使用的模型
+	Text            string // 响应文本
+	MappedModel     string // 实际使用的模型
+	ReasoningEffort string // 测智请求实际携带的推理档位
 }
 
-// BuildGeminiTestRequest 构建 Gemini 格式测试请求
-// 使用最小 token 消耗：使用调用方提示词并限制 maxOutputTokens 为 1。
+// BuildGeminiTestRequest 为 Gemini 连接测试生成一个 token。
 func BuildGeminiTestRequest(projectID, model string, prompts ...string) ([]byte, error) {
-	prompt := "."
-	if len(prompts) > 0 && strings.TrimSpace(prompts[0]) != "" {
-		prompt = strings.TrimSpace(prompts[0])
-	}
+	return buildGeminiTestRequest(projectID, model, testPrompt(prompts), 1)
+}
+
+func buildGeminiTestRequest(projectID, model, prompt string, maxTokens int) ([]byte, error) {
 	payload := map[string]any{
 		"contents": []map[string]any{
 			{
@@ -41,20 +41,19 @@ func BuildGeminiTestRequest(projectID, model string, prompts ...string) ([]byte,
 			},
 		},
 		"generationConfig": map[string]any{
-			"maxOutputTokens": 1,
+			"maxOutputTokens": maxTokens,
 		},
 	}
 	payloadBytes, _ := json.Marshal(payload)
 	return WrapV1InternalRequest(projectID, model, payloadBytes)
 }
 
-// BuildClaudeTestRequest 构建 Claude 格式测试请求并转换为 Gemini 格式
-// 使用最小 token 消耗：使用调用方提示词并限制 MaxTokens 为 1。
+// BuildClaudeTestRequest 将一个 token 的 Claude 连接测试请求转换为 Gemini 格式。
 func BuildClaudeTestRequest(projectID, mappedModel string, prompts ...string) ([]byte, error) {
-	prompt := "."
-	if len(prompts) > 0 && strings.TrimSpace(prompts[0]) != "" {
-		prompt = strings.TrimSpace(prompts[0])
-	}
+	return buildClaudeTestRequest(projectID, mappedModel, testPrompt(prompts), 1)
+}
+
+func buildClaudeTestRequest(projectID, mappedModel, prompt string, maxTokens int) ([]byte, error) {
 	promptJSON, _ := json.Marshal(prompt)
 	claudeReq := &protocolanthropic.ClaudeRequest{
 		Model: mappedModel,
@@ -64,10 +63,25 @@ func BuildClaudeTestRequest(projectID, mappedModel string, prompts ...string) ([
 				Content: json.RawMessage(promptJSON),
 			},
 		},
-		MaxTokens: 1,
+		MaxTokens: maxTokens,
 		Stream:    false,
 	}
 	return TransformClaudeToGemini(claudeReq, projectID, mappedModel)
+}
+
+// BuildAnswerRequest 按最终模型选择报文，为题目分配完整回答的输出预算。
+func BuildAnswerRequest(projectID, model, prompt string, maxTokens int) ([]byte, error) {
+	if strings.HasPrefix(model, "gemini-") {
+		return buildGeminiTestRequest(projectID, model, prompt, maxTokens)
+	}
+	return buildClaudeTestRequest(projectID, model, prompt, maxTokens)
+}
+
+func testPrompt(prompts []string) string {
+	if len(prompts) > 0 && strings.TrimSpace(prompts[0]) != "" {
+		return strings.TrimSpace(prompts[0])
+	}
+	return "."
 }
 
 // ExtractTextFromSSEResponse 从 SSE 流式响应中提取文本。

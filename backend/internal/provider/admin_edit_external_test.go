@@ -166,6 +166,27 @@ func TestAdminServiceBulkUpdateProvidersNormalizesOpenAIContinuationCapability(t
 	require.Equal(t, true, repo.lastBulkUpdate.Extra[providercore.ExtraKeyResponsesContinuationSupported])
 }
 
+// TestAdminOAuthResponseTierBilling 检查单个和批量更新 OAuth 计费开关时写入的字段。
+func TestAdminOAuthResponseTierBilling(t *testing.T) {
+	ctx := context.Background()
+	account := &providercore.Record{ID: 1, Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeOAuth}
+	extra := map[string]any{providercore.OpenAIResponseTierBillingEnabledKey: true}
+
+	single := &deprecatedProviderExtraRepoStub{provider: account}
+	require.NoError(t, newProviderEditorForTest(single).UpdateProviderExtra(ctx, account.ID, maps.Clone(extra)))
+	require.Equal(t, extra, single.lastExtraUpdates)
+
+	batch := &providerRepoStubForBulkUpdate{getByIDsProviders: []*providercore.Record{account}}
+	result, err := newProviderEditorForTest(batch).BulkUpdateProviders(ctx, &providercore.BulkUpdateProvidersInput{
+		ProviderIDs: []int64{account.ID},
+		Extra:       maps.Clone(extra),
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Success)
+	require.Equal(t, extra, batch.lastBulkUpdate.Extra)
+	require.Empty(t, batch.lastBulkUpdate.ProtocolUpdates)
+}
+
 func TestAdminServiceBulkUpdateProvidersRejectsContinuationForNonOpenAIAPIKey(t *testing.T) {
 	repo := &providerRepoStubForBulkUpdate{getByIDsProviders: []*providercore.Record{
 		{ID: 1, Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeOAuth},

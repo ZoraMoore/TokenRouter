@@ -19,6 +19,8 @@
 
 前端构建会导入 `backend/internal/pkg/locale/manifest.json`、`error_messages.json` 和 `backend/internal/provider/openai_defaults.json`。根目录和 `deploy/` 的 Dockerfile 在前端构建阶段将这些文件复制到 `/app/backend/` 下对应的目录，与源码中的相对导入路径一致。
 
+定制镜像由 `deploy/Dockerfile` 构建，应用入口为 `/app/tokenrouter`。前端构建阶段将 Node.js 的堆上限设为 4096 MiB。
+
 仓库支持以下运行方式：
 
 | 方式 | 入口 | 依赖和说明 |
@@ -111,13 +113,9 @@ Apple container 的新栈使用 `org.tokenrouter.stack` 标签；已有的 `sub2
 相关文档：[系统架构](../architecture/system_architecture.md)、[配置](../interfaces/configuration.md)、[版本升级说明](upgrade_notes.md)、[运维目录](index.md)。
 
 
-## 本部署的 observer 镜像
-
-`deploy/Dockerfile` 同时构建 `/app/tokenrouter` 与 `/app/tls-ingress-observer`。生产 Compose 的主服务和 `authenticated-ingress` profile 使用同一不可变自定义标签。observer 使用 host network 和受限 Linux capabilities，在取得抓包 socket 后降权运行。Nginx 覆盖连接配对 Header，并在公网入口将 `/internal/` 返回为 404。
-
 ## 本部署的安全运行版本
 
-生产主服务与 observer 的镜像为 `tokenrouter:0.2.10-header-activity-20261118-c7b73cb89`，主程序来自提交 `c7b73cb89bb072244834ff369d20e5f4ed1e6486`，业务定制基于 `af7fd1a3e982ff4b09331cd32b047b365c2c1666`。Edu 账号按套餐标识关闭加速，GPT 官key 分组使用 `follow_request`，规则见 [Fast 与 Ultra Fast 策略](../interfaces/openai_upstream.md#openai_fast_policy)。该版本包含 `18decad28b7157bf7e4890338cc1988d8f876351` 的 Fast 长上下文计价修复，账号 233 在分组 8 的使用记录、CSV 倍率列、个人密钥及本人所有的团队密钥把 0.2 展示为 0.14。预览记录使用响应式副本，费用、Token 和耗时明细浮层能够完成悬停目标比较。扣费、原始记录和后端接口使用计费数据，具体规则见[记录与对账](../domains/routing_and_billing.md#记录与对账)。镜像使用 Go 1.27.3 编译，运行于 Alpine 3.24.2，前端构建使用 Node 26.12.1。
+2026 年 11 月 18 日的生产主服务使用镜像 `tokenrouter:0.2.10-header-activity-20261118-c7b73cb89`，主程序来自提交 `c7b73cb89bb072244834ff369d20e5f4ed1e6486`，业务定制基于 `af7fd1a3e982ff4b09331cd32b047b365c2c1666`。Edu 账号按套餐标识关闭加速，GPT 官key 分组使用 `follow_request`，规则见 [Fast 与 Ultra Fast 策略](../interfaces/openai_upstream.md#openai_fast_policy)。该版本包含 `18decad28b7157bf7e4890338cc1988d8f876351` 的 Fast 长上下文计价修复，账号 233 在分组 8 的使用记录、CSV 倍率列、个人密钥及本人所有的团队密钥把 0.2 展示为 0.14。预览记录使用响应式副本，费用、Token 和耗时明细浮层能够完成悬停目标比较。扣费、原始记录和后端接口使用计费数据，具体规则见[记录与对账](../domains/routing_and_billing.md#记录与对账)。镜像使用 Go 1.27.3 编译，运行于 Alpine 3.24.2，前端构建使用 Node 26.12.1。
 
 Edu 兼容版本的源码、缓存构建配方和验收记录位于 `/mnt/data/edu-standard-20261106/`。后端完整单元测试有 210 个包通过。上线后已确认 Edu 的强制 Fast Key 按普通模式结算，商业 Pro 继续使用 Fast，价卡和提供商分组关联的校验值一致。主服务健康检查和首页返回 200，非法 Key 返回 401。迁移表有 354 条记录，最大迁移为 `298_preserve_custom_image_billing.sql`。本次按用户要求跳过备份。镜像回退使用 `tokenrouter:0.2.10-user-rate-tooltip-20261105-3b8c4ea1c`。
 
@@ -169,7 +167,7 @@ HAProxy 每三秒检查应用 `/health`，连续两次失败后停止向该节�
 
 三个实例分别配置 `OPS_NODE_ID=primary`、`secondary`、`tertiary`，`OPS_NODE_NAME` 为对应公网 IP，`OPS_CLUSTER_NODE_IDS=primary,secondary,tertiary`。运维概览通过共享 Redis 读取各节点十五秒一次的资源心跳，展示整机容量与应用额度。当前整机合计 8 核 CPU、15379 MiB 内存，应用 CPU 额度合计 7.6 核，内存上限合计 11264 MiB。采样与离线规则见[多节点资源容量](ops_monitoring_and_alerting.md#多节点资源容量)。
 
-资源监控版本的源码和构建产物位于 `/mnt/data/sub2api-build-cache/cluster-monitor-20261118`。运行镜像以 Edu 定制镜像为基础替换主程序，基础证书库与 observer 程序由该镜像提供。
+资源监控版本的源码和构建产物位于 `/mnt/data/sub2api-build-cache/cluster-monitor-20261118`。这次构建以 Edu 定制镜像为基础，替换主程序并复用证书库。
 
 顶栏标识和用户活跃人数版本的源码、构建产物与验收记录位于 `/mnt/data/sub2api-build-cache/header-activity-20261118` 和 `/mnt/data/sub2api-build-cache/header-activity-verification`。该镜像以资源监控版本为基础替换主程序。用户管理展示五分钟 API 活跃人数，三个节点按用户 ID 合并，每十五秒发布并刷新，统计规则见 [API 活跃用户人数](../domains/identity_and_tenancy.md#api_user_activity)。
 
@@ -179,7 +177,7 @@ WireGuard 接口为 `wg-sci`，主节点地址为 `10.203.76.1`，secondary 地�
 
 `sub2api-shared-data-proxy` 在 Docker 网络中通过服务名解析 PostgreSQL 和 Redis，并在 WireGuard 地址提供 `10.203.76.1:15432` 和 `10.203.76.1:16379`。secondary 和 tertiary 使用这两个地址访问共享数据。数据容器重新创建后，代理通过 Docker DNS 更新目标地址。公网地址未发布这些监听。
 
-应用负载均衡容器 `sub2api-load-balancer` 使用主机网络，primary 通过本机回环连接应用，secondary 和 tertiary 通过 WireGuard 连接应用。这个布局与各应用的可信代理地址匹配。主节点的 `tokenrouter-tls-ingress-observer-node2` 和 `tokenrouter-tls-ingress-observer-node3` 分别通过 `127.0.0.1:18089`、`127.0.0.1:18090` 的 Nginx 转发服务，将同一 TLS 入口的观测发送给对应节点。转发服务接受指定的观测路径，观察器与接收端继续校验内部认证凭据，请求在任一节点完成鉴权时均可关联观测。
+应用负载均衡容器 `sub2api-load-balancer` 使用主机网络，primary 通过本机回环连接应用，secondary 和 tertiary 通过 WireGuard 连接应用。这个布局与各应用的可信代理地址匹配。
 
 主节点服务单元为 `scienceedu-load-balancer.service`，secondary 和 tertiary 分别使用 `scienceedu-node2.service`、`scienceedu-node3.service`。这些服务在 Docker 和 `wg-quick@wg-sci.service` 启动后运行。secondary 和 tertiary 的运行配置位于各自的 `/opt/sub2api/runtime.env`，权限为 `0600`。
 

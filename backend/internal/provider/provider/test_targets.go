@@ -23,6 +23,9 @@ func (t *TestTargets) LoadTestTarget(ctx context.Context, request provider.TestR
 	if err != nil {
 		return nil, err
 	}
+	if value == nil {
+		return nil, provider.ErrIQUnavailable
+	}
 	switch value.Platform {
 	case provider.PlatformQoder:
 		return t.Qoder.Target(value), nil

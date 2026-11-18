@@ -60,11 +60,16 @@ func (s *OpenAIProviderTest) Execute(c *TestRun, value *providercore.Record, mod
 	// 原生 V2 与普通 Responses 一样只使用常规模型映射；旧端点兼容性测试才
 	// 在其基础上追加 compact_model_mapping。
 	testModelID = mappedTestModel(value, testModelID)
+	if mode == providercore.ProviderTestModeLegacyCompact {
+		testModelID = providercore.ResolveCompactForwardModel(value, testModelID)
+	}
+	if !value.AllowsOpenAIOAuthTarget(value.OpenAIOAuthFinalModelPolicy(ctx), testModelID, ModelDefaults()) {
+		return (TestStreamOutput{}).Error(c, providercore.ErrOpenAIOAuthModelNotAllowed.Error())
+	}
 	if mode == providercore.ProviderTestModeCompact {
 		return s.executeNativeCompaction(c, value, testModelID)
 	}
 	if mode == providercore.ProviderTestModeLegacyCompact {
-		testModelID = providercore.ResolveCompactForwardModel(value, testModelID)
 		return s.executeLegacyCompact(c, value, testModelID)
 	}
 
@@ -147,6 +152,19 @@ func (s *OpenAIProviderTest) Execute(c *TestRun, value *providercore.Record, mod
 		upstreamTestModelID = strings.TrimSpace(testModelID)
 	}
 	payload := openai.TestResponsesPayload(upstreamTestModelID, prompt, isOAuth)
+	if c.FullAnswer {
+		if c.IQMode == "modeltrace" {
+			if !isOAuth {
+				delete(payload, "instructions")
+				payload["max_output_tokens"] = 4096
+			}
+		} else {
+			payload["instructions"] = "请按题目指定的格式直接作答。"
+		}
+		if c.ReasoningEffort != "" {
+			payload["reasoning"] = map[string]string{"effort": c.ReasoningEffort}
+		}
+	}
 	payloadBytes, _ := json.Marshal(payload)
 
 	// task 失效时会注册新 task 并重试探针，因此开始事件只发送一次。
@@ -210,6 +228,9 @@ func (s *OpenAIProviderTest) Execute(c *TestRun, value *providercore.Record, mod
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if c.FullAnswer {
+		return c.readAnswer(resp, answerResponses, payloadBytes)
+	}
 	if isOAuth && s.Store != nil {
 		if updates, err := ExtractOpenAIUsageUpdates(resp, time.Now()); err == nil && len(updates) > 0 {
 			_ = s.Store.UpdateExtra(ctx, value.ID, updates)
@@ -265,6 +286,12 @@ func (s *OpenAIProviderTest) executeChat(
 	c.Begin(true)
 
 	payload := openai.TestChatCompletionsPayload(testModelID, prompt)
+	if c.IQMode == "modeltrace" {
+		payload["max_completion_tokens"] = 4096
+	}
+	if c.FullAnswer && c.ReasoningEffort != "" {
+		payload["reasoning_effort"] = c.ReasoningEffort
+	}
 	payloadBytes, _ := json.Marshal(payload)
 
 	(TestStreamOutput{}).SendEvent(c, providercore.TestEvent{Type: "test_start", Model: testModelID})
@@ -294,6 +321,9 @@ func (s *OpenAIProviderTest) executeChat(
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if c.FullAnswer {
+		return c.readAnswer(resp, answerChat, payloadBytes)
+	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		if !c.ModelFallbackTried && openAITestModelUnavailable(resp.StatusCode, body) {
@@ -755,6 +785,10 @@ func (s *OpenAIProviderTest) ExecuteImageAPIKey(c *TestRun, ctx context.Context,
 
 // ExecuteImageOAuth 使用 OAuth 的 Codex Responses 图片工具。
 func (s *OpenAIProviderTest) ExecuteImageOAuth(c *TestRun, ctx context.Context, value *providercore.Record, modelID, prompt string) error {
+	allows := value.OpenAIOAuthTargetFilter(value.OpenAIOAuthFinalModelPolicy(ctx), ModelDefaults())
+	if !allows(openai.ImagesResponsesMainModel) || !allows(modelID) {
+		return (TestStreamOutput{}).Error(c, providercore.ErrOpenAIOAuthModelNotAllowed.Error())
+	}
 	credentialProvider := value
 	if value.IsShadow() {
 		resolved, err := providercore.ResolveCredentialRecord(ctx, s.read, value)

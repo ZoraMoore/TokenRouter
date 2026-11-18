@@ -16,6 +16,22 @@ type geminiQuotaUsageFixture struct {
 	calls  int
 }
 
+func TestProviderCodecBindsCurrentOAuthWhitelistToExistingSnapshot(t *testing.T) {
+	value := &provider.Record{ID: 1, Platform: provider.PlatformOpenAI, Type: provider.ProviderTypeOAuth}
+	full, metadata, err := (ProviderCodec{}).Encode(WrapRecord(value))
+	require.NoError(t, err)
+	global := provider.NewOpenAIOAuthModelPolicy([]string{"gpt-enabled"})
+	codec := ProviderCodec{OpenAIOAuthModelWhitelist: func(context.Context) (provider.OpenAIOAuthModelPolicy, error) { return global, nil }}
+	for _, raw := range [][]byte{full, metadata} {
+		cached, err := codec.Decode(raw)
+		require.NoError(t, err)
+		record, err := RecordValue(cached)
+		require.NoError(t, err)
+		require.False(t, record.IsModelSupported("gpt-removed", provider.ModelMappingDefaults{}, provider.ModelPlatformRules{}))
+		require.True(t, record.IsModelSupported("gpt-enabled", provider.ModelMappingDefaults{}, provider.ModelPlatformRules{}))
+	}
+}
+
 func (f *geminiQuotaUsageFixture) GetModelUsage(_ context.Context, _ int64, start, _ time.Time) ([]provider.GeminiModelUsage, error) {
 	f.calls++
 	if start.Equal(f.minute) {

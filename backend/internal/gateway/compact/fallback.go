@@ -27,9 +27,10 @@ type Models interface {
 
 // Recovery 根据模型信息和协议报文决定压缩恢复方式。
 type Recovery struct {
-	Models        Models
-	ContextWindow func(string, []byte) bool
-	RewriteModel  func([]byte, string) []byte
+	Models          Models
+	AllowRetryModel func(string) bool
+	ContextWindow   func(string, []byte) bool
+	RewriteModel    func([]byte, string) []byte
 }
 
 // Request 固化当前请求的压缩意图，保持路径/触发器/native-v2 状态不变。
@@ -85,6 +86,9 @@ func (r Recovery) Prepare(in Request, status int, message string, payload []byte
 	fallback := r.ResolveModel(in.RequestedModel)
 	current := strings.TrimSpace(gjson.GetBytes(in.Body, "model").String())
 	if fallback == "" || strings.EqualFold(fallback, current) {
+		return in.Body, "", false
+	}
+	if r.AllowRetryModel != nil && !r.AllowRetryModel(fallback) {
 		return in.Body, "", false
 	}
 	body := r.RewriteModel(in.Body, fallback)

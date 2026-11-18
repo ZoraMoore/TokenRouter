@@ -6,14 +6,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	forwardcore "github.com/TokenFlux/TokenRouter/internal/gateway/forward"
 	"github.com/TokenFlux/TokenRouter/internal/infra/httpclient"
-	wire "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
 	"github.com/TokenFlux/TokenRouter/internal/upstream/openai"
 )
 
 func (p *OpenAIResponseOutput) CCOptions(c *gin.Context, writeError func(*gin.Context, int, string, string)) openai.CCResponseOptions {
-	tierObserver := &forwardcore.ResponseObserver{}
+	observer := UpstreamResponseModelObserverFromContext(c)
+	if observer == nil {
+		observer = BeginUpstreamResponseModelObservation(c)
+	}
 	maxLineSize := OpenAIResponseDefaultMaxLineSize
 	if p.Options.Configured && p.Options.MaxLineSize > 0 {
 		maxLineSize = p.Options.MaxLineSize
@@ -21,18 +22,12 @@ func (p *OpenAIResponseOutput) CCOptions(c *gin.Context, writeError func(*gin.Co
 	return openai.CCResponseOptions{
 		MaxLineSize: maxLineSize,
 		ObserveChunk: func(body []byte) {
-			tierObserver.ObserveOpenAI(body, wire.OpenAIChatCompletionServiceTierEventType(body))
-			if observer := UpstreamResponseModelObserverFromContext(c); observer != nil {
-				observer.ObserveOpenAI(body, "")
-			}
+			observer.ObserveOpenAI(body, "")
 		},
 		ObserveJSON: func(body []byte) {
-			ObserveOpenAIServiceTierInContext(c, body, "response.completed")
-			if observer := UpstreamResponseModelObserverFromContext(c); observer != nil {
-				observer.ObserveOpenAI(body, "")
-			}
+			observer.ObserveOpenAI(body, "response.completed")
 		},
-		ServiceTier: tierObserver.ServiceTier,
+		ServiceTier: observer.ServiceTier,
 		ReadBody: func(r io.Reader) ([]byte, error) {
 			return ReadUpstreamResponseBody(r, p.Options.ReadLimit, c, OpenAIResponseTooLarge)
 		},

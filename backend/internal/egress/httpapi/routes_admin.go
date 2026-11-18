@@ -40,8 +40,6 @@ func RegisterTLSFingerprintProfileRoutes(admin *gin.RouterGroup, endpoint *TLSFi
 			collector.DELETE("/sessions/:token", endpoint.DeleteCollectorSession)
 		}
 		profiles.GET("", endpoint.List)
-		profiles.GET("/collector/authenticated-ingress/status", endpoint.AuthenticatedIngressStatus)
-		profiles.POST("/:id/approval", endpoint.SetApproval)
 		profiles.GET("/:id", endpoint.GetByID)
 		profiles.POST("", endpoint.Create)
 		profiles.PUT("/:id", endpoint.Update)

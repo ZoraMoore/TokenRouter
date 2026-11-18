@@ -450,18 +450,16 @@ func RunMessages(ctx context.Context, body []byte, promptCacheKey, defaultMapped
 		return nil, handleErr
 	}
 
-	// 将档位和最终 effort 传入完成结果供计费使用
+	// 流中断时也可能已有用量，结算仍需要本轮实际发出的档位。
+	if result != nil {
+		result.ServiceTier = p.ResolvedServiceTier(p.ServiceTier(responsesBody))
+	}
 	if handleErr == nil && result != nil {
 		if compatContinuationEnabled && promptCacheKey != "" && result.ResponseID != "" {
 			p.BindResponseID(ctx, promptCacheKey, result.ResponseID)
 		}
 		if promptCacheKey != "" && anthropicDigestChain != "" {
 			p.BindDigestKey(apiKeyID, anthropicDigestChain, promptCacheKey, anthropicMatchedDigestChain)
-		}
-		// 计费 tier 优先采用上游回显值；上游未回显时回退到最终出站 body（经过
-		// fast policy filter/force 之后）里的 tier。
-		if tier := p.ResolvedServiceTier(p.ServiceTier(responsesBody)); tier != nil {
-			result.ServiceTier = tier
 		}
 		if responsesReq.Reasoning != nil && responsesReq.Reasoning.Effort != "" {
 			re := responsesReq.Reasoning.Effort

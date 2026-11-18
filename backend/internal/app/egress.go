@@ -5,17 +5,13 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	dbent "github.com/TokenFlux/TokenRouter/ent"
-	"github.com/TokenFlux/TokenRouter/internal/apikey"
 	"github.com/TokenFlux/TokenRouter/internal/app/lifecycle"
 	"github.com/TokenFlux/TokenRouter/internal/config"
 	"github.com/TokenFlux/TokenRouter/internal/egress"
 	egresshttp "github.com/TokenFlux/TokenRouter/internal/egress/httpapi"
 	egresspostgres "github.com/TokenFlux/TokenRouter/internal/egress/postgres"
 	egressprovider "github.com/TokenFlux/TokenRouter/internal/egress/provider"
-	egressredis "github.com/TokenFlux/TokenRouter/internal/egress/rediscache"
 	postgresinfra "github.com/TokenFlux/TokenRouter/internal/infra/postgres"
 	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry/logging"
 	providerpostgres "github.com/TokenFlux/TokenRouter/internal/provider/postgres"
@@ -75,10 +71,8 @@ func provideEgressCollector(cfg *config.Config) *egressprovider.TLSFingerprintCo
 	return egressprovider.NewTLSFingerprintCollectorService(options)
 }
 
-func provideEgressProfileHTTP(core *egress.TLSFingerprintProfileService, collector *egressprovider.TLSFingerprintCollectorService, ingress *egressprovider.AuthenticatedIngressTLSService) *egresshttp.TLSFingerprintProfileHandler {
-	handler := egresshttp.NewTLSFingerprintProfileHandler(core, collector)
-	handler.SetAuthenticatedIngressTLSService(ingress)
-	return handler
+func provideEgressProfileHTTP(core *egress.TLSFingerprintProfileService, collector *egressprovider.TLSFingerprintCollectorService) *egresshttp.TLSFingerprintProfileHandler {
+	return egresshttp.NewTLSFingerprintProfileHandler(core, collector)
 }
 
 func provideProxyTransfer(admin *egress.ProxyAdmin, tasks *lifecycle.Tasks) *egress.ProxyTransfer {
@@ -92,12 +86,4 @@ func provideProxyHTTP(admin *egress.ProxyAdmin, transfers *egress.ProxyTransfer)
 // provideProxyExpiry 复用唯一代理仓储，生命周期保持一分钟周期和立即首轮。
 func provideProxyExpiry(repo egress.ProxyRepository) *egress.ProxyExpiryService {
 	return egress.NewProxyExpiryService(repo, time.Minute)
-}
-
-// provideAuthenticatedIngressTLS 启动连接验证 worker，并在资源释放前停止它们。
-func provideAuthenticatedIngressTLS(cfg *config.Config, profiles *egress.TLSFingerprintProfileService, rdb *redis.Client, keys *apikey.APIKeyService, manager *lifecycle.Manager) *egressprovider.AuthenticatedIngressTLSService {
-	service := egressprovider.NewAuthenticatedIngressTLSService(&cfg.Server.TLSFingerprintAuthenticatedIngress, profiles, egressredis.NewAuthenticatedIngressQuotaStore(rdb))
-	keys.SetAuthenticatedIngressRequestObserver(service)
-	manager.Register(lifecycle.Hook{Name: "AuthenticatedIngressTLS", StopOrder: 5, Stop: func(context.Context) error { service.Stop(); return nil }})
-	return service
 }

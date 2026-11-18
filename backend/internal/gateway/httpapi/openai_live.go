@@ -136,6 +136,11 @@ func (s *OpenAILiveExecutor) shouldFailoverLiveCreateError(err error) bool {
 }
 
 func (s *OpenAILiveExecutor) createUpstreamLiveCall(ctx context.Context, provider *gatewayprovider.ExecutionProvider, request *session.LiveCallRequest, attestation string, tlsRouterMatch egress.TLSFingerprintRouterMatchResult) (*gatewaylive.Created, error) {
+	if request != nil {
+		if err := gatewayprovider.CheckOpenAIOAuthRequestModels(ctx, provider, "", request.Session); err != nil {
+			return nil, err
+		}
+	}
 	result, err := openai.CreateLiveCall(ctx, request, openai.LiveCreateOptions{
 		URL:         chatGPTLiveCallsURL,
 		Attestation: attestation,

@@ -787,6 +787,46 @@ func TestForwardAsRawChatCompletions_UsesFilteredServiceTierForBilling(t *testin
 	require.Equal(t, 2, result.Usage.OutputTokens)
 }
 
+// TestRawChatBridgesBillFinalTiers 检查请求协议转换后保留的出站档位和 Chat 上游的实际响应档位。
+func TestRawChatBridgesBillFinalTiers(t *testing.T) {
+	for _, tt := range []struct {
+		name, path, body string
+	}{
+		{"Chat", "/v1/chat/completions", `{"model":"gpt-5.4","messages":[{"role":"user","content":"hi"}],"service_tier":"priority"}`},
+		{"Responses", "/v1/responses", `{"model":"gpt-5.4","input":"hi","service_tier":"priority"}`},
+		{"Messages", "/v1/messages", `{"model":"gpt-5.4","messages":[{"role":"user","content":"hi"}],"max_tokens":12,"service_tier":"priority"}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, tt.path, strings.NewReader(tt.body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			upstream := &auxiliaryHTTPRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}},
+				Body: io.NopCloser(strings.NewReader(`{"id":"chat_1","object":"chat.completion","service_tier":"ultrafast","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}`)),
+			}}
+			svc := newResponsesFixture(responsesFixtureInputs{options: protocolHTTPOptions(), transport: upstream, readers: newExecutionReadersFixture(nil, nil)})
+			ctx := gatewayprovider.WithFastPolicyContext(context.Background(), &tierpolicy.OpenAIFastPolicySettings{
+				Rules: []tierpolicy.OpenAIFastPolicyRule{{ServiceTier: tierpolicy.OpenAIFastTierPriority, Action: anthropic.BetaPolicyActionFilter, Scope: anthropic.BetaPolicyScopeAPIKey}},
+			})
+			var result *forwardcore.OpenAIResult
+			var err error
+			provider := rawChatCompletionsTestProvider()
+			switch tt.name {
+			case "Chat":
+				result, err = svc.Text.RawChat(ctx, c, provider, []byte(tt.body), "")
+			case "Responses":
+				result, err = svc.Text.ResponsesViaRawChat(ctx, c, provider, []byte(tt.body))
+			case "Messages":
+				result, err = svc.Text.MessagesViaRawChat(ctx, c, provider, []byte(tt.body), "")
+			}
+			require.NoError(t, err)
+			require.False(t, gjson.GetBytes(upstream.lastBody, "service_tier").Exists())
+			require.Nil(t, result.ServiceTier)
+			require.Equal(t, "ultrafast", result.UpstreamResponseServiceTier)
+		})
+	}
+}
+
 func largeRawChatCompletionsBody() []byte {
 	return []byte(`{"model":"gpt-5.5","messages":[{"role":"user","content":"` +
 		strings.Repeat("x", openai.SilentRefusalMinRequestBodyBytes) +

@@ -829,6 +829,8 @@
             v-model:mode="modelRestrictionMode"
             :allowed-models="allowedModels"
             v-model:mappings="modelMappings"
+            :models="isOpenAIOAuthCategory && openAIOAuthWhitelist?.configured ? openAIOAuthWhitelist.models : undefined"
+            :hint="isOpenAIOAuthCategory ? t('admin.providers.openaiOAuthModelRestrictionHint') : undefined"
             :platform="isBedrockCategory ? 'anthropic' : form.platform"
             :sync-credentials="form.platform === 'qoder' ? undefined : syncPreviewCredentials"
             :source-placeholder="isBedrockCategory ? t('admin.providers.fromModel') : undefined"
@@ -837,6 +839,9 @@
             @add="touchQoderModelRestriction"
             @remove="touchQoderModelRestriction"
           />
+          <SettingsNotice v-if="isOpenAIOAuthCategory && openAIOAuthWhitelistLoadFailed" tone="warning">
+            {{ t('admin.providers.openaiOAuthPresetLoadFailed') }}
+          </SettingsNotice>
 
           <!-- Antigravity 白名单与映射分别控制最终范围和请求改写。 -->
           <SettingsSection
@@ -904,6 +909,14 @@
                 <p class="input-hint">{{ t('admin.providers.billingRateMultiplierHint') }}</p>
               </div>
             </div>
+            <SettingToggleRow
+              v-if="form.platform === 'openai' && (form.type === 'apikey' || form.type === 'oauth')"
+              id="create-openai-ultrafast-billing"
+              v-model="openAIResponseTierBillingEnabled"
+              :label="t('admin.providers.openai.ultrafastBilling')"
+              :hint="t('admin.providers.openai.ultrafastBillingDesc')"
+              testid="create-openai-ultrafast-billing-toggle"
+            />
           </SettingsSection>
 
           <TempUnschedFields v-model:enabled="tempUnschedEnabled" v-model:rules="tempUnschedRules" />
@@ -1551,7 +1564,7 @@
 </template>
 
 <script setup lang="ts">
-import { DEFAULT_CODEX_MODELS } from '@/utils/providerDefaults'
+import type { OpenAIOAuthModelWhitelist } from '@/api/admin/settings'
 import { vContentReveal } from '@/directives/contentReveal'
 import Collapse from '@/components/common/Collapse.vue'
 
@@ -2000,7 +2013,8 @@ const openAICompactModelMappings = ref<ModelMappingRow[]>([])
 const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
 const allowedModels = ref<string[]>([])
 const modelWhitelistTouched = ref(false)
-const defaultCreationModels = () => form.platform === 'openai' && form.type === 'oauth' ? [...DEFAULT_CODEX_MODELS] : []
+const openAIOAuthWhitelist = ref<OpenAIOAuthModelWhitelist | null>(null)
+const openAIOAuthWhitelistLoadFailed = ref(false)
 const qoderModelRestrictionTouched = ref(false)
 const qoderModelWhitelistTouched = ref(false)
 const poolModeEnabled = ref(false)
@@ -2054,6 +2068,8 @@ const autoPause7dThreshold = ref<number | null>(null)
 const autoPause5hDisabled = ref(false)
 const autoPause7dDisabled = ref(false)
 const openaiPassthroughEnabled = ref(false)
+// 只有 OpenAI API Key 提供商可以按上游响应中的档位计费。
+const openAIResponseTierBillingEnabled = ref(false)
 // OpenAI OAuth namespace 工具摊平兼容开关，缺省关闭即原样保留。
 const openaiFlattenNamespacesEnabled = ref(false)
 const openAICompactMode = ref<OpenAICompactMode>('force_on')
@@ -2388,8 +2404,7 @@ watch(
       adminAPI.tlsFingerprintRouters.list()
         .then(routers => { tlsFingerprintRouters.value = routers.map(router => ({ id: router.id, name: router.name })) })
         .catch(() => { tlsFingerprintRouters.value = [] })
-      // 打开表单时应用对应账号类型的默认白名单。
-      allowedModels.value = defaultCreationModels()
+      allowedModels.value = []
       modelWhitelistTouched.value = false
       // Antigravity: 默认使用映射模式并填充默认映射
       if (form.platform === 'antigravity') {
@@ -2452,8 +2467,7 @@ watch(
           : newPlatform === 'grok'
             ? 'https://api.x.ai/v1'
             : 'https://api.anthropic.com'
-    // 切换平台时应用对应账号类型的默认白名单。
-    allowedModels.value = defaultCreationModels()
+    allowedModels.value = []
     modelWhitelistTouched.value = false
     modelMappings.value = []
     modelRestrictionMode.value = (newPlatform === 'qoder' || newPlatform === 'grok') ? 'mapping' : 'whitelist'
@@ -2517,6 +2531,7 @@ watch(
     }
     if (newPlatform !== 'openai') {
       openaiPassthroughEnabled.value = false
+      openAIResponseTierBillingEnabled.value = false
       openaiFlattenNamespacesEnabled.value = false
       openAIResponsesContinuationSupported.value = false
       openAIImagesURLToB64JSON.value = false
@@ -2615,10 +2630,31 @@ watch(
 
 watch(() => form.type, () => {
   if (form.platform === 'openai') {
-    allowedModels.value = defaultCreationModels()
+    allowedModels.value = []
     modelWhitelistTouched.value = false
   }
 })
+
+// 进入 OpenAI OAuth 表单时读取当前预设。管理员已编辑的账号名单优先。
+watch(
+  () => props.show && form.platform === 'openai' && form.type === 'oauth',
+  async (active, _, onCleanup) => {
+    openAIOAuthWhitelist.value = null
+    openAIOAuthWhitelistLoadFailed.value = false
+    if (!active) return
+    let current = true
+    onCleanup(() => { current = false })
+    try {
+      const settings = await adminAPI.settings.getOpenAIOAuthModelWhitelist()
+      if (!current) return
+      openAIOAuthWhitelist.value = settings
+      if (!modelWhitelistTouched.value) allowedModels.value = [...settings.models]
+    } catch {
+      if (current) openAIOAuthWhitelistLoadFailed.value = true
+    }
+  },
+  { immediate: true }
+)
 
 // Model mapping helpers
 const touchQoderModelRestriction = () => {
@@ -2637,15 +2673,18 @@ const setAllowedModels = (models: string[]) => {
 }
 
 const applyPersistedModelRestriction = (credentials: Record<string, unknown>) => {
-  // 普通提供商将请求侧映射与最终白名单拆开持久化。
-  // 空白名单也写入 []，后端据此使用空列表；字段缺失时后端会解析自映射白名单。
   const persisted = buildPersistedModelRestriction(allowedModels.value, modelMappings.value)
   if (persisted.modelMapping) {
     credentials.model_mapping = persisted.modelMapping
   } else {
     delete credentials.model_mapping
   }
-  credentials.model_whitelist = persisted.modelWhitelist
+  // OpenAI OAuth 创建和 Session 导入在提交时读取站点预设，手动编辑过的名单随表单提交。
+  if (form.platform === 'openai' && form.type === 'oauth' && !modelWhitelistTouched.value) {
+    delete credentials.model_whitelist
+  } else {
+    credentials.model_whitelist = persisted.modelWhitelist
+  }
 }
 
 const applyQoderModelRestriction = (credentials: Record<string, unknown>) => {
@@ -2811,7 +2850,7 @@ const resetForm = () => {
   modelMappings.value = []
   openAICompactModelMappings.value = []
   modelRestrictionMode.value = 'whitelist'
-  allowedModels.value = defaultCreationModels()
+  allowedModels.value = []
   modelWhitelistTouched.value = false
   qoderModelRestrictionTouched.value = false
   qoderModelWhitelistTouched.value = false
@@ -2838,6 +2877,7 @@ const resetForm = () => {
   autoPause5hDisabled.value = false
   autoPause7dDisabled.value = false
   openaiPassthroughEnabled.value = false
+  openAIResponseTierBillingEnabled.value = false
   openaiFlattenNamespacesEnabled.value = false
   openAICompactMode.value = 'force_on'
   openAINativeCompactionV2Mode.value = 'force_on'
@@ -2924,6 +2964,11 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
   clearLegacyResponsesWSSettings(extra)
   delete extra.openai_ws_enabled
   delete extra.openai_long_context_billing_enabled
+  if ((form.type === 'apikey' || form.type === 'oauth') && openAIResponseTierBillingEnabled.value) {
+    extra.openai_response_tier_billing_enabled = true
+  } else {
+    delete extra.openai_response_tier_billing_enabled
+  }
   if (openaiPassthroughEnabled.value) {
     extra.openai_passthrough = true
   } else {
@@ -4097,9 +4142,7 @@ const OPENAI_MOBILE_RT_CLIENT_ID = 'app_LlGpXReQgckcGGUo2JrYvtJK'
 
 const buildOpenAICodexImportCredentialExtras = (): Record<string, unknown> | null => {
   const credentials: Record<string, unknown> = {}
-  // Session 重复导入时，未操作的默认值由后端新建流程填充。
   applyPersistedModelRestriction(credentials)
-  if (!modelWhitelistTouched.value) delete credentials.model_whitelist
 
   const compactModelMapping = buildOpenAICompactModelMapping()
   if (compactModelMapping) {

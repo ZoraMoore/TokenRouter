@@ -19,7 +19,7 @@ func TestOllamaCloudUsageManagedExtraCannotBeImported(t *testing.T) {
 		provider.OllamaCloudUsageAutoRefreshExtraKey: true,
 		provider.OllamaCloudUsageSnapshotExtraKey:    map[string]any{"status": "forged"},
 	}
-	created, err := provider.BuildProviderForCreate(&provider.CreateProviderInput{
+	created, err := provider.BuildProviderForCreate(t.Context(), &provider.CreateProviderInput{
 		Name: "ollama", Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeAPIKey,
 		Credentials: map[string]any{"base_url": "https://ollama.com", "api_key": "key"},
 		Concurrency: 1,

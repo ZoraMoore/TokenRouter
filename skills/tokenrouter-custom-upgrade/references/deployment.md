@@ -38,7 +38,7 @@ Do this only after confirming Redis is actually passwordless. With password auth
 
 ## Switch The Image
 
-Change only the image value in the production environment file. Preserve permissions and prove all non-image lines are byte-identical, for example by comparing hashes with the image line excluded. Never print the whole file.
+Follow `docs/operations/upgrade_notes.md` in the repository for release-specific Compose and proxy changes. For an image-only upgrade, update the image value in the production environment file. Preserve permissions and compare hashes with the image line excluded. Never print the whole file.
 
 Validate Compose resolution before mutation, then recreate only the application:
 

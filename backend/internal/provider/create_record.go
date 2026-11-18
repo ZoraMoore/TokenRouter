@@ -1,18 +1,20 @@
 package provider
 
 import (
+	"context"
 	"errors"
 	"time"
 )
 
-// CreationOptions 提供构造提供商值所需的时钟、时区和 seed，不加载完整应用配置。
+// CreationOptions 提供创建账号所需的时钟、时区、指纹种子和模型设置。
 type CreationOptions struct {
-	Now          func() time.Time
-	LoadLocation func(string) (*time.Location, error)
-	NewSeed      func() string
+	Now                   func() time.Time
+	LoadLocation          func(string) (*time.Location, error)
+	NewSeed               func() string
+	ReadOpenAIOAuthModels OpenAIOAuthModelPolicyReader
 }
 
-func BuildProviderForCreate(input *CreateProviderInput, providerExtra map[string]any, options CreationOptions) (*Record, error) {
+func BuildProviderForCreate(ctx context.Context, input *CreateProviderInput, providerExtra map[string]any, options CreationOptions) (*Record, error) {
 	// 受管会话状态由系统维护，废弃字段不得通过通用提供商接口写入。
 	DiscardDeprecatedProviderExtra(providerExtra)
 	if err := NormalizeUpstreamUsageExtra(providerExtra); err != nil {
@@ -37,7 +39,9 @@ func BuildProviderForCreate(input *CreateProviderInput, providerExtra map[string
 		Status:      StatusActive,
 		Schedulable: true,
 	}
-	ApplyOpenAICreationModels(provider)
+	if err := ApplyOpenAICreationModels(ctx, provider, options.ReadOpenAIOAuthModels); err != nil {
+		return nil, err
+	}
 	if err := NormalizeCNProviderCredentials(provider, true); err != nil {
 		return nil, err
 	}

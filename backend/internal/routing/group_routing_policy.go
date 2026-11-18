@@ -99,6 +99,11 @@ func (s *PricingConfigService) GetGroupPolicy(ctx context.Context, groupID int64
 	if group == nil {
 		return nil, nil
 	}
+	return group.ModelPolicyView(), nil
+}
+
+// ModelPolicyView 从同一份分组配置读取模型限制和允许的协议。
+func (group *Group) ModelPolicyView() *GroupPolicyView {
 	policy := group.RoutingPolicy.Clone()
 	if !policy.Enabled {
 		policy = GroupRoutingPolicy{}
@@ -107,7 +112,7 @@ func (s *PricingConfigService) GetGroupPolicy(ctx context.Context, groupID int64
 	if group.CustomModelsListEnabled() {
 		models = append([]string(nil), group.ModelsListConfig.Models...)
 	}
-	return &GroupPolicyView{ModelsList: models, GroupRoutingPolicy: policy, AllowedProtocols: append([]protocol.ProtocolID{}, group.AllowedProtocols...), ProtocolFallbacks: protocol.CloneFallbacks(group.ProtocolFallbacks), RequireOAuthOnly: group.RequireOAuthOnly}, nil
+	return &GroupPolicyView{ModelsList: models, GroupRoutingPolicy: policy, AllowedProtocols: append([]protocol.ProtocolID{}, group.AllowedProtocols...), ProtocolFallbacks: protocol.CloneFallbacks(group.ProtocolFallbacks), RequireOAuthOnly: group.RequireOAuthOnly}
 }
 
 func (p *GroupPolicyView) RestrictionSource() string {

@@ -30,7 +30,6 @@ var egressAssemblyProviders = wire.NewSet(
 	egressredis.NewTLSFingerprintProfileCache,
 	egressredis.NewTLSFingerprintRouterCache,
 	provideEgressProfiles,
-	provideAuthenticatedIngressTLS,
 	provider.NewTLSProfiles,
 	provideEgressRouters,
 	provideEgressCollector,

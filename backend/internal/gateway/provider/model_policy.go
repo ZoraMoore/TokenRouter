@@ -39,11 +39,11 @@ func (p ModelPolicy) configuredModels() []string {
 	return p.models.ConfiguredModels()
 }
 
-func (p ModelPolicy) supportsConfiguredModel(model string) bool {
+func (p ModelPolicy) supportsConfiguredModel(ctx context.Context, model string) bool {
 	if p.models != nil {
 		return p.models.Supports(model)
 	}
-	return p.Record.IsModelSupported(model, provideradapter.ModelDefaults(), provideradapter.ModelRules(p.Record))
+	return p.Record.SupportsModel(ctx, model, provideradapter.ModelDefaults(), provideradapter.ModelRules(p.Record))
 }
 
 func (p ModelPolicy) finalModelWhitelisted(model string) bool {
@@ -224,7 +224,7 @@ func (p ModelPolicy) Supports(ctx context.Context, model string) bool {
 		return p.antigravityModel(model, modelThinking(ctx)) != ""
 	}
 	if value.IsBedrock() {
-		if !p.supportsConfiguredModel(model) {
+		if !p.supportsConfiguredModel(ctx, model) {
 			return false
 		}
 		_, ok := p.Bedrock(model)
@@ -234,7 +234,7 @@ func (p ModelPolicy) Supports(ctx context.Context, model string) bool {
 		mapped := p.forwardMappedModel(model)
 		return p.finalModelWhitelisted(p.AnthropicUpstream(mapped))
 	}
-	return p.supportsConfiguredModel(model)
+	return p.supportsConfiguredModel(ctx, model)
 }
 
 // UpstreamModel 解析平台最终型号，并登记到本次请求的模型记录。

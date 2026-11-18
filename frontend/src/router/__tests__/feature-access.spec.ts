@@ -8,10 +8,11 @@ type NavigationGuard = (
 
 const routerHarness = vi.hoisted(() => ({
   guard: null as NavigationGuard | null,
-  routes: [] as Array<{ path: string; meta?: Record<string, unknown> }>,
+  routes: [] as Array<{ path: string; alias?: string; meta?: Record<string, unknown> }>,
 }))
 
 const authStore = vi.hoisted(() => ({
+  user: { id: 9 },
   checkAuth: vi.fn(),
   isAuthenticated: true,
   isAdmin: false,
@@ -31,6 +32,9 @@ const appStore = vi.hoisted(() => ({
   },
   fetchPublicSettings: vi.fn(),
 }))
+
+const readVisibility = vi.hoisted(() => vi.fn())
+vi.mock('@/composables/usePelicanVisibility', () => ({ readPelicanVisibility: readVisibility }))
 
 vi.mock('vue-router', () => ({
   createWebHistory: vi.fn(() => ({})),
@@ -116,11 +120,40 @@ describe('feature route guard', () => {
   })
 
   beforeEach(() => {
+    readVisibility.mockReset()
     authStore.isAuthenticated = true
     authStore.isAdmin = false
     appStore.publicSettingsLoaded = false
     appStore.cachedPublicSettings = null
     appStore.fetchPublicSettings.mockReset()
+  })
+
+  it('要求登录后查看鹈鹕测智，管理计划另需管理员身份', () => {
+    expect(routerHarness.routes.find(route => route.path === '/pelican-tests')?.meta)
+      .toMatchObject({ requiresAuth: true, requiresAdmin: false })
+    expect(routerHarness.routes.find(route => route.path === '/admin/pelican-tests')?.meta)
+      .toMatchObject({ requiresAuth: true, requiresAdmin: true })
+  })
+
+  it('用户展示关闭时两个直链都返回工作台，管理端仍可配置展示', async () => {
+    const userRoute = routerHarness.routes.find(route => route.path === '/pelican-tests')
+    expect(userRoute?.alias).toBe('/pelican-showcase')
+    expect(userRoute?.meta?.requiresPelicanShowcase).toBe(true)
+    readVisibility.mockResolvedValue({ enabled: false, api_enabled: true })
+    for (const path of ['/pelican-tests', '/pelican-showcase']) {
+      const blocked = runGuard(userRoute!.meta!, path)
+      await blocked.navigation
+      expect(blocked.next).toHaveBeenCalledWith('/dashboard')
+    }
+    authStore.isAdmin = true
+    const adminRoute = routerHarness.routes.find(route => route.path === '/admin/pelican-tests')
+    const admin = runGuard(adminRoute!.meta!, '/admin/pelican-tests')
+    await admin.navigation
+    expect(admin.next).toHaveBeenCalledWith()
+    readVisibility.mockResolvedValue({ enabled: true, api_enabled: false })
+    const open = runGuard(userRoute!.meta!, '/pelican-tests')
+    await open.navigation
+    expect(open.next).toHaveBeenCalledWith()
   })
 
   it('waits for the first public-settings request before deciding payment access', async () => {

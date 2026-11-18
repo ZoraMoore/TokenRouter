@@ -51,7 +51,6 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/userdisabledpublicgroup"
 	"github.com/TokenFlux/TokenRouter/ent/usersubscription"
 	"github.com/TokenFlux/TokenRouter/internal/billing"
-	"github.com/TokenFlux/TokenRouter/internal/egress"
 	"github.com/TokenFlux/TokenRouter/internal/protocol"
 	"github.com/TokenFlux/TokenRouter/internal/routing/accessview"
 	"github.com/TokenFlux/TokenRouter/internal/scheduler/policy"
@@ -1938,10 +1937,6 @@ func init() {
 	tlsfingerprintprofileDescEnableGrease := tlsfingerprintprofileFields[2].Descriptor()
 	// tlsfingerprintprofile.DefaultEnableGrease holds the default value on creation for the enable_grease field.
 	tlsfingerprintprofile.DefaultEnableGrease = tlsfingerprintprofileDescEnableGrease.Default.(bool)
-	// tlsfingerprintprofileDescVerification is the schema descriptor for verification field.
-	tlsfingerprintprofileDescVerification := tlsfingerprintprofileFields[13].Descriptor()
-	// tlsfingerprintprofile.DefaultVerification holds the default value on creation for the verification field.
-	tlsfingerprintprofile.DefaultVerification = tlsfingerprintprofileDescVerification.Default.(egress.TLSFingerprintProfileVerification)
 	tlsfingerprintrouterMixin := schema.TLSFingerprintRouter{}.Mixin()
 	tlsfingerprintrouterMixinFields0 := tlsfingerprintrouterMixin[0].Fields()
 	_ = tlsfingerprintrouterMixinFields0

@@ -86,7 +86,7 @@ func (s *CNProviderTest) Execute(
 			return (TestStreamOutput{}).Error(c, hint)
 		}
 		apiURL = strings.TrimRight(baseURL, "/") + "/v1/messages"
-		payload, err = claude.TestPayloadWithPrompt(testModelID, prompt)
+		payload, err = c.claudeTestPayload(testModelID, prompt)
 		if err != nil {
 			return (TestStreamOutput{}).Error(c, "Failed to create test payload")
 		}
@@ -98,6 +98,9 @@ func (s *CNProviderTest) Execute(
 		apiURL = cnTestResponsesURL(value.Platform, baseURL)
 		responsesPayload := openai.TestResponsesPayload(testModelID, prompt, false)
 		responsesPayload["store"] = false
+		if c.FullAnswer {
+			delete(responsesPayload, "instructions")
+		}
 		payload = responsesPayload
 	default:
 		baseURL, err := s.ValidateURL((providercore.ProtocolTarget{Record: value}).GetOpenAIBaseURL())
@@ -145,6 +148,16 @@ func (s *CNProviderTest) Execute(
 		return (TestStreamOutput{}).Error(c, fmt.Sprintf("Request failed: %s", err.Error()))
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if c.FullAnswer {
+		switch protocol {
+		case providercore.APIProtocolAnthropic:
+			return c.readAnswer(resp, answerClaude, payloadBytes)
+		case providercore.APIProtocolResponses:
+			return c.readAnswer(resp, answerResponses, payloadBytes)
+		default:
+			return c.readAnswer(resp, answerChat, payloadBytes)
+		}
+	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		errMsg := fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body))

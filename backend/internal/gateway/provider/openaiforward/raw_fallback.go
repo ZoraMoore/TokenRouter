@@ -58,7 +58,6 @@ func MessagesViaRawChat(ctx context.Context, body []byte, defaultMappedModel str
 	convertedEffort := chatReq.ReasoningEffort
 	reasoningEffort := &convertedEffort
 	reasoningEffort = p.ThinkingFallback(reasoningEffort, body, billingModel)
-	serviceTier := p.ServiceTier(body)
 
 	chatBody, err := json.Marshal(chatReq)
 	if err != nil {
@@ -84,9 +83,8 @@ func MessagesViaRawChat(ctx context.Context, body []byte, defaultMappedModel str
 	if err != nil {
 		return nil, err
 	}
-	if serviceTier == nil {
-		serviceTier = p.ServiceTier(chatBody)
-	}
+	// 协议转换和分组策略都可能改动档位，结算时保留最后发出的值。
+	serviceTier := p.ServiceTier(chatBody)
 
 	p.Debug("openai messages: forwarding via raw chat completions",
 		zap.Int64("provider_id", profile.ID),
@@ -147,7 +145,6 @@ func ResponsesViaRawChat(ctx context.Context, body []byte, p RawFallbackPorts) (
 	}
 
 	clientStream := responsesReq.Stream
-	serviceTier := p.ServiceTier(body)
 	// custom 工具（如 codex 的 exec）降级为 function 工具转发，回程需按名字还原为
 	// custom_tool_call 项，先记下名字集合；tool_search 工具同理，回程还原为
 	// tool_search_call 项；namespace 子工具（如 MCP 工具）摊平转发，回程按映射还原
@@ -191,9 +188,7 @@ func ResponsesViaRawChat(ctx context.Context, body []byte, p RawFallbackPorts) (
 	reasoningEffort := p.EffectiveEffort(chatBody, body, upstreamModel, billingModel, originalModel)
 	// 国产模型没有显式 effort 档位时，thinking 启用后补默认展示值。
 	reasoningEffort = p.ThinkingFallback(reasoningEffort, chatBody, billingModel)
-	if serviceTier == nil {
-		serviceTier = p.ServiceTier(chatBody)
-	}
+	serviceTier := p.ServiceTier(chatBody)
 
 	p.Debug("openai responses: forwarding via raw chat completions",
 		zap.Int64("provider_id", profile.ID),

@@ -1334,6 +1334,22 @@ export async function updateOpenAI403CooldownSettings(
   return data
 }
 
+// configured 区分内置的新账号预设和管理员已保存的全局限制。
+export interface OpenAIOAuthModelWhitelist {
+  configured: boolean
+  models: string[]
+}
+
+export async function getOpenAIOAuthModelWhitelist(): Promise<OpenAIOAuthModelWhitelist> {
+  const { data } = await apiClient.get<OpenAIOAuthModelWhitelist>('/admin/settings/openai-oauth-model-whitelist')
+  return data
+}
+
+export async function updateOpenAIOAuthModelWhitelist(models: string[]): Promise<OpenAIOAuthModelWhitelist> {
+  const { data } = await apiClient.put<OpenAIOAuthModelWhitelist>('/admin/settings/openai-oauth-model-whitelist', { models })
+  return data
+}
+
 // ==================== 429 Rate Limit Cooldown Settings ====================
 
 export interface RateLimit429CooldownSettings {
@@ -1686,6 +1702,8 @@ export const settingsAPI = {
   updateOverloadCooldownSettings,
   getOpenAI403CooldownSettings,
   updateOpenAI403CooldownSettings,
+  getOpenAIOAuthModelWhitelist,
+  updateOpenAIOAuthModelWhitelist,
   getRateLimit429CooldownSettings,
   updateRateLimit429CooldownSettings,
   getPanelRateLimitSettings,

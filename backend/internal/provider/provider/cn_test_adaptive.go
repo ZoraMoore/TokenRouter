@@ -41,6 +41,13 @@ func (s *CNProviderTest) ExecuteAdaptive(c *TestRun, value *providercore.Record,
 	if len(enabled) == 0 {
 		return (TestStreamOutput{}).Error(c, "No upstream protocols enabled")
 	}
+	if c.FullAnswer && selected == "" {
+		// 多个端点会各自生成一份答案，一道题选择一个启用的协议。
+		selected = enabled[0]
+		if slices.Contains(enabled, protocol.ProtocolOpenAIChatCompletions) {
+			selected = protocol.ProtocolOpenAIChatCompletions
+		}
+	}
 	if selected != "" {
 		if !slices.Contains(enabled, selected) {
 			return (TestStreamOutput{}).Error(c, fmt.Sprintf("Upstream protocol %s is not enabled", selected))
@@ -84,7 +91,7 @@ func (s *CNProviderTest) executeAdaptiveAnthropic(c *TestRun, value *providercor
 	}
 	apiURL := strings.TrimRight(baseURL, "/") + "/v1/messages"
 
-	payload, err := claude.TestPayloadWithPrompt(testModelID, prompt)
+	payload, err := c.claudeTestPayload(testModelID, prompt)
 	if err != nil {
 		return (TestStreamOutput{}).Error(c, "Failed to create adaptive Anthropic test payload")
 	}
@@ -110,6 +117,9 @@ func (s *CNProviderTest) executeAdaptiveAnthropic(c *TestRun, value *providercor
 		return (TestStreamOutput{}).Error(c, fmt.Sprintf("Adaptive Anthropic endpoint request failed: %s", err.Error()))
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if c.FullAnswer {
+		return c.readAnswer(resp, answerClaude, payloadBytes)
+	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		errMsg := fmt.Sprintf("Adaptive Anthropic endpoint returned %d: %s", resp.StatusCode, string(body))
@@ -159,6 +169,9 @@ func (s *CNProviderTest) executeAdaptiveResponses(c *TestRun, value *providercor
 		return (TestStreamOutput{}).Error(c, fmt.Sprintf("Adaptive Responses endpoint request failed: %s", err.Error()))
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if c.FullAnswer {
+		return c.readAnswer(resp, answerResponses, payloadBytes)
+	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		errMsg := fmt.Sprintf("Adaptive Responses endpoint returned %d: %s", resp.StatusCode, string(body))

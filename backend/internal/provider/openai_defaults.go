@@ -1,11 +1,11 @@
 package provider
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"maps"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -42,38 +42,52 @@ func DefaultOpenAITestModel(value *Record, defaults ModelMappingDefaults, rules 
 	return ""
 }
 
-// ApplyOpenAICreationModels 为新建 Codex 账号合并站点默认型号和导入的模型配置。
-func ApplyOpenAICreationModels(value *Record) {
+// ApplyOpenAICreationModels 为 OpenAI OAuth 账号预填模型。管理员可在导入时指定更窄的账号名单。
+// @project-doc docs/interfaces/openai_upstream.md#oauth_final_model_whitelist
+func ApplyOpenAICreationModels(ctx context.Context, value *Record, read OpenAIOAuthModelPolicyReader) error {
 	if value == nil || !value.IsOpenAIOAuth() || value.IsShadow() {
-		return
+		return nil
+	}
+	var policy OpenAIOAuthModelPolicy
+	if read != nil {
+		var err error
+		if policy, err = read(ctx); err != nil {
+			return err
+		}
+	}
+	local := ExtractExplicitFinalModelWhitelist(value.Credentials["model_whitelist"])
+	var models []string
+	if policy.Configured() {
+		if len(local) > 0 {
+			models = slices.Sorted(maps.Keys(local))
+		} else {
+			models = policy.Models()
+		}
+	} else {
+		// 首次设置站点名单前，账号使用内置型号、导入的白名单和具体映射目标。
+		models = slices.Clone(openAIDefaults.Models)
+		if local == nil {
+			local = make(map[string]struct{})
+		}
+		for _, target := range ResolveModelMapping(value, ModelMappingDefaults{}) {
+			target = strings.TrimSpace(target)
+			if target != "" && !strings.Contains(target, "*") {
+				local[target] = struct{}{}
+			}
+		}
+		for _, model := range slices.Sorted(maps.Keys(local)) {
+			if !slices.Contains(models, model) {
+				models = append(models, model)
+			}
+		}
 	}
 	credentials := maps.Clone(value.Credentials)
 	if credentials == nil {
 		credentials = make(map[string]any)
 	}
-	models := slices.Clone(openAIDefaults.Models)
-	add := func(model string) {
-		model = strings.TrimSpace(model)
-		if model != "" && !slices.Contains(models, model) {
-			models = append(models, model)
-		}
-	}
-	// 导入的额外型号和映射目标也需要出现在最终模型白名单中。
-	var imported []string
-	for model := range ExtractExplicitFinalModelWhitelist(credentials["model_whitelist"]) {
-		imported = append(imported, model)
-	}
-	for _, target := range ResolveModelMapping(value, ModelMappingDefaults{}) {
-		if !strings.Contains(target, "*") {
-			imported = append(imported, target)
-		}
-	}
-	sort.Strings(imported)
-	for _, model := range imported {
-		add(model)
-	}
 	credentials["model_whitelist"] = models
 	value.Credentials = credentials
+	return nil
 }
 
 // OpenAITestFallbackModel 返回首选型号不可用时允许测试的回退型号。

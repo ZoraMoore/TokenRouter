@@ -1,12 +1,14 @@
 import { defineComponent, nextTick } from 'vue'
-import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { routeLocationKey } from 'vue-router'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ModelMarketplaceView from '../ModelMarketplaceView.vue'
 import { modelIconData } from '@/utils/modelIconData'
 import type { MarketplaceGroup, MarketplaceModelPricing } from '@/types'
 
 const getMarketplaceModels = vi.hoisted(() => vi.fn())
 const checkAuth = vi.hoisted(() => vi.fn())
+const auth = vi.hoisted(() => ({ isAuthenticated: true }))
 const fetchPublicSettings = vi.hoisted(() => vi.fn())
 const copyToClipboard = vi.hoisted(() => vi.fn())
 
@@ -20,7 +22,7 @@ vi.mock('@/composables/useClipboard', () => ({
 
 vi.mock('@/stores', () => ({
   useAuthStore: () => ({
-    isAuthenticated: true,
+    isAuthenticated: auth.isAuthenticated,
     isAdmin: false,
     checkAuth,
   }),
@@ -50,7 +52,10 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string, params?: Record<string, string>) => {
+      t: (key: string, params?: Record<string, string> | number) => {
+        if (typeof params === 'number') {
+          return `${key} ${params}`
+        }
         if (key === 'marketplace.rateMultiplierValue') {
           return `marketplace.rateMultiplierValue ${params?.multiplier || ''}`
         }
@@ -135,17 +140,17 @@ const unpricedPricing: MarketplaceModelPricing = {
 
 function marketplaceFixture(): MarketplaceGroup[] {
   return [
-	marketplaceGroup(1, 'Plus', [
+    marketplaceGroup(1, 'Plus', [
       marketplaceModel('gpt-5.5', 'GPT 5.5', tokenPricing),
       marketplaceModel('legacy-unpriced', 'Legacy Unpriced', unpricedPricing),
     ]),
-	marketplaceGroup(2, 'Pro', [
+    marketplaceGroup(2, 'Pro', [
       marketplaceModel('gpt-5.5', 'GPT 5.5', tokenPricing),
     ]),
-	marketplaceGroup(3, 'Plus 2', [
+    marketplaceGroup(3, 'Plus 2', [
       marketplaceModel('gpt-5.5', 'GPT 5.5', tokenPricing),
     ]),
-	marketplaceGroup(4, 'Pro 2', [
+    marketplaceGroup(4, 'Pro 2', [
       marketplaceModel('gpt-5.5', 'GPT 5.5', tokenPricing),
     ]),
   ]
@@ -156,7 +161,6 @@ function marketplaceGroup(id: number, name: string, models: MarketplaceGroup['mo
     id,
     name,
     description: `${name} group`,
-    platform: 'openai',
     display_brand: 'OpenAI',
     sort_order: id,
     rate_multiplier: id,
@@ -187,6 +191,7 @@ function marketplaceModel(id: string, displayName: string, pricing: MarketplaceM
 async function mountMarketplace() {
   const wrapper = mount(ModelMarketplaceView, {
     global: {
+      provide: { [routeLocationKey as symbol]: { path: '/models' } },
       stubs: {
         AppLayout: { template: '<div><slot name="page-heading-actions" /><slot /></div>' },
         RouterLink: { template: '<a><slot /></a>' },
@@ -210,8 +215,12 @@ function visibleTooltips() {
 }
 
 describe('ModelMarketplaceView', () => {
+  enableAutoUnmount(afterEach)
+
   beforeEach(() => {
     localStorage.clear()
+    auth.isAuthenticated = true
+    getMarketplaceModels.mockReset()
     getMarketplaceModels.mockResolvedValue(marketplaceFixture())
     checkAuth.mockClear()
     fetchPublicSettings.mockClear()
@@ -228,17 +237,133 @@ describe('ModelMarketplaceView', () => {
     resolveModels(marketplaceFixture())
     await flushPromises()
     expect(wrapper.find('[data-testid="marketplace-skeleton"]').exists()).toBe(false)
-    expect(wrapper.findAll('[data-testid="marketplace-group-section"]')).toHaveLength(4)
-    wrapper.unmount()
+    expect(wrapper.findAll('aside button[aria-pressed]')).toHaveLength(4)
+    expect(wrapper.findAll('[data-testid="marketplace-group-section"]')).toHaveLength(1)
   })
 
-  it('默认按分组-模型展示', async () => {
+  it.each([true, false])('按后台顺序选中首组，切换同名模型时读取分组报价（登录状态 %s）', async (isAuthenticated) => {
+    auth.isAuthenticated = isAuthenticated
+    const codex = marketplaceGroup(42, 'Codex Pro (负载均衡)', [
+      marketplaceModel('shared', 'Shared', tokenPricing),
+      marketplaceModel('codex-only', 'Codex Only', tokenPricing),
+    ])
+    const domestic = marketplaceGroup(17, '国模分组', [
+      marketplaceModel('shared', 'Shared', { ...tokenPricing, input_price_per_token: 0.000009 }),
+      marketplaceModel('glm-only', 'GLM Only', unpricedPricing),
+    ])
+    codex.sort_order = 1
+    getMarketplaceModels.mockResolvedValue([domestic, codex])
     const wrapper = await mountMarketplace()
+    const buttons = wrapper.findAll('aside button[aria-pressed]')
+    expect(buttons.map(button => button.attributes('aria-pressed'))).toEqual(['true', 'false'])
+    expect(buttons[0].text()).toContain(codex.name)
+    const section = () => wrapper.get('[data-testid="marketplace-group-section"]')
+    expect(section().get('h2').text()).toBe(codex.name)
+    expect(section().findAll('article h3').map(title => title.text())).toEqual(['Shared', 'Codex Only'])
+    const firstCard = () => section().get('article')
+    expect(firstCard().get('dl').text()).toContain('1.00 点')
+    await firstCard().get('[data-testid="model-pricing-toggle"]').trigger('click')
+    expect(firstCard().get('[data-testid="pricing-rows"]').text()).toContain('1.00 点')
 
-    expect(wrapper.findAll('[data-testid="marketplace-group-section"]')).toHaveLength(4)
+    await buttons[1].trigger('click')
+    expect(buttons.map(button => button.attributes('aria-pressed'))).toEqual(['false', 'true'])
+    expect(section().get('h2').text()).toBe(domestic.name)
+    expect(section().findAll('article h3').map(title => title.text())).toEqual(['Shared', 'GLM Only'])
+    expect(firstCard().get('dl').text()).toContain('9.00 点')
+    expect(firstCard().get('[data-testid="model-pricing-toggle"]').attributes('aria-expanded')).toBe('false')
+    await firstCard().get('[data-testid="model-pricing-toggle"]').trigger('click')
+    expect(firstCard().get('[data-testid="pricing-rows"]').text()).toContain('9.00 点')
+    expect(getMarketplaceModels).toHaveBeenCalledTimes(1)
   })
 
-  it('用户侧不展示分组容量，并将可用率状态条靠右放置', async () => {
+  it('搜索和筛选显示各组的匹配数，手动切组后才显示其他组的结果', async () => {
+    const fixture = marketplaceFixture()
+    fixture[1].search_terms = ['Domestic Models']
+    fixture[1].display_brand = '智谱'
+    getMarketplaceModels.mockResolvedValue(fixture)
+    const wrapper = await mountMarketplace()
+    const section = () => wrapper.get('[data-testid="marketplace-group-section"]')
+    const search = wrapper.get('[data-testid="marketplace-search"]')
+    await search.setValue('DOMESTIC')
+
+    expect(section().get('h2').text()).toBe('Plus')
+    expect(section().get('[role="status"]').text()).toBe('marketplace.modelCount 0')
+    expect(section().findAll('article')).toHaveLength(0)
+    expect(section().text()).toContain('marketplace.otherGroupsMatch')
+    const buttons = wrapper.findAll('aside button[aria-pressed]')
+    expect(buttons.map(button => button.attributes('aria-pressed'))).toEqual(['true', 'false'])
+    expect(buttons[1].text()).toContain('Pro')
+    expect(buttons[1].text()).toContain('1')
+
+    // 窄屏的分组选择框和左栏按钮选择同一个分组。
+    await wrapper.get('aside [data-testid="select-option-2"]').trigger('click')
+    expect(section().get('h2').text()).toBe('Pro')
+    expect(section().get('[role="status"]').text()).toBe('marketplace.modelCount 1')
+    expect(section().get('article h3').text()).toBe('GPT 5.5')
+
+    await search.setValue(' GPT-5.5 ')
+    await wrapper.get('[data-testid="select-option-智谱"]').trigger('click')
+    await wrapper.get('[data-testid="select-option-unpriced"]').trigger('click')
+    expect(section().text()).toContain('marketplace.emptyTitle')
+    expect(section().text()).not.toContain('marketplace.otherGroupsMatch')
+    await wrapper.get('[data-testid="filter-reset"]').trigger('click')
+    expect((search.element as HTMLInputElement).value).toBe(' GPT-5.5 ')
+    expect(section().findAll('article')).toHaveLength(1)
+    expect(section().get('h2').text()).toBe('Pro')
+    await search.setValue('no-such-model')
+    await section().get('.empty-state button').trigger('click')
+    expect((search.element as HTMLInputElement).value).toBe('')
+    expect(section().get('h2').text()).toBe('Pro')
+  })
+
+  it('刷新后按 ID 保持选中，分组被移除时选中首个可用分组', async () => {
+    const fixture = marketplaceFixture()
+    const wrapper = await mountMarketplace()
+    await wrapper.findAll('aside button[aria-pressed]')[1].trigger('click')
+    const reload = async (next: MarketplaceGroup[]) => {
+      getMarketplaceModels.mockResolvedValueOnce(next)
+      window.dispatchEvent(new Event('locale-changed'))
+      await flushPromises()
+    }
+    const section = () => wrapper.get('[data-testid="marketplace-group-section"]')
+    await reload([fixture[3], { ...fixture[1], name: '专业组' }, fixture[0]])
+    expect(section().get('h2').text()).toBe('专业组')
+    await reload([fixture[3], fixture[0]])
+    expect(section().get('h2').text()).toBe('Plus')
+    await reload([])
+    expect(wrapper.find('article').exists()).toBe(false)
+    expect(wrapper.text()).toContain('marketplace.noPublicGroups')
+    expect(wrapper.find('.empty-state button').exists()).toBe(false)
+  })
+
+  it('迟到的目录响应不能替换新返回的分组和价格', async () => {
+    let resolveEarlier!: (value: MarketplaceGroup[]) => void
+    getMarketplaceModels.mockImplementationOnce(() => new Promise(resolve => { resolveEarlier = resolve }))
+    const wrapper = await mountMarketplace()
+    getMarketplaceModels.mockResolvedValueOnce([marketplaceGroup(7, 'New', [marketplaceModel('new', 'New Model', tokenPricing)])])
+    window.dispatchEvent(new Event('locale-changed'))
+    await flushPromises()
+    resolveEarlier(marketplaceFixture())
+    await flushPromises()
+    expect(wrapper.get('[data-testid="marketplace-group-section"] h2').text()).toBe('New')
+    expect(wrapper.get('article h3').text()).toBe('New Model')
+  })
+
+  it('没有模型的分组保留分组名和切换入口', async () => {
+    getMarketplaceModels.mockResolvedValue([
+      marketplaceGroup(1, '空分组', []),
+      marketplaceGroup(2, '图片', [marketplaceModel('image', 'Image', imagePricing)]),
+    ])
+    const wrapper = await mountMarketplace()
+    const section = () => wrapper.get('[data-testid="marketplace-group-section"]')
+    expect(section().get('h2').text()).toBe('空分组')
+    expect(section().text()).toContain('marketplace.emptyGroup')
+    expect(section().find('.empty-state button').exists()).toBe(false)
+    await wrapper.findAll('aside button[aria-pressed]')[1].trigger('click')
+    expect(section().get('article h3').text()).toBe('Image')
+  })
+
+  it('展示当前分组的可用率', async () => {
     const fixture = marketplaceFixture()
     fixture[0] = {
       ...fixture[0],
@@ -256,33 +381,35 @@ describe('ModelMarketplaceView', () => {
     const wrapper = await mountMarketplace()
 
     expect(wrapper.findAll('[data-testid="group-capacity"]')).toHaveLength(0)
-    expect(wrapper.get('[data-testid="marketplace-group-availability"]').classes()).toContain('xl:w-[560px]')
+    expect(wrapper.get('[data-testid="marketplace-group-availability"]').text()).toContain('85.71%')
+    await wrapper.findAll('aside button[aria-pressed]')[1].trigger('click')
+    expect(wrapper.find('[data-testid="marketplace-group-availability"]').exists()).toBe(false)
   })
 
-  it('分组头部用最高优惠标签替换模型数标签，无有效折扣的分组不渲染', async () => {
+  it('当前分组有折扣时显示最高优惠标签和说明', async () => {
     const fixture = marketplaceFixture()
-    // ratio >= 1 表示无折扣；undefined 表示后端未下发官方价比例。
+    // 两个分组分别覆盖无折扣和未配置官方价的情况。
     fixture[1] = { ...fixture[1], official_price_ratio: 1.2 }
     fixture[2] = { ...fixture[2], official_price_ratio: undefined }
     getMarketplaceModels.mockResolvedValue(fixture)
 
     const wrapper = await mountMarketplace()
-    const sections = wrapper.findAll('[data-testid="marketplace-group-section"]')
-
-    // fixture 中 group 1 的 official_price_ratio 为 0.1，即最高优惠 90%。
-    expect(sections[0].text()).toContain('marketplace.maxDiscountOff 90')
-    expect(sections[0].text()).not.toContain('marketplace.modelsStat')
-    expect(sections[1].text()).not.toContain('marketplace.maxDiscountOff')
-    expect(sections[2].text()).not.toContain('marketplace.maxDiscountOff')
-    expect(sections[3].text()).toContain('marketplace.maxDiscountOff 60')
-
-    // 移动端点击 tag 也能查看说明：点击后弹出提示气泡。
-    await sections[0].get('[data-testid="group-max-discount-tag"]').trigger('click')
+    const sections = () => wrapper.get('[data-testid="marketplace-group-section"]')
+    expect(sections().text()).toContain('marketplace.maxDiscountOff 90')
+    await sections().get('[data-testid="group-max-discount-tag"]').trigger('click')
     await nextTick()
     expect(visibleTooltips().some((el) => el.textContent?.includes('marketplace.maxDiscountHint'))).toBe(true)
-    await sections[0].get('[data-testid="group-rate-multiplier-tag"]').trigger('click')
+    await sections().get('[data-testid="group-rate-multiplier-tag"]').trigger('click')
     await nextTick()
     expect(visibleTooltips().some((el) => el.textContent?.includes('marketplace.rateMultiplierHint'))).toBe(true)
+
+    const buttons = wrapper.findAll('aside button[aria-pressed]')
+    for (const button of buttons.slice(1, 3)) {
+      await button.trigger('click')
+      expect(sections().find('[data-testid="group-max-discount-tag"]').exists()).toBe(false)
+    }
+    await buttons[3].trigger('click')
+    expect(sections().text()).toContain('marketplace.maxDiscountOff 60')
   })
 
   it('模型卡片摘要保留免费默认区间', async () => {
@@ -382,7 +509,6 @@ describe('ModelMarketplaceView', () => {
     expect(chips.map((chip) => chip.dataset.native)).toEqual(['false', 'true'])
     expect(tooltip!.querySelector('[data-testid="model-protocols-native-legend"]')).not.toBeNull()
     expect(chips[0].textContent).toContain('marketplace.protocolNames.anthropic_messages')
-    wrapper.unmount()
   })
 
   it('xAI 分组展示品牌图形', async () => {
@@ -427,7 +553,6 @@ describe('ModelMarketplaceView', () => {
     }
     expect(group.find('.provider-icon-fallback').exists()).toBe(false)
     expect(group.text()).toContain('智谱')
-    wrapper.unmount()
   })
 
   it('只展示统一分组倍率', async () => {

@@ -21,10 +21,19 @@ func (t anthropicTestTarget) Information() provider.TestTargetInfo {
 	return provider.TestTargetInfo{ProviderSnapshot: t.record.RoutingSnapshot(), APIProtocol: (provider.ProtocolTarget{Record: t.record}).GetAPIProtocol()}
 }
 
+// IQMappedModel 预检实际模型映射，阻止将图像等专用模型送入数字指纹题。
+func (t anthropicTestTarget) IQMappedModel(model string) string {
+	return mappedTestModel(t.record, model)
+}
+
 func (t anthropicTestTarget) Execute(ctx context.Context, request provider.PreparedTestRequest, sink provider.TestEventSink) error {
 	headers := make(http.Header)
 	headers.Set("User-Agent", request.UserAgent)
 	run := NewTestRun(ctx, headers, sink)
+	run.FullAnswer = request.FullAnswer
+	run.SVGAnswer = request.SVGAnswer
+	run.IQMode = request.IQMode
+	run.ReasoningEffort = request.ReasoningEffort
 	defer run.Cancel()
 	// 自动测试的 UA 保存在本次执行状态中。
 	executor := *t.executor

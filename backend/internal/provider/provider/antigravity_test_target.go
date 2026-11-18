@@ -29,6 +29,7 @@ func (t antigravityTestTarget) Information() provider.TestTargetInfo {
 func (t antigravityTestTarget) Execute(ctx context.Context, request provider.PreparedTestRequest, sink provider.TestEventSink) error {
 	image, explicit := provider.ProviderTestTypeFromArgs(request.TestType)
 	run := NewTestRun(ctx, make(http.Header), sink)
+	run.FullAnswer = request.FullAnswer
 	defer run.Cancel()
 	if explicit && image == provider.ProviderTestTypeImage {
 		return run.Result((TestStreamOutput{}).Error(run, "Image tests are not supported for this Antigravity provider type"))
@@ -42,7 +43,15 @@ func (t antigravityTestTarget) Execute(ctx context.Context, request provider.Pre
 	run.Begin(true)
 	(TestStreamOutput{}).SendEvent(run, provider.TestEvent{Type: "test_start", Model: request.Model})
 	result, err := t.executor.Probe(run.Context, t.record, request)
+	if request.FullAnswer && result != nil {
+		if err := run.Emit(provider.TestEvent{Type: "test_request", Model: result.MappedModel, Protocol: string(answerGemini), ReasoningEffort: result.ReasoningEffort}); err != nil {
+			return run.Result(err)
+		}
+	}
 	if err != nil {
+		if request.FullAnswer {
+			return run.Result(err)
+		}
 		return run.Result((TestStreamOutput{}).Error(run, err.Error()))
 	}
 	if result.Text != "" {

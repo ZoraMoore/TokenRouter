@@ -83,3 +83,12 @@ func ServiceTierValue(raw string) string {
 	}
 	return *normalized
 }
+
+// ObservedServiceTier 返回上游实际处理请求的档位。auto 只用于请求，由上游选择实际档位。
+func ObservedServiceTier(raw string) string {
+	tier := ServiceTierValue(raw)
+	if tier == "auto" {
+		return ""
+	}
+	return tier
+}

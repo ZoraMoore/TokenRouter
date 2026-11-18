@@ -26,7 +26,6 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/billing"
 	"github.com/TokenFlux/TokenRouter/internal/egress"
 	egressadapter "github.com/TokenFlux/TokenRouter/internal/egress/provider"
-	egresstestkit "github.com/TokenFlux/TokenRouter/internal/egress/testkit"
 	"github.com/TokenFlux/TokenRouter/internal/gateway"
 	"github.com/TokenFlux/TokenRouter/internal/infra/httpclient/tlsfingerprint"
 	"github.com/TokenFlux/TokenRouter/internal/protocol"
@@ -1954,8 +1953,8 @@ func TestProviderTestService_AutomaticOpenAIProbeUsesMatchedRoute(t *testing.T) 
 		upstream,
 		router,
 		map[int64]*egress.TLSFingerprintProfile{
-			10: egresstestkit.ApprovedTLSProfile(&egress.TLSFingerprintProfile{ID: 10, Name: "fixed"}),
-			20: egresstestkit.ApprovedTLSProfile(&egress.TLSFingerprintProfile{ID: 20, Name: "routed"}),
+			10: {ID: 10, Name: "fixed"},
+			20: {ID: 20, Name: "routed"},
 		},
 		nil,
 	)
@@ -2082,7 +2081,7 @@ func TestProviderTestService_AutomaticOpenAIProbeFallsBackToProviderTLSProfile(t
 		[]providercore.Record{provider},
 		upstream,
 		router,
-		map[int64]*egress.TLSFingerprintProfile{10: egresstestkit.ApprovedTLSProfile(&egress.TLSFingerprintProfile{ID: 10, Name: "fixed"}), 20: {ID: 20, Name: "unused-route"}},
+		map[int64]*egress.TLSFingerprintProfile{10: {ID: 10, Name: "fixed"}, 20: {ID: 20, Name: "unused-route"}},
 		nil,
 	)
 
@@ -2179,8 +2178,8 @@ func TestProviderTestService_AutomaticOpenAIProbeEmptyUserAgentParticipatesInRou
 				upstream,
 				router,
 				map[int64]*egress.TLSFingerprintProfile{
-					10: egresstestkit.ApprovedTLSProfile(&egress.TLSFingerprintProfile{ID: 10, Name: "fixed"}),
-					20: egresstestkit.ApprovedTLSProfile(&egress.TLSFingerprintProfile{ID: 20, Name: "routed"}),
+					10: {ID: 10, Name: "fixed"},
+					20: {ID: 20, Name: "routed"},
 				},
 				nil,
 			)
@@ -2224,7 +2223,7 @@ func TestProviderTestService_AutomaticOpenAIProbeMissingRouteProfileFallsBack(t 
 		[]providercore.Record{provider},
 		upstream,
 		router,
-		map[int64]*egress.TLSFingerprintProfile{10: egresstestkit.ApprovedTLSProfile(&egress.TLSFingerprintProfile{ID: 10, Name: "fixed"})},
+		map[int64]*egress.TLSFingerprintProfile{10: {ID: 10, Name: "fixed"}},
 		nil,
 	)
 
@@ -2316,7 +2315,7 @@ func TestProviderTestService_AutomaticOpenAIProbeRoutesChatCompletionsAndImages(
 			[]providercore.Record{provider},
 			upstream,
 			router,
-			map[int64]*egress.TLSFingerprintProfile{20: egresstestkit.ApprovedTLSProfile(&egress.TLSFingerprintProfile{ID: 20, Name: "image-route"})},
+			map[int64]*egress.TLSFingerprintProfile{20: {ID: 20, Name: "image-route"}},
 			nil,
 		)
 

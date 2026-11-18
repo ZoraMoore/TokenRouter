@@ -8,7 +8,10 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/scheduler"
 )
 
-type ProviderCodec struct{}
+// ProviderCodec 在读取调度快照时为账号绑定当前实例的模型规则。
+type ProviderCodec struct {
+	OpenAIOAuthModelWhitelist providercore.OpenAIOAuthModelPolicyReader
+}
 
 func (ProviderCodec) Encode(value scheduler.SnapshotProvider) ([]byte, []byte, error) {
 	v, err := RecordValue(value)
@@ -21,8 +24,11 @@ func (ProviderCodec) Encode(value scheduler.SnapshotProvider) ([]byte, []byte, e
 	return marshalSchedulerCacheProvider(*v)
 }
 
-func (ProviderCodec) Decode(raw any) (scheduler.SnapshotProvider, error) {
+func (c ProviderCodec) Decode(raw any) (scheduler.SnapshotProvider, error) {
 	v, err := decodeCachedProvider(raw)
+	if err == nil && v != nil {
+		v.OpenAIOAuthModelWhitelist = c.OpenAIOAuthModelWhitelist
+	}
 	return WrapRecord(v), err
 }
 
@@ -222,6 +228,7 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
 		"session_idle_timeout_minutes",
 		"responses_ws_connection_mode",
 		"openai_text_route_mode",
+		providercore.OpenAIResponseTierBillingEnabledKey,
 		"openai_compact_mode",
 		"openai_native_compaction_v2_mode",
 		"openai_responses_continuation_supported",

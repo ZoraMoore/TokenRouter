@@ -183,7 +183,7 @@ func TestOpenAIGatewayService_ResolveTLSProfileRouterFallback(t *testing.T) {
 			},
 		},
 	}
-	profileSvc := egressadapter.NewTLSProfiles(egress.NewTLSFingerprintProfileService(&tlsProfileTestStore{profiles: []*egress.TLSFingerprintProfile{approvedTLSProfileFixture(10, "fixed"), approvedTLSProfileFixture(20, "router")}}, nil))
+	profileSvc := egressadapter.NewTLSProfiles(egress.NewTLSFingerprintProfileService(&tlsProfileTestStore{profiles: []*egress.TLSFingerprintProfile{tlsProfileFixture(10, "fixed"), tlsProfileFixture(20, "router")}}, nil))
 	profileSvc.Start()
 
 	svc := newResponsesFixture(responsesFixtureInputs{profiles: profileSvc})

@@ -14,7 +14,6 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/TokenFlux/TokenRouter/ent/predicate"
 	"github.com/TokenFlux/TokenRouter/ent/tlsfingerprintprofile"
-	"github.com/TokenFlux/TokenRouter/internal/egress"
 )
 
 // TLSFingerprintProfileUpdate is the builder for updating TLSFingerprintProfile entities.
@@ -264,20 +263,6 @@ func (_u *TLSFingerprintProfileUpdate) ClearExtensions() *TLSFingerprintProfileU
 	return _u
 }
 
-// SetVerification sets the "verification" field.
-func (_u *TLSFingerprintProfileUpdate) SetVerification(v egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileUpdate {
-	_u.mutation.SetVerification(v)
-	return _u
-}
-
-// SetNillableVerification sets the "verification" field if the given value is not nil.
-func (_u *TLSFingerprintProfileUpdate) SetNillableVerification(v *egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileUpdate {
-	if v != nil {
-		_u.SetVerification(*v)
-	}
-	return _u
-}
-
 // Mutation returns the TLSFingerprintProfileMutation object of the builder.
 func (_u *TLSFingerprintProfileUpdate) Mutation() *TLSFingerprintProfileMutation {
 	return _u.mutation
@@ -465,9 +450,6 @@ func (_u *TLSFingerprintProfileUpdate) sqlSave(ctx context.Context) (_node int, 
 	}
 	if _u.mutation.ExtensionsCleared() {
 		_spec.ClearField(tlsfingerprintprofile.FieldExtensions, field.TypeJSON)
-	}
-	if value, ok := _u.mutation.Verification(); ok {
-		_spec.SetField(tlsfingerprintprofile.FieldVerification, field.TypeJSON, value)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -723,20 +705,6 @@ func (_u *TLSFingerprintProfileUpdateOne) ClearExtensions() *TLSFingerprintProfi
 	return _u
 }
 
-// SetVerification sets the "verification" field.
-func (_u *TLSFingerprintProfileUpdateOne) SetVerification(v egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileUpdateOne {
-	_u.mutation.SetVerification(v)
-	return _u
-}
-
-// SetNillableVerification sets the "verification" field if the given value is not nil.
-func (_u *TLSFingerprintProfileUpdateOne) SetNillableVerification(v *egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileUpdateOne {
-	if v != nil {
-		_u.SetVerification(*v)
-	}
-	return _u
-}
-
 // Mutation returns the TLSFingerprintProfileMutation object of the builder.
 func (_u *TLSFingerprintProfileUpdateOne) Mutation() *TLSFingerprintProfileMutation {
 	return _u.mutation
@@ -954,9 +922,6 @@ func (_u *TLSFingerprintProfileUpdateOne) sqlSave(ctx context.Context) (_node *T
 	}
 	if _u.mutation.ExtensionsCleared() {
 		_spec.ClearField(tlsfingerprintprofile.FieldExtensions, field.TypeJSON)
-	}
-	if value, ok := _u.mutation.Verification(); ok {
-		_spec.SetField(tlsfingerprintprofile.FieldVerification, field.TypeJSON, value)
 	}
 	_node = &TLSFingerprintProfile{config: _u.config}
 	_spec.Assign = _node.assignValues

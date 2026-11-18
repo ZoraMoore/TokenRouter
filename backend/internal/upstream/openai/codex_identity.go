@@ -18,8 +18,8 @@ const (
 
 	CodexClientVersionMaxLen = 64
 
-	CodexCLIVersion   = "0.144.1"
-	CodexCLIUserAgent = CodexDefaultOriginator + "/" + CodexCLIVersion + " (Ubuntu 22.4.0; x86_64) xterm-256color"
+	CodexCLIVersion   = clientmeta.CodexDefaultVersion
+	CodexCLIUserAgent = clientmeta.CodexDefaultUserAgent
 
 	CodexDefaultOriginator = clientmeta.CodexDefaultOriginator
 )

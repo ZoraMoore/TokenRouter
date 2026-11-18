@@ -116,6 +116,7 @@ func TestGatewayCacheLiveCallIdentityAndController(t *testing.T) {
 		UpstreamModel:         "gpt-live-upstream",
 		ModelMappingChain:     "live-alias→gpt-live-test→gpt-live-upstream",
 		APIKeyModelMapping:    map[string]string{"live-alias": "gpt-live-test"},
+		ImageToolModels:       []string{"gpt-image-custom"},
 		AttestationCiphertext: "encrypted-attestation",
 		CreatedAt:             time.Now(),
 		ExpiresAt:             time.Now().Add(time.Hour),
@@ -132,6 +133,7 @@ func TestGatewayCacheLiveCallIdentityAndController(t *testing.T) {
 	require.Equal(t, record.UpstreamModel, loaded.UpstreamModel)
 	require.Equal(t, record.ModelMappingChain, loaded.ModelMappingChain)
 	require.Equal(t, record.APIKeyModelMapping, loaded.APIKeyModelMapping)
+	require.Equal(t, record.ImageToolModels, loaded.ImageToolModels)
 
 	claimed, err := cache.ClaimLiveController(context.Background(), record.CallHash, session.LiveControllerObserver, "observer-1")
 	require.NoError(t, err)

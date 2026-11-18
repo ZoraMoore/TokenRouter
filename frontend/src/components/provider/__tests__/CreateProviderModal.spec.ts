@@ -8,10 +8,12 @@ const {
   createProviderMock,
   importCodexSessionMock,
   createOpenAICodexPATMock,
+  getOpenAIOAuthModelWhitelist,
 } = vi.hoisted(() => ({
   createProviderMock: vi.fn(),
   importCodexSessionMock: vi.fn(),
   createOpenAICodexPATMock: vi.fn(),
+  getOpenAIOAuthModelWhitelist: vi.fn(),
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -26,11 +28,13 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     providers: {
       create: createProviderMock,
+      refreshOpenAIToken: vi.fn().mockResolvedValue({ access_token: 'fixture-access', expires_at: 2000000000 }),
       checkMixedChannelRisk: vi.fn().mockResolvedValue({ has_risk: false }),
       importCodexSession: importCodexSessionMock,
       createOpenAICodexPAT: createOpenAICodexPATMock,
     },
     settings: {
+      getOpenAIOAuthModelWhitelist,
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
       getSettings: vi.fn().mockResolvedValue({}),
     },
@@ -107,7 +111,7 @@ const OAuthAuthorizationFlowStub = defineComponent({
     initialInputMethod: String,
   },
   data: () => ({ inputMethod: 'manual' }),
-  emits: ['import-codex-session', 'import-codex-pat'],
+  emits: ['import-codex-session', 'import-codex-pat', 'validate-refresh-token'],
   template: `
     <div>
       <button data-testid="import-codex-session" @click="$emit('import-codex-session', 'session-json')">session</button>
@@ -191,6 +195,7 @@ async function openCodexImportStep() {
 
 describe('CreateProviderModal OpenAI provider options', () => {
   beforeEach(() => {
+    getOpenAIOAuthModelWhitelist.mockReset().mockResolvedValue({ models: ['gpt-lab', 'codex-custom'], configured: true })
     createProviderMock.mockReset().mockResolvedValue({ id: 42, platform: 'openai', type: 'apikey' })
     importCodexSessionMock.mockReset().mockResolvedValue({
       created: 1,
@@ -231,6 +236,7 @@ describe('CreateProviderModal OpenAI provider options', () => {
     expect(payload?.extra?.openai_text_route_mode).toBeUndefined()
     expect(payload?.extra?.openai_responses_probe_status).toBeUndefined()
     expect(payload?.extra?.openai_responses_continuation_supported).toBe(false)
+    expect(payload?.extra).not.toHaveProperty('openai_response_tier_billing_enabled')
     expect(payload?.extra).not.toHaveProperty('openai_responses_mode')
     expect(payload?.extra).not.toHaveProperty('openai_responses_supported')
   })
@@ -308,6 +314,29 @@ describe('CreateProviderModal OpenAI provider options', () => {
     await wrapper.get('form#create-provider-form').trigger('submit.prevent')
     await flushPromises()
     expect(createProviderMock.mock.calls[0]?.[0]?.extra?.images_url_to_b64_json).toBe(true)
+  })
+
+  it('offers UltraFast response-tier billing on OpenAI providers and saves the API key setting', async () => {
+    const wrapper = mountModal()
+    const selector = '[data-testid="create-openai-ultrafast-billing-toggle"]'
+    await selectButtonByText(wrapper, 'admin.providers.claudeConsole')
+    expect(wrapper.find(selector).exists()).toBe(false)
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'OAuth')
+    expect(wrapper.get(selector).attributes('aria-checked')).toBe('false')
+    await selectButtonByText(wrapper, 'API Key')
+    const toggle = wrapper.get(selector)
+    expect(toggle.attributes('aria-checked')).toBe('false')
+    await toggle.trigger('click')
+    await wrapper.get('#create-provider-name').setValue('OpenAI UltraFast')
+    await wrapper.get('#create-provider-form input[type="password"]').setValue('test-api-key')
+    await wrapper.get('#create-provider-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(createProviderMock).toHaveBeenCalledWith(expect.objectContaining({
+      platform: 'openai',
+      type: 'apikey',
+      extra: expect.objectContaining({ openai_response_tier_billing_enabled: true })
+    }))
   })
 
   it('allows an explicitly empty native protocol set', async () => {
@@ -468,6 +497,17 @@ describe('CreateProviderModal OpenAI provider options', () => {
     expect(createProviderMock.mock.calls[0]?.[0]?.extra?.openai_long_context_billing_enabled).toBeUndefined()
   })
 
+  it('saves UltraFast response-tier billing for an OAuth import', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await wrapper.get('[data-testid="create-openai-ultrafast-billing-toggle"]').trigger('click')
+    await wrapper.get('#create-provider-name').setValue('OAuth UltraFast')
+    await wrapper.get('#create-provider-form').trigger('submit.prevent')
+    await wrapper.get('[data-testid="import-codex-session"]').trigger('click')
+    await flushPromises()
+    expect(importCodexSessionMock.mock.calls[0][0].extra.openai_response_tier_billing_enabled).toBe(true)
+  })
+
   it('leaves Codex session import billing ownership to the backend', async () => {
     const wrapper = await openCodexImportStep()
     await wrapper.get('[data-testid="import-codex-session"]').trigger('click')
@@ -486,17 +526,55 @@ describe('CreateProviderModal OpenAI provider options', () => {
     expect(createOpenAICodexPATMock.mock.calls[0]?.[0]?.extra?.openai_long_context_billing_enabled).toBeUndefined()
   })
 
-  it('新建 Codex 账号显示七个默认模型，Session 未修改白名单时交给新建流程补齐', async () => {
+  it('新建 OpenAI OAuth 账号预填后台名单，Session 未修改白名单时由服务器决定', async () => {
     const wrapper = mountModal()
     await selectButtonByText(wrapper, 'OpenAI')
-    expect(wrapper.findComponent(ModelWhitelistSelectorStub).props('modelValue')).toEqual([
-      'codex-auto-review', 'gpt-5.5', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6.1-sol',
-    ])
+    await flushPromises()
+    expect(getOpenAIOAuthModelWhitelist).toHaveBeenCalledOnce()
+    expect(wrapper.findComponent(ModelWhitelistSelectorStub).props('modelValue')).toEqual(['gpt-lab', 'codex-custom'])
     await wrapper.get('form#create-provider-form input[type="text"]').setValue('Codex import')
     await wrapper.get('form#create-provider-form').trigger('submit.prevent')
     await wrapper.get('[data-testid="import-codex-session"]').trigger('click')
     await flushPromises()
     expect(importCodexSessionMock.mock.calls[0]?.[0]?.credential_extras).not.toHaveProperty('model_whitelist')
+    wrapper.unmount()
+  })
+
+  it('切回 OpenAI OAuth 时重读全局名单，较早的响应不能覆盖已编辑的账号', async () => {
+    let finish!: (settings: { models: string[]; configured: boolean }) => void
+    getOpenAIOAuthModelWhitelist.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'API Key')
+    finish({ models: ['gpt-stale'], configured: true })
+    await flushPromises()
+    expect(wrapper.getComponent(ModelWhitelistSelectorStub).props('modelValue')).toEqual([])
+
+    getOpenAIOAuthModelWhitelist.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    await selectButtonByText(wrapper, 'admin.providers.types.chatgptOauth')
+    await wrapper.get('[data-testid="set-openai-model-whitelist"]').trigger('click')
+    finish({ models: ['gpt-current'], configured: true })
+    await flushPromises()
+    expect(wrapper.getComponent(ModelWhitelistSelectorStub).props('modelValue')).toEqual(['gpt-5.4'])
+    wrapper.unmount()
+  })
+
+  it('读取预填名单失败时，导入申请仍由服务器选定新账号默认模型', async () => {
+    getOpenAIOAuthModelWhitelist.mockRejectedValueOnce(new Error('unavailable'))
+    const wrapper = await openCodexImportStep()
+    await wrapper.get('[data-testid="import-codex-pat"]').trigger('click')
+    await flushPromises()
+    expect(createOpenAICodexPATMock).toHaveBeenCalledOnce()
+    expect(createOpenAICodexPATMock.mock.calls[0][0].credential_extras ?? {}).not.toHaveProperty('model_whitelist')
+    wrapper.unmount()
+  })
+
+  it('刷新令牌创建 OAuth 账号时将默认名单交给服务器', async () => {
+    const wrapper = await openCodexImportStep()
+    wrapper.getComponent(OAuthAuthorizationFlowStub).vm.$emit('validate-refresh-token', 'fixture-refresh')
+    await flushPromises()
+    expect(createProviderMock).toHaveBeenCalledOnce()
+    expect(createProviderMock.mock.calls[0][0].credentials).not.toHaveProperty('model_whitelist')
     wrapper.unmount()
   })
 

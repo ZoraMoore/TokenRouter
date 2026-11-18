@@ -23,13 +23,13 @@ func AllowsCompatibleCompact(provider *ExecutionProvider) bool {
 // 注意：对 spark 影子提供商，调用方还须额外调用 parentHealthyForShadow(provider, lookup)
 // 检查母提供商凭据可用性；该检查未内置于本函数，以避免注入 DB 依赖。
 func CompatibleProviderEligible(ctx context.Context, provider *ExecutionProvider, platform string, requestedModel string, requireCompact bool, requiredCapability providercore.OpenAIEndpointCapability) bool {
-	return CompatibleEligibilityReason(ctx, provider, platform, requestedModel, requireCompact, requiredCapability) == ""
+	return CompatibleEligibilityReason(ctx, provider, platform, requestedModel, requireCompact, requiredCapability, CompactModels{}) == ""
 }
 
 // CompatibleEligibilityReason 返回兼容性判断结果和首个拦截原因。
 // 负载批处理根据拒绝原因生成服务端的无可用提供商诊断。
 // @project-doc docs/architecture/provider_scheduling_and_cache.md#advanced_scheduler_selection
-func CompatibleEligibilityReason(ctx context.Context, provider *ExecutionProvider, platform string, requestedModel string, requireCompact bool, requiredCapability providercore.OpenAIEndpointCapability) string {
+func CompatibleEligibilityReason(ctx context.Context, provider *ExecutionProvider, platform string, requestedModel string, requireCompact bool, requiredCapability providercore.OpenAIEndpointCapability, compactModels CompactModels) string {
 	platform = strings.TrimSpace(platform)
 	if provider == nil {
 		return "provider_nil"
@@ -71,7 +71,7 @@ func CompatibleEligibilityReason(ctx context.Context, provider *ExecutionProvide
 			return "quota_auto_pause"
 		}
 	}
-	if !ExecutionModelPolicy(provider).SupportsCompatibleRouting(ctx, requestedModel) {
+	if !supportsCompatibleRequestModel(ctx, provider, requestedModel, requireCompact, compactModels) {
 		return "model_not_supported"
 	}
 	if !provider.View().IsSchedulable() || provider.View().IsQuotaExceeded() {
@@ -88,6 +88,22 @@ func CompatibleEligibilityReason(ctx context.Context, provider *ExecutionProvide
 		return "compact_unsupported"
 	}
 	return ""
+}
+
+func supportsCompatibleRequestModel(ctx context.Context, value *ExecutionProvider, model string, requireCompact bool, compactModels CompactModels) bool {
+	policy := ExecutionModelPolicy(value)
+	if requireCompact && value.View().IsOpenAIOAuth() {
+		global := value.View().OpenAIOAuthFinalModelPolicy(ctx)
+		if global.Configured() {
+			// 独立 Compact 端点优先使用专用映射和站点回退模型。
+			final := compactModels.Recovery(value).ResolveModel(model)
+			if final == "" {
+				final = policy.OpenAIUpstream(model, true)
+			}
+			return value.View().AllowsOpenAIOAuthTarget(global, final, provideradapter.ModelDefaults())
+		}
+	}
+	return policy.SupportsCompatibleRouting(ctx, model)
 }
 
 // OpenAIQuotaPause 使用当前时刻和本次请求阈值读取提供商派生状态。

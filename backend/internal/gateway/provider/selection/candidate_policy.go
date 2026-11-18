@@ -39,7 +39,7 @@ func (s *Compatible) withCandidatePolicy(ctx context.Context, groupID *int64, se
 
 // candidateEligibilityReason 在协议和模型过滤后复用各平台已有的提供商硬限制。
 func (s *Compatible) candidateEligibilityReason(ctx context.Context, value *gatewayadapter.ExecutionProvider, platform, model string, compact bool, required provider.OpenAIEndpointCapability) string {
-	if reason := gatewayadapter.CompatibleEligibilityReason(ctx, value, platform, model, compact, required); reason != "" {
+	if reason := gatewayadapter.CompatibleEligibilityReason(ctx, value, platform, model, compact, required, gatewayadapter.CompactModels{Default: s.options.OpenAICompactModel}); reason != "" {
 		return reason
 	}
 	if required, _ := ctx.Value(imageModelRequiredKey{}).(bool); required && !media.IsImageGenerationModel(gatewayadapter.ExecutionModelPolicy(value).UpstreamModel(ctx, model)) {

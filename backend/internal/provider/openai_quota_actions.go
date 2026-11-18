@@ -58,6 +58,21 @@ func (s *OpenAIQuotaActions) StopContext(ctx context.Context) error {
 	return s.activity.stop(ctx, "OpenAIQuotaActions")
 }
 
+// codexCreditOutcome 只承认已知的消费结果。早期回包只给出重置窗口数。
+func codexCreditOutcome(code string, windows int) string {
+	switch code {
+	case "reset", "success":
+		return "reset"
+	case "nothing_to_reset", "already_redeemed", "no_credit":
+		return code
+	case "", "ok":
+		if windows > 0 {
+			return "reset"
+		}
+	}
+	return "unknown"
+}
+
 func (s *OpenAIQuotaActions) Reset(ctx context.Context, providerID int64) (*OpenAIQuotaResetOutcome, error) {
 	runtimeCtx, done, err := s.activity.begin(context.WithoutCancel(ctx), ErrOpenAIQuotaStopped)
 	if err != nil {
@@ -79,6 +94,21 @@ func (s *OpenAIQuotaActions) Reset(ctx context.Context, providerID int64) (*Open
 	resetResponse := OpenAIQuotaResetOutcome{OpenAIQuotaResetResult: *result}
 	postCtx, cancelPost := context.WithTimeout(runtimeCtx, OpenAIQuotaResetPostProcessTimeout)
 	defer cancelPost()
+
+	if outcome := codexCreditOutcome(result.Code, result.WindowsReset); outcome != "reset" {
+		// 额度仍按上游当前值展示。未确认消费时保留原来的调度状态和限流快照。
+		resetResponse.Code = outcome
+		usage, readErr := s.Quota.QueryUsage(postCtx, providerID)
+		if readErr != nil || usage == nil {
+			resetResponse.WarningCode = OpenAIQuotaResetWarningCacheRefreshFailed
+			return &resetResponse, nil
+		}
+		resetResponse.Quota = usage
+		if err := s.Quota.CacheResetCreditsSnapshot(postCtx, providerID, usage.RateLimitResetCredits); err != nil {
+			resetResponse.WarningCode = OpenAIQuotaResetWarningCacheRefreshFailed
+		}
+		return &resetResponse, nil
+	}
 
 	// 重置次数一旦消费就不可退还，优先恢复提供商运行时状态，且不修改人工 schedulable 开关。
 	if s.Recovery == nil {

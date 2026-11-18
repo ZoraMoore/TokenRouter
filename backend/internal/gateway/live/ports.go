@@ -8,8 +8,11 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/scheduler"
 )
 
-// TextFrame 保留文本帧类型；HTTP Adapter 负责与具体 WebSocket 库转换。
-const TextFrame = 1
+// 控制协议可以使用文本帧或包含 JSON 的二进制帧。
+const (
+	TextFrame   = 1
+	BinaryFrame = 2
+)
 
 // FrameConn 提供控制连接的同步帧读写。
 type FrameConn interface {

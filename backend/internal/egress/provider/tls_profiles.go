@@ -60,7 +60,17 @@ func FromTLSProfile(p *tlsfingerprint.Profile) *egress.TLSFingerprintProfile {
 		return nil
 	}
 	return egress.CloneTLSFingerprintProfile(&egress.TLSFingerprintProfile{
-		Name: p.Name, EnableGREASE: p.EnableGREASE, CipherSuites: p.CipherSuites, Curves: p.Curves, PointFormats: p.PointFormats, SignatureAlgorithms: p.SignatureAlgorithms,
-		SignatureAlgorithmsCert: p.SignatureAlgorithmsCert, ALPNProtocols: p.ALPNProtocols, SupportedVersions: p.SupportedVersions, KeyShareGroups: p.KeyShareGroups, PSKModes: p.PSKModes, Extensions: p.Extensions,
+		Name:                    p.Name,
+		EnableGREASE:            p.EnableGREASE,
+		CipherSuites:            p.CipherSuites,
+		Curves:                  p.Curves,
+		PointFormats:            p.PointFormats,
+		SignatureAlgorithms:     p.SignatureAlgorithms,
+		SignatureAlgorithmsCert: p.SignatureAlgorithmsCert,
+		ALPNProtocols:           p.ALPNProtocols,
+		SupportedVersions:       p.SupportedVersions,
+		KeyShareGroups:          p.KeyShareGroups,
+		PSKModes:                p.PSKModes,
+		Extensions:              p.Extensions,
 	})
 }

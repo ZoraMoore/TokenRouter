@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
-	"github.com/TokenFlux/TokenRouter/internal/egress"
 )
 
 const (
@@ -44,8 +43,6 @@ const (
 	FieldPskModes = "psk_modes"
 	// FieldExtensions holds the string denoting the extensions field in the database.
 	FieldExtensions = "extensions"
-	// FieldVerification holds the string denoting the verification field in the database.
-	FieldVerification = "verification"
 	// Table holds the table name of the tlsfingerprintprofile in the database.
 	Table = "tls_fingerprint_profiles"
 )
@@ -68,7 +65,6 @@ var Columns = []string{
 	FieldKeyShareGroups,
 	FieldPskModes,
 	FieldExtensions,
-	FieldVerification,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -92,8 +88,6 @@ var (
 	NameValidator func(string) error
 	// DefaultEnableGrease holds the default value on creation for the "enable_grease" field.
 	DefaultEnableGrease bool
-	// DefaultVerification holds the default value on creation for the "verification" field.
-	DefaultVerification egress.TLSFingerprintProfileVerification
 )
 
 // OrderOption defines the ordering options for the TLSFingerprintProfile queries.

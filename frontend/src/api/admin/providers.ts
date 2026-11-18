@@ -33,14 +33,11 @@ export interface CodexInviteResetCredit {
   reset_type?: string
   granted_at?: string
   expires_at?: string
-  profile_user_id?: string
-  profile_image_url?: string
-  raw?: Record<string, unknown>
 }
 
 export interface CodexInviteResetStatus {
   referral_key: string
-  invite_eligibility?: Record<string, unknown>
+  available_invites?: number | null
   eligibility_rules?: string[]
   should_show?: boolean | null
   grant_action?: string
@@ -53,15 +50,11 @@ export interface CodexInviteResetStatus {
   requires_consent: boolean
   available_count: number
   credits: CodexInviteResetCredit[]
-  raw_eligibility_rules?: Record<string, unknown>
-  raw_credits?: Record<string, unknown>
 }
 
 export interface CodexInviteResetInviteResult {
-  invites?: Array<Record<string, unknown>>
+  sent_count: number
   failed_emails?: string[]
-  message?: string
-  raw?: Record<string, unknown>
 }
 
 export interface CodexInviteResetConsumeResult {
@@ -70,8 +63,6 @@ export interface CodexInviteResetConsumeResult {
   redeem_request_id: string
   windows_reset: number
   available_count?: number
-  remaining_credits?: Array<Record<string, unknown>>
-  raw?: Record<string, unknown>
 }
 
 export interface OpenAIRateLimitWindow {
@@ -116,6 +107,16 @@ export interface OpenAIQuotaUsage {
 
 export interface OpenAIQuotaRefreshResult extends OpenAIQuotaUsage {
   cache_persisted: boolean
+}
+
+export interface OpenAIQuotaResetResult {
+  code: string
+  windows_reset: number
+  quota?: OpenAIQuotaUsage | null
+  provider?: Provider | null
+  cache_refreshed: boolean
+  provider_state_recovered: boolean
+  warning_code?: string
 }
 
 export interface AdvancedSchedulerScoreDiagnosticProvider {
@@ -774,7 +775,7 @@ export async function syncFromCrs(params: {
   return data
 }
 
-export async function exportData(options?: {
+interface ProviderExportOptions {
   ids?: number[]
   filters?: {
     platform?: string
@@ -787,8 +788,18 @@ export async function exportData(options?: {
     sort_order?: 'asc' | 'desc'
   }
   includeProxies?: boolean
-}): Promise<AdminDataPayload> {
+}
+
+// Sub2API 账号文件以 accounts 保存提供商，代理和导出时间使用相同的字段。
+type Sub2APIDataPayload = Pick<AdminDataPayload, 'exported_at' | 'proxies' | 'skipped_shadows'> & {
+  accounts: AdminDataPayload['providers']
+}
+
+export function exportData(options: ProviderExportOptions & { format: 'sub2api' }): Promise<Sub2APIDataPayload>
+export function exportData(options?: ProviderExportOptions): Promise<AdminDataPayload>
+export async function exportData(options?: ProviderExportOptions & { format?: 'sub2api' }): Promise<AdminDataPayload | Sub2APIDataPayload> {
   const params: Record<string, string> = {}
+  if (options?.format) params.format = options.format
   if (options?.ids && options.ids.length > 0) {
     params.ids = options.ids.join(',')
   } else if (options?.filters) {
@@ -805,7 +816,7 @@ export async function exportData(options?: {
   if (options?.includeProxies === false) {
     params.include_proxies = 'false'
   }
-  const { data } = await apiClient.get<AdminDataPayload>('/admin/providers/data', { params })
+  const { data } = await apiClient.get<AdminDataPayload | Sub2APIDataPayload>('/admin/providers/data', { params })
   return data
 }
 
@@ -964,11 +975,13 @@ export async function getCodexInviteResetStatus(id: number): Promise<CodexInvite
  */
 export async function sendCodexInviteResetInvite(
   id: number,
-  emails: string[]
+  emails: string[],
+  programId: string,
+  confirmed: boolean
 ): Promise<CodexInviteResetInviteResult> {
   const { data } = await apiClient.post<CodexInviteResetInviteResult>(
     `/admin/providers/${id}/codex/invite-reset/invite`,
-    { emails }
+    { emails, program_id: programId, confirmed }
   )
   return data
 }
@@ -1001,6 +1014,12 @@ export async function refreshOpenAIQuota(id: number): Promise<OpenAIQuotaRefresh
   const { data } = await apiClient.post<OpenAIQuotaRefreshResult>(
     `/admin/openai/providers/${id}/quota/refresh`
   )
+  return data
+}
+
+// 重置成功时，响应一并返回回读的额度和提供商状态。
+export async function resetOpenAIQuota(id: number): Promise<OpenAIQuotaResetResult> {
+  const { data } = await apiClient.post<OpenAIQuotaResetResult>(`/admin/openai/providers/${id}/reset-quota`)
   return data
 }
 
@@ -1105,6 +1124,7 @@ export const providersAPI = {
   sendCodexInviteResetInvite,
   consumeCodexInviteReset,
   refreshOpenAIQuota,
+  resetOpenAIQuota,
   revertProxyFallback,
   createSparkShadow,
   getOllamaCloudUsageSettings,

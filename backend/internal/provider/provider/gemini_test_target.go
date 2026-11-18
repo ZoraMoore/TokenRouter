@@ -25,6 +25,8 @@ func (t geminiTestTarget) Execute(ctx context.Context, request provider.Prepared
 	headers := make(http.Header)
 	headers.Set("User-Agent", request.UserAgent)
 	run := NewTestRun(ctx, headers, sink)
+	run.FullAnswer = request.FullAnswer
+	run.SVGAnswer = request.SVGAnswer
 	defer run.Cancel()
 	// 自动测试的 UA 保存在本次执行状态中。
 	executor := *t.executor

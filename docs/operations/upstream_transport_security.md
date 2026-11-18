@@ -52,7 +52,11 @@ egress 负责 TLS Profile 和 Router 的配置和缓存（只有一份）；写�
 
 调用方用 `TLSSelection` 明确传入提供商的资格、直接模板和路由匹配结果；`egress/provider.TLSProfiles` 只把策略结果转成传输指纹，不读取提供商，也不保存缓存。app 直接管理模板服务的启停，授权 token 的专用选择复用同一个实例。
 
-TLS collector 的短期会话、到期和记录上限，由 egress 负责；监听、证书和 ClientHello 的捕获在 provider 适配层，按管理员的请求开启。TLS collector 可以采集受控的会话，用于建立或检查 profile。采集入口是管理员的诊断功能，不接收任意的公网目标，捕获到的 Authorization 和 Cookie 也不会作为普通样本保存。OAuth token、reset 等特殊请求，可以使用专用的 profile 和 UA，但仍然遵守目标和代理的校验。
+管理员可以用 TLS collector 启动独立的 HTTPS 监听，将诊断客户端指向临时会话 URL。收集器记录 ClientHello，并提取 User-Agent 和 SDK 版本等请求头，供管理员建立或检查模板。egress 管理会话有效期和记录上限。
+
+模板的 `extensions` 含 50 时，`signature_algorithms_cert` 配置该扩展的证书签名算法。这个字段为空时，扩展 50 使用与扩展 13 相同的算法列表。选择随机模板（ID `-1`）时，模板服务从本地缓存的自定义模板中抽取。
+
+OAuth token、reset 等特殊请求可使用专用模板和 User-Agent。应用仍按出站策略检查目标和代理。
 
 ## 目标与重定向校验
 
@@ -85,10 +89,3 @@ OpenAI 代理断流的隔离状态，只由 `egress.ProxyStreamCircuit` 维护�
 直连回退只在代理策略允许时发生。回退时，记录原来的代理、选择的结果和调度的失效；安全的目标校验失败时，换代理或关闭指纹都绕不过去。
 
 相关文档：[边缘与 HTTP 入口安全](edge_security.md)、[提供商维护](provider_maintenance.md)、[网关错误响应策略](../interfaces/gateway_error_policy.md)。
-
-
-## 本部署的 TLS 模板验证
-
-自定义模板保存 `signature_algorithms_cert` 和 `verification`。模板经过受控 CONNECT 采集或已认证入站采集，通过本地 ClientHello 回放和指定目标握手验证后，由管理员批准使用。随机池还要求 `random_pool_eligible=true`。握手字段变化会将验证状态标为 `stale`。
-
-Linux observer 向内部观察端点提交去敏 ClientHello。API Key 的 HTTP 认证适配器在认证成功后提取 Nginx 的连接字段，清除内部 Header，并将白名单快照交给验证 worker。共享 Redis 日额度控制验证尝试与模板创建数量。模板服务每 30 秒刷新数据库，刷新失败时清空自定义模板缓存。

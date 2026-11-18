@@ -15,6 +15,24 @@ import (
 	routingtestkit "github.com/TokenFlux/TokenRouter/internal/routing/testkit"
 )
 
+func TestResolveOpenAIWSRoutingModelReloadsOAuthWhitelistBetweenTurns(t *testing.T) {
+	models := providercore.NewOpenAIOAuthModelPolicy([]string{"gpt-turn-one"})
+	target := &gatewayprovider.ExecutionProvider{Record: providercore.Record{
+		LoadLocation: time.LoadLocation, Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeOAuth, Status: "active", Schedulable: true,
+		Credentials:               map[string]any{"model_mapping": map[string]any{"client": "gpt-turn-one"}},
+		OpenAIOAuthModelWhitelist: func(context.Context) (providercore.OpenAIOAuthModelPolicy, error) { return models, nil },
+	}}
+	svc := NewCompatible(CompatibleDependencies{}, DefaultOptions())
+	turn := func(model string) error {
+		_, err := svc.ResolveOpenAIWSRoutingModelForProvider(context.Background(), nil, target, model, providercore.OpenAIEndpointCapabilityTextGeneration)
+		return err
+	}
+	require.NoError(t, turn("client"))
+	models = providercore.NewOpenAIOAuthModelPolicy([]string{"gpt-turn-two"})
+	require.Error(t, turn("client"))
+	require.NoError(t, turn("gpt-turn-two"))
+}
+
 // TestResolveOpenAIWSRoutingModelForProviderStrictlyFollowsBillingBasis 检查长连接每轮按计费依据校验 R、C 或 U。
 func TestResolveOpenAIWSRoutingModelForProviderStrictlyFollowsBillingBasis(t *testing.T) {
 	price := 0.01

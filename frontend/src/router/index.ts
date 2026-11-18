@@ -9,6 +9,7 @@ import { useAppStore } from '@/stores/app'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { installNavigationLoading } from './navigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
+import { readPelicanVisibility } from '@/composables/usePelicanVisibility'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
@@ -215,6 +216,20 @@ const routes: RouteRecordRaw[] = [
       title: 'Dashboard',
       titleKey: 'dashboard.title',
       descriptionKey: 'dashboard.welcomeMessage'
+    }
+  },
+  {
+    path: '/pelican-tests',
+    alias: '/pelican-showcase',
+    name: 'PelicanTests',
+    component: () => import('@/views/user/PelicanTestsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      requiresPelicanShowcase: true,
+      title: 'Pelican Tests',
+      titleKey: 'pelicanTests.title',
+      descriptionKey: 'pelicanTests.userDescription'
     }
   },
   {
@@ -469,6 +484,19 @@ const routes: RouteRecordRaw[] = [
       title: 'Ops Monitoring',
       titleKey: 'admin.ops.title',
       descriptionKey: 'admin.ops.description'
+    }
+  },
+  {
+    path: '/admin/pelican-tests',
+    name: 'AdminPelicanTests',
+    component: () => import('@/views/admin/PelicanTestsView.vue'),
+    props: route => ({ scheduleQuery: route.query }),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Pelican Test Plans',
+      titleKey: 'pelicanTests.title',
+      descriptionKey: 'pelicanTests.adminDescription'
     }
   },
   {
@@ -891,6 +919,15 @@ router.beforeEach(async (to, _from, next) => {
     // User is authenticated but not admin, redirect to user dashboard
     next('/dashboard')
     return
+  }
+
+  // 直接打开旧地址或画廊别名时，先按当前登录账号读取展示开关。
+  if (to.meta.requiresPelicanShowcase) {
+    const visibility = authStore.user && await readPelicanVisibility(authStore.user.id, true)
+    if (!visibility?.enabled) {
+      next(authStore.isAdmin ? '/admin/pelican-tests' : '/dashboard')
+      return
+    }
   }
 
   // 公共设置可能尚未加载（App.vue 的 onMounted 异步拉取晚于首次导航，且纯静态部署

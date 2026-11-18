@@ -19,7 +19,7 @@ func ProviderFromRecordShallow(a *provider.Record) *Provider {
 	a = provider.CloneRecord(a)
 	runtime := provider.RuntimeConfig{Extra: a.Extra, Concurrency: a.Concurrency, SessionWindowStart: a.SessionWindowStart, SessionWindowEnd: a.SessionWindowEnd}
 	redactedCreds, credsStatus := RedactCredentials(a.Credentials)
-	extra := redactProviderManagedExtra(a.Extra)
+	extra := RedactProviderManagedExtra(a.Extra)
 	var ollamaCloudUsage *provider.OllamaCloudUsageState
 	if state := provider.OllamaCloudUsageStateFromProvider(a); state.Eligible {
 		ollamaCloudUsage = state
@@ -202,7 +202,8 @@ func ProviderFromRecordShallow(a *provider.Record) *Provider {
 	return out
 }
 
-func redactProviderManagedExtra(extra map[string]any) map[string]any {
+// RedactProviderManagedExtra 复制提供商扩展设置，并清理用量查询会话和历史查询凭据。
+func RedactProviderManagedExtra(extra map[string]any) map[string]any {
 	if extra == nil {
 		return nil
 	}

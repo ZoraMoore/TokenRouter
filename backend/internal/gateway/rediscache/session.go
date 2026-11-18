@@ -385,27 +385,32 @@ func (c *gatewayCache) SaveLiveCall(ctx context.Context, record *session.LiveCal
 	if err != nil {
 		return fmt.Errorf("marshal live API key model mapping: %w", err)
 	}
+	imageTools, err := json.Marshal(record.ImageToolModels)
+	if err != nil {
+		return err
+	}
 	values := map[string]any{
-		"call_id":          record.CallID,
-		"provider_id":      record.ProviderID,
-		"api_key_id":       record.APIKeyID,
-		"user_id":          record.UserID,
-		"group_id":         record.GroupID,
-		"subscription_id":  record.SubscriptionID,
-		"lease_id":         record.LeaseID,
-		"model":            record.Model,
-		"requested_model":  record.RequestedModel,
-		"upstream_model":   record.UpstreamModel,
-		"mapping_chain":    record.ModelMappingChain,
-		"api_key_mapping":  string(modelMapping),
-		"created_at":       record.CreatedAt.UnixMilli(),
-		"expires_at":       record.ExpiresAt.UnixMilli(),
-		"controller":       record.Controller,
-		"controller_owner": record.ControllerOwner,
-		"user_agent":       record.UserAgent,
-		"ip_address":       record.IPAddress,
-		"inbound_endpoint": record.InboundEndpoint,
-		"attestation":      record.AttestationCiphertext,
+		"call_id":           record.CallID,
+		"provider_id":       record.ProviderID,
+		"api_key_id":        record.APIKeyID,
+		"user_id":           record.UserID,
+		"group_id":          record.GroupID,
+		"subscription_id":   record.SubscriptionID,
+		"lease_id":          record.LeaseID,
+		"model":             record.Model,
+		"requested_model":   record.RequestedModel,
+		"upstream_model":    record.UpstreamModel,
+		"mapping_chain":     record.ModelMappingChain,
+		"api_key_mapping":   string(modelMapping),
+		"image_tool_models": string(imageTools),
+		"created_at":        record.CreatedAt.UnixMilli(),
+		"expires_at":        record.ExpiresAt.UnixMilli(),
+		"controller":        record.Controller,
+		"controller_owner":  record.ControllerOwner,
+		"user_agent":        record.UserAgent,
+		"ip_address":        record.IPAddress,
+		"inbound_endpoint":  record.InboundEndpoint,
+		"attestation":       record.AttestationCiphertext,
 	}
 	key := liveCallKey(record.CallHash)
 	pipe := c.rdb.TxPipeline()
@@ -435,6 +440,12 @@ func (c *gatewayCache) GetLiveCall(ctx context.Context, callHash string) (*sessi
 			return nil, fmt.Errorf("decode live API key model mapping: %w", err)
 		}
 	}
+	var imageTools []string
+	if raw := values["image_tool_models"]; raw != "" {
+		if err := json.Unmarshal([]byte(raw), &imageTools); err != nil {
+			return nil, err
+		}
+	}
 	return &session.LiveCallRecord{
 		CallID:                values["call_id"],
 		CallHash:              callHash,
@@ -449,6 +460,7 @@ func (c *gatewayCache) GetLiveCall(ctx context.Context, callHash string) (*sessi
 		UpstreamModel:         values["upstream_model"],
 		ModelMappingChain:     values["mapping_chain"],
 		APIKeyModelMapping:    modelMapping,
+		ImageToolModels:       imageTools,
 		CreatedAt:             createdAt,
 		ExpiresAt:             expiresAt,
 		Controller:            values["controller"],

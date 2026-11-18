@@ -45,6 +45,8 @@ Navigation sidebar with user and admin sections.
   - API Keys
   - Usage
   - Redeem
+  - Team
+  - Creative Studio
   - Profile
 - Admin navigation links (shown only if user is admin):
   - Admin Dashboard

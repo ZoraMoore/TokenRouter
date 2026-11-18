@@ -76,6 +76,8 @@ type ProviderSnapshot struct {
 	Type                                                        string
 	RateMultiplier                                              float64
 	OpenAI, CNProvider, OAuthLike, QuotaEligible, HasQuotaLimit bool
+	// OpenAIResponseTierBillingEnabled 取自本次请求选中的 OpenAI 提供商。
+	OpenAIResponseTierBillingEnabled bool
 	// CredentialProviderID 用于读取影子的母提供商。
 	CredentialProviderID *int64
 	Notification         *billing.QuotaNotifyProvider

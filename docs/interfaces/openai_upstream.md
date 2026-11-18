@@ -33,6 +33,8 @@ OAuth 补全提供商元数据时，ID token 里个人的 `chatgpt_plan_type` �
 
 OAuth 提供商可以受 Codex CLI-only、客户端白名单、agent identity、privacy status 和 OAuth passthrough 策略的限制。OAuth 出站的 `originator` 需要和最终 User-Agent 的第一段配对；客户端没有提供可以识别的官方身份，或者身份修复失败时，统一使用 `codex-tui`。PAT、模型和额度探测、Alpha Search、HTTP 和 WebSocket 都使用同一个默认身份。
 
+网关内置的 Codex CLI 版本为 `0.170.0`。管理员可通过 `openai_codex_user_agent` 指定上游 UA。设置留空时，网关用同一个内置版本生成默认的 `User-Agent` 和 `version` 请求头。
+
 客户端或 TLS 路由明确提供、并且能够配对的官方身份，原样保留；历史上的 `codex_cli_rs` 只作为兼容识别的值。API Key 提供商不使用 OAuth 专用的内部端点和身份元数据。Header override、代理、base URL 和 TLS 配置受出站安全规则约束，无法覆盖受保护的认证头，也无法绕过目标校验。
 
 OpenAI OAuth 提供商的 `extra.codex_fingerprint_mode` 控制 Codex Responses 设备指纹的统一程度。没有配置、空值或无效值都按 `off` 处理，只有 `device`、`session`、`full` 是手动开启的选项：
@@ -142,11 +144,13 @@ OpenAI API Key 提供商可以通过 `extra.images_url_to_b64_json=true` 开启�
 
 分组用 `openai_fast_policy` 选择 `follow_request`、`force_priority`、`force_ultrafast` 或 `force_off`。HTTP、Chat、Messages、passthrough 和 WebSocket 使用同一套策略：强制开启时，可以为没带 tier 的请求注入对应的档位；强制关闭时，移除 Fast 和 Ultra Fast，并阻止 Key 再次开启，其他合法的 tier 保留。
 
-OpenAI OAuth 提供商的 `credentials.plan_type` 为 `edu_plus` 时，账号按 `force_off` 处理。判断使用去除首尾空白并转为小写的套餐标识。客户端的 `priority`、`fast` 和 `ultrafast` 会被移除，分组、全局规则和 Key 也无法为该账号注入加速档位。全局规则中的过滤和阻断仍按请求档位执行。`flex`、`auto`、`default` 和 `scale` 按请求传递。HTTP 和 WebSocket 共用这项判断，结算从策略处理后的出站请求读取档位，因此被关闭的 Fast 请求按 Standard 计费。商业 Pro 和其他套餐继续执行分组、全局和 Key 的策略。
+OpenAI OAuth 提供商的 `credentials.plan_type` 为 `edu_plus` 时，账号按 `force_off` 处理。判断使用去除首尾空白并转为小写的套餐标识。客户端的 `priority`、`fast` 和 `ultrafast` 会被移除，分组、全局规则和 Key 也无法为该账号注入加速档位。全局规则中的过滤和阻断仍按请求档位执行。`flex`、`auto`、`default` 和 `scale` 按请求传递。HTTP 和 WebSocket 共用这项判断，关闭响应档位计费时，被移除的加速档位按普通价结算。商业 Pro 和其他套餐继续执行分组、全局和 Key 的策略。
 
 其他账号的分组强制意图先经过全局规则。全局的过滤、阻断、强制 Fast 或 Ultra Fast 优先于分组和 Key。Key 的 `force_off` 可以移除全局放行的分组级加速，`force_on` 保持分组级的 Ultra Fast 档位。全局规则匹配已有的合法 tier，主动作和其他模型动作都支持 `force_ultrafast`。
 
 新字段优先于旧的 `force_openai_fast`：旧值 true 映射为强制 Fast，false 映射为跟随请求，更新时两个字段都省略则保留现值。其他平台的提供商不应用这项策略，公开的分组接口不返回管理用的策略。迁移 269 保留旧开关的行为；新字段随分组复制、仓储和认证快照传递，认证快照版本为 46，版本不一致时重建快照。
+
+管理员在“提供商管理”中新增或编辑 OpenAI OAuth 或 API Key 账号时，可以在“调度与容错”中开启“UltraFast 档位计费”。开关对应 `extra.openai_response_tier_billing_enabled`，默认关闭。开启后，网关按上游返回的已知 `service_tier` 结算，既可以升档，也可以降档。Responses 流读取终态事件的档位，Chat Completions 读取响应声明的档位。缺少档位或值无法识别时，按策略处理后的出站请求结算。OAuth 账号开启后，上游返回 `default` 时按普通价结算。关闭时，OAuth 的 `default` 回显沿用出站档位。开关关闭时，上游单方面返回 UltraFast 不会触发升档收费。出站请求是否启用加速仍由上面的档位策略决定。
 
 `free_openai_fast` 是关联价格配置的用户计费策略，出站的 `service_tier` 不受它影响。只有 OpenAI 提供商实际按 `priority` 或 `fast` 计费时才生效：网关用同一个模型映射、价格配置的价卡、高峰和长上下文的时刻，重新取得 Standard 价格，写进用户侧的 `ActualCost` 和统一结算的基础金额，同时把 Fast 的 `TotalCost` 留给 Usage Log、提供商统计和提供商额度。Standard 价格缺失时，按零成本缺价的流程记录，原有的定价错误照常报告；非 OpenAI 提供商、普通的 tier 和不可信的认证快照都不适用。这个字段随 API Key 认证快照传递，快照和失效规则见[提供商调度与缓存一致性](../architecture/provider_scheduling_and_cache.md)。
 
@@ -312,6 +316,15 @@ Images API 的流式和非流式上游请求，都和客户端的取消信号脱
 OpenAI HTTP 的准备、同一提供商内的恢复和响应消费，由 `gateway/provider/openaiforward` 接入 upstream 的原语；提供商切换只有 `gateway/text` 的一个循环。入站 WS 的 turn 和恢复由 `gateway/ws` 组织，连接池和帧解析在 upstream。Compact 的恢复资格和状态在 `gateway/compact`，keepalive 和提交后的错误写出在 `gateway/httpapi`；计费和会话缓存都只有一份。
 
 执行器使用 `gateway/execution` 明确的 Request 和 ExecutionResult，以及同步的 OutputSink。候选计划只在实际选择返回时记录，缺失时用 PlanProvided 表示；系统不会为了填充结果额外查询，也不会在执行结束后重新计算。完成数据在入队前固定，WS 保留每个 turn 自己的定价时刻、模型链和部分失败资格。
+
+<a id="oauth_final_model_whitelist"></a>
+### OpenAI OAuth 全局最终模型白名单
+
+在系统设置的“网关服务”中打开“OpenAI”即可编辑白名单。每项填写一个完整的上游模型 ID。首次保存前，网关按各账号的模型规则处理请求，新账号从 `backend/internal/provider/openai_defaults.json` 的 `models` 读取预设。保存后，所有 OpenAI OAuth 账号都按全局名单检查映射后的最终型号，匹配时区分大小写。多个请求别名可以映射到同一个获准的型号。
+
+新建或导入 OAuth 账号时，未指定账号名单就使用当时的全局名单。账号有自己的名单时，可用型号取账号与全局名单的交集。管理员从全局名单删除型号后，使用该型号的现有账号也受限。把自定义 GPT 加进全局名单后，账号自身的规则也需要允许该型号。[设置的保存和生效时间](configuration.md#runtime_settings)
+
+Spark 影子账号仍受自身可用型号限制。通过 OAuth 的 Responses 生图时，全局名单需要同时允许发起 Responses 请求的文字模型和图片工具使用的图片模型。图片工具省略型号时使用 `gpt-image-2`。
 
 ## 额度与调度
 

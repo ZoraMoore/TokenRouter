@@ -240,6 +240,8 @@ SMTP 的测试连接和实际发送共用同一条建连路径和超时：
 
 ### 平台相关设置
 
+管理员在网关服务的“OpenAI”设置中维护 OAuth 全局最终模型白名单。管理接口 `GET /api/v1/admin/settings/openai-oauth-model-whitelist` 返回 `models` 和 `configured`。首次保存前返回内置预设和 `configured: false`。用 `PUT` 提交 `{"models":["gpt-custom"]}` 会启用该名单，并把完整型号写入 `openai_oauth_model_whitelist`。每次可提交 1 至 256 项，重复 ID 按首次出现的位置合并。保存成功后当前实例立即使用新名单。其他实例的缓存有效期为 5 秒，过期后在下次读取时刷新。设置读取失败且缓存已过期时，OAuth 请求暂时无法选中该提供商。[账号模型匹配规则](openai_upstream.md#oauth_final_model_whitelist)
+
 Grok 文本转发有两项数据库运行时设置：`grok_default_text_model` 和 `grok_default_base_url_mode`。`grok_default_text_model` 只用于允许省略模型的请求，其他请求里的模型名不会被改成默认型号；需要改写时，配置手动的模型映射。原来的 `grok_cross_client_model_map_enabled` 已经移除，管理设置请求里带这个字段时返回 400。
 
 base URL 模式只在提供商没有保存手动端点时生效，可以选 CLI 代理、公共 API、`us-east-1`、`us-west-2` 和 `eu-west-1`。这些设置可以热更新；提供商手动配置的 URL 优先，媒体和 Voice 使用各自的官方端点。

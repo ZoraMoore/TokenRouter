@@ -2,14 +2,14 @@ package provider
 
 // 邀请重置结果使用公开的数据格式，交换操作由注入的执行接口完成。
 type CodexInviteResetStatus struct {
-	ReferralKey       string         `json:"referral_key"`
-	InviteEligibility map[string]any `json:"invite_eligibility,omitempty"`
-	EligibilityRules  []string       `json:"eligibility_rules,omitempty"`
-	// ShouldShow 表示上游是否建议 Codex Desktop 主动展示邀请入口，管理端只作为状态标记展示。
+	AvailableInvites *int     `json:"available_invites"`
+	ReferralKey      string   `json:"referral_key"`
+	EligibilityRules []string `json:"eligibility_rules,omitempty"`
+	// ShouldShow 表示上游当前是否开放此邀请活动。
 	ShouldShow *bool `json:"should_show,omitempty"`
-	// GrantAction 保留上游返回的原始奖励动作，便于排查新增奖励类型。
+	// GrantAction 是识别出的 Codex 奖励动作。
 	GrantAction string `json:"grant_action,omitempty"`
-	// GrantAmount 表示单次邀请达成后双方获得的奖励数量。
+	// GrantAmount 表示活动发给邀请人的奖励数量。
 	GrantAmount *int `json:"grant_amount,omitempty"`
 	// HasRewards 表示当前邀请活动是否会发放奖励，nil 表示上游没有返回该字段。
 	HasRewards *bool `json:"has_rewards,omitempty"`
@@ -24,36 +24,34 @@ type CodexInviteResetStatus struct {
 	RequiresConsent          bool                     `json:"requires_consent"`
 	AvailableCount           int                      `json:"available_count"`
 	Credits                  []CodexInviteResetCredit `json:"credits"`
-	RawEligibilityRules      map[string]any           `json:"raw_eligibility_rules,omitempty"`
-	RawCredits               map[string]any           `json:"raw_credits,omitempty"`
 }
 
 type CodexInviteResetCredit struct {
-	ID              string         `json:"id"`
-	Status          string         `json:"status,omitempty"`
-	Title           string         `json:"title,omitempty"`
-	Description     string         `json:"description,omitempty"`
-	ResetType       string         `json:"reset_type,omitempty"`
-	GrantedAt       string         `json:"granted_at,omitempty"`
-	ExpiresAt       string         `json:"expires_at,omitempty"`
-	ProfileUserID   string         `json:"profile_user_id,omitempty"`
-	ProfileImageURL string         `json:"profile_image_url,omitempty"`
-	Raw             map[string]any `json:"raw,omitempty"`
+	ID          string `json:"id"`
+	Status      string `json:"status,omitempty"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	ResetType   string `json:"reset_type,omitempty"`
+	GrantedAt   string `json:"granted_at,omitempty"`
+	ExpiresAt   string `json:"expires_at,omitempty"`
+}
+
+// CodexInviteRequest 记录管理员选择的活动、收件人和本次发送的同意状态。
+type CodexInviteRequest struct {
+	Emails    []string `json:"emails" binding:"required,min=1,max=5,dive,required,max=254"`
+	ProgramID string   `json:"program_id" binding:"required,max=64"`
+	Confirmed bool     `json:"confirmed"`
 }
 
 type CodexInviteResetInviteResult struct {
-	Invites      []map[string]any `json:"invites,omitempty"`
-	FailedEmails []string         `json:"failed_emails,omitempty"`
-	Message      string           `json:"message,omitempty"`
-	Raw          map[string]any   `json:"raw,omitempty"`
+	SentCount    int      `json:"sent_count"`
+	FailedEmails []string `json:"failed_emails,omitempty"`
 }
 
 type CodexInviteResetConsumeResult struct {
-	Code             string           `json:"code,omitempty"`
-	CreditID         string           `json:"credit_id,omitempty"`
-	RedeemRequestID  string           `json:"redeem_request_id"`
-	WindowsReset     int              `json:"windows_reset"`
-	AvailableCount   *int             `json:"available_count,omitempty"`
-	RemainingCredits []map[string]any `json:"remaining_credits,omitempty"`
-	Raw              map[string]any   `json:"raw,omitempty"`
+	Code            string `json:"code,omitempty"`
+	CreditID        string `json:"credit_id,omitempty"`
+	RedeemRequestID string `json:"redeem_request_id"`
+	WindowsReset    int    `json:"windows_reset"`
+	AvailableCount  *int   `json:"available_count,omitempty"`
 }

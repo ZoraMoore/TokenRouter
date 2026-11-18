@@ -361,6 +361,7 @@
               :today-stats="todayStatsByProviderId[String(row.id)] ?? null"
               :today-stats-loading="todayStatsLoading"
               :manual-refresh-token="usageManualRefreshToken"
+              :quota-refresh-token="quotaRefreshTokens.get(row.id) || 0"
               :batched-usage="usageBatchByProviderId[String(row.id)] ?? null"
               :batched-usage-error="usageBatchErrorByProviderId[String(row.id)] ?? null"
               :batched-usage-loading="usageBatchLoadingByProviderId[String(row.id)] === true"
@@ -370,6 +371,7 @@
               :upstream-usage-loading="upstreamUsageLoadingByProviderId[String(row.id)] === true"
               :request-upstream-usage="requestUpstreamUsage"
               @provider-updated="handleProviderUpdated"
+              @invite-reset="handleInviteReset"
               @usage-loaded="handleProviderUsageLoaded(row.id, $event)"
             />
           </template>
@@ -478,11 +480,16 @@
     <EditProviderModal :show="showEdit" :provider="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleProviderUpdated" />
     <ReAuthProviderModal :show="showReAuth" :provider="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleProviderUpdated" />
     <ProviderTestModal :show="showTest" :provider="testingAcc" @close="closeTestModal" />
+    <ProviderIQTestModal v-if="iqProvider" :show="true" :provider="iqProvider" @close="iqProvider = null" />
     <ProviderStatsModal :show="showStats" :provider="statsAcc" @close="closeStatsModal" />
     <AdvancedSchedulerScoreModal :show="showAdvancedSchedulerScore" :provider="advancedSchedulerScoreAcc" @close="closeAdvancedSchedulerScoreModal" />
-    <CodexInviteResetModal :show="showInviteReset" :provider="inviteResetAcc" @close="closeInviteResetModal" @updated="enterAutoRefreshSilentWindow" />
+    <CodexInviteResetModal :show="showInviteReset" :provider="inviteResetAcc" @close="closeInviteResetModal" @updated="handleInviteResetUpdated" />
     <ScheduledTestsPanel :show="showSchedulePanel" :provider-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
-    <ProviderActionMenu :show="menu.show" :provider="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @advanced-scheduler-score="handleAdvancedSchedulerScore" @schedule="handleSchedule" @duplicate="handleDuplicateProvider" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @invite-reset="handleInviteReset" @create-spark-shadow="handleCreateSparkShadow" @delete="handleDelete" />
+    <ProviderActionMenu :show="menu.show" :provider="menu.acc" :position="menu.pos"
+      @close="menu.show = false" @test="handleTest" @iq-test="iqProvider = $event" @stats="handleViewStats"
+      @advanced-scheduler-score="handleAdvancedSchedulerScore" @schedule="handleSchedule" @duplicate="handleDuplicateProvider"
+      @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota"
+      @set-privacy="handleSetPrivacy" @invite-reset="handleInviteReset" @create-spark-shadow="handleCreateSparkShadow" @delete="handleDelete" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="handleExternalProvidersChanged" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
     <BulkEditProviderModal
@@ -541,6 +548,7 @@ import ProviderActionMenu from '@/components/admin/provider/ProviderActionMenu.v
 import ImportDataModal from '@/components/admin/provider/ImportDataModal.vue'
 import ReAuthProviderModal from '@/components/admin/provider/ReAuthProviderModal.vue'
 import ProviderTestModal from '@/components/admin/provider/ProviderTestModal.vue'
+import ProviderIQTestModal from '@/components/admin/provider/ProviderIQTestModal.vue'
 import ProviderStatsModal from '@/components/admin/provider/ProviderStatsModal.vue'
 import AdvancedSchedulerScoreModal from '@/components/admin/provider/AdvancedSchedulerScoreModal.vue'
 import CodexInviteResetModal from '@/components/admin/provider/CodexInviteResetModal.vue'
@@ -642,6 +650,8 @@ const showDeleteDialog = ref(false)
 const showCreateShadowDialog = ref(false)
 const showReAuth = ref(false)
 const showTest = ref(false)
+const iqProvider = ref<Provider | null>(null)
+const quotaRefreshTokens = ref(new Map<number, number>())
 const showStats = ref(false)
 const showAdvancedSchedulerScore = ref(false)
 const showInviteReset = ref(false)
@@ -1763,6 +1773,7 @@ const isAnyModalOpen = computed(() => {
     showDeleteDialog.value ||
     showReAuth.value ||
     showTest.value ||
+    iqProvider.value !== null ||
     showStats.value ||
     showInviteReset.value ||
     showSchedulePanel.value ||
@@ -2669,16 +2680,18 @@ const handleExportData = async () => {
   if (exportingData.value) return
   exportingData.value = true
   try {
-    const dataPayload = await providerExportStepUp.run(() => adminAPI.providers.exportData(
-      selIds.value.length > 0
-        ? { ids: selIds.value, includeProxies: includeProxyOnExport.value }
-        : {
-            includeProxies: includeProxyOnExport.value,
-            filters: buildProviderQueryFilters()
-          }
-    ))
+    const dataPayload = await providerExportStepUp.run(() => adminAPI.providers.exportData({
+      format: 'sub2api',
+      includeProxies: includeProxyOnExport.value,
+      ...(selIds.value.length > 0 ? { ids: selIds.value } : { filters: buildProviderQueryFilters() })
+    }))
+    // 滚动升级期间，先前版本的节点会忽略 format 参数并返回 providers 文件。
+    if (!Array.isArray(dataPayload?.accounts) || !Array.isArray(dataPayload.proxies) || 'providers' in dataPayload) {
+      appStore.showError(t('admin.providers.dataExportUnexpectedFormat'))
+      return
+    }
     const timestamp = formatExportTimestamp()
-    const filename = `tokenrouter-provider-${timestamp}.json`
+    const filename = `sub2api-account-${timestamp}.json`
     const blob = new Blob([JSON.stringify(dataPayload, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -2686,10 +2699,18 @@ const handleExportData = async () => {
     link.download = filename
     link.click()
     URL.revokeObjectURL(url)
-    // spark 影子提供商被后端排除出备份(其凭据透传母提供商、调度配置不可经凭据型导入重建);
-    // 存在跳过项时提示用户下载文件缺少的提供商数量。
-    if (dataPayload.skipped_shadows && dataPayload.skipped_shadows > 0) {
-      appStore.showWarning(t('admin.providers.dataExportedSkippedShadows', { count: dataPayload.skipped_shadows }))
+    const warnings: string[] = []
+    if (dataPayload.skipped_shadows) {
+      warnings.push(t('admin.providers.dataExportedSkippedShadows', { count: dataPayload.skipped_shadows }))
+    }
+    // Sub2API 可以导出全部账号类型，部分版本的通用导入器接受其中四类。
+    const exportedTypes = new Set(dataPayload.accounts.map(account => account.type))
+    const unsupportedTypes = [...exportedTypes].filter(type => !['oauth', 'setup-token', 'apikey', 'upstream'].includes(type))
+    if (unsupportedTypes.length) {
+      warnings.push(t('admin.providers.dataExportedUnsupportedTypes', { types: unsupportedTypes.join(', ') }))
+    }
+    if (warnings.length) {
+      appStore.showWarning(warnings.join(' '))
     } else {
       appStore.showSuccess(t('admin.providers.dataExported'))
     }
@@ -2720,6 +2741,11 @@ const handleTest = (a: Provider) => { testingAcc.value = a; showTest.value = tru
 const handleViewStats = (a: Provider) => { statsAcc.value = a; showStats.value = true }
 const handleAdvancedSchedulerScore = (a: Provider) => { advancedSchedulerScoreAcc.value = a; showAdvancedSchedulerScore.value = true }
 const handleInviteReset = (a: Provider) => { inviteResetAcc.value = a; showInviteReset.value = true }
+// 邀请或重置完成后，刷新本次操作所在行的配额。
+function handleInviteResetUpdated(providerId: number) {
+  enterAutoRefreshSilentWindow()
+  quotaRefreshTokens.value.set(providerId, (quotaRefreshTokens.value.get(providerId) || 0) + 1)
+}
 const handleSchedule = async (a: Provider) => {
   scheduleAcc.value = a
   scheduleModelOptions.value = []

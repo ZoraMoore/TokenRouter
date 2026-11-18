@@ -2,12 +2,59 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/TokenFlux/TokenRouter/internal/provider/transfer"
 	"github.com/TokenFlux/TokenRouter/internal/routing/capability"
 )
+
+// crsOAuthFixture 模拟一次同步中的来源账号，并保存成功创建的记录。
+type crsOAuthFixture struct {
+	CRSProviderStore
+	created []*Record
+}
+
+func (f *crsOAuthFixture) Fetch(context.Context, string, string, string) (*transfer.CRSExportResponse, error) {
+	result := &transfer.CRSExportResponse{Success: true}
+	result.Data.OpenAIOAuthProviders = []transfer.CRSOpenAIOAuthProvider{
+		{ID: "sample", Credentials: map[string]any{"access_token": "test-token"}},
+	}
+	return result, nil
+}
+
+func (f *crsOAuthFixture) GetByCRSAccountID(context.Context, string) (*Record, error) {
+	return nil, nil
+}
+
+func (f *crsOAuthFixture) Create(_ context.Context, value *Record) error {
+	f.created = append(f.created, value)
+	return nil
+}
+
+// TestCRSSyncUsesSiteOAuthModels 检查 CRS 直接写入提供商时使用站点名单，读取失败时保留该项的错误。
+func TestCRSSyncUsesSiteOAuthModels(t *testing.T) {
+	f := &crsOAuthFixture{}
+	var readErr error
+	syncer := NewCRSSync(f, nil, f, CRSOptions{
+		ReadOpenAIOAuthModels: func(context.Context) (OpenAIOAuthModelPolicy, error) {
+			return NewOpenAIOAuthModelPolicy([]string{"gpt-example"}), readErr
+		},
+	})
+	result, err := syncer.SyncFromCRS(t.Context(), SyncFromCRSInput{})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Created)
+	require.Equal(t, []string{"gpt-example"}, f.created[0].Credentials["model_whitelist"])
+
+	readErr = errors.New("settings unavailable")
+	result, err = syncer.SyncFromCRS(t.Context(), SyncFromCRSInput{})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Failed)
+	require.Contains(t, result.Items[0].Error, readErr.Error())
+	require.Len(t, f.created, 1)
+}
 
 func TestBuildSelectedSet(t *testing.T) {
 	tests := []struct {

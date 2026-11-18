@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"context"
+	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -13,22 +15,13 @@ import (
 // CodexInviteResetCommands 是管理 HTTP 对提供商用例的窄操作接口。
 type CodexInviteResetCommands interface {
 	GetStatus(context.Context, int64) (*provider.CodexInviteResetStatus, error)
-	SendInvite(context.Context, int64, []string) (*provider.CodexInviteResetInviteResult, error)
+	SendInvite(context.Context, int64, provider.CodexInviteRequest) (*provider.CodexInviteResetInviteResult, error)
 	Consume(context.Context, int64, string) (*provider.CodexInviteResetConsumeResult, error)
 }
 
 // CodexInviteResetHandler 处理 Codex 邀请重置管理接口。
 type CodexInviteResetHandler struct {
 	service CodexInviteResetCommands
-}
-
-type codexInviteResetInviteRequest struct {
-	Emails []string `json:"emails" binding:"required"`
-}
-
-type codexInviteResetConsumeRequest struct {
-	// CreditID 可选；没有 credit 明细时由上游自动选择可用的重置机会。
-	CreditID string `json:"credit_id"`
 }
 
 // NewCodexInviteResetHandler 创建 Codex 邀请重置管理处理器。
@@ -55,12 +48,13 @@ func (h *CodexInviteResetHandler) SendInvite(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req codexInviteResetInviteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
+	var req provider.CodexInviteRequest
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 8<<10)
+	if err := response.BindJSONStrict(c, &req); err != nil {
+		response.BadRequest(c, "Invalid request")
 		return
 	}
-	result, err := h.service.SendInvite(c.Request.Context(), providerID, req.Emails)
+	result, err := h.service.SendInvite(c.Request.Context(), providerID, req)
 	if response.ErrorFrom(c, err) {
 		return
 	}
@@ -73,12 +67,22 @@ func (h *CodexInviteResetHandler) Consume(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req codexInviteResetConsumeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
+	// 空对象让上游选择一次可用机会。显式的空值和未知字段不能触发消费。
+	var req map[string]any
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 8<<10)
+	if err := response.BindJSONStrict(c, &req); err != nil || req == nil || len(req) > 1 {
+		response.BadRequest(c, "Invalid request")
 		return
 	}
-	result, err := h.service.Consume(c.Request.Context(), providerID, req.CreditID)
+	var creditID string
+	if len(req) == 1 {
+		creditID, ok = req["credit_id"].(string)
+		if !ok || strings.TrimSpace(creditID) == "" || len(creditID) > 256 {
+			response.BadRequest(c, "Invalid request")
+			return
+		}
+	}
+	result, err := h.service.Consume(c.Request.Context(), providerID, creditID)
 	if response.ErrorFrom(c, err) {
 		return
 	}
@@ -86,8 +90,9 @@ func (h *CodexInviteResetHandler) Consume(c *gin.Context) {
 }
 
 func parseCodexInviteResetProviderID(c *gin.Context) (int64, bool) {
+	c.Header("Cache-Control", "private, no-store")
 	providerID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
+	if err != nil || providerID <= 0 {
 		response.BadRequest(c, "Invalid provider ID")
 		return 0, false
 	}

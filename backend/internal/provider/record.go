@@ -127,45 +127,46 @@ var DefaultPoolModeRetryableStatusCodes = []int{401, 403, 429}
 // Record 保存提供商的配置和运行数据，对外调用使用对应的快照。
 // Credentials 使用 JSON 忽略标记，普通日志输出提供商 ID。
 type Record struct {
-	Proxy                   *egress.Proxy `json:"-"`
-	Groups                  []*accessview.GroupConfig
-	ProviderGroups          []GroupMembership
-	ID                      int64
-	Name                    string
-	Notes                   *string
-	Platform                string
-	Type                    string
-	Credentials             map[string]any `json:"-"`
-	Extra                   map[string]any `json:"-"`
-	ProxyID                 *int64
-	ProxyFallbackOriginID   *int64
-	ProxyFallbackOriginName *string
-	Concurrency             int
-	Priority                int
-	RateMultiplier          *float64
-	LoadFactor              *int
-	Status                  string
-	ErrorMessage            string
-	LastUsedAt              *time.Time
-	ExpiresAt               *time.Time
-	AutoPauseOnExpired      bool
-	CreatedAt               time.Time
-	UpdatedAt               time.Time
-	Schedulable             bool
-	RateLimitedAt           *time.Time
-	RateLimitResetAt        *time.Time
-	OverloadUntil           *time.Time
-	TempUnschedulableUntil  *time.Time
-	TempUnschedulableReason string
-	QuotaAutoPaused         bool `json:"-"`
-	SessionWindowStart      *time.Time
-	SessionWindowEnd        *time.Time
-	SessionWindowStatus     string
-	ParentProviderID        *int64
-	QuotaDimension          string
-	GroupIDs                []int64
-	Now                     func() time.Time                     `json:"-"`
-	LoadLocation            func(string) (*time.Location, error) `json:"-"`
+	Proxy                     *egress.Proxy `json:"-"`
+	Groups                    []*accessview.GroupConfig
+	ProviderGroups            []GroupMembership
+	ID                        int64
+	Name                      string
+	Notes                     *string
+	Platform                  string
+	Type                      string
+	Credentials               map[string]any `json:"-"`
+	Extra                     map[string]any `json:"-"`
+	ProxyID                   *int64
+	ProxyFallbackOriginID     *int64
+	ProxyFallbackOriginName   *string
+	Concurrency               int
+	Priority                  int
+	RateMultiplier            *float64
+	LoadFactor                *int
+	Status                    string
+	ErrorMessage              string
+	LastUsedAt                *time.Time
+	ExpiresAt                 *time.Time
+	AutoPauseOnExpired        bool
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
+	Schedulable               bool
+	RateLimitedAt             *time.Time
+	RateLimitResetAt          *time.Time
+	OverloadUntil             *time.Time
+	TempUnschedulableUntil    *time.Time
+	TempUnschedulableReason   string
+	QuotaAutoPaused           bool `json:"-"`
+	SessionWindowStart        *time.Time
+	SessionWindowEnd          *time.Time
+	SessionWindowStatus       string
+	ParentProviderID          *int64
+	QuotaDimension            string
+	GroupIDs                  []int64
+	Now                       func() time.Time                     `json:"-"`
+	LoadLocation              func(string) (*time.Location, error) `json:"-"`
+	OpenAIOAuthModelWhitelist OpenAIOAuthModelPolicyReader         `json:"-"`
 }
 
 type TempUnschedulableRule struct {

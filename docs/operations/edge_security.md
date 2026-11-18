@@ -59,38 +59,7 @@ server:
 
 ## Nginx 基线
 
-在 `http` 块中定义共享区域。限速值要根据实际的合法流量调整；下面的值只是一个保守的起点。
-
-### 已认证入站模板采集
-
-项目已移除 Nginx/TShark 匿名旁路采集器及其安装、定时运行、报告和日志轮转文件。正常 API 流量的 TLS 模板采集使用下述 `authenticated_ingress` 链路。历史匿名样本没有同连接鉴权证据，不能导入、补标或提升为已认证模板。
-
-`authenticated_ingress` 为正常访问 `api.scienceedu.me` 的客户端提供零额外配置采集：客户继续使用自己的 Base URL 和 API Key，不需要 HTTPS CONNECT 代理、额外 CA 或采集命令。Linux 主机上的 `tls-ingress-observer` 通过 AF_PACKET 只读观察发往 Nginx 443 的 TCP 流，有限重组完整 ClientHello，校验 SNI 后把去敏结构提交到主服务；它不进入转发链，不解密或转发 HTTP。observer 与 Nginx 必须看到同一入站五元组，并与 TLS 终止 Nginx 位于相同主机网络视图。若 CDN、L4 负载均衡、容器 NAT 或其它 TLS 终止层改写了这组地址/端口，关联会失败或观察到代理指纹，因此生产域名必须直接在该 Nginx 终止客户端 TLS，Cloudflare 等只能使用 DNS Only。
-
-observer 使用 `observer_token` 对规范化后的源/目标 IP 与端口生成 HMAC flow ID；提交载荷不含明文 IP、端口、原始包、TLS random、session ticket、PSK/key-share 公钥或密钥材料。Nginx 则必须覆盖注入下列内部头，不能追加或透传客户端同名值。`edge_token` 与 `observer_token` 必须是两个不同的至少 32 字节随机 secret，只能由 Nginx、observer 和主服务读取，也不能写入 access log：
-
-```nginx
-# 建议放入 root-only include；示例值必须替换，且不得提交到仓库。
-proxy_set_header X-TokenRouter-Ingress-Edge-Token "<独立 edge_token>";
-proxy_set_header X-TokenRouter-Ingress-Connection-Id $connection;
-proxy_set_header X-TokenRouter-Ingress-Connection-Requests $connection_requests;
-proxy_set_header X-TokenRouter-Ingress-Remote-Addr $realip_remote_addr;
-proxy_set_header X-TokenRouter-Ingress-Remote-Port $realip_remote_port;
-proxy_set_header X-TokenRouter-Ingress-Resolved-Client-Addr $remote_addr;
-proxy_set_header X-TokenRouter-Ingress-Server-Addr $server_addr;
-proxy_set_header X-TokenRouter-Ingress-Server-Port $server_port;
-proxy_set_header X-TokenRouter-Ingress-Session-Reused $ssl_session_reused;
-proxy_set_header X-TokenRouter-Ingress-Alpn $ssl_alpn_protocol;
-proxy_set_header X-TokenRouter-Ingress-Http-Protocol $server_protocol;
-```
-
-启用 RealIP 模块时，`Remote-Addr`/`Remote-Port` 必须改用 `$realip_remote_addr`/`$realip_remote_port` 表示 observer 实际看到的 TCP 对端，而 `Resolved-Client-Addr` 保持 `$remote_addr`。两者地址不相同表示可信 CDN/代理已经重终止客户端 TLS，主服务会 fail-close 拒绝该指纹关联，防止把 Cloudflare 指纹错误标为客户客户端；DNS Only 直连时两者应相同。
-
-主服务仅在完整 API Key 鉴权成功后处理这些头，并立即从请求中删除；采集组件只收到白名单连接/客户端字段及 API Key/User 两个内部数字 ID，不接触完整 API Key 领域对象、Authorization、Cookie、请求体或原始凭据。每条 TLS 连接只接受 `$connection_requests=1` 且 `$ssl_session_reused=.` 的首个已认证请求，并要求 ClientHello 观测先于鉴权且时间差不超过五秒；PSK/ticket、重放或端口复用造成的迟到关联均被拒绝。候选按本站 SNI、模板摘要和固定验证目标全局去重，客户 ID、flow ID 与连接元组不进入持久模板。当前分类器接受带版本的 Codex（`codex_cli_rs`、`codex-tui`、`codex_vscode`）、Claude Code（`claude-cli`）和 Node（`openai/nodejs`、`node`/`node.js`）User-Agent；其它或无法解析版本的客户端正常获得 API 服务，但不会进入模板候选。
-
-同一全局模板摘要累计至少三个不同完整连接后，主服务先执行本地 uTLS 精确回放，再依次对配置中的 `chatgpt.com` 与 `api.openai.com` 做无凭据 TLS-only 握手。客户端版本只作为分类证据，不参与全局模板去重；每日验证与持久模板创建另有固定上限。任一重组、配对、分类、回放、目标验证、内存容量或数据库写入失败都只丢弃/拒绝该观测，不能阻塞 API 鉴权、网关请求或 Nginx；observer 停止、队列满或内部入口不可用同样 fail-open 到正常业务。验证全部成功且 `auto_create_verified=true` 时自动创建 `source_kind=authenticated_ingress` 的 `verified` 模板；自动模板保持未批准且不进入随机池，管理员显式发布前不能绑定账号或 Router。
-
-pending ClientHello/鉴权事件默认保留 300 秒，未凑够连接的候选默认保留 24 小时，进程重启即丢失；容量上限采用有界淘汰。持久模板不保存客户 ID，但客户端版本、OS/架构（若 User-Agent 可解析）、本站 SNI 和时间仍可能构成运维数据，须限制管理员访问并按隐私说明和删除策略处理。“客户零额外配置”只表示无需改变客户端网络或安装 CA，不取消部署者对采集用途、字段、留存和退出方式的透明告知及适用法律义务。此链路只验证 TLS ClientHello 和目标握手；Nginx 注入的 ALPN/HTTP 协议只供短期关联上下文，当前不采集或复现 HTTP/2 SETTINGS、伪头顺序、WINDOW_UPDATE、PRIORITY、流复用、TCP 或请求时序。
+在 `http` 块中定义共享区域，并按合法流量调整限速值。
 
 ```nginx
 limit_conn_zone $binary_remote_addr zone=tokenrouter_conn:20m;

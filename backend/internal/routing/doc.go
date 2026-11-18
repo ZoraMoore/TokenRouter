@@ -7,6 +7,7 @@
 //
 // 文件分组：
 //   - group*.go、client_group.go：分组配置、管理、容量查询和可用性探测。
+//   - pelican_tests.go 和 pelican_runner.go 管理分组测智计划与定时执行。pelican_state_probe.go 整理会话续接观测，pelican_showcase.go 管理作品展示与读取权限。
 //   - plan.go、reasoning.go：请求模型映射、候选协议和推理强度规则。
 //   - model*.go、requestable*.go：模型属性、可用性诊断、目录缓存和请求模型解析。
 //   - pricing*.go：价格目录、价格配置的读写和缓存、分时计费设置。

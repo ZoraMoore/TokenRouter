@@ -550,16 +550,17 @@ func TestProxyLiveSidebandForwardsTextAndBinary(t *testing.T) {
 		},
 	}
 	record := &gatewaysession.LiveCallRecord{
-		CallID:     "call_proxy",
-		CallHash:   live.HashCallID("call_proxy"),
-		ProviderID: provider.Record.ID,
-		APIKeyID:   22,
-		UserID:     33,
-		LeaseID:    "lease-1",
-		CreatedAt:  time.Now(),
-		ExpiresAt:  time.Now().Add(time.Minute),
-		Controller: gatewaysession.LiveControllerPending,
-		UserAgent:  "test-live-client",
+		CallID:             "call_proxy",
+		CallHash:           live.HashCallID("call_proxy"),
+		APIKeyModelMapping: map[string]string{"image-alias": "gpt-image-test"},
+		ProviderID:         provider.Record.ID,
+		APIKeyID:           22,
+		UserID:             33,
+		LeaseID:            "lease-1",
+		CreatedAt:          time.Now(),
+		ExpiresAt:          time.Now().Add(time.Minute),
+		Controller:         gatewaysession.LiveControllerPending,
+		UserAgent:          "test-live-client",
 	}
 	attestationCipher := openai.NewLiveAttestationCipher("live-sideband-test-secret")
 	var err error
@@ -601,6 +602,12 @@ func TestProxyLiveSidebandForwardsTextAndBinary(t *testing.T) {
 	clientBinary := <-upstream.writes
 	require.Equal(t, coderws.MessageBinary, clientBinary.messageType)
 	require.Equal(t, []byte{1, 2, 3}, clientBinary.payload)
+
+	// 同一个会话更新也可以用二进制 JSON 发送，须经过型号映射和白名单检查。
+	require.NoError(t, client.Write(ctx, coderws.MessageBinary, []byte(`{"type":"session.update","session":{"tools":[{"type":"image_generation","model":"image-alias"}]}}`)))
+	clientControl := <-upstream.writes
+	require.Equal(t, coderws.MessageBinary, clientControl.messageType)
+	require.Equal(t, "gpt-image-test", gjson.GetBytes(clientControl.payload, "session.tools.0.model").String())
 
 	upstream.reads <- liveTestFrame{messageType: coderws.MessageText, payload: []byte(`{"type":"server.text"}`)}
 	messageType, payload, err := client.Read(ctx)
@@ -814,7 +821,7 @@ func TestStopLiveObserversPreservesRemoteCall(t *testing.T) {
 
 // newLiveTLSRoutingServices 构造同时覆盖 TLS 模板和身份头的 Live 路由规则。
 func newLiveTLSRoutingServices() (*egressadapter.TLSProfiles, *egress.TLSFingerprintRouterService) {
-	profileService := egressadapter.NewTLSProfiles(egress.NewTLSFingerprintProfileService(&liveProfileStore{values: []*egress.TLSFingerprintProfile{approvedTLSProfileFixture(20, "live-routed")}}, nil))
+	profileService := egressadapter.NewTLSProfiles(egress.NewTLSFingerprintProfileService(&liveProfileStore{values: []*egress.TLSFingerprintProfile{tlsProfileFixture(20, "live-routed")}}, nil))
 	profileService.Start()
 
 	router := &egress.TLSFingerprintRouter{

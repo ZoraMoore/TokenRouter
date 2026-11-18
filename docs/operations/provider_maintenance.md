@@ -8,6 +8,7 @@
 - [管理操作](#管理操作)：修改提供商的编辑、导入导出、同步、批量操作、隐私或列表时读取。
 - [状态与临时不可调度](#状态与临时不可调度)：修改错误、限流或恢复时间时读取。
 - [提供商测试与自动恢复](#提供商测试与自动恢复)：修改定时测试或恢复条件时读取。
+- [分组鹈鹕测智](#pelican_group_tests)说明智能运维如何出题、选号、保存样本和展示判定。
 - [额度与能力探测](#额度与能力探测)：修改上游 usage、quota 或 endpoint capability 时读取。
 - [OAuth 用量查询](#oauth-用量查询)：修改 OAuth 和 Setup Token 的用量展示、缓存或写回时读取。
 - [运维诊断](#运维诊断)：排查刷新堆积、误封禁或提供商抖动时读取。
@@ -62,6 +63,10 @@ app 直接构造、绑定并登记一个 `BackgroundRefreshService`，它的 `Re
 ### 导入、导出和同步
 
 提供商的文件导入导出由 `provider.Archive` 负责，HTTP 在 `provider/httpapi`。管理员可以选择导出原始凭据，导出会排除影子提供商，跨调用传递时使用独立的副本。导入先处理代理，再按文件中的配置逐项创建提供商，最后执行隐私设置。`provider/transfer` 定义文件格式，省略和 null 字段按提供商创建规则处理。ID Token 通过 OpenAI 的非认证解码补齐缺失的身份提示。
+
+在提供商管理页选择“导出”可以下载 Sub2API 账号文件。已勾选账号时导出选中项，未勾选时按当前筛选条件导出。选择包含代理后，文件会带上代理记录以及账号对应的代理引用。账号所属分组由目标实例管理。
+
+文件保留每个账号的类型。Sub2API 通用导入器接受 `oauth`、`setup-token`、`apikey` 和 `upstream`。如果导出的账号含有其他类型，页面会列出这些类型的名称。[接口参数和原生备份格式](../interfaces/http_api.md#product_name_compatibility) · [Sub2API 导入规则](https://github.com/ranxi2001/sub2api/blob/a71bcd6238777630bb74f18106097689ce7a5836/backend/internal/handler/admin/account_data.go#L832-L859)
 
 Codex session 文件的导入由 `provider.CodexImporter` 负责，HTTP 直接调用这个用例，纯解析和身份索引在 provider 内部维护。只有 access token 的，按 access 的摘要匹配；完整的 OAuth 按用户和提供商兼容匹配；Agent Identity 按团队隔离，并合并 runtime。索引和导入用的 map 在跨调用传递时复制。时钟和私钥验证都由外部注入，导入时的 JWT 解码只用来补齐提示，不承担认证；OAuth 批量创建使用相同的合并、保护字段和摘要规则，供应商交换由 upstream 执行。
 
@@ -145,6 +150,42 @@ Kimi、Zhipu、DeepSeek 的连接测试，只测试提供商 `upstream_protocols
 
 管理端的连接测试请求，要明确选择 `test_type=text|image`，并在同一个请求里传自定义的 `prompt`。文字测试不会因为模型名里有图片标记就换端点；图片测试由 OpenAI、Gemini 或 Grok 提供商的平台图片端点执行，和模型名无关。OpenAI 的 `compact` 和 `legacy_compact` 只执行固定载荷的连接测试，不显示也不使用自定义提示词。只有没带 `test_type` 的旧调用，才按模型名判断。图片和文字的结果，分别通过 SSE 的图片事件和内容事件返回；不支持图片端点的平台，直接返回可以诊断的错误，不会悄悄改成文字测试。OpenAI API Key 和 Grok 的图片测试，同时接受 `b64_json` 和图片链接（OpenAI 只接受 `https` 或 `data:image/` 开头的链接）；上游返回了结果、但没有可以展示的图片时，测试判为失败，并附上截断的响应正文。
 
+<a id="provider_iq_tests"></a>
+## 账号智商测试
+
+在提供商行的操作菜单打开“智商测试”。题目测试使用当前账号，可选模型和推理强度，同一轮可同时比较一至八份回答。鹈鹕题显示 SVG，糖果题显示答案，自定义题可以填写题面。需要连续观察某个分组时，从弹窗打开定时计划，选择该账号所属的分组。运行时间和结果展示由[分组鹈鹕测智](#pelican_group_tests)管理。
+
+质量检测逐题展示模型的回答和判题结果，请求失败或回答不完整时可以看到原因。管理员可以据此复查当次表现。ModelTrace 指纹对同一账号依次提出三道数字题，在本机用内嵌指纹库计算模型和家族的相对概率。候选范围由指纹库决定，库外模型也可能得到很高的相似概率。指纹模式适用于受支持的原生 OpenAI、Anthropic 文字通道。关闭弹窗会取消在途请求，已完成的手动记录可在同一浏览器里按管理员和账号查看。上游会计算实际请求用量。
+
+在“探针测试”中，选择启用 Responses 的独立 OpenAI OAuth 账号和文字模型。首发取得续接状态后，服务端在同一账号、同一会话中发起第二次请求。参考实现为两次请求各建一个会话 ID，TokenRouter 在一轮内复用同一个会话 ID。两次都返回 HTTP 200 且收到完整结束事件时，续接状态相同或省略显示“状态稳定”，换成新值显示“状态变化”。首发缺少状态、请求被限流或响应中断时显示“无法判断”。每步最多等待 45 秒。面板保留请求状态与耗时，续接值和认证信息只用于当前请求。探针反映会话续接行为，判断答题质量还需结合该模型的作答样本。[参考项目的两次请求及判定逻辑](https://github.com/ranxi2001/sub2api/blob/e687827fcb5c2bbb347dfb1d15f116c0ab0580c9/backend/internal/service/openai_codex_state_probe.go)
+
+题目选择和指纹流程参考 [ranxi2001 账号测试](https://github.com/ranxi2001/sub2api/blob/e687827fcb5c2bbb347dfb1d15f116c0ab0580c9/frontend/src/components/admin/account/IQTestModal.vue)和 [ModelTrace 三题指纹](https://github.com/ranxi2001/sub2api/blob/e687827fcb5c2bbb347dfb1d15f116c0ab0580c9/docs/modeltrace-tests.md)。
+
+<a id="pelican_group_tests"></a>
+## 分组鹈鹕测智
+
+管理员在“智能运维”下打开“鹈鹕测智”（`/admin/pelican-tests`），为一个分组、模型和题型建立计划。选定提供商后，每次都由这个账号作答。选择自动调度时，系统按该分组的模型规则和文字协议选择提供商。模型以用户请求的名称展示，实际发送时依次应用分组映射和提供商映射。测试占用提供商的并发槽位，消耗上游额度，用户余额保持原值。
+
+定时观测续接状态时，选择“Codex 探针测试”，指定该分组中的账号，再选择测试频率。也可从手动探针面板带入账号和模型。用户展示开启后，组内用户可查看最近一次的模型、状态、观测时间、耗时及两步请求摘要。管理员仍可在计划历史中查看该次使用的账号。
+
+管理员在“测试频率”中可选每 15 分钟、每 30 分钟、每小时、每 2 小时、每 6 小时或每天 09:00。新建计划默认每天 09:00 运行。选择“自定义”后可填写五字段 Cron，时间按服务器配置的时区计算。已暂停的计划也可立即运行。PostgreSQL 保存手动请求和下次执行时间。每个实例最多同时执行三项测试。绘图题最多运行十分钟，租约十五分钟。其他题型的执行时间最多四分钟，租约五分钟。写入结果时核对领取凭证，并在同一事务内更新计划进度。进程中断后，其他实例可在租约到期时重新领取任务。
+
+新建计划选择“鹈鹕 SVG”时，表单填入鹈鹕骑自行车的题面。原来按题库轮换的计划继续按预定时刻抽题，管理员改写题面后按新题面运行。生成完整 SVG 后，状态为“待复核”。管理员查看动画后标记“通过”或“疑似降智”。糖果题默认按最终答案 21 自动判分。管理员可以查看和修改两种内置题的名称和题面，也可以修改糖果题的参考答案。改用其他答案时，系统去掉首尾空白后与模型回答逐字比较。超时、回答不完整、没有可用提供商或作品无法预览时显示“无法判断”。一个结论对应一个账号在该次作答中的表现。
+
+模型的输出 token 上限由作答接口决定。Claude 绘图请求使用 `max_tokens=32000`，OpenAI 的 Codex OAuth 绘图请求使用上游默认预算。采集器逐行读取绘图事件，流式回答最多暂存 4 MiB 可见文字，最终回答和提取出的 SVG 各限 2 MiB。上游返回完成信号且 SVG 能独立预览时，系统才把作品收进画廊。
+
+管理员可在计划中自定义题型名称与题面。绘图题生成可独立预览的 SVG，由管理员复核。文本题去掉回答和参考答案首尾的空白后逐字比较。同一模型可为同题建立多条不同推理强度的计划，在同一画廊比较作品。OpenAI Responses 和 Chat Completions 会将所选档位发给上游，协议或模型拒绝该档位时，这次作答显示“无法判断”。修改题面、判分答案或推理强度后，新配置从下一轮开始积累样本。
+
+管理员在“用户展示”里控制作品的访问和保留。“开放给用户”控制侧栏入口、网页及详情。“允许 API Key 读取作品”在网页开放时生效，调用方可以按 Key 的分组权限读取绘图。关闭展示后，定时测试和作品收录照常运行。已有计划的站点升级后保留网页入口，新站由管理员开启展示。API Key 读取默认关闭。
+
+每个分组默认保留最新 20 幅作品，可设为 1–100 幅。自动清理默认开启，保留 7 天，可设为 1–90 天。关闭自动清理后只按张数保留。同一分组的绘图计划共用张数上限。调低保留量或缩短天数会移除超限作品，调高上限后继续收录新作品。管理员仍可查每个计划最近 30 条测试记录和实际作答账号。
+
+用户在 `/pelican-tests` 按题名和分组查看作品。打开绘图卡片可以按原尺寸查看 SVG，也可以缩放到窗口大小。有作品时，画廊顶部会说明输出长度可能影响腿部细节或车轮动画，供用户按整体画风判读。改题、更换模型或调整推理强度后，已收录的图仍列在作答时的题名下，保留当次模型和推理强度。模型的最近状态取自匹配当前配置的测试。
+
+糖果题卡片按作答时间从新到旧排列，可以对照同组各模型的回答和判定。卡片显示分组请求的模型、当次推理强度、耗时和完成时间。早期样本的推理强度显示“未记录”。打开卡片可以查看题面和完整回答。答错的样本也会列出，最新一次没有有效作答时，模型一栏显示该次测试的状态。自定义文本题可在样本详情中查看回答。账号名称只供管理员查看。
+
+题库和糖果题的判分写法来自 [Sub2API 的鹈鹕题库](https://github.com/ranxi2001/sub2api/blob/52a745d9405cc41ad64edf41c327fb978017f7ff/backend/internal/service/pelican_questions.go)和[糖果题判分](https://github.com/ranxi2001/sub2api/blob/52a745d9405cc41ad64edf41c327fb978017f7ff/backend/internal/service/candy_answer.go)。绘图时间和作品留存参考了 Sub2API 的[分组采样](https://github.com/ranxi2001/sub2api/blob/5bef330d5edf039fe390a2b17bb9dc2e5731ba92/backend/internal/service/pelican_group_tests.go)和[用户画廊](https://github.com/ranxi2001/sub2api/blob/5bef330d5edf039fe390a2b17bb9dc2e5731ba92/frontend/src/views/user/PelicanShowcaseView.vue)。
+
 ## 额度与能力探测
 
 Gemini tier 的静态默认值和动态设置，由 `provider.GeminiQuotaService`（只有一个）合并并缓存，每个请求拿到一份私有的副本。`GeminiPrecheck` 通过只读的统计接口执行本地预检，单独保留一分钟的日统计缓存，分钟级的数据每次查询；app 注入洛杉矶时间的日界，展示用的固定 24 小时窗口和它不同。
@@ -155,7 +196,9 @@ OpenAI 的额度和重置，由 `provider.OpenAIQuotaService` 统一编排，app
 
 直接调用重置 API、成功消费了次数之后，服务先在一个和客户端取消脱钩的有限上下文里，恢复提供商的 error、限流和临时不可调度状态，再回读额度快照和最新的提供商数据；恢复不修改人工的 `schedulable` 开关。后续步骤部分失败时，响应用 `cache_refreshed`、`provider_state_recovered` 和 `warning_code` 明确区分；已经消费的次数，调用方不能当作可以重试的失败。
 
-Codex 的邀请资格、规则和 credit 查询的汇总，由 `provider.CodexInviteResetService` 执行；资格接口失败时，只关闭邀请入口，已有的次数照常按顺序查询。提供商 provider 在准备时读取共享的 token、代理和专用的 TLS 和 UA，`upstream/openai.CodexInviteClient` 负责 HTTP 报文和关闭响应体。管理员路由直接绑定这个用例。
+OpenAI OAuth 主账号的用量窗口提供“次数”“重置”和“邀请”。点击“次数”可读取当前额度和重置机会。确认重置后，该行显示上游重置结果。邀请弹窗将剩余邀请名额与已有重置次数分开显示。个人和工作区账号分别查询所属活动的资格，发送前服务端再次核对活动、剩余名额和上游要求的同意项。资格查询失败时，已有的重置次数仍可查询。
+
+`provider.CodexInviteResetService` 处理邀请活动和重置次数，使用账号配置的代理及 TLS 路由。资格读取和发送对应的上游路径为 `/referrals/invite/eligibility` 和 `/referrals/invite`。[参考项目的邀请客户端](https://github.com/ranxi2001/sub2api/blob/e687827fcb5c2bbb347dfb1d15f116c0ab0580c9/backend/internal/repository/openai_referral_client.go)
 
 OpenAI API Key 不会自动探测 Responses 能力；创建、编辑、批量更新和复制，都以管理员选择的上游协议为准，历史的探测字段已经清除，不参与调度。两种压缩也由各自的管理员开关决定，手动连接测试不更新能力配置，但额度观测、401 认证错误的记录和 429 限流的处理照常进行。提供商写入时统一清理历史探测状态，并将兼容的压缩开关值规范为开启或关闭。API Key 的文字测试可以明确选择 Responses 或 Chat Completions，OAuth 使用 Codex Responses。HTTP continuation 是独立的开关，没有配置时关闭。
 

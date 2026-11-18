@@ -134,11 +134,12 @@ func TestPrepareOpenAIWSHTTPBridgeBodyStripsNoneReasoningForCompatibleEndpoint(t
 }
 
 func TestProxyOpenAIWSHTTPBridgeTurn_KeepsOutboundAndObservedServiceTiersSeparate(t *testing.T) {
-	// proxyOpenAIWSHTTPBridgeTurn 是 client WS→HTTP bridge，本身不 canonicalize
-	// fast→priority；生产入口的归一化在 openai_ws_forwarder_ingress.go 的 fast
-	// policy. This test covers the local observer while preserving the canonical
-	// outbound priority tier independently.
-	sse := `data: {"type":"response.completed","response":{"id":"resp_tier","model":"gpt-5.5","status":"completed","service_tier":"default","usage":{"input_tokens":1,"output_tokens":1}}}` + "\n" + ``
+	// 上游在建立响应时回显请求档位，完成时单独声明实际档位。
+	sse := `data: {"type":"response.created","response":{"id":"resp_tier","model":"gpt-5.5","service_tier":"priority"}}
+
+data: {"type":"response.completed","response":{"id":"resp_tier","status":"completed","service_tier":"ultrafast","usage":{"input_tokens":1,"output_tokens":1}}}
+
+`
 	upstream := &auxiliaryHTTPRecorder{resp: &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
@@ -162,7 +163,7 @@ func TestProxyOpenAIWSHTTPBridgeTurn_KeepsOutboundAndObservedServiceTiersSeparat
 	require.Equal(t, "priority", gjson.GetBytes(upstream.lastBody, "service_tier").String())
 	require.NotNil(t, result.ServiceTier)
 	require.Equal(t, "priority", *result.ServiceTier)
-	require.Equal(t, "default", result.UpstreamResponseServiceTier)
+	require.Equal(t, "ultrafast", result.UpstreamResponseServiceTier)
 	require.Equal(t, "gpt-5.5", result.UpstreamResponseModel)
 }
 

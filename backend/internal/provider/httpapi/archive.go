@@ -12,6 +12,7 @@ import (
 	idempotencyhttp "github.com/TokenFlux/TokenRouter/internal/idempotency/httpapi"
 	infraerrors "github.com/TokenFlux/TokenRouter/internal/pkg/apperror"
 	"github.com/TokenFlux/TokenRouter/internal/provider"
+	"github.com/TokenFlux/TokenRouter/internal/provider/httpapi/dto"
 	"github.com/TokenFlux/TokenRouter/internal/provider/transfer"
 	response "github.com/TokenFlux/TokenRouter/internal/server/httpx"
 )
@@ -27,6 +28,11 @@ func NewArchiveHandler(archive *provider.Archive) *ArchiveHandler {
 }
 
 func (h *ArchiveHandler) ExportData(c *gin.Context) {
+	format := c.Query("format")
+	if format != "" && format != "tokenrouter" && format != "sub2api" {
+		response.BadRequest(c, "unsupported provider export format")
+		return
+	}
 	ids, err := parseProviderIDs(c)
 	if err != nil {
 		response.BadRequest(c, err.Error())
@@ -59,7 +65,37 @@ func (h *ArchiveHandler) ExportData(c *gin.Context) {
 		}
 		return
 	}
+	if format == "sub2api" {
+		response.Success(c, sub2APIArchive(payload))
+		return
+	}
 	response.Success(c, payload)
+}
+
+// sub2APIArchive 将管理员选中的提供商写入 Sub2API 的 accounts 集合。
+// @project-doc docs/interfaces/http_api.md#product_name_compatibility
+func sub2APIArchive(payload transfer.DataPayload) transfer.Sub2APIDataPayload {
+	for i := range payload.Providers {
+		extra := dto.RedactProviderManagedExtra(payload.Providers[i].Extra)
+		// Codex 临时票据和采集代理可能携带其他会话的凭据。
+		for key := range extra {
+			if strings.HasPrefix(key, "codex_turn_ticket:") || key == "codex_harvest_proxy_url" {
+				delete(extra, key)
+			}
+		}
+		// TokenRouter 的账号通过 proxy_key 绑定代理。导入过的 Sub2API 代理组 ID 属于来源数据库。
+		delete(extra, "openai_proxy_ids")
+		delete(extra, "openai_proxy_mode")
+		delete(extra, "openai_excel_bps_proxy_ids")
+		delete(extra, "openai_excel_bps_proxy_mode")
+		payload.Providers[i].Extra = extra
+	}
+	return transfer.Sub2APIDataPayload{
+		ExportedAt:     payload.ExportedAt,
+		Proxies:        payload.Proxies,
+		Accounts:       payload.Providers,
+		SkippedShadows: payload.SkippedShadows,
+	}
 }
 
 func (h *ArchiveHandler) ImportData(c *gin.Context) {

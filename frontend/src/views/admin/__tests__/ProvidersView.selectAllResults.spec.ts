@@ -8,15 +8,19 @@ const {
   listProviders,
   listWithEtag,
   getBatchTodayStats,
+  exportData,
   getAllProxies,
   getAllGroups,
+  showWarning,
   showError
 } = vi.hoisted(() => ({
   listProviders: vi.fn(),
   listWithEtag: vi.fn(),
   getBatchTodayStats: vi.fn(),
+  exportData: vi.fn(),
   getAllProxies: vi.fn(),
   getAllGroups: vi.fn(),
+  showWarning: vi.fn(),
   showError: vi.fn()
 }))
 
@@ -26,6 +30,7 @@ vi.mock('@/api/admin', () => ({
       list: listProviders,
       listWithEtag,
       getBatchTodayStats,
+      exportData,
       batchDelete: vi.fn(),
       batchClearError: vi.fn(),
       batchRefresh: vi.fn(),
@@ -43,6 +48,7 @@ vi.mock('@/api/admin', () => ({
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
     showError,
+    showWarning,
     showSuccess: vi.fn(),
     showInfo: vi.fn()
   })
@@ -105,6 +111,7 @@ const mountView = () => mount(ProvidersView, {
       DataTable: { props: ['data'], template: '<div data-test="data-table"></div>' },
       Pagination: true,
       ConfirmDialog: true,
+      TotpStepUpDialog: true,
       ProviderTableActions: { template: '<div><slot name="beforeCreate" /><slot name="after" /></div>' },
       ProviderTableFilters: ProviderTableFiltersStub,
       ProviderBulkActionsBar: ProviderBulkActionsBarStub,
@@ -140,9 +147,11 @@ describe('admin ProvidersView select all filtered results', () => {
     listProviders.mockReset()
     listWithEtag.mockReset()
     getBatchTodayStats.mockReset()
+    exportData.mockReset()
     getAllProxies.mockReset()
     getAllGroups.mockReset()
     showError.mockReset()
+    showWarning.mockReset()
 
     listWithEtag.mockResolvedValue({
       notModified: true,
@@ -156,6 +165,63 @@ describe('admin ProvidersView select all filtered results', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it.each([true, false])('二次验证通过后下载 Sub2API 账号文件，选中本页为 %s', async (selected) => {
+    const rows = makeProviders(2)
+    listProviders.mockResolvedValue({ items: rows, total: 2, page: 1, page_size: 20, pages: 1 })
+    const accounts = [
+      { name: 'fixture OAuth', type: 'oauth' },
+      { name: 'fixture Qoder', type: 'cosy' }
+    ]
+    const archive = { exported_at: '2026-11-19T00:00:00Z', accounts, proxies: [], ...(selected ? {} : { skipped_shadows: 1 }) }
+    exportData.mockRejectedValueOnce({ reason: 'STEP_UP_REQUIRED' }).mockResolvedValueOnce(archive)
+    const createURL = vi.fn((_blob: Blob) => 'blob:fixture')
+    const revokeURL = vi.fn()
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = createURL
+      static revokeObjectURL = revokeURL
+    })
+    const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const wrapper = mountView()
+    await flushPromises()
+    if (selected) await wrapper.get('[data-test="select-page"]').trigger('click')
+
+    const dialog = wrapper.findAllComponents({ name: 'ConfirmDialog' }).find((item) => item.props('title') === 'admin.providers.dataExport')!
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(download).not.toHaveBeenCalled()
+    const { controller } = wrapper.getComponent({ name: 'TotpStepUpDialog' }).props()
+    controller.onVerified()
+    await flushPromises()
+
+    const scope = selected ? { ids: [1, 2] } : { filters: expect.objectContaining({ sort_by: expect.any(String) }) }
+    expect(exportData).toHaveBeenLastCalledWith({ format: 'sub2api', includeProxies: true, ...scope })
+    expect(download).toHaveBeenCalledTimes(1)
+    expect(download.mock.contexts[0].download).toMatch(/^sub2api-account-\d{14}\.json$/)
+    const reader = new FileReader()
+    const content = new Promise((resolve) => { reader.onload = () => resolve(reader.result) })
+    reader.readAsText(createURL.mock.calls[0][0])
+    expect(JSON.parse(String(await content))).toEqual(archive)
+    expect(revokeURL).toHaveBeenCalledWith('blob:fixture')
+    const warning = selected ? 'admin.providers.dataExportedUnsupportedTypes' : 'admin.providers.dataExportedSkippedShadows admin.providers.dataExportedUnsupportedTypes'
+    expect(showWarning).toHaveBeenCalledWith(warning)
+    wrapper.unmount()
+  })
+
+  it('服务器返回 TokenRouter 文件时提示格式错误并取消下载', async () => {
+    listProviders.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 1 })
+    exportData.mockResolvedValue({ type: 'tokenrouter-data', version: 2, providers: [], proxies: [] })
+    const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const wrapper = mountView()
+    await flushPromises()
+    const dialog = wrapper.findAllComponents({ name: 'ConfirmDialog' }).find((item) => item.props('title') === 'admin.providers.dataExport')!
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(showError).toHaveBeenCalledWith('admin.providers.dataExportUnexpectedFormat')
+    expect(download).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('selects all matching IDs in one commit and clears the selection when filters change', async () => {

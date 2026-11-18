@@ -192,6 +192,9 @@ func (s *OpenAIAuxiliary) buildInputTokensUpstreamRequest(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
+	if err := gatewayprovider.CheckOpenAIOAuthRequestModels(ctx, provider, "", body); err != nil {
+		return nil, err
+	}
 	targetURL := openaiPlatformAPIInputTokensURL
 	if provider.Record.Type == capability.ProviderTypeAPIKey {
 		if baseURL := gatewayprovider.ExecutionProtocolTarget(provider).GetOpenAIBaseURL(); strings.TrimSpace(baseURL) != "" {

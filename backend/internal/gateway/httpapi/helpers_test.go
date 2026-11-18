@@ -2429,11 +2429,7 @@ func (unifiedRecordFunds) Apply(_ context.Context, command *billing.UsageBilling
 	return &billing.UsageBillingApplyResult{Applied: true, BalanceAmountUSD: command.BillableAmountUSD}, nil
 }
 
-// approvedTLSProfileFixture 创建通过目标验证并已批准的路由测试模板。
-func approvedTLSProfileFixture(id int64, name string) *egress.TLSFingerprintProfile {
-	now := time.Now()
-	value := &egress.TLSFingerprintProfile{ID: id, Name: name}
-	value.Verification = egress.TLSFingerprintProfileVerification{SourceKind: egress.TLSFingerprintProfileSourceControlledConnect, ValidationStatus: egress.TLSFingerprintProfileValidationVerified, ValidatorVersion: egress.TLSFingerprintProfileValidatorVersion, ApprovedForUse: true, ValidatedAt: &now, ObservedJA3Hash: "fixture", ReplayedJA3Hash: "fixture", CaptureTarget: "chatgpt.com", ValidatedTargets: []egress.TLSFingerprintTargetValidation{{Host: "chatgpt.com", Success: true}}}
-	value.Verification.FingerprintSHA256 = value.FingerprintSHA256()
-	return value
+// tlsProfileFixture 提供指定 ID 和名称的路由模板。
+func tlsProfileFixture(id int64, name string) *egress.TLSFingerprintProfile {
+	return &egress.TLSFingerprintProfile{ID: id, Name: name}
 }

@@ -1,7 +1,6 @@
 import defaults from '../../../backend/internal/provider/openai_defaults.json'
 
-// 创建表单和后端导入共用本站的模型与测试预设。
-export const DEFAULT_CODEX_MODELS: readonly string[] = defaults.models
+// 连接测试和后端共用提示词及首选型号。
 export const DEFAULT_PROVIDER_TEST_PROMPT = defaults.test_prompt
 export const PREFERRED_PROVIDER_TEST_MODELS: readonly string[] = defaults.test_models
 

@@ -67,6 +67,9 @@ declare module 'vue-router' {
      */
     requiresUsageRanking?: boolean
 
+    /** 用户作品画廊要求管理员开放展示。 */
+    requiresPelicanShowcase?: boolean
+
     /**
      * 是否要求创作台功能开关已启用
      * @default false

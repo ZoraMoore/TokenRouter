@@ -15,6 +15,10 @@ const (
 
 	// CodexDefaultOriginator 是网关默认使用的 Codex TUI originator。
 	CodexDefaultOriginator = "codex-tui"
+
+	// CodexDefaultVersion 同时用于上游请求的默认 UA 和 version 头。
+	CodexDefaultVersion   = "0.170.0"
+	CodexDefaultUserAgent = CodexDefaultOriginator + "/" + CodexDefaultVersion + " (Ubuntu 22.4.0; x86_64) xterm-256color"
 )
 
 var (

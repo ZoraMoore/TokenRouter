@@ -1,8 +1,11 @@
 package provider
 
 import (
+	"context"
+
 	"github.com/TokenFlux/TokenRouter/internal/gateway/compact"
 	protocolopenai "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
+	provideradapter "github.com/TokenFlux/TokenRouter/internal/provider/provider"
 	"github.com/TokenFlux/TokenRouter/internal/upstream/openai"
 )
 
@@ -26,5 +29,11 @@ func (p compactAttemptModels) ResolveGlobalModel(model string) string {
 }
 
 func (p CompactModels) Recovery(target *ExecutionProvider) compact.Recovery {
-	return compact.Recovery{Models: compactAttemptModels{defaults: p, target: target}, ContextWindow: openai.IsOpenAIContextWindowError, RewriteModel: protocolopenai.ReplaceModelInBody}
+	return compact.Recovery{
+		Models: compactAttemptModels{defaults: p, target: target}, ContextWindow: openai.IsOpenAIContextWindowError, RewriteModel: protocolopenai.ReplaceModelInBody,
+		AllowRetryModel: func(model string) bool {
+			value := target.View()
+			return value.AllowsOpenAIOAuthTarget(value.OpenAIOAuthFinalModelPolicy(context.Background()), model, provideradapter.ModelDefaults())
+		},
+	}
 }

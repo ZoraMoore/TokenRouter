@@ -29,16 +29,17 @@ import (
 // wsPassthroughAdapter 保存当前平台的执行凭据、握手参数和单次操作接口。
 type wsPassthroughAdapter struct {
 	gatewayws.RequestUsageDecoder
-	service  *OpenAIWebSocketExecutor
-	request  *gin.Context
-	provider *gatewayprovider.ExecutionProvider
-	token    string
-	hooks    *gatewayws.OpenAIIngressHooks
-	decision egress.OpenAIWSProtocolDecision
-	router   egress.TLSFingerprintRouterMatchResult
-	headers  http.Header
-	wsURL    string
-	proxyURL string
+	service      *OpenAIWebSocketExecutor
+	request      *gin.Context
+	provider     *gatewayprovider.ExecutionProvider
+	token        string
+	hooks        *gatewayws.OpenAIIngressHooks
+	decision     egress.OpenAIWSProtocolDecision
+	router       egress.TLSFingerprintRouterMatchResult
+	headers      http.Header
+	wsURL        string
+	proxyURL     string
+	modelSession gatewayprovider.OpenAIModelSession
 }
 
 func (p *wsPassthroughAdapter) IsLite(body []byte) bool {
@@ -78,15 +79,21 @@ func (p *wsPassthroughAdapter) ScopeIdentity(body []byte) ([]byte, bool, error) 
 	return gatewayhttp.ApplyCodexIdentityRaw(p.request, p.provider, gatewayhttp.APIKeyIDFromContext(p.request), body)
 }
 
-func (p *wsPassthroughAdapter) FastPolicy(ctx context.Context, turn int, model string, body []byte, scoped bool) ([]byte, *gatewayws.PolicyBlocked, error) {
+// FramePolicy 在帧发送前检查服务等级、主模型和会话继承的工具。
+func (p *wsPassthroughAdapter) FramePolicy(ctx context.Context, turn int, model string, body []byte, scoped bool) ([]byte, *gatewayws.PolicyBlocked, error) {
 	if scoped {
 		ctx = openAIWSFastModePolicyContext(ctx, p.hooks, turn)
 	}
 	out, blocked, err := gatewayws.ApplyServiceTierFrame(body, model, p.service.FastPolicy.Input(ctx, p.provider, model))
-	if blocked == nil {
-		return out, nil, err
+	if blocked != nil {
+		return out, &gatewayws.PolicyBlocked{Message: blocked.Message, Cause: blocked}, err
 	}
-	return out, &gatewayws.PolicyBlocked{Message: blocked.Message, Cause: blocked}, err
+	if err == nil && (scoped || gjson.GetBytes(out, "type").String() == "session.update") {
+		if checkErr := p.modelSession.CheckFrame(ctx, p.provider, model, out); checkErr != nil {
+			return out, &gatewayws.PolicyBlocked{Message: checkErr.Error(), Cause: checkErr}, nil
+		}
+	}
+	return out, nil, err
 }
 
 func (p *wsPassthroughAdapter) PromptReplace(ctx context.Context, body []byte) []byte {

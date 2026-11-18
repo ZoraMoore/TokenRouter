@@ -111,7 +111,6 @@ export type {
   CreateProfileRequest,
   UpdateProfileRequest,
   TLSFingerprintCollectorStatus,
-  TLSFingerprintAuthenticatedIngressStatus,
   TLSFingerprintCollectorSession,
   TLSFingerprintCaptureRecord
 } from './tlsFingerprintProfile'

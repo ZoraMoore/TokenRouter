@@ -334,15 +334,12 @@ func RunChat(ctx context.Context, body []byte, promptCacheKey, defaultMappedMode
 		return nil, handleErr
 	}
 
-	// 将档位和最终 effort 传入完成结果供计费使用.
-	// 计费 tier 优先采用上游回显值；上游未回显时回退到最终出站 body（经过
-	// fast policy filter/force 之后）里的 tier，policy filter 删掉字段后不再
-	// 按原请求 Fast 计费。
-	if handleErr == nil && result != nil {
-		if tier := p.ResolvedServiceTier(p.ServiceTier(responsesBody)); tier != nil {
-			result.ServiceTier = tier
+	// 完成阶段需要实际发出的档位，包括分组策略删掉档位的情形。
+	if result != nil {
+		result.ServiceTier = p.ResolvedServiceTier(p.ServiceTier(responsesBody))
+		if handleErr == nil {
+			result.ReasoningEffort = reasoningEffort
 		}
-		result.ReasoningEffort = reasoningEffort
 	}
 
 	// OAuth 提供商从响应头提取并保存 Codex 用量快照。

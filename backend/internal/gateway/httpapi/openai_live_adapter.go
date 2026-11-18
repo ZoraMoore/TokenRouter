@@ -4,6 +4,7 @@ import (
 	"context"
 
 	coderws "github.com/coder/websocket"
+	"github.com/tidwall/gjson"
 
 	gatewaylive "github.com/TokenFlux/TokenRouter/internal/gateway/live"
 	gatewayprovider "github.com/TokenFlux/TokenRouter/internal/gateway/provider"
@@ -21,9 +22,11 @@ type livePorts struct{ service *OpenAILiveExecutor }
 
 // liveTarget 管理提供商凭据和平台拨号，向 Live 流程提供帧接口。
 type liveTarget struct {
-	service  *OpenAILiveExecutor
-	record   *session.LiveCallRecord
-	provider *gatewayprovider.ExecutionProvider
+	service      *OpenAILiveExecutor
+	record       *session.LiveCallRecord
+	provider     *gatewayprovider.ExecutionProvider
+	model        string
+	modelSession gatewayprovider.OpenAIModelSession
 }
 
 // liveUpstreamFrames 转换帧枚举和正常关闭错误，连接由 Live 流程关闭。
@@ -52,7 +55,7 @@ func (p livePorts) Target(ctx context.Context, record *session.LiveCallRecord) (
 	if err != nil {
 		return nil, err
 	}
-	return liveTarget{service: p.service, record: record, provider: provider}, nil
+	return &liveTarget{service: p.service, record: record, provider: provider, model: requeststate.FirstNonEmpty(record.UpstreamModel, record.Model), modelSession: gatewayprovider.OpenAIModelSession{ImageTools: record.ImageToolModels}}, nil
 }
 
 func (p livePorts) RecordZeroUsage(ctx context.Context, record *session.LiveCallRecord, duration int) {
@@ -108,8 +111,23 @@ func (t liveTarget) Dial(ctx context.Context) (gatewaylive.FrameConn, error) {
 	return liveUpstreamFrames{conn}, nil
 }
 
-func (t liveTarget) Rewrite(ctx context.Context, payload []byte) ([]byte, string, []string, error) {
-	return t.service.rewriteLiveSidebandClientPayload(ctx, t.record, t.provider, payload)
+func (t *liveTarget) Rewrite(ctx context.Context, payload []byte) ([]byte, string, []string, error) {
+	body, clientModel, models, err := t.service.rewriteLiveSidebandClientPayload(ctx, t.record, t.provider, payload)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	event := gjson.GetBytes(body, "type").String()
+	if event == "session.update" || event == "response.create" {
+		model := t.model
+		if len(models) > 0 {
+			model = models[len(models)-1]
+		}
+		if err := t.modelSession.CheckFrame(ctx, t.provider, model, body); err != nil {
+			return nil, "", nil, err
+		}
+		t.model = model
+	}
+	return body, clientModel, models, nil
 }
 
 func (c liveUpstreamFrames) ReadFrame(ctx context.Context) (int, []byte, error) {

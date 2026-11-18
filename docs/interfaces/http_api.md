@@ -182,6 +182,47 @@ POST /api/v1/creative/runs/{id}/outputs/{index}/ack
 
 创作台的 JWT 和工作区入口由 `creative/httpapi` 处理，批量图片的 Key 入口由 `batchimage/httpapi` 处理。批量下载流关闭时会释放下载许可，应用关闭时等待完整的 HTTP 调用结束。创作供应商已经成功、但临时输出无法交付时，返回 `result_lost`，资金按已经确认的服务收取；这个状态表示生成发生过，系统也不会自动重新生成。
 
+### 账号智商测试
+
+管理员通过以下接口测试选定的提供商。三个 `iq-test` 接口接受 `model_id` 和可选的 `reasoning_effort`。探针只接受模型名。服务端使用该账号的认证信息并应用模型映射。
+
+| 端点 | 请求及结果 |
+| --- | --- |
+| `POST /api/v1/admin/providers/:id/iq-test` | 接受 `question_kind`、`prompt`、`expected_answer` 和 `round_id`。每次返回一份回答、实际模型、档位、耗时和判定。同轮的并行请求可共用题面及轮次编号。 |
+| `POST /api/v1/admin/providers/:id/iq-test/quality` | 返回本轮检测的题目、模型回答、逐题判定和通过题数。 |
+| `POST /api/v1/admin/providers/:id/iq-test/modeltrace` | 逐题发送 SSE 事件 `modeltrace_start`、`modeltrace_sample` 和 `modeltrace_complete`。完成事件包含有效样本数和指纹库候选的相对概率。 |
+| `POST /api/v1/admin/providers/:id/state-probe` | 在同一 OpenAI OAuth 账号上检查 Codex 续接。传 `{"model_id":"模型名"}` 或 `{}`，空对象使用 `gpt-6-astra`。返回两次 HTTP 状态、完成标志、各步耗时、状态长度，以及 `verdict` 和可选的 `failure`。 |
+
+输入无效或账号不适用时返回 400，账号不存在时返回 404，账号已达测试并发上限时返回 409。指纹流开始后的失败通过 `error` 事件报告。客户端收到完成事件后再保存整轮结果。测试记录和定时计划的关系见[账号智商测试](../operations/provider_maintenance.md#provider_iq_tests)。
+
+### 鹈鹕测智
+
+管理员接口的前缀是 `/api/v1/admin/pelican-tests`。
+
+| 方法和路径 | 用途 |
+| --- | --- |
+| `GET /groups/:id/providers` | 列出分组内的提供商 ID、名称和可否运行探针的 `supports_state_probe`。 |
+| `GET /question-defaults` | 返回两个内置题型的 `question_kind`、`question_name`、`question_prompt` 和 `expected_answer`，供管理员编辑。 |
+| `GET /plans`、`POST /plans` | 查询或新建分组计划。 |
+| `PUT /plans/:id`、`DELETE /plans/:id` | 更新计划或删除计划及历史。 |
+| `POST /plans/:id/run` | 将手动运行请求入队。成功返回 202，已排队或运行中返回 409。 |
+| `GET /plans/:id/results`、`GET /results/:id` | 查询最近样本摘要或指定样本的题目和回答。 |
+| `PUT /results/:id/review` | 提交作品复核，`status` 接受 `passed` 或 `suspected`。 |
+
+计划通过 `group_id`、`provider_id` 和 `model_id` 选择测试目标，通过 `cron_expression` 和 `enabled` 配置定时执行。`provider_id` 为空时由分组调度选号。模型名称和 Cron 表达式分别限 128 字节。
+
+协议探针使用 `question_kind=state_probe`，必须指定分组中的一个独立 OpenAI OAuth 账号。可填写用于分组展示的 `question_name`。题面、预期答案和推理强度必须留空。手动探针返回的 `healthy`、`degraded`、`inconclusive` 在分组历史中分别存为 `passed`、`suspected`、`inconclusive`。用户通过已有分组列表查看最近状态，点开样本可读到两次请求的观测摘要。作品 API 只提供绘图样本。
+
+答题计划的 `question_kind` 可以使用内置题型 `pelican`、`candy`，也可以使用自定义题型 `custom_svg`、`custom_text`。内置题型可按计划覆盖题名与题面，糖果题还可覆盖参考答案。旧计划中留空的字段使用内置值。自定义题型需要 `question_name`（最多 96 字节）和 `question_prompt`（最多 8192 字节）。文本题另需 `expected_answer`（最多 1024 字节）。同一分组和模型可按题名、题型与推理强度分别建立计划。计划的 `reasoning_effort` 接受空字符串、`low`、`medium`、`high` 和 `xhigh`。
+
+管理员通过 `GET` 和 `PUT /api/v1/admin/pelican-showcase/settings` 读取和保存展示设置。保存时须提交全部五项：`enabled`、`api_enabled`、`max_items`（1–100）、`auto_cleanup`、`retention_days`（1–90）。
+
+登录用户通过 `GET /api/v1/pelican-tests/visibility` 读取网页和作品 API 的开放状态。网页开放时，`GET /api/v1/pelican-tests` 列出可见分组的计划、运行状态和当前配置的最近一次测试。每个计划的 `artworks` 包含仍在分组画廊中的作品。作品记录作答时的题型、题名、模型和推理强度，更换模型或将计划改为文本题后仍可读取。糖果计划的 `answers` 列出该计划最近 30 条记录中，符合当前配置且已有判定和作答的样本。`answer_preview` 取自模型当次的回答，长回答显示前 256 个字符并附省略号。两份列表都按完成时间倒序排列，同一时刻按样本 ID 倒序。`reasoning_effort` 是当次作答的推理强度。
+
+打开样本时，`GET /api/v1/pelican-tests/results/:id` 返回题目、判据和完整作答。关闭网页展示或请求不可见的样本时返回 404。
+
+两个展示开关均开启时，本站 API Key 可通过 `GET /api/v1/public/pelican-showcase` 读取作品目录，通过 `GET /api/v1/public/pelican-showcase/items/:id` 读取单幅作品。两条路径都支持 HEAD。凭据放在 Authorization Bearer、X-API-Key 或 X-Goog-API-Key 请求头中。目录只列出该 Key 绑定且用户当前有权使用的分组。清单的 `max_items_per_group` 是每组张数上限，`latest_generated_at` 是当前可见作品中最新的生成时间。每幅作品的 `content_url` 指向详情，`response_text` 提供 SVG 正文。读取使用已保存的数据，不消耗模型额度。详情与网页遵循相同的留存范围。
+
 ### 高级调度评分诊断
 
 提供商的高级调度评分诊断只对管理员开放。`GET /api/v1/admin/providers/:id/advanced-scheduler-score` 返回这个提供商所属的高级分组摘要；带 `group_id` 时，返回指定高级分组的完整候选池、硬过滤结果、有效配置、各指标的原值、归一化值和贡献、Top-K 权重、实际活动池的概率，以及平台策略的提示。开启订阅优先、并且存在合格的订阅提供商时，普通提供商标记为延后，不参与本轮概率。开启粘性加权时，previous-response 和 session 只影响 Top-K 权重；关闭时，有效的硬粘性提供商按实际的强制选择显示概率 1。
@@ -193,6 +234,8 @@ POST /api/v1/creative/runs/{id}/outputs/{index}/ack
 路由前缀只表示客户端用的协议。`/v1/messages` 等通用入口先在当前分组里选出满足模型、协议和其他策略的提供商，再按这个提供商的平台调用单次执行器。供应商由选号结果决定，模型族和分组的展示品牌都不影响它；`/antigravity/*` 另外有强制平台条件。
 
 ### 同步、导入和用量
+
+OpenAI OAuth 主账号的邀请和重置操作使用管理员路由 `/api/v1/admin/providers/:id/codex/invite-reset`。在此路径下，`GET /status` 返回活动编号 `referral_key`、剩余邀请名额 `available_invites` 和可用重置次数 `available_count`。发送邀请使用 `POST /invite`，请求包含收件邮箱数组 `emails`、取自本次查询的 `program_id` 及管理员勾选的 `confirmed`。活动变更时须重新读取状态。使用一次重置机会调用 `POST /consume`，可传 `credit_id` 指定要使用的次数。直接重置上游配额使用 `POST /api/v1/admin/openai/providers/:id/reset-quota`。管理员可以从对应账号的用量窗口打开这些操作。
 
 CRS 同步和预览路由绑定 `provider/httpapi.CRSHandler`，路径是 `/api/v1/admin/providers/sync/crs` 和 `/preview`，使用管理员中间件和标准的错误 envelope。默认同步代理，传 false 时关闭；"只创建选中项"传空集合时，已存在提供商的更新照常执行。Codex session 导入 `/api/v1/admin/providers/import/codex-session` 绑定 `provider/httpapi.CodexImportHandler`，包含请求校验、逐项结果和幂等 scope。
 
@@ -368,7 +411,9 @@ app 为所有需要幂等的用户和管理员 HTTP 处理器绑定同一个协�
 <a id="product_name_compatibility"></a>
 ## 产品名称兼容
 
-提供商和代理的导出使用 `type=tokenrouter-data`、`version=2` 和 `providers` 集合。导入也接受同版本的 `type=sub2api-data` 文件。
+提供商管理页通过 `GET /api/v1/admin/providers/data?format=sub2api` 下载 Sub2API 账号文件。顶层的 `exported_at` 是导出时间，`accounts` 保存账号，`proxies` 保存随账号导出的代理。账号通过 `proxy_key` 引用文件内的代理。Sub2API 导出省略 `type` 和 `version`。
+
+请求省略 `format` 时返回 TokenRouter 原生备份，使用 `type=tokenrouter-data`、`version=2` 和 `providers` 集合。代理管理页也使用原生格式。原生导入接受 `type=sub2api-data`、`version=2` 且使用 `providers` 集合的文件。
 
 提供商管理的导入入口兼容旧 Sub2API 文件的 `accounts` 集合，类型可以省略或填写 `sub2api-data`，版本可以省略或填写 `1`。前后端在导入时将它转换为版本 2 的提供商集合，代理缺省时按空数组处理。凭据、扩展数据、代理引用和调度设置传入相同的提供商创建流程。OpenAI OAuth 条目的顶层 `plan_type` 补入 `credentials.plan_type`，已有非空凭据值优先。
 

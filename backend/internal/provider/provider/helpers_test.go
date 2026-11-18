@@ -22,7 +22,6 @@ import (
 
 	"github.com/TokenFlux/TokenRouter/internal/egress"
 	egressadapter "github.com/TokenFlux/TokenRouter/internal/egress/provider"
-	egresstestkit "github.com/TokenFlux/TokenRouter/internal/egress/testkit"
 	"github.com/TokenFlux/TokenRouter/internal/gateway/forward"
 	"github.com/TokenFlux/TokenRouter/internal/infra/httpclient/tlsfingerprint"
 	providercore "github.com/TokenFlux/TokenRouter/internal/provider"
@@ -285,7 +284,7 @@ func (s *tlsProfileTestStore) List(context.Context) ([]*egress.TLSFingerprintPro
 func newTLSProfileServiceWithCacheForTest(profiles map[int64]*egress.TLSFingerprintProfile) *egressadapter.TLSProfiles {
 	values := make([]*egress.TLSFingerprintProfile, 0, len(profiles))
 	for _, profile := range profiles {
-		values = append(values, egresstestkit.ApprovedTLSProfile(profile))
+		values = append(values, profile)
 	}
 	service := egressadapter.NewTLSProfiles(egress.NewTLSFingerprintProfileService(&tlsProfileTestStore{profiles: values}, nil))
 	service.Start()

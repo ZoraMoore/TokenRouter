@@ -44,7 +44,7 @@ func TestOpenAIQuotaActionsOwnPostConsumptionLifecycle(t *testing.T) {
 	var consumed atomic.Int32
 	source := quotaActionsSource{reset: func(context.Context) (*openai.OpenAIQuotaResetResult, error) {
 		consumed.Add(1)
-		return &openai.OpenAIQuotaResetResult{Code: "fixture-consumed"}, nil
+		return &openai.OpenAIQuotaResetResult{Code: "reset"}, nil
 	}}
 	recovery := quotaActionsRecovery(func(ctx context.Context) (*SuccessfulTestRecovery, error) {
 		recoveryEntered <- ctx

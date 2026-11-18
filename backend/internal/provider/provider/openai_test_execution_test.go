@@ -18,6 +18,35 @@ type excelBPSProbeStore struct {
 	errorCalls int
 }
 
+func TestOpenAIProviderTestRejectsUnlistedMappedModel(t *testing.T) {
+	global := provider.NewOpenAIOAuthModelPolicy([]string{"gpt-probe"})
+	value := &provider.Record{
+		Platform: provider.PlatformOpenAI, Type: provider.ProviderTypeOAuth,
+		Credentials: map[string]any{
+			"model_whitelist":       []string{"gpt-probe"},
+			"model_mapping":         map[string]any{"valid-alias": "gpt-probe", "old-alias": "gpt-removed"},
+			"compact_model_mapping": map[string]any{"gpt-probe": "gpt-removed"},
+		},
+		OpenAIOAuthModelWhitelist: func(context.Context) (provider.OpenAIOAuthModelPolicy, error) { return global, nil },
+	}
+	for _, tc := range []struct{ model, mode string }{
+		{"old-alias", provider.ProviderTestModeDefault},
+		{"old-alias", provider.ProviderTestModeCompact},
+		{"valid-alias", provider.ProviderTestModeLegacyCompact},
+	} {
+		run := NewTestRun(context.Background(), nil, &geminiTestSinkFixture{})
+		err := (&OpenAIProviderTest{}).Execute(run, value, tc.model, "test", tc.mode, "text")
+		run.Cancel()
+		require.ErrorContains(t, err, provider.ErrOpenAIOAuthModelNotAllowed.Error())
+	}
+	// 管理员给全局名单增加型号后，已有账号自己的白名单继续约束连接测试。
+	global = provider.NewOpenAIOAuthModelPolicy([]string{"gpt-probe", "gpt-removed"})
+	run := NewTestRun(context.Background(), nil, &geminiTestSinkFixture{})
+	defer run.Cancel()
+	err := (&OpenAIProviderTest{}).Execute(run, value, "old-alias", "test", provider.ProviderTestModeDefault, "text")
+	require.ErrorContains(t, err, provider.ErrOpenAIOAuthModelNotAllowed.Error())
+}
+
 func (s *excelBPSProbeStore) SetError(context.Context, int64, string) error {
 	s.errorCalls++
 	return nil

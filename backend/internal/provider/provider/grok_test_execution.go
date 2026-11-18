@@ -131,6 +131,9 @@ func (s *GrokProviderTest) Execute(c *TestRun, value *providercore.Record, model
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if c.FullAnswer {
+		return c.readAnswer(resp, answerResponses, payloadBytes)
+	}
 	now := time.Now()
 	snapshot := xai.ParseQuotaObservation(resp.Header, resp.StatusCode, now)
 	providercore.StampGrokQuotaPlan(value, snapshot, testModelID, xai.ResolveGrokTextResponsesModelID, xai.ApplyGrok45ResponsesPlanSignal)

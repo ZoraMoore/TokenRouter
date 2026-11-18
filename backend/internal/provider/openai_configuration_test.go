@@ -91,3 +91,36 @@ func TestNormalizeOpenAITextRouteModeRejectsInvalidNewValue(t *testing.T) {
 
 	require.Error(t, err)
 }
+
+// TestOpenAIResponseTierBilling 检查渠道资格、历史配置以及新写入的字段类型。
+func TestOpenAIResponseTierBilling(t *testing.T) {
+	const key = "openai_response_tier_billing_enabled"
+	for _, tc := range []struct {
+		name         string
+		platform     string
+		providerType string
+		extra        map[string]any
+		want         bool
+	}{
+		{"旧账号", PlatformOpenAI, ProviderTypeAPIKey, nil, false},
+		{"开启", PlatformOpenAI, ProviderTypeAPIKey, map[string]any{key: true}, true},
+		{"关闭", PlatformOpenAI, ProviderTypeAPIKey, map[string]any{key: false}, false},
+		{"无效历史值", PlatformOpenAI, ProviderTypeAPIKey, map[string]any{key: "true"}, false},
+		{"OAuth", PlatformOpenAI, ProviderTypeOAuth, map[string]any{key: true}, true},
+		{"其他平台", PlatformAnthropic, ProviderTypeAPIKey, map[string]any{key: true}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			record := &Record{Platform: tc.platform, Type: tc.providerType, Extra: tc.extra}
+			require.Equal(t, tc.want, record.OpenAIResponseTierBillingEnabled())
+		})
+	}
+
+	for _, invalid := range []any{"true", nil, 1} {
+		extra := map[string]any{key: invalid}
+		require.True(t, HasOpenAIConfigurationPatch(nil, extra))
+		require.Error(t, NormalizeOpenAIAPIKeyConfigurationPatch(nil, extra))
+		for _, kind := range []string{ProviderTypeAPIKey, ProviderTypeOAuth} {
+			require.Error(t, NormalizeOpenAIAPIKeyConfiguration(&Record{Platform: PlatformOpenAI, Type: kind, Extra: extra}))
+		}
+	}
+}

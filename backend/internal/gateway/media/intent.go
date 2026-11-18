@@ -1,6 +1,7 @@
 package media
 
 import (
+	"iter"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -10,6 +11,8 @@ import (
 
 const (
 	OpenAIResponsesEndpoint = "/v1/responses"
+	// DefaultOpenAIImageModel 供图片工具省略型号时的网关检查和计费使用。
+	DefaultOpenAIImageModel = "gpt-image-2"
 
 	ResponsesLiteHeader              = "X-OpenAI-Internal-Codex-Responses-Lite"
 	ResponsesLiteHeaderKey           = "x-openai-internal-codex-responses-lite"
@@ -35,6 +38,52 @@ type OpenAIResponsesImageBillingConfig struct {
 
 func NewImageIntentPolicy(rules ImageToolRules) ImageIntentPolicy {
 	return ImageIntentPolicy{rules: rules}
+}
+
+// OpenAIImageToolModels 枚举声明的原生图片工具，未指定型号的工具使用网关默认值。
+func OpenAIImageToolModels(tools gjson.Result) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		if !tools.IsArray() {
+			return
+		}
+		tools.ForEach(func(_, tool gjson.Result) bool {
+			var toolType, model gjson.Result
+			image, valid := false, true
+			tool.ForEach(func(key, value gjson.Result) bool {
+				switch key.Str {
+				case "type":
+					valid = valid && !toolType.Exists()
+					toolType = value
+					image = image || strings.TrimSpace(value.Str) == "image_generation"
+				case "model":
+					valid = valid && !model.Exists() && value.Type == gjson.String
+					model = value
+				}
+				return true
+			})
+			if !image {
+				return true
+			}
+			// 重复的配置无法确定上游会采用哪一项，空型号会被已启用的白名单拒绝。
+			if !valid {
+				return yield("")
+			}
+			id := strings.TrimSpace(model.Str)
+			if id == "" {
+				id = DefaultOpenAIImageModel
+			}
+			return yield(id)
+		})
+	}
+}
+
+// SnapshotOpenAIImageToolModels 只保存型号，长连接无需持有包含工具定义的整段 JSON。
+func SnapshotOpenAIImageToolModels(tools gjson.Result) []string {
+	var models []string
+	for id := range OpenAIImageToolModels(tools) {
+		models = append(models, strings.Clone(id))
+	}
+	return models
 }
 
 // GroupImagePermission 接收明确的存在性和权限位，保留无分组 Key 的行为。
@@ -422,7 +471,7 @@ func (p ImageIntentPolicy) ResolveOpenAIResponsesImageBillingConfigDetailed(reqB
 		}
 	}
 	if imageModel == "" && hasImageTool {
-		imageModel = "gpt-image-2"
+		imageModel = DefaultOpenAIImageModel
 	}
 	if imageModel == "" {
 		imageModel = strings.TrimSpace(fallbackModel)
@@ -471,7 +520,7 @@ func (p ImageIntentPolicy) ResolveOpenAIResponsesImageBillingConfigDetailedFromB
 		}
 	}
 	if imageModel == "" && hasImageTool {
-		imageModel = "gpt-image-2"
+		imageModel = DefaultOpenAIImageModel
 	}
 	if imageModel == "" {
 		imageModel = strings.TrimSpace(fallbackModel)

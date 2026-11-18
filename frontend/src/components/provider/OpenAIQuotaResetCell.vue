@@ -7,9 +7,9 @@
       <button
         type="button"
         class="inline-flex min-w-[54px] items-center justify-center gap-0.5 rounded-compact px-1.5 py-0.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-primary-500 dark:hover:bg-primary-500/8"
-        :disabled="loading"
+        :disabled="loading || resetting"
         :title="countButtonTitle"
-        @click="handleQuery"
+        @click="handleQuery()"
       >
         <Icon
           name="refresh"
@@ -21,6 +21,16 @@
         <span v-if="data">{{ availableResetCount }}</span>
       </button>
 
+      <template v-if="!isShadow">
+        <button type="button" data-testid="quota-reset" class="inline-flex items-center gap-1 rounded-compact px-1.5 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
+          :disabled="!canReset" :title="resetTitle" @click="confirming = true">
+          {{ t('common.reset') }}
+        </button>
+        <button type="button" data-testid="quota-invite" class="inline-flex items-center gap-1 rounded-compact px-1.5 py-0.5 text-xs font-medium text-primary-600 hover:bg-primary-50 disabled:opacity-50 dark:text-primary-500 dark:hover:bg-primary-500/8"
+          :disabled="resetting" @click="emit('invite-reset', provider)">
+          {{ t('admin.providers.openaiQuotaReset.invite') }}
+        </button>
+      </template>
       <slot />
     </div>
 
@@ -77,27 +87,44 @@
     >
       {{ warning }}
     </div>
+    <div v-if="message" class="text-xs text-emerald-700 dark:text-emerald-400" role="status">{{ message }}</div>
+    <ConfirmDialog v-if="confirming" :show="confirming" :title="t('admin.providers.openaiQuotaReset.confirmTitle')"
+      :message="t('admin.providers.openaiQuotaReset.confirmMessage', { count: availableResetCount })"
+      :loading="resetting" @cancel="confirming = false" @confirm="handleReset" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Provider } from '@/types'
 import {
   refreshOpenAIQuota,
+  resetOpenAIQuota,
   type OpenAIQuotaUsage
 } from '@/api/admin/providers'
 import Icon from '@/components/icons/Icon.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const props = defineProps<{
   provider: Provider
+  refreshToken?: number
+}>()
+const emit = defineEmits<{
+  'invite-reset': [provider: Provider]
+  'provider-updated': [provider: Provider]
+  'quota-updated': [quota: OpenAIQuotaUsage]
 }>()
 
 const { t } = useI18n()
 
 const visible = computed(() => props.provider.platform === 'openai' && props.provider.type === 'oauth')
 const loading = ref(false)
+const resetting = ref(false)
+const confirming = ref(false)
+const message = ref('')
+const isShadow = computed(() => props.provider.parent_provider_id != null)
+let generation = 0
 const error = ref<string | null>(null)
 const warning = ref<string | null>(null)
 const data = ref<OpenAIQuotaUsage | null>(null)
@@ -142,6 +169,8 @@ const readCachedResetCredits = (provider: Provider): OpenAIQuotaUsage | null => 
 data.value = readCachedResetCredits(props.provider)
 
 const availableResetCount = computed(() => data.value?.rate_limit_reset_credits?.available_count ?? 0)
+const canReset = computed(() => visible.value && !isShadow.value && !loading.value && !resetting.value && availableResetCount.value > 0)
+const resetTitle = computed(() => t(`admin.providers.openaiQuotaReset.${!data.value ? 'resetTooltipNeedQuery' : availableResetCount.value > 0 ? 'resetTooltipReady' : 'resetTooltipNoCredits'}`))
 const resetCreditExpirations = computed(() =>
   (data.value?.rate_limit_reset_credits?.credits ?? [])
     .map((credit) => credit.expires_at?.trim() ?? '')
@@ -219,35 +248,80 @@ const toggleResetCreditDetails = () => {
   showResetCreditDetails.value = !showResetCreditDetails.value
 }
 
-const handleQuery = async () => {
-  if (loading.value) return
+const handleQuery = async (refresh = false) => {
+  if (!visible.value || resetting.value || (loading.value && !refresh)) return
+  const request = ++generation
   loading.value = true
   error.value = null
   warning.value = null
+  message.value = ''
   showResetCreditDetails.value = false
   try {
     const result = await refreshOpenAIQuota(props.provider.id)
+    if (request !== generation) return
     data.value = result
+    emit('quota-updated', result)
     if (!result.cache_persisted) {
       warning.value = t('admin.providers.openaiQuotaReset.refreshCachePersistFailed')
     }
   } catch (e) {
-    error.value = extractErrorMessage(e)
+    if (request === generation) error.value = extractErrorMessage(e)
   } finally {
-    loading.value = false
+    if (request === generation) loading.value = false
+  }
+}
+
+const handleReset = async () => {
+  if (!confirming.value || !canReset.value) return
+  const request = ++generation
+  resetting.value = true
+  error.value = null
+  warning.value = null
+  message.value = ''
+  try {
+    const result = await resetOpenAIQuota(props.provider.id)
+    if (request !== generation) return
+    data.value = result.quota ?? null
+    if (result.provider) emit('provider-updated', result.provider)
+    if (result.quota) emit('quota-updated', result.quota)
+    if (result.code === 'reset' || result.code === 'success' || ((!result.code || result.code === 'ok') && result.windows_reset > 0)) {
+      message.value = t('admin.providers.openaiQuotaReset.resetSuccess', { windows: result.windows_reset })
+    } else {
+      const outcomes: Record<string, string> = { nothing_to_reset: 'inviteResetNothingToReset', already_redeemed: 'inviteResetAlreadyRedeemed', no_credit: 'inviteResetNoCredit' }
+      message.value = t(`admin.providers.${outcomes[result.code] ?? 'inviteResetConsumeUnknown'}`)
+    }
+    if (result.warning_code) warning.value = t('admin.providers.openaiQuotaReset.resetRefreshWarning')
+  } catch (e) {
+    if (request === generation) {
+      data.value = null
+      error.value = extractErrorMessage(e)
+    }
+  } finally {
+    if (request === generation) {
+      resetting.value = false
+      confirming.value = false
+    }
   }
 }
 
 watch(
-  () => props.provider.id,
+  [() => props.provider.id, visible, isShadow],
   () => {
+    generation++
     data.value = readCachedResetCredits(props.provider)
+    resetting.value = false
+    confirming.value = false
+    message.value = ''
     error.value = null
     warning.value = null
     loading.value = false
     showResetCreditDetails.value = false
-  }
+  },
+  { flush: 'sync' }
 )
+
+watch(() => props.refreshToken, (token) => { if (token) void handleQuery(true) })
+onBeforeUnmount(() => { generation++ })
 
 watch(resetCreditExpirations, () => {
   if (hiddenResetCreditCount.value <= 0) {

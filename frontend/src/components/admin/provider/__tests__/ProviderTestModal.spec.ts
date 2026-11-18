@@ -67,7 +67,7 @@ function mountModal(provider: Record<string, unknown> = {
   platform: 'gemini',
   type: 'apikey',
   status: 'active'
-}) {
+}, realSelect = false) {
   return mount(ProviderTestModal, {
     props: {
       show: false,
@@ -76,7 +76,8 @@ function mountModal(provider: Record<string, unknown> = {
     global: {
       stubs: {
         BaseDialog: { template: '<div><slot name="header-actions" /><slot /></div>' },
-        Select: { props: ['disabled', 'modelValue'], emits: ['update:modelValue'], template: '<div class="select-stub" :data-disabled="disabled ? \'true\' : \'false\'"></div>' },
+        Select: realSelect ? false : { props: ['disabled', 'modelValue'], emits: ['update:modelValue'], template: '<div class="select-stub" :data-disabled="disabled ? \'true\' : \'false\'"></div>' },
+        teleport: true,
         PlatformIcon: true,
         TextArea: {
           props: ['modelValue'],
@@ -508,6 +509,24 @@ describe('ProviderTestModal', () => {
     await flushPromises()
     expect(wrapper.getComponent('[data-testid="provider-test-model"]').props('modelValue')).toBe(expected)
     expect(wrapper.get('textarea').element.value).toBe('don’t search the internet, who is Thibault Sottiaux on X。')
+    wrapper.unmount()
+  })
+
+  it('OpenAI OAuth 白名单中只有自定义型号时可以选择并发起连接测试', async () => {
+    getAvailableModels.mockResolvedValue([{ id: 'Vendor/GPT-lab', display_name: 'Lab' }])
+    global.fetch = vi.fn().mockResolvedValue(
+      createStreamResponse(['data: {"type":"test_complete","success":true}\n']),
+    ) as any
+    const wrapper = mountModal({ id: 42, name: 'Codex', platform: 'openai', type: 'oauth' }, true)
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    await wrapper.get('[data-testid="provider-test-model"] button').trigger('click')
+    const option = wrapper.get('[role="option"]')
+    expect(option.text()).toBe('Vendor/GPT-lab')
+    await option.trigger('click')
+    await wrapper.get('[data-testid="provider-test-start"]').trigger('click')
+    await flushPromises()
+    expect(JSON.parse((global.fetch as any).mock.calls[0][1].body).model_id).toBe('Vendor/GPT-lab')
     wrapper.unmount()
   })
 

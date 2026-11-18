@@ -597,6 +597,18 @@ export default {
         title: 'OpenAI Scheduling Settings',
         description: 'Control automatic quota pausing for OpenAI providers'
       },
+      openaiOAuthModelWhitelist: {
+        title: 'OpenAI OAuth global final model whitelist',
+        description: 'Once saved, this list limits new and existing OpenAI OAuth accounts. The gateway checks the final model ID after mapping. Each account can restrict its models further.',
+        modelIDs: 'Allowed model IDs',
+        inputHint: 'Enter one full, case-sensitive model ID per line. You can enter GPT models that are missing from the catalog.',
+        presetHint: 'These presets apply to new accounts. Saving this list also applies it to existing accounts.',
+        usePreset: 'Use preset list',
+        invalidCount: 'Enter 1 to 256 model IDs.',
+        invalidID: 'Use up to 255 characters per model ID. Start with a letter or number, then use letters, numbers or . _ : / -. Replace wildcards and URLs with model IDs.',
+        loadFailed: 'Could not load the OpenAI OAuth model whitelist',
+        saveFailed: 'Could not save the OpenAI OAuth model whitelist'
+      },
       ollamaCloudUsage: {
         title: 'Ollama Cloud Usage Refresh',
         description: 'Refresh official Ollama settings-page usage driven by model requests for individually opted-in providers. Disabled by default. Idle providers are not polled.',
@@ -652,7 +664,7 @@ export default {
         antigravityUserAgentVersionPlaceholder: '1.23.2',
         antigravityUserAgentVersionHint: 'Leave empty to use ANTIGRAVITY_USER_AGENT_VERSION or the built-in default 1.23.2; when set, the admin setting takes precedence.',
         openaiCodexUserAgent: 'OpenAI Codex UA',
-        openaiCodexUserAgentPlaceholder: 'codex-tui/0.158.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.158.0)',
+        openaiCodexUserAgentPlaceholder: 'Built-in codex-tui',
         openaiCodexUserAgentHint: 'Used to bypass Cloudflare browser-UA challenges on the OpenAI upstream. Only applies when the client User-Agent is detected as a browser (Mozilla/...). Leave empty to use the built-in codex-tui default.',
         openaiAllowClaudeCodeCodexPlugin: "Allow using the Codex plugin in Claude Code",
         openaiAllowClaudeCodeCodexPluginDesc:
@@ -1630,36 +1642,14 @@ export default {
       columns: {
         name: 'Name',
         description: 'Description',
-        validation: 'Validation',
         grease: 'GREASE',
         alpn: 'ALPN',
         actions: 'Actions'
       },
 
-      validation: {
-        draft: 'Draft',
-        verified: 'Verified',
-        rejected: 'Rejected',
-        stale: 'Revalidation required'
-      },
-
-      verificationSource: {
-        authenticatedIngress: 'Authenticated ingress',
-        controlledConnect: 'Controlled CONNECT',
-        manual: 'Manual',
-        legacy: 'Legacy profile'
-      },
-
-      approval: {
-        pending: 'Awaiting administrator approval',
-        approve: 'Approve use',
-        success: 'Profile approved for explicit binding',
-        failed: 'Failed to approve profile'
-      },
-
       collector: {
         title: 'Built-in Fingerprint Collector',
-        description: 'Capture a controlled client through a target-restricted CONNECT session. Tokens, prompts, and business requests are never forwarded.',
+        description: 'Start a temporary HTTPS collector to capture the TLS ClientHello from Claude Code and Codex CLI.',
         running: 'Running',
         stopped: 'Stopped',
         start: 'Start',
@@ -1670,38 +1660,19 @@ export default {
         generatedCert: 'Temporary self-signed CA',
         configuredCert: 'Configured certificate',
         createSession: 'Create Session',
-        clientKind: 'Client type',
-        clientVersion: 'Client version',
-        operatingSystem: 'Operating system',
-        architecture: 'Architecture',
-        runtime: 'Runtime (optional)',
-        runtimeVersion: 'Runtime version (optional)',
-        targetHost: 'Validation target',
-        targetChatGPT: 'chatgpt.com (OpenAI OAuth / Codex)',
-        targetOpenAIAPI: 'api.openai.com (validation evidence only)',
-        declaredClient: 'Declared client',
-        coldStartConfirmed: 'I will use a fresh process and will not capture a resumed TLS session',
-        controlledHint: 'Capture at least 3 independent cold-start connections for the same client configuration. Anonymous Nginx samples cannot be promoted.',
-        sessionValidationError: 'Enter the client version, operating system, and architecture, select a target, and confirm a cold start.',
         refreshCaptures: 'Refresh Captures',
         captureURL: 'Capture URL',
-        proxyURL: 'Controlled proxy URL',
         expiresAt: 'Expires At',
         claudeCommand: 'Claude Code',
         codexCommand: 'Codex CLI Command',
         codexConfig: 'Codex CLI Config',
-        controlledCommand: 'Controlled capture command',
-        commandStopsBeforeHTTP: 'The collector reads only the target ClientHello and then disconnects. A client connection error is expected.',
         copyCA: 'Copy CA',
         downloadCA: 'Download CA',
         captures: 'Captures',
         captureCount: '{count} records',
         noCaptures: 'No captures yet. Run a client with the command above and results will appear here.',
         copyYaml: 'Copy YAML',
-        promoteCapture: 'Validate and create',
-        ready: 'Ready to validate',
-        blocked: 'Blocked',
-        matchingSamples: '{count} matching cold-start connections',
+        applyCapture: 'Fill Form',
         unknownClient: 'Unknown Client',
         statusFailed: 'Failed to load collector status',
         startSuccess: 'Collector started',
@@ -1710,38 +1681,11 @@ export default {
         sessionCreated: 'Capture session created',
         sessionFailed: 'Failed to create capture session',
         applied: 'Capture filled into the form',
-        promoteSuccess: 'Replay and target TLS handshake passed; a bindable profile was created',
-        promoteFailed: 'Capture validation or profile creation failed',
         copied: 'Copied to clipboard',
         copyFailed: 'Copy failed'
       },
 
-      authenticatedIngress: {
-        title: 'Authenticated Ingress Capture',
-        description: 'As customers call this API normally, TLS ClientHello observations are linked to verified internal customer identities automatically. No proxy or CA setup is required. Only aggregate runtime status is shown here.',
-        enabled: 'Enabled',
-        disabled: 'Disabled',
-        refresh: 'Refresh status',
-        retry: 'Try again',
-        loading: 'Loading authenticated ingress capture status…',
-        refreshing: 'Refreshing…',
-        loadFailed: 'Failed to load authenticated ingress capture status. Try again.',
-        pendingClientHellos: 'ClientHellos awaiting link',
-        pendingAuthenticatedFlows: 'Authenticated requests awaiting match',
-        matchedFlows: 'Matched flows',
-        rejectedFlows: 'Rejected flows',
-        candidateGroups: 'Candidate fingerprint groups',
-        validationsInFlight: 'Validations in flight',
-        verifiedProfilesCreated: 'Verified profiles created',
-        existingProfilesMatched: 'Existing profiles matched',
-        noActivity: 'No eligible authenticated ingress traffic has been observed yet. Status updates as customers call the API normally.',
-        disabledHint: 'Authenticated ingress capture is disabled. Enable the server configuration before observations can accumulate.',
-        lastVerified: 'Last verified',
-        lastError: 'Most recent processing error'
-      },
-
       form: {
-        manualDraftWarning: 'Manual creation and YAML import save a draft. Changing handshake fields on a verified profile requires revalidation. Bindable profiles must come from authenticated ingress or controlled CONNECT validation.',
         pasteYaml: 'Paste YAML Configuration',
         pasteYamlPlaceholder: 'Paste YAML output from TLS Fingerprint Collector here...',
         pasteYamlHint: 'Paste the YAML copied from TLS Fingerprint Collector to auto-fill all fields.',

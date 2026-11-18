@@ -49,8 +49,12 @@ func providePrivacyClientFactory() openai.PrivacyClientFactory {
 }
 
 // provideProviderAdmin 绑定共享的提供商管理用例和平台执行接口。
-func provideProviderAdmin(store *providerpostgres.ProviderStore, usage *billingpostgres.ProviderUsageStore, blocker provider.RuntimeUnblocker, privacy *provider.PrivacyService, groups *routingpostgres.GroupStore, proxies *egresspostgres.ProxyStore, tasks *lifecycle.Tasks, upstream httpclient.UpstreamTransport, tls *egressadapter.TLSProfiles) *provider.Admin {
-	return provider.NewAdmin(store, provider.AdminOptions{ShadowModels: provideradapter.DefaultSparkShadowModels, Duplicates: store, Quotas: usage, RuntimeBlocker: blocker, Privacy: privacy, Groups: providerGroupReferences{groups}, Proxies: proxies, Creation: provider.CreationOptions{Now: time.Now, LoadLocation: time.LoadLocation, NewSeed: uuid.NewString}, Credentials: provideradapter.CreateCredentialHooks(upstream, tls), Background: tasks.Go, Error: slog.Error})
+func provideProviderAdmin(store *providerpostgres.ProviderStore, usage *billingpostgres.ProviderUsageStore, blocker provider.RuntimeUnblocker, privacy *provider.PrivacyService, groups *routingpostgres.GroupStore, proxies *egresspostgres.ProxyStore, tasks *lifecycle.Tasks, upstream httpclient.UpstreamTransport, tls *egressadapter.TLSProfiles, settings *provider.RuntimeSettings) *provider.Admin {
+	creation := provider.CreationOptions{
+		Now: time.Now, LoadLocation: time.LoadLocation, NewSeed: uuid.NewString,
+		ReadOpenAIOAuthModels: settings.OpenAIOAuthModelWhitelistSnapshot,
+	}
+	return provider.NewAdmin(store, provider.AdminOptions{ShadowModels: provideradapter.DefaultSparkShadowModels, Duplicates: store, Quotas: usage, RuntimeBlocker: blocker, Privacy: privacy, Groups: providerGroupReferences{groups}, Proxies: proxies, Creation: creation, Credentials: provideradapter.CreateCredentialHooks(upstream, tls), Background: tasks.Go, Error: slog.Error})
 }
 
 func (g providerGroupReferences) GetGroup(ctx context.Context, id int64) (*provider.GroupReference, error) {

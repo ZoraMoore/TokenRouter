@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/TokenFlux/TokenRouter/internal/gateway/clientmeta"
 )
 
 const (
@@ -16,7 +18,7 @@ const (
 	openAICodexUserAgentCacheTTL         = 60 * time.Second
 	openAICodexUserAgentErrorTTL         = 5 * time.Second
 	openAICodexUserAgentDBTimeout        = 5 * time.Second
-	DefaultOpenAICodexUserAgent          = "codex-tui/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.144.1)"
+	DefaultOpenAICodexUserAgent          = clientmeta.CodexDefaultUserAgent + " (" + clientmeta.CodexDefaultOriginator + "; " + clientmeta.CodexDefaultVersion + ")"
 	openAIAllowCodexPluginCacheTTL       = 60 * time.Second
 	openAIAllowCodexPluginErrorTTL       = 5 * time.Second
 	openAIAllowCodexPluginDBTimeout      = 5 * time.Second

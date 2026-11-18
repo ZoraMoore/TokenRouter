@@ -91,12 +91,13 @@ type GeminiDependencies struct {
 
 // Options 包含启动配置，app 负责区分未配置和零值。
 type Options struct {
-	Scheduling        schedulercore.FlowOptions
-	DebugRouting      bool
-	StickyTTL         time.Duration
-	ResponseTTL       time.Duration
-	ReadLegacySticky  bool
-	WriteLegacySticky bool
+	Scheduling         schedulercore.FlowOptions
+	OpenAICompactModel string
+	DebugRouting       bool
+	StickyTTL          time.Duration
+	ResponseTTL        time.Duration
+	ReadLegacySticky   bool
+	WriteLegacySticky  bool
 }
 
 // DefaultOptions 返回未提供进程配置时的默认值。

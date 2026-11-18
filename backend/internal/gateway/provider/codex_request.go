@@ -2,6 +2,7 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 
@@ -9,6 +10,9 @@ import (
 
 	"github.com/TokenFlux/TokenRouter/internal/gateway/media"
 	protocolopenai "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
+	"github.com/TokenFlux/TokenRouter/internal/protocol/wirejson"
+	"github.com/TokenFlux/TokenRouter/internal/provider"
+	provideradapter "github.com/TokenFlux/TokenRouter/internal/provider/provider"
 	"github.com/TokenFlux/TokenRouter/internal/upstream/openai"
 )
 
@@ -19,6 +23,142 @@ const (
 	OpenAICompatClaudeCodeTodoGuardMarker = "<tokenrouter-claude-code-todo-guard>"
 	OpenAICompatClaudeCodeTodoGuardText   = OpenAICompatClaudeCodeTodoGuardMarker + "\nWhen using Claude Code todo or task tracking tools, keep the visible task list consistent. Do not send final or summary text while any item remains in_progress. Before finishing, asking the user to choose, or reporting a blocker, update the todo list so completed work is completed and deferred work is pending/open; leave an item in_progress only when active work will continue in the same turn.\n</tokenrouter-claude-code-todo-guard>"
 )
+
+// OpenAIModelSession 保存当前连接设置的图片工具型号，供省略 tools 的下一轮请求检查。
+type OpenAIModelSession struct {
+	ImageTools []string
+}
+
+// openAIOAuthModelFields 只保留协议中能指定执行型号的字段，普通消息里的 JSON 不参与判断。
+type openAIOAuthModelFields struct {
+	model, tools, choice, session, response, input gjson.Result
+}
+
+// CheckFrame 在模型名单变更后复核继承的工具，并在会话设置通过时替换本地记录。
+func (s *OpenAIModelSession) CheckFrame(ctx context.Context, target *ExecutionProvider, model string, body []byte) error {
+	if value := target.View(); value == nil || !value.IsOpenAIOAuth() {
+		return nil
+	}
+	inherited := s.ImageTools
+	event := gjson.GetBytes(body, "type").String()
+	var changedTools gjson.Result
+	switch event {
+	case "session.update":
+		changedTools = gjson.GetBytes(body, "session.tools")
+		if changedTools.IsArray() {
+			inherited = nil
+		}
+	case "response.create":
+		fields := gjson.GetManyBytes(body, "tools", "response.tools", "response.model")
+		if fields[0].IsArray() || fields[1].IsArray() {
+			inherited = nil
+		}
+		if fields[2].Type == gjson.String {
+			model = fields[2].String()
+		}
+	}
+	if err := CheckOpenAIOAuthRequestModels(ctx, target, model, body, inherited...); err != nil {
+		return err
+	}
+	if changedTools.IsArray() {
+		s.ImageTools = media.SnapshotOpenAIImageToolModels(changedTools)
+	}
+	return nil
+}
+
+// readOpenAIOAuthModelFields 拒绝有歧义的重复字段，保证上游与网关检查同一份配置。
+func readOpenAIOAuthModelFields(object gjson.Result) (openAIOAuthModelFields, bool) {
+	var fields openAIOAuthModelFields
+	valid := true
+	object.ForEach(func(key, value gjson.Result) bool {
+		var dest *gjson.Result
+		switch key.Str {
+		case "model":
+			dest = &fields.model
+		case "tools":
+			dest = &fields.tools
+		case "tool_choice":
+			dest = &fields.choice
+		case "session":
+			dest = &fields.session
+		case "response":
+			dest = &fields.response
+		case "input":
+			dest = &fields.input
+		default:
+			return true
+		}
+		if dest.Exists() {
+			valid = false
+			return false
+		}
+		*dest = value
+		return true
+	})
+	return fields, valid
+}
+
+// CheckOpenAIOAuthRequestModels 在请求发出前检查实际的主模型和图片工具指定的型号。
+// WebSocket 的模型可以从上一轮继承，调用方传入本轮已解析的最终型号。
+func CheckOpenAIOAuthRequestModels(ctx context.Context, target *ExecutionProvider, model string, body []byte, inheritedTools ...string) error {
+	value := target.View()
+	global := value.OpenAIOAuthFinalModelPolicy(ctx)
+	if !global.Configured() {
+		return nil
+	}
+	allows := value.OpenAIOAuthTargetFilter(global, provideradapter.ModelDefaults())
+	root, ok := readOpenAIOAuthModelFields(wirejson.ParseView(body))
+	if !ok || model == "" && !root.model.Exists() || model != "" && !allows(model) {
+		return provider.ErrOpenAIOAuthModelNotAllowed
+	}
+	session, sessionOK := readOpenAIOAuthModelFields(root.session)
+	response, responseOK := readOpenAIOAuthModelFields(root.response)
+	if !sessionOK || !responseOK {
+		return provider.ErrOpenAIOAuthModelNotAllowed
+	}
+	for _, field := range []gjson.Result{root.model, session.model, response.model} {
+		if field.Exists() && (field.Type != gjson.String || !allows(field.Str)) {
+			return provider.ErrOpenAIOAuthModelNotAllowed
+		}
+	}
+	for _, tool := range inheritedTools {
+		if !allows(tool) {
+			return provider.ErrOpenAIOAuthModelNotAllowed
+		}
+	}
+	// 普通文本请求可跳过较大的 input 数组。JSON 的 Unicode 转义也可能组成工具名。
+	if !bytes.Contains(body, []byte("image_generation")) && !bytes.Contains(body, []byte(`\u`)) {
+		return nil
+	}
+	allowedTools := func(tools, choice gjson.Result) bool {
+		declared := false
+		for id := range media.OpenAIImageToolModels(tools) {
+			declared = true
+			if !allows(id) {
+				return false
+			}
+		}
+		usesImage := openai.IsOpenAIImageGenerationType(choice.Str) || openai.IsOpenAIImageGenerationType(choice.Get("type").Str)
+		return !usesImage || declared || len(inheritedTools) > 0 || allows(media.DefaultOpenAIImageModel)
+	}
+	for _, fields := range []openAIOAuthModelFields{root, session, response} {
+		if !allowedTools(fields.tools, fields.choice) {
+			return provider.ErrOpenAIOAuthModelNotAllowed
+		}
+	}
+	valid := true
+	root.input.ForEach(func(_, entry gjson.Result) bool {
+		if entry.Get("type").String() == "additional_tools" {
+			fields, ok := readOpenAIOAuthModelFields(entry)
+			valid = ok && allowedTools(fields.tools, fields.choice)
+		}
+		return valid
+	})
+	if !valid {
+		return provider.ErrOpenAIOAuthModelNotAllowed
+	}
+	return nil
+}
 
 func ApplyCodexOAuthTransform(reqBody map[string]any, isCodexCLI bool, isCompact bool) openai.CodexTransformResult {
 	return ApplyCodexOAuthTransformWithOptions(reqBody, openai.CodexOAuthTransformOptions{IsCodexCLI: isCodexCLI, IsCompact: isCompact})

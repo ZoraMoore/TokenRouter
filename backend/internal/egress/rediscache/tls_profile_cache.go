@@ -13,9 +13,11 @@ import (
 )
 
 const (
-	tlsFPProfileCacheKey  = "tls_fingerprint_profiles"
-	tlsFPProfilePubSubKey = "tls_fingerprint_profiles_updated"
-	tlsFPProfileCacheTTL  = 24 * time.Hour
+	// v2 仅缓存可供出站选择的模板。旧缓存可能含有未发布的采集模板。
+	tlsFPProfileCacheKey         = "tls_fingerprint_profiles:v2"
+	tlsFPProfilePreviousCacheKey = "tls_fingerprint_profiles"
+	tlsFPProfilePubSubKey        = "tls_fingerprint_profiles_updated"
+	tlsFPProfileCacheTTL         = 24 * time.Hour
 )
 
 type tlsFingerprintProfileCache struct {
@@ -92,7 +94,7 @@ func (c *tlsFingerprintProfileCache) Invalidate(ctx context.Context) error {
 	c.localCache = nil
 	c.localMu.Unlock()
 
-	return c.rdb.Del(ctx, tlsFPProfileCacheKey).Err()
+	return c.rdb.Del(ctx, tlsFPProfileCacheKey, tlsFPProfilePreviousCacheKey).Err()
 }
 
 // NotifyUpdate 通知其他实例刷新缓存。

@@ -58,6 +58,7 @@ func provideAdminRouteMount(eAdminTLSFingerprintProfile *routeegress.TLSFingerpr
 	eAdminGrokOAuth *routeprovider.GrokOAuthHandler,
 	eAdminAuditLog *routeaudit.AuditLogHandler,
 	eAdminPricing *routerouting.PricingHandler,
+	ePelican *routerouting.PelicanHandler,
 	eModelAttributes *routerouting.ModelAttributeHandler,
 	eAdminSetting *routesettings.Handler,
 	ePreAggregation *routesettings.PreAggregationHandler,
@@ -197,6 +198,11 @@ func provideAdminRouteMount(eAdminTLSFingerprintProfile *routeegress.TLSFingerpr
 			// 运维监控（Ops）
 			{
 				routeops.RegisterOpsRoutes(admin, eAdminOps)
+			}
+
+			// 智能运维
+			{
+				routerouting.RegisterPelicanAdminRoutes(admin, ePelican)
 			}
 
 			// 系统管理

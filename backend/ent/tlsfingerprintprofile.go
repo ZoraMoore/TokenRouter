@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/TokenFlux/TokenRouter/ent/tlsfingerprintprofile"
-	"github.com/TokenFlux/TokenRouter/internal/egress"
 )
 
 // TLSFingerprintProfile is the model entity for the TLSFingerprintProfile schema.
@@ -48,9 +47,7 @@ type TLSFingerprintProfile struct {
 	// PskModes holds the value of the "psk_modes" field.
 	PskModes []uint16 `json:"psk_modes,omitempty"`
 	// Extensions holds the value of the "extensions" field.
-	Extensions []uint16 `json:"extensions,omitempty"`
-	// Verification holds the value of the "verification" field.
-	Verification egress.TLSFingerprintProfileVerification `json:"verification,omitempty"`
+	Extensions   []uint16 `json:"extensions,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -59,7 +56,7 @@ func (*TLSFingerprintProfile) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case tlsfingerprintprofile.FieldCipherSuites, tlsfingerprintprofile.FieldCurves, tlsfingerprintprofile.FieldPointFormats, tlsfingerprintprofile.FieldSignatureAlgorithms, tlsfingerprintprofile.FieldSignatureAlgorithmsCert, tlsfingerprintprofile.FieldAlpnProtocols, tlsfingerprintprofile.FieldSupportedVersions, tlsfingerprintprofile.FieldKeyShareGroups, tlsfingerprintprofile.FieldPskModes, tlsfingerprintprofile.FieldExtensions, tlsfingerprintprofile.FieldVerification:
+		case tlsfingerprintprofile.FieldCipherSuites, tlsfingerprintprofile.FieldCurves, tlsfingerprintprofile.FieldPointFormats, tlsfingerprintprofile.FieldSignatureAlgorithms, tlsfingerprintprofile.FieldSignatureAlgorithmsCert, tlsfingerprintprofile.FieldAlpnProtocols, tlsfingerprintprofile.FieldSupportedVersions, tlsfingerprintprofile.FieldKeyShareGroups, tlsfingerprintprofile.FieldPskModes, tlsfingerprintprofile.FieldExtensions:
 			values[i] = new([]byte)
 		case tlsfingerprintprofile.FieldEnableGrease:
 			values[i] = new(sql.NullBool)
@@ -201,14 +198,6 @@ func (_m *TLSFingerprintProfile) assignValues(columns []string, values []any) er
 					return fmt.Errorf("unmarshal field extensions: %w", err)
 				}
 			}
-		case tlsfingerprintprofile.FieldVerification:
-			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field verification", values[i])
-			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &_m.Verification); err != nil {
-					return fmt.Errorf("unmarshal field verification: %w", err)
-				}
-			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -291,9 +280,6 @@ func (_m *TLSFingerprintProfile) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("extensions=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Extensions))
-	builder.WriteString(", ")
-	builder.WriteString("verification=")
-	builder.WriteString(fmt.Sprintf("%v", _m.Verification))
 	builder.WriteByte(')')
 	return builder.String()
 }

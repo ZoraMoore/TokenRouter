@@ -258,7 +258,7 @@ func (s *Admin) DuplicateProvider(ctx context.Context, id int64, actorScope, ope
 	if err := egress.NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
 		return nil, err
 	}
-	duplicate, err := BuildProviderForCreate(input, input.Extra, s.options.Creation)
+	duplicate, err := BuildProviderForCreate(ctx, input, input.Extra, s.options.Creation)
 	if err != nil {
 		return nil, err
 	}

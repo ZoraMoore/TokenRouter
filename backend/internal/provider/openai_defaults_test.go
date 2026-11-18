@@ -12,10 +12,10 @@ func TestApplyOpenAICreationModelsMergesAndIsolatesCredentials(t *testing.T) {
 		"model_mapping":   map[string]any{"alias": "mapped-model"},
 	}
 	value := &Record{Platform: PlatformOpenAI, Type: ProviderTypeOAuth, Credentials: credentials}
-	ApplyOpenAICreationModels(value)
+	require.NoError(t, ApplyOpenAICreationModels(t.Context(), value, nil))
 	require.Equal(t, []string{"codex-auto-review", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6-astra", "gpt-6-sol", "gpt-6.1-sol", "custom-model", "mapped-model"}, value.Credentials["model_whitelist"])
 	require.Equal(t, []any{"gpt-6-sol", "custom-model"}, credentials["model_whitelist"])
-	ApplyOpenAICreationModels(value)
+	require.NoError(t, ApplyOpenAICreationModels(t.Context(), value, nil))
 	require.Len(t, value.Credentials["model_whitelist"], 9)
 }
 
@@ -25,7 +25,7 @@ func TestApplyOpenAICreationModelsScope(t *testing.T) {
 		{Platform: PlatformAnthropic, Type: ProviderTypeOAuth},
 		{Platform: PlatformOpenAI, Type: ProviderTypeOAuth, ParentProviderID: new(int64)},
 	} {
-		ApplyOpenAICreationModels(value)
+		require.NoError(t, ApplyOpenAICreationModels(t.Context(), value, nil))
 		require.Nil(t, value.Credentials)
 	}
 }

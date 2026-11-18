@@ -36,7 +36,7 @@ type RequestPort interface {
 	FeatureDenied()
 	ImageDeniedMessage() string
 	ImageBilling([]byte, string) (ImageBilling, error)
-	FastPolicy(context.Context, int, string, []byte, bool) ([]byte, *PolicyBlocked, error)
+	FramePolicy(context.Context, int, string, []byte, bool) ([]byte, *PolicyBlocked, error)
 	PolicyDenied()
 	BlockedEvent(*PolicyBlocked) []byte
 	WriteBlocked(context.Context, []byte)

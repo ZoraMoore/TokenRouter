@@ -10,13 +10,45 @@ import (
 const (
 	LegacyOpenAICapabilitiesCredentialKey = "openai_capabilities"
 	LegacyOpenAIResponsesModeExtraKey     = "openai_responses_mode"
+
+	// OpenAIResponseTierBillingEnabledKey 控制 OpenAI API Key 或 OAuth 账号是否按上游返回的档位结算。
+	OpenAIResponseTierBillingEnabledKey = "openai_response_tier_billing_enabled"
 )
 
 func IsOpenAIAPIKeyProvider(provider *Record) bool {
 	return provider != nil && provider.Platform == PlatformOpenAI && provider.Type == ProviderTypeAPIKey
 }
 
+// OpenAIResponseTierBillingEnabled 只在管理员明确开启时采信该账号的响应档位。
+func (r *Record) OpenAIResponseTierBillingEnabled() bool {
+	if !r.supportsOpenAIResponseTierBilling() {
+		return false
+	}
+	enabled, _ := r.Extra[OpenAIResponseTierBillingEnabledKey].(bool)
+	return enabled
+}
+
+// supportsOpenAIResponseTierBilling 判断账号能否按响应档位结算。
+func (r *Record) supportsOpenAIResponseTierBilling() bool {
+	return r != nil && r.IsOpenAI() && (r.Type == ProviderTypeOAuth || r.Type == ProviderTypeAPIKey)
+}
+
+func validateOpenAIResponseTierBilling(extra map[string]any) error {
+	if value, exists := extra[OpenAIResponseTierBillingEnabledKey]; exists {
+		if _, ok := value.(bool); !ok {
+			return infraerrors.BadRequest("OPENAI_RESPONSE_TIER_BILLING_INVALID", "openai_response_tier_billing_enabled must be a boolean")
+		}
+	}
+	return nil
+}
+
 func HasOpenAIConfigurationPatch(credentials, extra map[string]any) bool {
+	_, billing := extra[OpenAIResponseTierBillingEnabledKey]
+	return billing || hasOpenAIProtocolPatch(credentials, extra)
+}
+
+// hasOpenAIProtocolPatch 识别由 OpenAI API Key 账号管理的协议字段。
+func hasOpenAIProtocolPatch(credentials, extra map[string]any) bool {
 	if credentials != nil {
 		if _, ok := credentials[OpenAIWorkloadCapabilitiesCredentialKey]; ok {
 			return true
@@ -51,6 +83,11 @@ func NormalizeOpenAIAPIKeyConfiguration(provider *Record) error {
 		provider.Extra["openai_compact_mode"] = provider.GetOpenAICompactMode()
 		provider.Extra[OpenAINativeCompactionV2ModeExtraKey] = provider.GetOpenAINativeCompactionV2Mode()
 	}
+	if provider.supportsOpenAIResponseTierBilling() {
+		if err := validateOpenAIResponseTierBilling(provider.Extra); err != nil {
+			return err
+		}
+	}
 	if !IsOpenAIAPIKeyProvider(provider) {
 		return nil
 	}
@@ -77,6 +114,9 @@ func NormalizeOpenAIAPIKeyConfiguration(provider *Record) error {
 
 // NormalizeOpenAIAPIKeyConfigurationPatch 规范化增量中提供的字段。
 func NormalizeOpenAIAPIKeyConfigurationPatch(credentials, extra map[string]any) error {
+	if err := validateOpenAIResponseTierBilling(extra); err != nil {
+		return err
+	}
 	// 增量中出现旧键表示旧客户端正在主动修改该项；即使它回传了不认识的新键，
 	// 也应让本次旧字段修改生效。完整持久化数据仍由全量规范化优先采用新键。
 	if _, found := credentials[LegacyOpenAICapabilitiesCredentialKey]; found {

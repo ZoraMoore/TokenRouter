@@ -218,6 +218,7 @@ describe('TLSFingerprintRoutersModal', () => {
     await flushPromises()
 
     expect(listRoutersMock).toHaveBeenCalledTimes(1)
+    expect(listProfilesMock).toHaveBeenCalledWith()
     expect(wrapper.text()).toContain('Codex Router')
 
     const toggleButton = wrapper.findAll('button').find(button => button.text().includes('common.enabled'))

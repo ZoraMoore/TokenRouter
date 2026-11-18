@@ -5,9 +5,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/TokenFlux/TokenRouter/internal/apikey"
 	apikeyhttp "github.com/TokenFlux/TokenRouter/internal/apikey/httpapi"
 	batchhttp "github.com/TokenFlux/TokenRouter/internal/batchimage/httpapi"
 	billinghttp "github.com/TokenFlux/TokenRouter/internal/billing/httpapi"
+	"github.com/TokenFlux/TokenRouter/internal/config"
 	creativehttp "github.com/TokenFlux/TokenRouter/internal/creative/httpapi"
 	gatewayhttp "github.com/TokenFlux/TokenRouter/internal/gateway/httpapi"
 	wshttp "github.com/TokenFlux/TokenRouter/internal/gateway/ws/httpapi"
@@ -107,6 +109,9 @@ func providePaymentRouteMount(user *paymenthttp.PaymentHandler, webhook *payment
 
 // provideUserRouteMount 将用户 HTTP 处理器和跨模块读取函数绑定到路由注册函数。
 func provideUserRouteMount(
+	ePelican *routinghttp.PelicanHandler,
+	keys *apikey.APIKeyService,
+	cfg *config.Config,
 	eUserPromotion *promotionhttp.UserHandler,
 	eSubscription *billinghttp.SubscriptionHandler,
 	eAnnouncement *sitehttp.AnnouncementHandler,
@@ -120,6 +125,15 @@ func provideUserRouteMount(
 	eUser *identityhttp.UserHandler,
 ) userRouteMount {
 	return func(v1 *gin.RouterGroup, security httpRouteSecurity) {
+		// 作品响应随调用方权限和展示开关变化，代理不能复用上一次授权的结果。
+		showcase := v1.Group("/public/pelican-showcase", func(c *gin.Context) {
+			c.Header("Cache-Control", "private, no-store")
+			c.Writer.Header().Add("Vary", "Authorization, X-API-Key, X-Goog-API-Key")
+			c.Next()
+		})
+		showcase.Use(security.Panel.PublicIP(), pelicanReadAuth(keys, cfg), security.Panel.Global())
+		routinghttp.RegisterPelicanKeyRoutes(showcase, ePelican, pelicanKeyScope)
+
 		authenticated := v1.Group("")
 		authenticated.Use(security.JWT)
 		authenticated.Use(security.BackendUser)
@@ -133,6 +147,7 @@ func provideUserRouteMount(
 		teamhttp.RegisterUserRoutes(authenticated, eTeam, security.StepUp)
 		usagehttp.RegisterUserRoutes(authenticated, eUsage, security.Panel.Heavy())
 		creativehttp.RegisterUserRoutes(authenticated, eCreative, security.Panel.Heavy())
+		routinghttp.RegisterPelicanUserRoutes(authenticated, ePelican)
 		sitehttp.RegisterUserRoutes(authenticated, eAnnouncement)
 		billinghttp.RegisterUserRoutes(authenticated, eRedeem, eSubscription)
 	}

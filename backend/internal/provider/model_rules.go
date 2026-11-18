@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"maps"
 	"slices"
 	"sort"
@@ -11,6 +12,7 @@ import (
 // ModelRulesSnapshot 保存一次查询使用的模型配置和匹配索引。
 type ModelRulesSnapshot struct {
 	record          *Record
+	oauthModels     OpenAIOAuthModelPolicy
 	rules           ModelPlatformRules
 	mapping         map[string]string
 	mappingPatterns []string
@@ -26,6 +28,7 @@ func PrepareModelRules(record *Record, defaults ModelMappingDefaults, rules Mode
 	if record == nil {
 		return result
 	}
+	result.oauthModels = record.OpenAIOAuthFinalModelPolicy(context.Background())
 	result.mapping = ResolveModelMapping(record, defaults)
 	for pattern := range result.mapping {
 		if strings.HasSuffix(pattern, "*") {
@@ -58,7 +61,7 @@ func PrepareModelRules(record *Record, defaults ModelMappingDefaults, rules Mode
 			result.qoder[rules.NormalizeQoder(pattern)] = struct{}{}
 		}
 	}
-	result.configured = configuredRequestModels(result.mapping, scope, platformModels, result.whitelistMember)
+	result.configured = configuredRequestModels(result.mapping, scope, platformModels, result.oauthModels, result.whitelistMember)
 	return result
 }
 
@@ -111,7 +114,7 @@ func (s *ModelRulesSnapshot) Supports(model string) bool {
 		return false
 	}
 	mapped, _ := s.ResolveMappedModel(model)
-	return s.whitelisted(mapped) && s.record.modelPlatformAllows(mapped, s.rules)
+	return s.whitelisted(mapped) && s.record.modelPlatformAllows(mapped, s.rules, s.oauthModels)
 }
 
 // FinalModelWhitelisted 检查已完成平台规范化的最终型号。
@@ -138,6 +141,9 @@ func (s *ModelRulesSnapshot) whitelisted(model string) bool {
 
 func (s *ModelRulesSnapshot) whitelistMember(model string) bool {
 	model = strings.TrimSpace(model)
+	if !s.oauthModels.Allows(model) {
+		return false
+	}
 	if _, found := s.exact[modelWhitelistKey(model)]; found {
 		return true
 	}
@@ -173,12 +179,16 @@ func modelWhitelistKey(value string) string {
 }
 
 // configuredRequestModels 合并具体白名单、平台型号和映射两端的名称。
-func configuredRequestModels(mapping map[string]string, scope map[string]struct{}, platformModels []string, allows func(string) bool) []string {
+func configuredRequestModels(mapping map[string]string, scope map[string]struct{}, platformModels []string, global OpenAIOAuthModelPolicy, allows func(string) bool) []string {
 	models := make(map[string]struct{})
 	for model := range scope {
-		if !strings.Contains(model, "*") {
+		if !strings.Contains(model, "*") && global.Allows(model) {
 			models[model] = struct{}{}
 		}
+	}
+	if global.Configured() {
+		// 全局名单也能提供目录里尚未收录的型号，账号自己的范围决定是否展示。
+		platformModels = append(global.Models(), platformModels...)
 	}
 	for _, model := range platformModels {
 		if allows(model) {

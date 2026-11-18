@@ -382,10 +382,10 @@ func (s *Admin) UpdateProviderExtra(ctx context.Context, id int64, updates map[s
 		if err != nil {
 			return err
 		}
-		if !IsOpenAIAPIKeyProvider(provider) {
+		if !provider.supportsOpenAIResponseTierBilling() || (hasOpenAIProtocolPatch(nil, updates) && !IsOpenAIAPIKeyProvider(provider)) {
 			return infraerrors.BadRequest(
 				"OPENAI_CONFIGURATION_TARGET_INVALID",
-				"OpenAI text protocol and continuation configuration only applies to OpenAI API Key providers",
+				"provider type does not support the requested OpenAI settings",
 			)
 		}
 		if err := NormalizeOpenAIAPIKeyConfigurationPatch(nil, updates); err != nil {
@@ -464,10 +464,10 @@ func (s *Admin) BulkUpdateProviders(ctx context.Context, input *BulkUpdateProvid
 			if !ok || provider == nil {
 				return nil, invalidBulkOpenAITarget(providerID, "provider does not exist")
 			}
-			if !IsOpenAIAPIKeyProvider(provider) {
+			if !provider.supportsOpenAIResponseTierBilling() {
 				return nil, infraerrors.BadRequest(
 					"OPENAI_CONFIGURATION_TARGET_INVALID",
-					"OpenAI text protocol and continuation configuration can only be bulk-updated on OpenAI API Key providers",
+					"provider type does not support the requested OpenAI settings",
 				)
 			}
 		}
@@ -515,7 +515,7 @@ func (s *Admin) BulkUpdateProviders(ctx context.Context, input *BulkUpdateProvid
 		input.Credentials = SanitizeStoredCredentials("", input.Credentials)
 	}
 	protocolUpdates := map[int64]map[string]any{}
-	if len(input.Credentials) > 0 || hasOpenAIConfigPatch {
+	if len(input.Credentials) > 0 || hasOpenAIProtocolPatch(nil, input.Extra) {
 		for _, provider := range cachedTargets {
 			if provider == nil {
 				continue

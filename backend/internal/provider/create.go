@@ -31,7 +31,7 @@ func (s *Admin) CreateProvider(ctx context.Context, input *CreateProviderInput) 
 	// OAuth 兑换后不得持久化临时 SSO 或密码。
 	input.Credentials = SanitizeStoredCredentials(input.Platform, input.Credentials)
 
-	provider, err := BuildProviderForCreate(input, providerExtra, s.options.Creation)
+	provider, err := BuildProviderForCreate(ctx, input, providerExtra, s.options.Creation)
 	if err != nil {
 		return nil, err
 	}

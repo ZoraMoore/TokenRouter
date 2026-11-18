@@ -7,8 +7,12 @@ import admin from './admin'
 import misc from './misc'
 import team from './team'
 import requests from './requests'
+import pelicanTests from './pelicanTests'
+import providerIQ from './providerIQ'
 
 export default {
+  providerIQ,
+  pelicanTests,
   requests,
   legal: {
     "login": "Log in",

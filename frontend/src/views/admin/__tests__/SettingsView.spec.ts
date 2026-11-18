@@ -17,6 +17,8 @@ const {
   getOverloadCooldownSettings,
   getOpenAI403CooldownSettings,
   updateOpenAI403CooldownSettings,
+  getOpenAIOAuthModelWhitelist,
+  updateOpenAIOAuthModelWhitelist,
   getRateLimit429CooldownSettings,
   updateRateLimit429CooldownSettings,
   getPanelRateLimitSettings,
@@ -53,6 +55,8 @@ const {
   getOverloadCooldownSettings: vi.fn(),
   getOpenAI403CooldownSettings: vi.fn(),
   updateOpenAI403CooldownSettings: vi.fn(),
+  getOpenAIOAuthModelWhitelist: vi.fn(),
+  updateOpenAIOAuthModelWhitelist: vi.fn(),
   getRateLimit429CooldownSettings: vi.fn(),
   updateRateLimit429CooldownSettings: vi.fn(),
   getPanelRateLimitSettings: vi.fn().mockResolvedValue({
@@ -126,6 +130,8 @@ vi.mock("@/api", () => ({
       getOverloadCooldownSettings,
       getOpenAI403CooldownSettings,
       updateOpenAI403CooldownSettings,
+      getOpenAIOAuthModelWhitelist,
+      updateOpenAIOAuthModelWhitelist,
       getRateLimit429CooldownSettings,
       updateRateLimit429CooldownSettings,
       getPanelRateLimitSettings,
@@ -780,6 +786,8 @@ describe("admin SettingsView payment visible method controls", () => {
     getOverloadCooldownSettings.mockReset();
     getOpenAI403CooldownSettings.mockReset();
     updateOpenAI403CooldownSettings.mockReset();
+    getOpenAIOAuthModelWhitelist.mockReset();
+    updateOpenAIOAuthModelWhitelist.mockReset();
     getRateLimit429CooldownSettings.mockReset();
     updateRateLimit429CooldownSettings.mockReset();
     getStreamTimeoutSettings.mockReset();
@@ -828,6 +836,8 @@ describe("admin SettingsView payment visible method controls", () => {
       threshold_count: 3,
       threshold_window_minutes: 180,
     });
+    getOpenAIOAuthModelWhitelist.mockResolvedValue({ models: ["gpt-default"], configured: false });
+    updateOpenAIOAuthModelWhitelist.mockImplementation(async (models: string[]) => ({ models, configured: true }));
     updateOpenAI403CooldownSettings.mockResolvedValue({
       enabled: true,
       cooldown_minutes: 10,
@@ -1992,6 +2002,98 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(updateSettings.mock.calls[0]?.[0]).not.toHaveProperty(
       "enable_cch_signing",
     );
+  });
+
+  it("在 OpenAI 分区增删自定义 OAuth 型号，通过保存条提交完整模型 ID", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openGatewayTab(wrapper);
+    expect(wrapper.get('[data-testid="gateway-card-openai-oauth-model-whitelist"]').attributes("style")).toContain("display: none");
+    await openGatewaySection(wrapper, "openai");
+    const card = wrapper.get('[data-testid="gateway-card-openai-oauth-model-whitelist"]');
+    expect(card.isVisible()).toBe(true);
+    const input = card.get("textarea");
+    expect(input.element.value).toBe("gpt-default");
+    expect(updateOpenAIOAuthModelWhitelist).not.toHaveBeenCalled();
+
+    await input.setValue("gpt-lab\nVendor/GPT-lab.2:preview\ngpt-lab\n");
+    await saveFromSaveBar(wrapper);
+    expect(updateOpenAIOAuthModelWhitelist).toHaveBeenCalledExactlyOnceWith(["gpt-lab", "Vendor/GPT-lab.2:preview"]);
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(input.element.value).toBe("gpt-lab\nVendor/GPT-lab.2:preview");
+    expect(wrapper.get('[data-testid="settings-save-bar"]').attributes("inert")).toBeDefined();
+    wrapper.unmount();
+  });
+
+  it("可直接启用内置模型，首次读取和放弃草稿均不启用白名单", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openGatewayTab(wrapper);
+    await openGatewaySection(wrapper, "openai");
+    const card = wrapper.get('[data-testid="gateway-card-openai-oauth-model-whitelist"]');
+    await card.get("textarea").setValue("gpt-draft");
+    await wrapper.get('[data-testid="settings-save-bar-discard"]').trigger("click");
+    await flushPromises();
+    expect(card.get("textarea").element.value).toBe("gpt-default");
+    expect(updateOpenAIOAuthModelWhitelist).not.toHaveBeenCalled();
+
+    await card.get('[data-testid="openai-oauth-use-preset"]').trigger("click");
+    await saveFromSaveBar(wrapper);
+    expect(updateOpenAIOAuthModelWhitelist).toHaveBeenCalledExactlyOnceWith(["gpt-default"]);
+    expect(card.find('[data-testid="openai-oauth-use-preset"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("拒绝空的全局白名单和带通配符的模型 ID", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openGatewayTab(wrapper);
+    await openGatewaySection(wrapper, "openai");
+    const input = wrapper.get('[data-testid="gateway-card-openai-oauth-model-whitelist"] textarea');
+    for (const value of ["", "gpt-*", "https://example.com", "gpt model"]) {
+      await input.setValue(value);
+      await saveFromSaveBar(wrapper);
+      expect(updateOpenAIOAuthModelWhitelist).not.toHaveBeenCalled();
+      expect(input.attributes("aria-invalid")).toBe("true");
+    }
+    wrapper.unmount();
+  });
+
+  it("全局名单保存失败后可以直接重试当前草稿", async () => {
+    getOpenAIOAuthModelWhitelist.mockResolvedValue({ models: ["gpt-saved"], configured: true });
+    updateOpenAIOAuthModelWhitelist.mockRejectedValueOnce(new Error("write failed"));
+    const wrapper = mountView();
+    await flushPromises();
+    await openGatewayTab(wrapper);
+    await openGatewaySection(wrapper, "openai");
+    const card = wrapper.get('[data-testid="gateway-card-openai-oauth-model-whitelist"]');
+    expect(card.get("textarea").element.value).toBe("gpt-saved");
+    await card.get("textarea").setValue("gpt-draft");
+    await saveFromSaveBar(wrapper);
+    expect(showError).toHaveBeenCalledWith("error");
+    expect(card.get("textarea").element.value).toBe("gpt-draft");
+    await saveFromSaveBar(wrapper);
+    expect(updateOpenAIOAuthModelWhitelist).toHaveBeenCalledTimes(2);
+    expect(wrapper.get('[data-testid="settings-save-bar"]').attributes("inert")).toBeDefined();
+    wrapper.unmount();
+  });
+
+  it("读取全局名单失败后可重试并继续编辑服务端保存的模型", async () => {
+    getOpenAIOAuthModelWhitelist.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({
+      configured: true,
+      models: ["gpt-saved"],
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openGatewayTab(wrapper);
+    await openGatewaySection(wrapper, "openai");
+    const card = wrapper.get('[data-testid="gateway-card-openai-oauth-model-whitelist"]');
+    expect(card.find("textarea").exists()).toBe(false);
+    await card.get("button").trigger("click");
+    await flushPromises();
+    expect(card.get("textarea").element.value).toBe("gpt-saved");
+    expect(updateOpenAIOAuthModelWhitelist).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 
   it("renders the advanced scheduler only in General and omits the retired global switch", async () => {

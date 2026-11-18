@@ -71,48 +71,6 @@ server:
     # 每个流的最大上传缓冲区（字节，默认 512KB）
     max_upload_buffer_per_stream: 524288
 
-  # Authenticated ingress TLS fingerprint collection. Disabled by default.
-  # 已认证入站 TLS 指纹采集。客户继续正常使用本站 Base URL 与 API Key，
-  # 不需要配置 CONNECT 代理或 CA；启用前必须部署同版本 tls-ingress-observer，
-  # 并让直接终止 TLS 的 Nginx 覆盖注入可信连接头。
-  tls_fingerprint_authenticated_ingress:
-    enabled: false
-    # Generate two different secrets with at least 32 bytes each, for example:
-    # openssl rand -hex 32
-    # 生成两个不同且至少 32 字节的 secret；不得记录、回显或提交到仓库。
-    edge_token: ""
-    observer_token: ""
-    # Exact client-facing SNI hosts accepted from the packet observer.
-    # observer 当前每个进程观察一个 SNI；多域名需要分别部署 observer。
-    observed_hosts:
-      - "api.scienceedu.me"
-    # Only these two upstream validation targets are accepted by the application.
-    # 自动创建前对列表中的每个目标执行无凭据 TLS-only 握手，任一失败即拒绝。
-    validation_targets:
-      - "chatgpt.com"
-      - "api.openai.com"
-    # Unmatched ClientHello/auth event lifetime in memory: 30-1800 seconds.
-    # 未匹配 ClientHello/鉴权事件的内存 TTL：30-1800 秒。
-    pending_ttl_seconds: 300
-    # Incomplete candidate lifetime in memory: 300-604800 seconds.
-    # 未凑够样本的候选内存 TTL：300-604800 秒。
-    candidate_ttl_seconds: 86400
-    # Independent complete, non-resumed TLS connections required: 3-20.
-    # 相同候选需要的独立、完整、非恢复 TLS 连接数：3-20。
-    minimum_independent_connections: 3
-    # Bounded in-memory capacities; oldest eligible entries are evicted on pressure.
-    # 有界内存容量；达到上限时淘汰最旧的可淘汰记录，不阻塞 API 流量。
-    max_pending_flows: 20000
-    max_candidate_groups: 5000
-    # Bound automatic upstream probes and durable template creation per UTC day.
-    # 限制每个 UTC 日的自动目标探测与持久模板创建，避免异常客户端制造模板洪泛。
-    max_validation_attempts_per_day: 100
-    max_validation_attempts_per_owner_per_day: 5
-    max_verified_profiles_per_day: 50
-    # Create a verified profile after replay and all target probes pass.
-    # 仅自动创建模板，不会自动绑定账号、Router 或随机池。
-    auto_create_verified: true
-
 # =============================================================================
 # WebAuthn / Passkey 配置
 # =============================================================================

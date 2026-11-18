@@ -1,6 +1,7 @@
 package live
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -85,7 +86,7 @@ func (s *Service) ProxyLiveSideband(
 				errCh <- readErr
 				return
 			}
-			if messageType == TextFrame {
+			if messageType == TextFrame || messageType == BinaryFrame && bytes.HasPrefix(bytes.TrimSpace(payload), []byte("{")) {
 				rewritten, clientModel, internalModels, rewriteErr := provider.Rewrite(proxyCtx, payload)
 				if rewriteErr != nil {
 					errCh <- rewriteErr

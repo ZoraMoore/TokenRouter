@@ -23,6 +23,8 @@ func (t cnTestTarget) Information() provider.TestTargetInfo {
 
 func (t cnTestTarget) Execute(ctx context.Context, request provider.PreparedTestRequest, sink provider.TestEventSink) error {
 	run := NewTestRun(ctx, make(http.Header), sink)
+	run.FullAnswer = request.FullAnswer
+	run.SVGAnswer = request.SVGAnswer
 	run.Automatic = request.Automatic
 	run.Headers.Set("User-Agent", request.UserAgent)
 	defer run.Cancel()
@@ -32,7 +34,11 @@ func (t cnTestTarget) Execute(ctx context.Context, request provider.PreparedTest
 		// 管理员选定协议时只验证该端点，未选定时依次验证全部已启用协议。
 		err = t.executor.ExecuteAdaptive(run, t.record, request.Model, request.Prompt, provider.TestProtocolID(request.Protocol))
 	case provider.TestRouteCNResponses:
-		err = t.executor.Responses.Execute(run, t.record, request.Model, request.Prompt, request.Mode, request.TestType)
+		if run.FullAnswer {
+			err = t.executor.Execute(run, t.record, request.Model, request.Prompt)
+		} else {
+			err = t.executor.Responses.Execute(run, t.record, request.Model, request.Prompt, request.Mode, request.TestType)
+		}
 	default:
 		err = t.executor.Execute(run, t.record, request.Model, request.Prompt)
 	}

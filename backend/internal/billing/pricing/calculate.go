@@ -64,18 +64,18 @@ func NormalizedFastModeMultiplier(pricing *ModelPricing) (float64, bool) {
 	return *configured, true
 }
 
-// ConfiguredServiceTierMultiplier 返回价卡显式层级倍率；未配置时沿用官方默认倍率。
+// ConfiguredServiceTierMultiplier 按最终档位取倍率。UltraFast 按标准 token 单价的 6 倍收费。
 func ConfiguredServiceTierMultiplier(serviceTier string, pricing *ModelPricing) float64 {
-	if pricing != nil {
-		switch NormalizeBillingServiceTier(serviceTier) {
-		case "priority", "fast":
-			if multiplier, configured := NormalizedFastModeMultiplier(pricing); configured {
-				return multiplier
-			}
-		case "flex":
-			if pricing.FlexMultiplier != nil {
-				return *pricing.FlexMultiplier
-			}
+	switch NormalizeBillingServiceTier(serviceTier) {
+	case OpenAIFastTierUltrafast:
+		return 6
+	case OpenAIFastTierPriority, "fast":
+		if multiplier, configured := NormalizedFastModeMultiplier(pricing); configured {
+			return multiplier
+		}
+	case "flex":
+		if pricing != nil && pricing.FlexMultiplier != nil {
+			return *pricing.FlexMultiplier
 		}
 	}
 	return 1

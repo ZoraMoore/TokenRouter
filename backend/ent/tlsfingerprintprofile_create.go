@@ -12,7 +12,6 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/TokenFlux/TokenRouter/ent/tlsfingerprintprofile"
-	"github.com/TokenFlux/TokenRouter/internal/egress"
 )
 
 // TLSFingerprintProfileCreate is the builder for creating a TLSFingerprintProfile entity.
@@ -145,20 +144,6 @@ func (_c *TLSFingerprintProfileCreate) SetExtensions(v []uint16) *TLSFingerprint
 	return _c
 }
 
-// SetVerification sets the "verification" field.
-func (_c *TLSFingerprintProfileCreate) SetVerification(v egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileCreate {
-	_c.mutation.SetVerification(v)
-	return _c
-}
-
-// SetNillableVerification sets the "verification" field if the given value is not nil.
-func (_c *TLSFingerprintProfileCreate) SetNillableVerification(v *egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileCreate {
-	if v != nil {
-		_c.SetVerification(*v)
-	}
-	return _c
-}
-
 // Mutation returns the TLSFingerprintProfileMutation object of the builder.
 func (_c *TLSFingerprintProfileCreate) Mutation() *TLSFingerprintProfileMutation {
 	return _c.mutation
@@ -206,10 +191,6 @@ func (_c *TLSFingerprintProfileCreate) defaults() {
 		v := tlsfingerprintprofile.DefaultEnableGrease
 		_c.mutation.SetEnableGrease(v)
 	}
-	if _, ok := _c.mutation.Verification(); !ok {
-		v := tlsfingerprintprofile.DefaultVerification
-		_c.mutation.SetVerification(v)
-	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -230,9 +211,6 @@ func (_c *TLSFingerprintProfileCreate) check() error {
 	}
 	if _, ok := _c.mutation.EnableGrease(); !ok {
 		return &ValidationError{Name: "enable_grease", err: errors.New(`ent: missing required field "TLSFingerprintProfile.enable_grease"`)}
-	}
-	if _, ok := _c.mutation.Verification(); !ok {
-		return &ValidationError{Name: "verification", err: errors.New(`ent: missing required field "TLSFingerprintProfile.verification"`)}
 	}
 	return nil
 }
@@ -320,10 +298,6 @@ func (_c *TLSFingerprintProfileCreate) createSpec() (*TLSFingerprintProfile, *sq
 	if value, ok := _c.mutation.Extensions(); ok {
 		_spec.SetField(tlsfingerprintprofile.FieldExtensions, field.TypeJSON, value)
 		_node.Extensions = value
-	}
-	if value, ok := _c.mutation.Verification(); ok {
-		_spec.SetField(tlsfingerprintprofile.FieldVerification, field.TypeJSON, value)
-		_node.Verification = value
 	}
 	return _node, _spec
 }
@@ -608,18 +582,6 @@ func (u *TLSFingerprintProfileUpsert) UpdateExtensions() *TLSFingerprintProfileU
 // ClearExtensions clears the value of the "extensions" field.
 func (u *TLSFingerprintProfileUpsert) ClearExtensions() *TLSFingerprintProfileUpsert {
 	u.SetNull(tlsfingerprintprofile.FieldExtensions)
-	return u
-}
-
-// SetVerification sets the "verification" field.
-func (u *TLSFingerprintProfileUpsert) SetVerification(v egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileUpsert {
-	u.Set(tlsfingerprintprofile.FieldVerification, v)
-	return u
-}
-
-// UpdateVerification sets the "verification" field to the value that was provided on create.
-func (u *TLSFingerprintProfileUpsert) UpdateVerification() *TLSFingerprintProfileUpsert {
-	u.SetExcluded(tlsfingerprintprofile.FieldVerification)
 	return u
 }
 
@@ -938,20 +900,6 @@ func (u *TLSFingerprintProfileUpsertOne) UpdateExtensions() *TLSFingerprintProfi
 func (u *TLSFingerprintProfileUpsertOne) ClearExtensions() *TLSFingerprintProfileUpsertOne {
 	return u.Update(func(s *TLSFingerprintProfileUpsert) {
 		s.ClearExtensions()
-	})
-}
-
-// SetVerification sets the "verification" field.
-func (u *TLSFingerprintProfileUpsertOne) SetVerification(v egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileUpsertOne {
-	return u.Update(func(s *TLSFingerprintProfileUpsert) {
-		s.SetVerification(v)
-	})
-}
-
-// UpdateVerification sets the "verification" field to the value that was provided on create.
-func (u *TLSFingerprintProfileUpsertOne) UpdateVerification() *TLSFingerprintProfileUpsertOne {
-	return u.Update(func(s *TLSFingerprintProfileUpsert) {
-		s.UpdateVerification()
 	})
 }
 
@@ -1436,20 +1384,6 @@ func (u *TLSFingerprintProfileUpsertBulk) UpdateExtensions() *TLSFingerprintProf
 func (u *TLSFingerprintProfileUpsertBulk) ClearExtensions() *TLSFingerprintProfileUpsertBulk {
 	return u.Update(func(s *TLSFingerprintProfileUpsert) {
 		s.ClearExtensions()
-	})
-}
-
-// SetVerification sets the "verification" field.
-func (u *TLSFingerprintProfileUpsertBulk) SetVerification(v egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileUpsertBulk {
-	return u.Update(func(s *TLSFingerprintProfileUpsert) {
-		s.SetVerification(v)
-	})
-}
-
-// UpdateVerification sets the "verification" field to the value that was provided on create.
-func (u *TLSFingerprintProfileUpsertBulk) UpdateVerification() *TLSFingerprintProfileUpsertBulk {
-	return u.Update(func(s *TLSFingerprintProfileUpsert) {
-		s.UpdateVerification()
 	})
 }
 

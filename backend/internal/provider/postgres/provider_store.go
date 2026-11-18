@@ -15,13 +15,14 @@ const postgresParameterBatchSize = 50000
 
 // ProviderStoreOptions 提供数据转换、事件写入和时钟配置。
 type ProviderStoreOptions struct {
-	Events         ProviderEvents
-	OllamaIdentity func(*providercore.Record) bool
-	Group          func(*dbent.Group) *accessview.GroupConfig
-	Proxy          func(*dbent.Proxy) *egress.Proxy
-	Observe        func(string, ...any)
-	Now            func() time.Time
-	LoadLocation   func(string) (*time.Location, error)
+	Events                    ProviderEvents
+	OllamaIdentity            func(*providercore.Record) bool
+	Group                     func(*dbent.Group) *accessview.GroupConfig
+	Proxy                     func(*dbent.Proxy) *egress.Proxy
+	Observe                   func(string, ...any)
+	Now                       func() time.Time
+	LoadLocation              func(string) (*time.Location, error)
+	OpenAIOAuthModelWhitelist providercore.OpenAIOAuthModelPolicyReader
 }
 type ProviderStore struct {
 	client  *dbent.Client
@@ -68,6 +69,7 @@ func (r *ProviderStore) recordFromEntity(entity *dbent.Provider) *providercore.R
 	if value != nil {
 		value.Now = r.options.Now
 		value.LoadLocation = r.options.LoadLocation
+		value.OpenAIOAuthModelWhitelist = r.options.OpenAIOAuthModelWhitelist
 	}
 	return value
 }

@@ -43462,7 +43462,6 @@ type TLSFingerprintProfileMutation struct {
 	appendpsk_modes                 []uint16
 	extensions                      *[]uint16
 	appendextensions                []uint16
-	verification                    *egress.TLSFingerprintProfileVerification
 	clearedFields                   map[string]struct{}
 	done                            bool
 	oldValue                        func(context.Context) (*TLSFingerprintProfile, error)
@@ -44410,42 +44409,6 @@ func (m *TLSFingerprintProfileMutation) ResetExtensions() {
 	delete(m.clearedFields, tlsfingerprintprofile.FieldExtensions)
 }
 
-// SetVerification sets the "verification" field.
-func (m *TLSFingerprintProfileMutation) SetVerification(efpv egress.TLSFingerprintProfileVerification) {
-	m.verification = &efpv
-}
-
-// Verification returns the value of the "verification" field in the mutation.
-func (m *TLSFingerprintProfileMutation) Verification() (r egress.TLSFingerprintProfileVerification, exists bool) {
-	v := m.verification
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldVerification returns the old "verification" field's value of the TLSFingerprintProfile entity.
-// If the TLSFingerprintProfile object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TLSFingerprintProfileMutation) OldVerification(ctx context.Context) (v egress.TLSFingerprintProfileVerification, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldVerification is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldVerification requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldVerification: %w", err)
-	}
-	return oldValue.Verification, nil
-}
-
-// ResetVerification resets all changes to the "verification" field.
-func (m *TLSFingerprintProfileMutation) ResetVerification() {
-	m.verification = nil
-}
-
 // Where appends a list predicates to the TLSFingerprintProfileMutation builder.
 func (m *TLSFingerprintProfileMutation) Where(ps ...predicate.TLSFingerprintProfile) {
 	m.predicates = append(m.predicates, ps...)
@@ -44480,7 +44443,7 @@ func (m *TLSFingerprintProfileMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TLSFingerprintProfileMutation) Fields() []string {
-	fields := make([]string, 0, 16)
+	fields := make([]string, 0, 15)
 	if m.created_at != nil {
 		fields = append(fields, tlsfingerprintprofile.FieldCreatedAt)
 	}
@@ -44526,9 +44489,6 @@ func (m *TLSFingerprintProfileMutation) Fields() []string {
 	if m.extensions != nil {
 		fields = append(fields, tlsfingerprintprofile.FieldExtensions)
 	}
-	if m.verification != nil {
-		fields = append(fields, tlsfingerprintprofile.FieldVerification)
-	}
 	return fields
 }
 
@@ -44567,8 +44527,6 @@ func (m *TLSFingerprintProfileMutation) Field(name string) (ent.Value, bool) {
 		return m.PskModes()
 	case tlsfingerprintprofile.FieldExtensions:
 		return m.Extensions()
-	case tlsfingerprintprofile.FieldVerification:
-		return m.Verification()
 	}
 	return nil, false
 }
@@ -44608,8 +44566,6 @@ func (m *TLSFingerprintProfileMutation) OldField(ctx context.Context, name strin
 		return m.OldPskModes(ctx)
 	case tlsfingerprintprofile.FieldExtensions:
 		return m.OldExtensions(ctx)
-	case tlsfingerprintprofile.FieldVerification:
-		return m.OldVerification(ctx)
 	}
 	return nil, fmt.Errorf("unknown TLSFingerprintProfile field %s", name)
 }
@@ -44723,13 +44679,6 @@ func (m *TLSFingerprintProfileMutation) SetField(name string, value ent.Value) e
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetExtensions(v)
-		return nil
-	case tlsfingerprintprofile.FieldVerification:
-		v, ok := value.(egress.TLSFingerprintProfileVerification)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetVerification(v)
 		return nil
 	}
 	return fmt.Errorf("unknown TLSFingerprintProfile field %s", name)
@@ -44893,9 +44842,6 @@ func (m *TLSFingerprintProfileMutation) ResetField(name string) error {
 		return nil
 	case tlsfingerprintprofile.FieldExtensions:
 		m.ResetExtensions()
-		return nil
-	case tlsfingerprintprofile.FieldVerification:
-		m.ResetVerification()
 		return nil
 	}
 	return fmt.Errorf("unknown TLSFingerprintProfile field %s", name)

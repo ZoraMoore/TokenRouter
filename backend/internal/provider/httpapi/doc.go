@@ -11,5 +11,5 @@
 //   - codex_import.go、codex_invite_reset.go、crs.go：导入 Codex 凭据并处理邀请和 CRS 操作。
 //   - oauth_usage.go、ollama_usage.go、upstream_usage.go：查询授权账户和上游用量。
 //   - runtime_settings.go、routes_settings.go、routes_admin.go：读取运行设置并注册路由。
-//   - test_handler.go、test_events.go、scheduled_plans.go：执行连接测试、输出事件并管理测试计划。
+//   - test_handler.go、iq_test_handler.go、test_events.go、scheduled_plans.go：执行连接测试、账号智商测试并管理测试计划。
 package httpapi

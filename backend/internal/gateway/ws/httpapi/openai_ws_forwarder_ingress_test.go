@@ -657,7 +657,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 	captureConn := &openAIWSCaptureConn{
 		events: [][]byte{
 			[]byte(`{"type":"response.output_item.done","item":{"id":"ig_ingress_1","type":"image_generation_call","status":"generating","result":"iVBORw0KGgoAAAANSUhEUg/+=="}}`),
-			[]byte(`{"type":"response.completed","response":{"id":"resp_ingress_turn_1","model":"upstream-turn-1","usage":{"input_tokens":1,"output_tokens":1}}}`),
+			[]byte(`{"type":"response.completed","response":{"id":"resp_ingress_turn_1","model":"upstream-turn-1","service_tier":"ultrafast","usage":{"input_tokens":1,"output_tokens":1}}}`),
 			[]byte(`{"type":"response.completed","response":{"id":"resp_ingress_turn_2","model":"upstream-turn-2","usage":{"input_tokens":1,"output_tokens":1}}}`),
 		},
 	}
@@ -691,7 +691,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 	}
 
 	serverErrCh := make(chan error, 1)
-	turnTerminalCh := make(chan string, 2)
+	turnResults := make(chan *forwardcore.OpenAIResult, 2)
 	turnEffortCh := make(chan string, 1)
 	routingCalls := make([]string, 0, 2)
 	hooks := &ws.OpenAIIngressHooks{
@@ -710,7 +710,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 			result := capture.Result
 			turnErr := capture.Err
 			if turnErr == nil && result != nil {
-				turnTerminalCh <- result.UpstreamTerminalEvent
+				turnResults <- result
 				if result.ReasoningEffort != nil {
 					turnEffortCh <- *result.ReasoningEffort
 				}
@@ -789,8 +789,11 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 	require.Equal(t, "response.completed", gjson.GetBytes(secondTurnEvent, "type").String())
 	require.Equal(t, "resp_ingress_turn_2", gjson.GetBytes(secondTurnEvent, "response.id").String())
 	require.Equal(t, "client-turn-2", gjson.GetBytes(secondTurnEvent, "response.model").String())
-	require.Equal(t, "response.completed", <-turnTerminalCh, "首轮 turn 应保留成功终态")
-	require.Equal(t, "response.completed", <-turnTerminalCh, "第二轮 turn 应保留成功终态")
+	firstResult, secondResult := <-turnResults, <-turnResults
+	require.Equal(t, "response.completed", firstResult.UpstreamTerminalEvent)
+	require.Equal(t, "response.completed", secondResult.UpstreamTerminalEvent)
+	require.Equal(t, "ultrafast", firstResult.UpstreamResponseServiceTier)
+	require.Empty(t, secondResult.UpstreamResponseServiceTier)
 	require.Equal(t, "max", <-turnEffortCh, "WS v2 应记录第三方模型显式 max")
 
 	_ = clientConn.Close(websocket.StatusNormalClosure, "done")
@@ -7524,6 +7527,51 @@ func TestPassthroughLifecycle_LeaseLossSendsRetryClose(t *testing.T) {
 	case <-serverErr:
 	case <-time.After(3 * time.Second):
 		t.Fatal("passthrough lease-loss reader did not exit")
+	}
+}
+
+// TestPassthroughLifecycleResponseTierPerTurn 检查直连上游时，每轮结算只使用本轮的请求和终态。
+func TestPassthroughLifecycleResponseTierPerTurn(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	upstream := newStagedPassthroughConn()
+	turns := make(chan ws.OpenAITurnCapture, 2)
+	service := newPassthroughLifecycleService(passthroughLifecycleConfig(), upstream)
+	server, _ := startPassthroughLifecycleServerWithHooks(t, ctx, service, passthroughLifecycleProvider(), func(*gin.Context) *ws.OpenAIIngressHooks {
+		return &ws.OpenAIIngressHooks{AfterTurn: func(capture ws.OpenAITurnCapture) { turns <- capture }}
+	})
+	defer server.Close()
+	conn := dialPassthroughLifecycleClient(t, server)
+	defer func() { _ = conn.CloseNow() }()
+
+	for i, expected := range []string{"ultrafast", ""} {
+		if i == 1 {
+			err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"response.create","model":"gpt-5.1","service_tier":"flex"}`))
+			require.NoError(t, err)
+		}
+		body := requirePassthroughUpstreamWrite(t, upstream, time.Second)
+		id := fmt.Sprintf("resp_tier_%d", i)
+		upstream.Send(fmt.Sprintf(`{"type":"response.created","response":{"id":%q,"model":"gpt-5.1","service_tier":"priority"}}`, id))
+		upstream.Send(fmt.Sprintf(`{"type":"response.completed","response":{"id":%q,"service_tier":%q,"usage":{"input_tokens":2,"output_tokens":1}}}`, id, expected))
+		for range 2 {
+			_, err := readPassthroughLifecycleFrame(t, conn, time.Second)
+			require.NoError(t, err)
+		}
+		select {
+		case turn := <-turns:
+			require.NoError(t, turn.Err)
+			require.NotNil(t, turn.Result)
+			require.Equal(t, expected, turn.Result.UpstreamResponseServiceTier)
+			if i == 0 {
+				require.False(t, gjson.GetBytes(body, "service_tier").Exists())
+				require.Nil(t, turn.Result.ServiceTier)
+			} else {
+				require.Equal(t, "flex", gjson.GetBytes(body, "service_tier").String())
+				require.Equal(t, "flex", *turn.Result.ServiceTier)
+			}
+		case <-ctx.Done():
+			t.Fatal("未收到本轮上游结果")
+		}
 	}
 }
 

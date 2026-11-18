@@ -187,7 +187,7 @@ func (s *RequestNormalizer) Normalize(ctx context.Context, raw []byte, applyUser
 	// 所有 WebSocket turn 在此应用与 HTTP 相同的 Fast 评估、规范化和适用范围规则。
 	// 首轮需要 model，后续省略时使用 s.State.OriginalModel。策略评估前写入上游模型，供白名单和 filter 使用。
 	policyCtx := ctx
-	policyApplied, blocked, policyErr := p.FastPolicy(policyCtx, turn, upstreamModel, normalized, true)
+	policyApplied, blocked, policyErr := p.FramePolicy(policyCtx, turn, upstreamModel, normalized, true)
 	if policyErr != nil {
 		return ClientPayload{}, p.CloseError(1008, "invalid websocket request payload", policyErr)
 	}

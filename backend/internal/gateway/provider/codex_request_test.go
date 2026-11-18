@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -12,6 +13,61 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/routing/capability"
 	"github.com/TokenFlux/TokenRouter/internal/upstream/openai"
 )
+
+func TestCheckOpenAIOAuthRequestModels(t *testing.T) {
+	ctx := context.Background()
+	global := providercore.NewOpenAIOAuthModelPolicy([]string{"gpt-text", "gpt-image-allowed"})
+	target := &ExecutionProvider{Record: providercore.Record{
+		Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeOAuth,
+		OpenAIOAuthModelWhitelist: func(context.Context) (providercore.OpenAIOAuthModelPolicy, error) { return global, nil },
+	}}
+	for _, tc := range []struct {
+		final, body string
+		allow       bool
+	}{
+		{"", `{"model":"gpt-text","tools":[{"type":"image_generation","model":"gpt-image-allowed"}]}`, true},
+		{"", `{"model":"GPT-TEXT"}`, false},
+		{"gpt-text", `{"type":"response.create"}`, true},
+		{"gpt-text", `{"type":"response.create","model":"public-alias"}`, false},
+		{"", `{"model":"gpt-text","model":"another"}`, false},
+		{"", `{"model":"gpt-text","tools":[{"type":"function","name":"run","model":"example"}]}`, true},
+		{"", `{"model":"gpt-text","tools":[{"type":"image_generation"}]}`, false},
+		{"", `{"model":"gpt-text","tool_choice":{"type":"image_generation"}}`, false},
+		{"", `{"model":"gpt-text","tools":[{"type":"image_generation"},{"type":"image_generation","model":"other"}]}`, false},
+		{"gpt-text", `{"type":"session.update","session":{"tools":[{"type":"image_generation","model":"other"}]}}`, false},
+		{"", `{"model":"gpt-text","input":[{"type":"additional_tools","tools":[{"type":"image_generation","model":"other"}]}]}`, false},
+	} {
+		err := CheckOpenAIOAuthRequestModels(ctx, target, tc.final, []byte(tc.body))
+		require.Equal(t, tc.allow, err == nil, tc.body)
+	}
+	global = providercore.NewOpenAIOAuthModelPolicy([]string{"gpt-text", "gpt-image-allowed", "gpt-image-2"})
+	target.Record.Credentials = map[string]any{"model_whitelist": []string{"gpt-text", "gpt-image-allowed"}}
+	require.ErrorIs(t, CheckOpenAIOAuthRequestModels(ctx, target, "gpt-text", []byte(`{"tools":[{"type":"image_generation"}]}`)), providercore.ErrOpenAIOAuthModelNotAllowed)
+	require.ErrorIs(t, CheckOpenAIOAuthRequestModels(ctx, target, "gpt-image-2", nil), providercore.ErrOpenAIOAuthModelNotAllowed)
+	target.Record.Credentials["model_whitelist"] = []string{"gpt-text", "gpt-image-2"}
+	require.ErrorIs(t, CheckOpenAIOAuthRequestModels(ctx, target, "gpt-text", []byte(`{"tools":[{"type":"image_generation","model":"gpt-image-allowed"}]}`)), providercore.ErrOpenAIOAuthModelNotAllowed)
+	require.NoError(t, CheckOpenAIOAuthRequestModels(ctx, target, "gpt-text", []byte(`{"tools":[{"type":"image_generation"}]}`)))
+	target.Record.Type = capability.ProviderTypeAPIKey
+	require.NoError(t, CheckOpenAIOAuthRequestModels(ctx, target, "", []byte(`{"model":"another"}`)))
+}
+
+func TestOpenAIModelSessionRechecksInheritedTools(t *testing.T) {
+	global := providercore.OpenAIOAuthModelPolicy{}
+	target := &ExecutionProvider{Record: providercore.Record{
+		Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeOAuth,
+		OpenAIOAuthModelWhitelist: func(context.Context) (providercore.OpenAIOAuthModelPolicy, error) { return global, nil },
+	}}
+	session := OpenAIModelSession{}
+	check := func(body string) error { return session.CheckFrame(t.Context(), target, "gpt-text", []byte(body)) }
+	require.NoError(t, check(`{"type":"session.update","session":{"tools":[{"type":"image_generation"}]}}`))
+	global = providercore.NewOpenAIOAuthModelPolicy([]string{"gpt-text"})
+	require.ErrorIs(t, check(`{"type":"response.create","response":{}}`), providercore.ErrOpenAIOAuthModelNotAllowed)
+	require.NoError(t, check(`{"type":"response.create","response":{"tools":[]}}`))
+	require.ErrorIs(t, check(`{"type":"response.create"}`), providercore.ErrOpenAIOAuthModelNotAllowed)
+	require.NoError(t, check(`{"type":"session.update","session":{"tools":[]}}`))
+	require.NoError(t, check(`{"type":"response.create"}`))
+	require.ErrorIs(t, check(`{"type":"response.create","response":{"model":"gpt-forbidden"}}`), providercore.ErrOpenAIOAuthModelNotAllowed)
+}
 
 func TestApplyCodexOAuthTransform_ToolContinuationPreservesInput(t *testing.T) {
 	// 续链场景：保留 item_reference 与 id，但不再强制 store=true。

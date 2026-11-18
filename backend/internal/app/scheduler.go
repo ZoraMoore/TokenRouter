@@ -28,13 +28,13 @@ type schedulerSharedState struct {
 	Sticky     *scheduler.StickyStats
 }
 
-func provideSchedulerCache(rdb *redis.Client, cfg *config.Config) *schedulerredis.SnapshotCache {
+func provideSchedulerCache(rdb *redis.Client, cfg *config.Config, settings *provider.RuntimeSettings) *schedulerredis.SnapshotCache {
 	options := schedulerredis.SnapshotCacheOptions{}
 	if cfg != nil {
 		options.MGetChunkSize = cfg.Gateway.Scheduling.SnapshotMGetChunkSize
 		options.WriteChunkSize = cfg.Gateway.Scheduling.SnapshotWriteChunkSize
 	}
-	return schedulerredis.NewSnapshotCache(rdb, codec.ProviderCodec{}, options)
+	return schedulerredis.NewSnapshotCache(rdb, codec.ProviderCodec{OpenAIOAuthModelWhitelist: settings.OpenAIOAuthModelWhitelistSnapshot}, options)
 }
 
 func provideSchedulerSnapshot(cache scheduler.SnapshotCache, outbox scheduler.SchedulerOutboxRepository, providers *providerpostgres.ProviderStore, groups *routingpostgres.GroupStore, cfg *config.Config) *scheduler.SnapshotService {

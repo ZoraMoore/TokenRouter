@@ -45,7 +45,7 @@ type PassthroughPort interface {
 	AliasTools([]byte) ([]byte, error)
 	Compatibility([]byte, bool) ([]byte, bool, error)
 	ScopeIdentity([]byte) ([]byte, bool, error)
-	FastPolicy(context.Context, int, string, []byte, bool) ([]byte, *PolicyBlocked, error)
+	FramePolicy(context.Context, int, string, []byte, bool) ([]byte, *PolicyBlocked, error)
 	PromptReplace(context.Context, []byte) []byte
 	BlockedEvent(*PolicyBlocked) []byte
 	PolicyDenied()

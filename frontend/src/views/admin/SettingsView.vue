@@ -244,6 +244,51 @@
             </SettingsSection>
           </SettingsCard>
 
+          <SettingsCard
+            v-show="activeGatewaySection === 'openai'" v-content-reveal="activeGatewaySection === 'openai'"
+            data-testid="gateway-card-openai-oauth-model-whitelist"
+            :title="t('admin.settings.openaiOAuthModelWhitelist.title')"
+            :description="t('admin.settings.openaiOAuthModelWhitelist.description')"
+          >
+            <ContentSkeleton v-if="openAIOAuthWhitelistLoading" variant="form" :rows="2" />
+            <SettingsSection v-else-if="openAIOAuthWhitelistLoadError">
+              <SettingsNotice tone="error">{{ openAIOAuthWhitelistLoadError }}</SettingsNotice>
+              <button type="button" class="btn btn-secondary btn-sm" @click="loadOpenAIOAuthModelWhitelist">
+                {{ t('common.retry') }}
+              </button>
+            </SettingsSection>
+            <SettingsSection v-else>
+              <div>
+                <label for="openai-oauth-model-ids" class="input-label">{{ t('admin.settings.openaiOAuthModelWhitelist.modelIDs') }}</label>
+                <textarea
+                  id="openai-oauth-model-ids"
+                  v-model="openAIOAuthWhitelistText"
+                  class="input w-full resize-y font-mono"
+                  rows="7"
+                  spellcheck="false"
+                  autocapitalize="none"
+                  :disabled="saving || discarding"
+                  :aria-invalid="!!openAIOAuthWhitelistValidation"
+                  aria-describedby="openai-oauth-models-hint openai-oauth-models-error"
+                ></textarea>
+                <p id="openai-oauth-models-hint" class="input-hint">{{ t('admin.settings.openaiOAuthModelWhitelist.inputHint') }}</p>
+                <p id="openai-oauth-models-error" aria-live="polite" class="text-sm text-red-600 dark:text-red-400">
+                  {{ openAIOAuthWhitelistValidation }}
+                </p>
+              </div>
+              <div v-if="!openAIOAuthWhitelistConfigured" class="flex flex-wrap items-center justify-between gap-3">
+                <p class="input-hint">{{ t('admin.settings.openaiOAuthModelWhitelist.presetHint') }}</p>
+                <button
+                  v-if="!isSettingsDirty('openAIOAuthModelWhitelist')"
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  data-testid="openai-oauth-use-preset"
+                  @click="useOpenAIOAuthPreset = true"
+                >{{ t('admin.settings.openaiOAuthModelWhitelist.usePreset') }}</button>
+              </div>
+            </SettingsSection>
+          </SettingsCard>
+
           <!-- OpenAI OAuth 403 冷却 -->
           <SettingsCard
             v-show="activeGatewaySection === 'openai'" v-content-reveal="activeGatewaySection === 'openai'"
@@ -5336,6 +5381,7 @@ import SettingsSection from "@/components/common/settings/SettingsSection.vue";
 import SettingsSegmented, { type SettingsSegmentedOption } from "@/components/common/settings/SettingsSegmented.vue";
 import SettingsSubpanel from "@/components/common/settings/SettingsSubpanel.vue";
 import SettingsTagInput from "@/components/common/settings/SettingsTagInput.vue";
+import { isValidOpenAIModelID } from "@/utils/modelMappingRules";
 import { useDirtyTracker } from "@/composables/useDirtyTracker";
 import { provideSettingsSaveRegistry, type SettingsSaveTarget } from "@/composables/useSettingsSaveRegistry";
 import type { CustomMenuItem, CustomEndpoint, FooterLinkGroup } from "@/types";
@@ -5359,6 +5405,7 @@ import {
 } from "@/api/admin/settings";
 import type {
   AuthSourceDefaultsState,
+  OpenAIOAuthModelWhitelist,
   AuthSourceType,
   SystemSettings,
   UpdateSettingsRequest,
@@ -5704,6 +5751,24 @@ const openAI403CooldownForm = reactive({
   error_on_threshold_enabled: true,
   threshold_count: 3,
   threshold_window_minutes: 180,
+});
+
+const openAIOAuthWhitelistText = ref("");
+const openAIOAuthWhitelistConfigured = ref(false);
+const useOpenAIOAuthPreset = ref(false);
+const openAIOAuthWhitelistLoading = ref(true);
+const openAIOAuthWhitelistLoadError = ref("");
+// 每行一个最终模型 ID，读写时保留数字、大小写和供应商前缀。
+const openAIOAuthWhitelistModels = computed(() =>
+  openAIOAuthWhitelistText.value.split(/\r?\n/).map((line) => line.replace(/^ +| +$/g, "")).filter(Boolean),
+);
+const openAIOAuthWhitelistValidation = computed(() => {
+  const models = openAIOAuthWhitelistModels.value;
+  if (!models.length || models.length > 256) return t("admin.settings.openaiOAuthModelWhitelist.invalidCount");
+  if (models.some((id) => !isValidOpenAIModelID(id))) {
+    return t("admin.settings.openaiOAuthModelWhitelist.invalidID");
+  }
+  return "";
 });
 
 // Rate Limit Cooldown (429) 状态
@@ -7946,6 +8011,7 @@ const { isDirty: isSettingsDirty, markClean: markSettingsClean } = useDirtyTrack
   }),
   overloadCooldown: () => overloadCooldownForm,
   openAI403Cooldown: () => openAI403CooldownForm,
+  openAIOAuthModelWhitelist: () => [openAIOAuthWhitelistText.value, useOpenAIOAuthPreset.value],
   rateLimit429Cooldown: () => rateLimit429CooldownForm,
   streamTimeout: () => streamTimeoutForm,
   rectifier: () => rectifierForm,
@@ -7967,6 +8033,7 @@ const settingsSaveTargets: Array<[string, SettingsSaveTarget]> = [
   ],
   ["overloadCooldown", { dirty: computed(() => isSettingsDirty("overloadCooldown")), save: saveOverloadCooldownSettings, discard: loadOverloadCooldownSettings }],
   ["openAI403Cooldown", { dirty: computed(() => isSettingsDirty("openAI403Cooldown")), save: saveOpenAI403CooldownSettings, discard: loadOpenAI403CooldownSettings }],
+  ["openAIOAuthModelWhitelist", { dirty: computed(() => isSettingsDirty("openAIOAuthModelWhitelist")), save: saveOpenAIOAuthModelWhitelist, discard: loadOpenAIOAuthModelWhitelist }],
   ["rateLimit429Cooldown", { dirty: computed(() => isSettingsDirty("rateLimit429Cooldown")), save: saveRateLimit429CooldownSettings, discard: loadRateLimit429CooldownSettings }],
   ["streamTimeout", { dirty: computed(() => isSettingsDirty("streamTimeout")), save: saveStreamTimeoutSettings, discard: loadStreamTimeoutSettings }],
   ["rectifier", { dirty: computed(() => isSettingsDirty("rectifier")), save: saveRectifierSettings, discard: loadRectifierSettings }],
@@ -8889,6 +8956,41 @@ async function saveOverloadCooldownSettings(): Promise<boolean> {
   }
 }
 
+// 首次读取也会返回内置模型。只有保存这一项才会将其应用到已有账号。
+function applyOpenAIOAuthModelWhitelist(settings: OpenAIOAuthModelWhitelist) {
+  openAIOAuthWhitelistText.value = settings.models.join("\n");
+  openAIOAuthWhitelistConfigured.value = settings.configured;
+  useOpenAIOAuthPreset.value = false;
+  markSettingsClean("openAIOAuthModelWhitelist");
+}
+
+async function loadOpenAIOAuthModelWhitelist() {
+  openAIOAuthWhitelistLoading.value = true;
+  openAIOAuthWhitelistLoadError.value = "";
+  try {
+    applyOpenAIOAuthModelWhitelist(await adminAPI.settings.getOpenAIOAuthModelWhitelist());
+  } catch (error) {
+    openAIOAuthWhitelistLoadError.value = extractApiErrorMessage(error, t("admin.settings.openaiOAuthModelWhitelist.loadFailed"));
+  } finally {
+    openAIOAuthWhitelistLoading.value = false;
+  }
+}
+
+async function saveOpenAIOAuthModelWhitelist(): Promise<boolean> {
+  if (openAIOAuthWhitelistValidation.value) {
+    appStore.showError(openAIOAuthWhitelistValidation.value);
+    return false;
+  }
+  try {
+    const models = [...new Set(openAIOAuthWhitelistModels.value)];
+    applyOpenAIOAuthModelWhitelist(await adminAPI.settings.updateOpenAIOAuthModelWhitelist(models));
+    return true;
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, t("admin.settings.openaiOAuthModelWhitelist.saveFailed")));
+    return false;
+  }
+}
+
 async function loadOpenAI403CooldownSettings() {
   openAI403CooldownLoading.value = true;
   try {
@@ -9731,6 +9833,7 @@ onMounted(() => {
   loadOllamaCloudUsageSettings();
   loadOverloadCooldownSettings();
   loadOpenAI403CooldownSettings();
+  loadOpenAIOAuthModelWhitelist();
   loadRateLimit429CooldownSettings();
   loadPanelRateLimitSettings();
   loadStreamTimeoutSettings();

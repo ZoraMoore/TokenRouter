@@ -60,6 +60,17 @@ func TestRecoveryPortOrderAndSingleRetry(t *testing.T) {
 			body := []byte(`{"model":"current","input":[{"type":"compaction_trigger"}],"stream":true}`)
 			in := Request{Explicit: true, RequestedModel: "client", Body: body}
 			failure := r.NewFailure(true, []byte(`{"error":{"code":"model_not_found"}}`), "model not found")
+			r.AllowRetryModel = func(model string) bool {
+				require.Equal(t, tc.fallback, model)
+				return false
+			}
+			unchanged, blockedModel, retry := r.ApplySignal(in, failure, p)
+			require.Equal(t, body, unchanged)
+			require.Empty(t, blockedModel)
+			require.False(t, retry)
+			require.Equal(t, tc.reads, p.calls)
+			p.calls = nil
+			r.AllowRetryModel = nil
 			result, model, ok := r.ApplySignal(in, failure, p)
 			require.True(t, ok)
 			require.Equal(t, tc.fallback, model)
@@ -68,7 +79,7 @@ func TestRecoveryPortOrderAndSingleRetry(t *testing.T) {
 			p.calls = nil
 			in.Body = result
 			in.AlreadyRetried = true
-			unchanged, _, retry := r.ApplySignal(in, failure, p)
+			unchanged, _, retry = r.ApplySignal(in, failure, p)
 			require.False(t, retry)
 			require.Equal(t, result, unchanged)
 			require.Empty(t, p.calls)

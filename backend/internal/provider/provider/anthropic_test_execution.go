@@ -41,8 +41,8 @@ func (s *AnthropicProviderTest) Execute(c *TestRun, value *providercore.Record, 
 		testModelID = claude.DefaultTestModel
 	}
 
-	// API Key 提供商测试连接时也需要应用通配符模型映射。
-	if value.Type == "apikey" {
+	// API Key 的连接测试和 OAuth 的测智题都按提供商配置解析模型名。
+	if value.Type == "apikey" || (c.FullAnswer && value.IsOAuth()) {
 		testModelID = mappedTestModel(value, testModelID)
 	}
 
@@ -87,9 +87,30 @@ func (s *AnthropicProviderTest) Execute(c *TestRun, value *providercore.Record, 
 	c.Begin(true)
 
 	// 所有类型复用原 Claude Code 测试报文。
-	payload, err := claude.TestPayloadWithPrompt(testModelID, prompt)
+	payload, err := c.claudeTestPayload(testModelID, prompt)
 	if err != nil {
 		return (TestStreamOutput{}).Error(c, "Failed to create test payload")
+	}
+	if c.IQMode != "" {
+		if c.IQMode == "modeltrace" {
+			delete(payload, "temperature")
+			payload["max_tokens"] = 4096
+			if !value.IsOAuth() {
+				delete(payload, "system")
+				delete(payload, "metadata")
+			}
+		}
+		switch c.ReasoningEffort {
+		case "":
+		case "none":
+			payload["thinking"] = map[string]string{"type": "disabled"}
+		case "low", "medium", "high", "xhigh", "max":
+			delete(payload, "temperature")
+			payload["thinking"] = map[string]string{"type": "adaptive"}
+			payload["output_config"] = map[string]string{"effort": c.ReasoningEffort}
+		default:
+			return providercore.ErrTestAnswerEffort
+		}
 	}
 	payloadBytes, _ := json.Marshal(payload)
 
@@ -135,6 +156,9 @@ func (s *AnthropicProviderTest) Execute(c *TestRun, value *providercore.Record, 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if c.FullAnswer {
+		return c.readAnswer(resp, answerClaude, payloadBytes)
+	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		errMsg := fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body))
@@ -160,7 +184,7 @@ func (s *AnthropicProviderTest) executeVertex(c *TestRun, ctx context.Context, v
 
 	c.Begin(true)
 
-	payload, err := claude.TestPayloadWithPrompt(testModelID, prompt)
+	payload, err := c.claudeTestPayload(testModelID, prompt)
 	if err != nil {
 		return (TestStreamOutput{}).Error(c, "Failed to create test payload")
 	}
@@ -204,6 +228,9 @@ func (s *AnthropicProviderTest) executeVertex(c *TestRun, ctx context.Context, v
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if c.FullAnswer {
+		return c.readAnswerForModel(resp, answerClaude, vertexBody, testModelID)
+	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		errMsg := fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body))
@@ -246,7 +273,7 @@ func (s *AnthropicProviderTest) ExecuteBedrock(c *TestRun, ctx context.Context, 
 				},
 			},
 		},
-		"max_tokens":  256,
+		"max_tokens":  c.tokenBudget(256),
 		"temperature": 1,
 	}
 	bedrockBody, _ := json.Marshal(bedrockPayload)
@@ -291,6 +318,9 @@ func (s *AnthropicProviderTest) ExecuteBedrock(c *TestRun, ctx context.Context, 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if c.FullAnswer {
+		return c.readAnswerForModel(resp, answerBedrock, bedrockBody, testModelID)
+	}
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
@@ -324,6 +354,15 @@ func (s *AnthropicProviderTest) applyUserAgent(req *http.Request) {
 	if agent := strings.TrimSpace(s.UserAgent); agent != "" {
 		req.Header.Set("User-Agent", agent)
 	}
+}
+
+// claudeTestPayload 为作答的思考和文字生成预留 token。
+func (c *TestRun) claudeTestPayload(modelID, prompt string) (map[string]any, error) {
+	payload, err := claude.TestPayloadWithPrompt(modelID, prompt)
+	if err == nil && c.FullAnswer {
+		payload["max_tokens"] = pelicanMaxTokens
+	}
+	return payload, err
 }
 
 func (s *AnthropicProviderTest) resolveTLSProfile(value *providercore.Record) *tlsfingerprint.Profile {

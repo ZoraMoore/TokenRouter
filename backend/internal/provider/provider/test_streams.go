@@ -336,6 +336,9 @@ func (s TestStreamOutput) SendEvent(c *TestRun, event providercore.TestEvent) {
 
 // Error 记录错误日志和事件，并返回错误文本。
 func (s TestStreamOutput) Error(c *TestRun, errorMsg string) error {
+	if c.FullAnswer {
+		return errAnswerUpstream
+	}
 	log.Printf("Provider test error: %s", errorMsg)
 	s.SendEvent(c, providercore.TestEvent{Type: "error", Error: errorMsg})
 	return fmt.Errorf("%s", errorMsg)

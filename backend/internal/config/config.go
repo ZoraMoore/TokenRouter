@@ -18,7 +18,6 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/TokenFlux/TokenRouter/internal/identity/authconfig"
-	"github.com/TokenFlux/TokenRouter/internal/pkg/authenticatedingress"
 	schedulerpolicy "github.com/TokenFlux/TokenRouter/internal/scheduler/policy"
 	ippolicy "github.com/TokenFlux/TokenRouter/internal/server/clientip/policy"
 	"github.com/TokenFlux/TokenRouter/internal/server/httpconfig"
@@ -343,20 +342,19 @@ type PricingConfig struct {
 }
 
 type ServerConfig struct {
-	TLSFingerprintAuthenticatedIngress TLSFingerprintAuthenticatedIngressConfig `mapstructure:"tls_fingerprint_authenticated_ingress"`
-	Host                               string                                   `mapstructure:"host"`
-	Port                               int                                      `mapstructure:"port"`
-	Mode                               string                                   `mapstructure:"mode"`                      // debug/release
-	EnableServerTiming                 bool                                     `mapstructure:"enable_server_timing"`      // 是否为管理端页面请求返回 Server-Timing
-	FrontendURL                        string                                   `mapstructure:"frontend_url"`              // 前端基础 URL，用于生成邮件中的外部链接
-	ReadHeaderTimeout                  int                                      `mapstructure:"read_header_timeout"`       // 读取请求头超时（秒）
-	MaxHeaderBytes                     int                                      `mapstructure:"max_header_bytes"`          // 请求头最大字节数（HTTP/2 映射为 header-list 上限）
-	IdleTimeout                        int                                      `mapstructure:"idle_timeout"`              // 空闲连接超时（秒）
-	TrustedProxies                     []string                                 `mapstructure:"trusted_proxies"`           // 可信代理列表（CIDR/IP）
-	TrustedProxiesConfigured           bool                                     `mapstructure:"-" json:"-" yaml:"-"`       // 是否显式配置了可信代理列表
-	MaxRequestBodySize                 int64                                    `mapstructure:"max_request_body_size"`     // 全局最大请求体限制
-	H2C                                H2CConfig                                `mapstructure:"h2c"`                       // HTTP/2 Cleartext 配置
-	TLSFingerprintCollector            TLSFingerprintCollectorConfig            `mapstructure:"tls_fingerprint_collector"` // TLS 指纹收集器配置
+	Host                     string                        `mapstructure:"host"`
+	Port                     int                           `mapstructure:"port"`
+	Mode                     string                        `mapstructure:"mode"`                      // debug/release
+	EnableServerTiming       bool                          `mapstructure:"enable_server_timing"`      // 是否为管理端页面请求返回 Server-Timing
+	FrontendURL              string                        `mapstructure:"frontend_url"`              // 前端基础 URL，用于生成邮件中的外部链接
+	ReadHeaderTimeout        int                           `mapstructure:"read_header_timeout"`       // 读取请求头超时（秒）
+	MaxHeaderBytes           int                           `mapstructure:"max_header_bytes"`          // 请求头最大字节数（HTTP/2 映射为 header-list 上限）
+	IdleTimeout              int                           `mapstructure:"idle_timeout"`              // 空闲连接超时（秒）
+	TrustedProxies           []string                      `mapstructure:"trusted_proxies"`           // 可信代理列表（CIDR/IP）
+	TrustedProxiesConfigured bool                          `mapstructure:"-" json:"-" yaml:"-"`       // 是否显式配置了可信代理列表
+	MaxRequestBodySize       int64                         `mapstructure:"max_request_body_size"`     // 全局最大请求体限制
+	H2C                      H2CConfig                     `mapstructure:"h2c"`                       // HTTP/2 Cleartext 配置
+	TLSFingerprintCollector  TLSFingerprintCollectorConfig `mapstructure:"tls_fingerprint_collector"` // TLS 指纹收集器配置
 }
 
 // TLSFingerprintCollectorConfig TLS 指纹收集器配置。
@@ -1102,9 +1100,6 @@ type UsageCleanupConfig struct {
 	TaskTimeoutSeconds int `mapstructure:"task_timeout_seconds"`
 }
 
-// TLSFingerprintAuthenticatedIngressConfig 配置 Nginx 与观察器的连接配对和验证额度。
-type TLSFingerprintAuthenticatedIngressConfig = authenticatedingress.Config
-
 func firstNonEmptyString(values ...string) string {
 	for _, value := range values {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
@@ -1707,20 +1702,6 @@ func setDefaults() {
 	viper.SetDefault("server.tls_fingerprint_collector.key_file", "")
 	viper.SetDefault("server.tls_fingerprint_collector.session_ttl_seconds", 1800)
 	viper.SetDefault("server.tls_fingerprint_collector.max_records_per_session", 20)
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.enabled", false)
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.edge_token", "")
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.observer_token", "")
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.observed_hosts", []string{"api.scienceedu.me"})
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.validation_targets", []string{"chatgpt.com", "api.openai.com"})
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.pending_ttl_seconds", 300)
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.candidate_ttl_seconds", 86400)
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.minimum_independent_connections", 3)
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.max_pending_flows", 20000)
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.max_candidate_groups", 5000)
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.max_validation_attempts_per_day", 100)
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.max_validation_attempts_per_owner_per_day", 5)
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.max_verified_profiles_per_day", 50)
-	viper.SetDefault("server.tls_fingerprint_authenticated_ingress.auto_create_verified", true)
 
 	// Log
 	viper.SetDefault("log.level", "info")
@@ -2325,63 +2306,6 @@ func setEnvReachableDefaults() {
 }
 
 func (c *Config) Validate() error {
-	if ingress := &c.Server.TLSFingerprintAuthenticatedIngress; ingress.Enabled {
-		ingress.EdgeToken = strings.TrimSpace(ingress.EdgeToken)
-		ingress.ObserverToken = strings.TrimSpace(ingress.ObserverToken)
-		if len(ingress.EdgeToken) < 32 {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress.edge_token must be at least 32 bytes when enabled")
-		}
-		if len(ingress.ObserverToken) < 32 {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress.observer_token must be at least 32 bytes when enabled")
-		}
-		if ingress.EdgeToken == ingress.ObserverToken {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress edge_token and observer_token must differ")
-		}
-		if ingress.PendingTTLSeconds < 30 || ingress.PendingTTLSeconds > 1800 {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress.pending_ttl_seconds must be between 30 and 1800")
-		}
-		if ingress.CandidateTTLSeconds < 300 || ingress.CandidateTTLSeconds > 7*24*60*60 {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress.candidate_ttl_seconds must be between 300 and 604800")
-		}
-		if ingress.MinimumIndependentConnections < 3 || ingress.MinimumIndependentConnections > 20 {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress.minimum_independent_connections must be between 3 and 20")
-		}
-		if ingress.MaxPendingFlows < 100 || ingress.MaxPendingFlows > 100000 {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress.max_pending_flows must be between 100 and 100000")
-		}
-		if ingress.MaxCandidateGroups < 10 || ingress.MaxCandidateGroups > 20000 {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress.max_candidate_groups must be between 10 and 20000")
-		}
-		if ingress.MaxValidationAttemptsPerDay < 1 || ingress.MaxValidationAttemptsPerDay > 1000 {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress.max_validation_attempts_per_day must be between 1 and 1000")
-		}
-		if ingress.MaxValidationAttemptsPerOwner < 1 || ingress.MaxValidationAttemptsPerOwner > ingress.MaxValidationAttemptsPerDay {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress.max_validation_attempts_per_owner_per_day must be between 1 and max_validation_attempts_per_day")
-		}
-		if ingress.MaxVerifiedProfilesPerDay < 1 || ingress.MaxVerifiedProfilesPerDay > ingress.MaxValidationAttemptsPerDay {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress.max_verified_profiles_per_day must be between 1 and max_validation_attempts_per_day")
-		}
-		ingress.ObservedHosts = normalizeStringSlice(ingress.ObservedHosts)
-		ingress.ValidationTargets = normalizeStringSlice(ingress.ValidationTargets)
-		if len(ingress.ObservedHosts) == 0 {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress.observed_hosts must not be empty when enabled")
-		}
-		if len(ingress.ValidationTargets) == 0 {
-			return fmt.Errorf("server.tls_fingerprint_authenticated_ingress.validation_targets must not be empty when enabled")
-		}
-		for _, host := range append(append([]string{}, ingress.ObservedHosts...), ingress.ValidationTargets...) {
-			if !isPlainDNSHostname(host) {
-				return fmt.Errorf("server.tls_fingerprint_authenticated_ingress contains invalid hostname %q", host)
-			}
-		}
-		for _, target := range ingress.ValidationTargets {
-			switch strings.ToLower(target) {
-			case "chatgpt.com", "api.openai.com":
-			default:
-				return fmt.Errorf("server.tls_fingerprint_authenticated_ingress validation target %q is not allowed", target)
-			}
-		}
-	}
 	if c.RequestLog.RetentionDays < 0 {
 		return fmt.Errorf("request_log.retention_days must be non-negative")
 	}
@@ -3629,26 +3553,4 @@ func (c *Config) normalizePricingCatalogSource() {
 // ValidateDingTalkConfig 使用身份配置的规则校验钉钉登录参数。
 func ValidateDingTalkConfig(value DingTalkConnectConfig) error {
 	return authconfig.ValidateDingTalkConfig(value)
-}
-
-func isPlainDNSHostname(value string) bool {
-	value = strings.ToLower(strings.TrimSpace(value))
-	if value == "" || len(value) > 253 || strings.HasPrefix(value, ".") || strings.HasSuffix(value, ".") {
-		return false
-	}
-	labels := strings.Split(value, ".")
-	if len(labels) < 2 {
-		return false
-	}
-	for _, label := range labels {
-		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return false
-		}
-		for _, char := range label {
-			if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '-' {
-				return false
-			}
-		}
-	}
-	return true
 }

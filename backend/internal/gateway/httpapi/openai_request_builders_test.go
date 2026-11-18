@@ -33,6 +33,23 @@ type codexProviderIdentityRepoStub struct {
 	provider *gatewayprovider.ExecutionProvider
 }
 
+// TestOpenAIRequestsWhitelistAtDispatch 检查普通请求和直通请求在构造出站请求前执行相同的最终模型限制。
+func TestOpenAIRequestsWhitelistAtDispatch(t *testing.T) {
+	global := providercore.NewOpenAIOAuthModelPolicy([]string{"gpt-text", "gpt-account-excluded"})
+	value := &gatewayprovider.ExecutionProvider{Record: providercore.Record{
+		Platform: providercore.PlatformOpenAI, Type: providercore.ProviderTypeOAuth,
+		Credentials:               map[string]any{"model_whitelist": []string{"gpt-text"}},
+		OpenAIOAuthModelWhitelist: func(context.Context) (providercore.OpenAIOAuthModelPolicy, error) { return global, nil },
+	}}
+	executor := &OpenAIRequests{}
+	for _, body := range []string{`{"model":"gpt-removed"}`, `{"model":"gpt-account-excluded"}`, `{"model":"gpt-text","tools":[{"type":"image_generation"}]}`} {
+		_, err := executor.Build(t.Context(), nil, value, []byte(body), "", true, "", false)
+		require.ErrorIs(t, err, providercore.ErrOpenAIOAuthModelNotAllowed)
+		_, err = executor.BuildPassthrough(t.Context(), nil, value, []byte(body), "")
+		require.ErrorIs(t, err, providercore.ErrOpenAIOAuthModelNotAllowed)
+	}
+}
+
 func TestOpenAIAgentIdentityPassthroughKeepsSessionAndPromptCacheHeaders(t *testing.T) {
 	key, privateKey := newTestAgentIdentityKey(t)
 	provider := &gatewayprovider.ExecutionProvider{

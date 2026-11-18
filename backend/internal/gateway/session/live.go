@@ -65,13 +65,15 @@ type LiveCallRecord struct {
 	UpstreamModel      string
 	ModelMappingChain  string
 	APIKeyModelMapping map[string]string
-	CreatedAt          time.Time
-	ExpiresAt          time.Time
-	Controller         string
-	ControllerOwner    string
-	UserAgent          string
-	IPAddress          string
-	InboundEndpoint    string
+	// ImageToolModels 保存创建控制连接前已经交给上游的图片工具型号。
+	ImageToolModels []string
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
+	Controller      string
+	ControllerOwner string
+	UserAgent       string
+	IPAddress       string
+	InboundEndpoint string
 	// AttestationCiphertext 仅用于让同一会话的 Sideband 复用创建时的证明。
 	AttestationCiphertext string
 }

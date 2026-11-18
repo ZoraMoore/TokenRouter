@@ -23,7 +23,7 @@ var NewExecutionProviderStoreForTest = provideExecutionProviderStore
 func TestExecutionStoreUsesNativeStateAndOuterTransaction(t *testing.T) {
 	f := newDatabaseFixture(t)
 	ctx := t.Context()
-	data := NewProviderStoreForTest(f.client, f.db, nil)
+	data := NewProviderStoreForTest(f.client, f.db, nil, nil)
 	funds := billingpostgres.NewProviderUsageStore(f.db, billingpostgres.ProviderUsageOptions{})
 	store := NewExecutionProviderStoreForTest(data, funds)
 	row, err := f.client.Provider.Create().SetName("execution-store").SetPlatform(provider.PlatformOpenAI).SetType(provider.ProviderTypeAPIKey).SetCredentials(map[string]any{"api_key": "fixture-key"}).SetExtra(map[string]any{"quota_limit": 100.0, "quota_used": 0.0}).Save(ctx)

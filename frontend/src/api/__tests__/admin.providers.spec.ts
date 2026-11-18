@@ -14,6 +14,9 @@ vi.mock('@/api/client', () => ({
 
 import {
   consumeCodexInviteReset,
+  exportData,
+  sendCodexInviteResetInvite,
+  resetOpenAIQuota,
   getAdvancedSchedulerScore,
   previewAdvancedSchedulerScore,
   queryBatchUpstreamUsage,
@@ -25,6 +28,22 @@ describe('admin providers API', () => {
   beforeEach(() => {
 	get.mockReset()
     post.mockReset()
+  })
+
+  it('请求 Sub2API 账号文件时保留选中 ID、筛选条件和代理开关', async () => {
+    const archive = { exported_at: '2026-11-19T00:00:00Z', accounts: [], proxies: [] }
+    get.mockResolvedValue({ data: archive })
+
+    await expect(exportData({ format: 'sub2api', ids: [2, 7], filters: { type: 'oauth' }, includeProxies: false })).resolves.toEqual(archive)
+    expect(get).toHaveBeenLastCalledWith('/admin/providers/data', {
+      params: { format: 'sub2api', ids: '2,7', include_proxies: 'false' }
+    })
+    await exportData({ format: 'sub2api', filters: { platform: 'anthropic', type: 'apikey', sort_by: 'priority', sort_order: 'desc' } })
+    expect(get).toHaveBeenLastCalledWith('/admin/providers/data', {
+      params: { format: 'sub2api', platform: 'anthropic', type: 'apikey', sort_by: 'priority', sort_order: 'desc' }
+    })
+    await exportData()
+    expect(get).toHaveBeenLastCalledWith('/admin/providers/data', { params: {} })
   })
 
   it('loads an overview or a single advanced scheduler score group through the dedicated endpoint', async () => {
@@ -75,6 +94,16 @@ describe('admin providers API', () => {
       timeout: 180_000
     })
     expect(result).toEqual(response)
+  })
+
+  it('发送指定邮箱和活动的同意状态，单行重置调用额度端点', async () => {
+    post.mockResolvedValue({ data: { sent_count: 1 } })
+    await sendCodexInviteResetInvite(42, ['friend@example.com'], 'codex_referral_consumer', true)
+    expect(post).toHaveBeenLastCalledWith('/admin/providers/42/codex/invite-reset/invite', {
+      emails: ['friend@example.com'], program_id: 'codex_referral_consumer', confirmed: true
+    })
+    await resetOpenAIQuota(42)
+    expect(post).toHaveBeenLastCalledWith('/admin/openai/providers/42/reset-quota')
   })
 
   it('Codex 重置有明细选择时发送 credit_id', async () => {

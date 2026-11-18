@@ -34,9 +34,8 @@ Preserve these behaviors unless the user explicitly changes them:
 - EasyPay provider and service-level draft tests assert GET query parameters and credential redaction.
 - The frontend Docker build uses a 4096 MiB Node heap; this affects build time only, not runtime memory.
 - `website-docs/` remains a separate versioned VitePress site and is excluded from the main Docker build context.
-- Controlled TLS profiles retain provenance, local replay and target-handshake evidence; only approved, verified, target-compatible profiles may be bound or enter the random pool.
-- Authenticated ingress capture retains its observer, authenticated request association, bounded queues/TTLs and shared Redis daily quotas. Automatically created profiles remain unapproved until an administrator publishes them.
-- Main application and TLS observer use the same immutable custom image. Preserve the observer binary, Compose profile, trusted Nginx headers and public `/internal/` block.
+- TLS profiles store `signature_algorithms_cert` for ClientHello extension 50. Extension 13 uses `signature_algorithms`.
+- Profile queries use migration 259's historical metadata to exclude unpublished captures from the template list and runtime cache.
 - The already-applied `259_add_tls_fingerprint_profile_verification.sql` is immutable. For v0.1.277, upstream migrations 259–265 use fork IDs 260–266. For v0.2.10, upstream migrations 266–296 use fork IDs 267–297. Migration 273 archives existing group prices; migration 282 transfers group price cards and billing settings into separate pricing configurations. Custom migration 298 preserves independent image rates across ordinary requests, public quotes, creative tasks, and batch funding snapshots.
 - Vite production builds avoid the duplicate checker process while retaining the preceding `vue-tsc` typecheck.
 - Migration 278 uses PostgreSQL's constant default for OpenAI history, restores the future default to `unknown`, and updates differing platform values. Rehearsals include every historical table and compare all usage fields, platform totals, balances, prices, and TLS settings before production cutover.

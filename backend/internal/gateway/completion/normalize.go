@@ -5,6 +5,7 @@ import (
 
 	"github.com/TokenFlux/TokenRouter/internal/billing/pricing"
 	"github.com/TokenFlux/TokenRouter/internal/protocol"
+	"github.com/TokenFlux/TokenRouter/internal/protocol/openai"
 )
 
 type ServiceTierBillingResolution struct {
@@ -42,6 +43,8 @@ func ServiceTierCostRank(tier string) (rank int, known bool) {
 		return 1, true
 	case "priority", "fast":
 		return 2, true
+	case openai.ServiceTierUltrafast:
+		return 3, true
 	default:
 		return 1, false
 	}
@@ -77,17 +80,29 @@ func (s *Recorder) normalizeResult(r *Result, a *ProviderSnapshot, openAI bool, 
 	if !openAI && requested == "" {
 		requested = strings.TrimSpace(r.Usage.Speed)
 	}
-	resolution := ResolveBillingServiceTier(requested, r.UpstreamResponseServiceTier)
+	// 影子提供商借用母提供商凭据，响应计费开关仍取自本次选中的提供商。
+	responseBilling := openAI && observedProvider != nil && observedProvider.OpenAIResponseTierBillingEnabled
+	var resolution ServiceTierBillingResolution
 	if openAI {
-		resolution = ResolveOpenAIServiceTierBilling(a != nil && a.OAuthLike, requested, r.UpstreamResponseServiceTier)
+		resolution = resolveOpenAIServiceTierBilling(a != nil && a.OAuthLike, responseBilling, requested, r.UpstreamResponseServiceTier)
+	} else {
+		resolution = ResolveBillingServiceTier(requested, r.UpstreamResponseServiceTier)
 	}
-	if resolution.Downgraded {
+	if resolution.Billing != resolution.Requested {
 		tier := resolution.Billing
 		r.ServiceTier = &tier
 		if !openAI && r.Usage.Speed != "" {
 			r.Usage.Speed = tier
 		}
+	}
+	if responseBilling || resolution.Downgraded {
 		event := BillingEvent{Kind: "tier_downgrade", Component: "service.gateway", RequestID: strings.TrimSpace(requestID), RequestedTier: resolution.Requested, ObservedTier: resolution.Observed, BilledTier: resolution.Billing}
+		if responseBilling {
+			event.Kind = "tier_response"
+			if resolution.Observed == "" {
+				event.Kind = "tier_response_missing"
+			}
+		}
 		if openAI {
 			event.Component = "service.openai_gateway"
 		}
@@ -100,12 +115,19 @@ func (s *Recorder) normalizeResult(r *Result, a *ProviderSnapshot, openAI bool, 
 	return resolution
 }
 
-// ResolveOpenAIServiceTierBilling 保留 OAuth default 回显的非权威性，其余响应只允许降档。
-func ResolveOpenAIServiceTierBilling(oauthLike bool, requested, observed string) ServiceTierBillingResolution {
-	if oauthLike && CodexOAuthResponseTierIsNonAuthoritative(observed) {
+// resolveOpenAIServiceTierBilling 处理响应结算开关与 Codex OAuth 的 default 回显。
+func resolveOpenAIServiceTierBilling(oauthLike, responseBilling bool, requested, observed string) ServiceTierBillingResolution {
+	if responseBilling {
+		observed = openai.ObservedServiceTier(observed)
+	}
+	if !responseBilling && oauthLike && CodexOAuthResponseTierIsNonAuthoritative(observed) {
 		return ServiceTierBillingResolution{Requested: normalizeBillingServiceTier(requested), Observed: normalizeBillingServiceTier(observed), Billing: normalizeBillingServiceTier(requested)}
 	}
-	return ResolveBillingServiceTier(requested, observed)
+	resolution := ResolveBillingServiceTier(requested, observed)
+	if responseBilling && observed != "" {
+		resolution.Billing = observed
+	}
+	return resolution
 }
 
 func CodexOAuthResponseTierIsNonAuthoritative(observed string) bool {

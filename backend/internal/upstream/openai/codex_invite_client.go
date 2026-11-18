@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -83,58 +82,41 @@ func (s *CodexInviteClient) doJSON(req *http.Request) (map[string]any, error) {
 		return nil, apperror.InternalServer("HTTP_UPSTREAM_NOT_CONFIGURED", "http upstream is not configured")
 	}
 	req = req.WithContext(upstream.WithHTTPUpstreamProfile(req.Context(), upstream.HTTPUpstreamProfileOpenAI))
+	sending := req.Method == http.MethodPost && strings.HasSuffix(req.URL.Path, "/referrals/invite")
+	uncertain := func() error {
+		if sending {
+			return apperror.New(502, "CODEX_INVITE_SEND_UNKNOWN", "邀请结果未确认，请先在 Codex 中查看发送记录")
+		}
+		return apperror.New(502, "CODEX_INVITE_RESET_UPSTREAM_ERROR", "暂时无法确认 Codex 请求结果，请查询最新状态")
+	}
 	resp, err := s.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, uncertain()
 	}
-	// 响应体会被完整读取，关闭失败不影响本次调用结果。
 	defer func() { _ = resp.Body.Close() }()
-
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, ImageErrorBodyReadLimit))
-	if readErr != nil {
-		return nil, readErr
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		message := strings.TrimSpace(string(body))
-		if message == "" {
-			message = http.StatusText(resp.StatusCode)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		switch resp.StatusCode {
+		case http.StatusBadRequest, http.StatusUnprocessableEntity:
+			return nil, apperror.BadRequest("CODEX_INVITE_REJECTED", "Codex 拒绝了请求，请检查邀请资格和输入")
+		case http.StatusForbidden:
+			return nil, apperror.Forbidden(codexInviteResetUnavailable, codexInviteResetUnavailableMessage)
+		case http.StatusConflict:
+			return nil, apperror.Conflict("CODEX_INVITE_CONFLICT", "Codex 已记录该操作，请查询最新状态")
+		case http.StatusTooManyRequests:
+			return nil, apperror.New(429, "CODEX_INVITE_RATE_LIMITED", "Codex 限制了操作频率，请稍后再试")
+		default:
+			return nil, uncertain()
 		}
-		if err := codexInviteResetUpstreamBusinessError(resp.StatusCode, message); err != nil {
-			return nil, err
-		}
-		return nil, apperror.Newf(apperror.Category(resp.StatusCode), "CODEX_INVITE_RESET_UPSTREAM_ERROR", "codex invite reset upstream returned %d: %s", resp.StatusCode, message)
 	}
-	if len(bytes.TrimSpace(body)) == 0 {
-		return map[string]any{}, nil
+	body, err := io.ReadAll(io.LimitReader(resp.Body, ImageErrorBodyReadLimit+1))
+	if err != nil || int64(len(body)) > ImageErrorBodyReadLimit {
+		return nil, uncertain()
 	}
-
 	var result map[string]any
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("decode codex invite reset response: %w", err)
+	if err := json.Unmarshal(body, &result); err != nil || result == nil {
+		return nil, uncertain()
 	}
 	return result, nil
-}
-
-func codexInviteResetUpstreamBusinessError(statusCode int, body string) error {
-	detail := codexInviteResetUpstreamDetail(body)
-	if statusCode != http.StatusForbidden || !strings.Contains(detail, "推荐邀请不可用") {
-		return nil
-	}
-	// 上游在活动关闭或提供商不具备推荐资格时会返回 403，仍可能保留可用重置次数。
-	return apperror.Forbidden(codexInviteResetUnavailable, codexInviteResetUnavailableMessage).WithMetadata(map[string]string{
-		"upstream_status": fmt.Sprint(statusCode),
-		"upstream_detail": detail,
-	})
-}
-
-func codexInviteResetUpstreamDetail(body string) string {
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(body), &payload); err == nil {
-		if detail := codexInviteDetail(payload["detail"]); detail != "" {
-			return detail
-		}
-	}
-	return strings.TrimSpace(body)
 }
 
 func BuildCodexBackendURL(path string, query map[string]string) (string, error) {
@@ -154,12 +136,4 @@ func BuildCodexBackendURL(path string, query map[string]string) (string, error) 
 		base.RawQuery = values.Encode()
 	}
 	return base.String(), nil
-}
-
-// codexInviteDetail 保留字符串及其它 JSON 值的原展示转换。
-func codexInviteDetail(value any) string {
-	if value == nil {
-		return ""
-	}
-	return strings.TrimSpace(fmt.Sprint(value))
 }

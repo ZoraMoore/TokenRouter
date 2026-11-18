@@ -2,7 +2,9 @@ package provider
 
 import (
 	"github.com/TokenFlux/TokenRouter/internal/provider"
+	"github.com/TokenFlux/TokenRouter/internal/upstream"
 	"github.com/TokenFlux/TokenRouter/internal/upstream/antigravity"
+	"github.com/TokenFlux/TokenRouter/internal/upstream/openai"
 	"github.com/TokenFlux/TokenRouter/internal/upstream/qoder"
 )
 
@@ -17,8 +19,14 @@ func ModelDefaults() provider.ModelMappingDefaults {
 // ModelRules 在检查平台资格时读取站点信息。
 func ModelRules(value *provider.Record) provider.ModelPlatformRules {
 	return provider.ModelPlatformRules{
-		NormalizeQoder:      qoder.NormalizeModelForWhitelist,
-		OpenAIOAuthServable: provider.IsOpenAIOAuthServableModel,
+		NormalizeQoder: qoder.NormalizeModelForWhitelist,
+		OpenAIOAuthServable: func(model string, global provider.OpenAIOAuthModelPolicy) bool {
+			// Codex 通过 Responses 的文字模型调用图片工具。
+			if global.Configured() && upstream.IsGPTImageGenerationModel(model) && !value.AllowsOpenAIOAuthTarget(global, openai.ImagesResponsesMainModel, ModelDefaults()) {
+				return false
+			}
+			return provider.IsOpenAIOAuthServableModel(model)
+		},
 		QoderCompatible: func(model string) bool {
 			if value == nil {
 				return false

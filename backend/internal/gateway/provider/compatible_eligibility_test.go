@@ -14,6 +14,29 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/routing/capability"
 )
 
+// TestOAuthWhitelistCompactTarget 对照首发的专用映射、站点回退和普通请求。
+func TestOAuthWhitelistCompactTarget(t *testing.T) {
+	ctx := context.Background()
+	global := providercore.NewOpenAIOAuthModelPolicy([]string{"configured-compact"})
+	target := &ExecutionProvider{Record: providercore.Record{
+		Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeOAuth, Status: "active", Schedulable: true,
+		Credentials:               map[string]any{"model_whitelist": []string{"configured-compact", "account-compact"}},
+		OpenAIOAuthModelWhitelist: func(context.Context) (providercore.OpenAIOAuthModelPolicy, error) { return global, nil },
+	}}
+	options := CompactModels{Default: "configured-compact"}
+	reason := func(compact bool) string {
+		return CompatibleEligibilityReason(ctx, target, capability.PlatformOpenAI, "public", compact, providercore.OpenAIEndpointCapabilityTextGeneration, options)
+	}
+	require.Equal(t, "model_not_supported", reason(false))
+	require.Empty(t, reason(true))
+	target.Record.Credentials["compact_model_mapping"] = map[string]any{"public": "account-compact"}
+	require.Equal(t, "model_not_supported", reason(true))
+	global = providercore.NewOpenAIOAuthModelPolicy([]string{"account-compact"})
+	require.Empty(t, reason(true))
+	target.Record.Credentials["model_whitelist"] = []string{"configured-compact"}
+	require.Equal(t, "model_not_supported", reason(true))
+}
+
 func TestEvaluateOpenAIQuotaAutoPause_UsesGlobalDefaultAndWindowReset(t *testing.T) {
 	ctx := WithQuotaAutoPauseSettings(context.Background(), providercore.QuotaAutoPauseSettings{DefaultThreshold5h: 0.95})
 	now := time.Now().UTC()

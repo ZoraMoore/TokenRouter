@@ -111,13 +111,14 @@ func wrapSchedulerRecordPointers(values []*acctcore.Record) []scheduler.Snapshot
 }
 
 // provideProviderStore 构造共享的提供商存储，并绑定数据转换和事件写入函数。
-func provideProviderStore(client *dbent.Client, db *sql.DB, cache scheduler.SnapshotCache) *providerpostgres.ProviderStore {
+func provideProviderStore(client *dbent.Client, db *sql.DB, cache scheduler.SnapshotCache, settings *acctcore.RuntimeSettings) *providerpostgres.ProviderStore {
 	store := providerpostgres.NewProviderStore(client, db, providerpostgres.ProviderStoreOptions{
 		Group: func(g *dbent.Group) *accessview.GroupConfig {
 			return (*accessview.GroupConfig)(routingpostgres.GroupFromEnt(g))
 		},
-		OllamaIdentity: acctcore.IsOllamaCloudUsageProvider,
-		Proxy:          egresspostgres.ProxyEntity, Now: time.Now, LoadLocation: time.LoadLocation,
+		OllamaIdentity:            acctcore.IsOllamaCloudUsageProvider,
+		OpenAIOAuthModelWhitelist: settings.OpenAIOAuthModelWhitelistSnapshot,
+		Proxy:                     egresspostgres.ProxyEntity, Now: time.Now, LoadLocation: time.LoadLocation,
 		Observe: func(format string, args ...any) { logging.LegacyPrintf("repository.provider", format, args...) },
 	})
 	store.SetEvents(newProviderEvents(store, cache))

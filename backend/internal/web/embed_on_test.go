@@ -504,6 +504,17 @@ func TestOverrideFilesNeverReceiveImmutableCacheHeaders(t *testing.T) {
 }
 
 func TestFrontendServer_Middleware(t *testing.T) {
+	t.Run("leaves_retired_internal_post_unregistered", func(t *testing.T) {
+		server, err := NewFrontendServer(&mockSettingsProvider{settings: map[string]string{}})
+		require.NoError(t, err)
+		router := gin.New()
+		router.Use(server.Middleware())
+		response := httptest.NewRecorder()
+		path := "/internal/tls-fingerprint/authenticated-ingress/observations"
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, path, nil))
+		require.Equal(t, http.StatusNotFound, response.Code)
+	})
+
 	t.Run("skips_api_routes", func(t *testing.T) {
 		provider := &mockSettingsProvider{
 			settings: map[string]string{"test": "value"},
@@ -513,7 +524,6 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		require.NoError(t, err)
 
 		apiPaths := []string{
-			"/internal/tls-fingerprint/authenticated-ingress/observations",
 			"/api/v1/users",
 			"/v1/models",
 			"/models",
@@ -981,17 +991,4 @@ func (p *blockingPublic) GetPublicSettingsForInjection(context.Context) (any, er
 		return map[string]any{"site_name": "OLD-TEST"}, nil
 	}
 	return map[string]any{"site_name": "NEW-TEST"}, nil
-}
-
-// TestFrontendServerInternalObservationDispatch 核对内部 POST 进入观察器处理器并返回认证拒绝。
-func TestFrontendServerInternalObservationDispatch(t *testing.T) {
-	frontend, err := NewFrontendServer(&mockSettingsProvider{settings: map[string]string{}})
-	require.NoError(t, err)
-	router := gin.New()
-	router.Use(frontend.Middleware())
-	path := "/internal/tls-fingerprint/authenticated-ingress/observations"
-	router.POST(path, func(c *gin.Context) { c.AbortWithStatus(http.StatusNotFound) })
-	response := httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, path, strings.NewReader("{}")))
-	require.Equal(t, http.StatusNotFound, response.Code)
 }

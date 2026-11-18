@@ -3988,6 +3988,71 @@ func TestOpenAIGatewayServiceRecordUsage_ServiceTierDowngradedByUpstreamResponse
 	require.InDelta(t, baseCost.TotalCost, usageRepo.LastLog.TotalCost, 1e-10, "a request served at default must not pay the priority price")
 }
 
+// TestOpenAIRecordResponseTierBilling 检查用量记录和扣费采用同一个结算档位。
+func TestOpenAIRecordResponseTierBilling(t *testing.T) {
+	for _, tt := range []struct {
+		name, platform, kind, requested, observed, billed string
+		enabled                                           bool
+	}{
+		{"未指定档位按上游结算", capability.PlatformOpenAI, capability.ProviderTypeAPIKey, "", "ultrafast", "ultrafast", true},
+		{"认可等价价位的实际档位", capability.PlatformOpenAI, capability.ProviderTypeAPIKey, "default", "scale", "scale", true},
+		{"响应别名按优先档结算", capability.PlatformOpenAI, capability.ProviderTypeAPIKey, "", "fast", "priority", true},
+		{"自动选择并非实际档位", capability.PlatformOpenAI, capability.ProviderTypeAPIKey, "priority", "auto", "priority", true},
+		{"缺少响应采用出站档位", capability.PlatformOpenAI, capability.ProviderTypeAPIKey, "priority", "", "priority", true},
+		{"未知档位保留普通价格", capability.PlatformOpenAI, capability.ProviderTypeAPIKey, "", "unknown", "", true},
+		{"关闭后不升档", capability.PlatformOpenAI, capability.ProviderTypeAPIKey, "", "ultrafast", "", false},
+		{"关闭后仍使用请求的超快档", capability.PlatformOpenAI, capability.ProviderTypeAPIKey, "ultrafast", "", "ultrafast", false},
+		{"关闭后仍可降档", capability.PlatformOpenAI, capability.ProviderTypeAPIKey, "ultrafast", "priority", "priority", false},
+		{"OAuth 按响应升档", capability.PlatformOpenAI, capability.ProviderTypeOAuth, "", "ultrafast", "ultrafast", true},
+		{"OAuth 按响应降档", capability.PlatformOpenAI, capability.ProviderTypeOAuth, "ultrafast", "default", "default", true},
+		{"OAuth 关闭时采用请求档位", capability.PlatformOpenAI, capability.ProviderTypeOAuth, "", "ultrafast", "", false},
+		{"OAuth 缺少响应档位", capability.PlatformOpenAI, capability.ProviderTypeOAuth, "ultrafast", "", "ultrafast", true},
+		{"其他平台不能启用升档", capability.PlatformAnthropic, capability.ProviderTypeAPIKey, "", "ultrafast", "", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			usage := &completiontestkit.UsageLogStore{Inserted: true}
+			funds := &completiontestkit.SettlementStore{}
+			svc := completiontestkit.NewRecording(usage, funds, nil, false)
+			const multiplier = 0.25
+			svc.Options.DefaultMultiplier = multiplier
+			result := &forwardcore.OpenAIResult{
+				RequestID: "resp_tier", Model: "gpt-5.4", UpstreamResponseServiceTier: tt.observed,
+				Usage: openai.ForwardUsage{InputTokens: 100, OutputTokens: 50},
+			}
+			if tt.requested != "" {
+				result.ServiceTier = &tt.requested
+			}
+			err := svc.RecordOpenAI(context.Background(), &gatewaycapture.OpenAICapture{
+				Result: result, APIKey: &apikey.APIKey{ID: 1, Quota: 10}, User: &identity.User{ID: 2},
+				APIKeyService: &completiontestkit.KeyQuotaUpdater{},
+				Provider:      &providercore.Record{ID: 3, Platform: tt.platform, Type: tt.kind, Extra: map[string]any{"openai_response_tier_billing_enabled": tt.enabled}},
+			})
+			require.NoError(t, err)
+			require.NotNil(t, usage.LastLog)
+			if tt.billed == "" {
+				require.Nil(t, usage.LastLog.ServiceTier)
+			} else {
+				require.Equal(t, &tt.billed, usage.LastLog.ServiceTier)
+			}
+			tokens := pricing.UsageTokens{InputTokens: 100, OutputTokens: 50}
+			price, err := svc.Dependencies.Calculator.CalculateCostWithServiceTier("gpt-5.4", tokens, multiplier, tt.billed)
+			require.NoError(t, err)
+			require.InDelta(t, price.TotalCost, usage.LastLog.TotalCost, 1e-12)
+			require.Positive(t, price.TotalCost)
+			require.Equal(t, 1, funds.Calls)
+			require.NotNil(t, funds.LastCmd)
+			require.InDelta(t, usage.LastLog.ActualCost, funds.LastCmd.BillableAmountUSD, 1e-12)
+			require.InDelta(t, price.ActualCost, funds.LastCmd.BillableAmountUSD, 1e-12)
+			require.InDelta(t, price.ActualCost, funds.LastCmd.APIKeyQuotaCost, 1e-12)
+			if tt.billed == "ultrafast" {
+				standard, err := svc.Dependencies.Calculator.CalculateCost("gpt-5.4", tokens, multiplier)
+				require.NoError(t, err)
+				require.InDelta(t, standard.ActualCost*6, funds.LastCmd.BillableAmountUSD, 1e-12)
+			}
+		})
+	}
+}
+
 func TestOpenAIGatewayServiceRecordUsage_CodexDefaultEchoKeepsFastBilling(t *testing.T) {
 	for _, providerType := range []string{capability.ProviderTypeOAuth, capability.ProviderTypeSetupToken} {
 		t.Run(providerType, func(t *testing.T) {

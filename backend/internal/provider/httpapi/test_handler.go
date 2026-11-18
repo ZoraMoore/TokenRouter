@@ -10,9 +10,18 @@ import (
 	response "github.com/TokenFlux/TokenRouter/internal/server/httpx"
 )
 
-// TestHandler 绑定测试请求字段、SSE 输出及测试成功后的恢复函数。
+// providerTests 在管理员指定的账号上执行连接测试和答题检测。
+type providerTests interface {
+	Test(context.Context, provider.TestRequest, provider.TestEventSink) error
+	RunIQQuestion(context.Context, int64, provider.IQTestRequest) (provider.IQQuestionResult, error)
+	RunIQQuality(context.Context, int64, provider.IQTestRequest) (provider.IQQualityResult, error)
+	RunStateProbe(context.Context, int64, string) (provider.StateProbeResult, error)
+	RunModelTrace(context.Context, int64, provider.IQTestRequest, func(string, any) error) error
+}
+
+// TestHandler 绑定测试请求字段、SSE 输出及连接测试成功后的恢复函数。
 type TestHandler struct {
-	tests   *provider.TestService
+	tests   providerTests
 	recover func(context.Context, int64) error
 }
 

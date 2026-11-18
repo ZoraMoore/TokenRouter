@@ -588,6 +588,18 @@ export default {
         title: 'OpenAI 调度设置',
         description: '控制 OpenAI 提供商配额自动暂停策略'
       },
+      openaiOAuthModelWhitelist: {
+        title: 'OpenAI OAuth 全局最终模型白名单',
+        description: '保存后，新建和已有的 OpenAI OAuth 账号都只能使用这份名单中的模型。网关检查映射后的模型 ID，账号可进一步限制可用范围。',
+        modelIDs: '允许的模型 ID',
+        inputHint: '每行填写一个完整的模型 ID，区分大小写。可以直接填写目录未收录的 GPT 型号。',
+        presetHint: '当前显示新建账号的内置预设。首次保存这份名单后，全局限制生效。',
+        usePreset: '选用内置名单',
+        invalidCount: '请填写 1 至 256 个模型 ID。',
+        invalidID: '模型 ID 长度上限为 255 个字符，首字符须为英文字母或数字。其余字符可使用英文字母、数字和 . _ : / -。请用具体型号替换通配符或网址。',
+        loadFailed: '读取 OpenAI OAuth 全局模型白名单失败',
+        saveFailed: '保存 OpenAI OAuth 全局模型白名单失败'
+      },
       ollamaCloudUsage: {
         title: 'Ollama Cloud 用量刷新',
         description: '在模型请求驱动下刷新提供商在 Ollama 官方设置页展示的用量；默认关闭。无新请求时不会自动抓取。',
@@ -643,7 +655,7 @@ export default {
         antigravityUserAgentVersionPlaceholder: '1.23.2',
         antigravityUserAgentVersionHint: '留空时使用 ANTIGRAVITY_USER_AGENT_VERSION 或内置默认值 1.23.2；填写后后台设置优先。',
         openaiCodexUserAgent: 'OpenAI Codex UA',
-        openaiCodexUserAgentPlaceholder: 'codex-tui/0.158.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.158.0)',
+        openaiCodexUserAgentPlaceholder: '内置 codex-tui',
         openaiCodexUserAgentHint: '用于规避 OpenAI 上游 Cloudflare 对浏览器 UA 的访问质询。仅在检测到客户端 User-Agent 为浏览器（Mozilla/...）时生效，其他客户端原样透传。留空使用内置 codex-tui 默认值。',
         openaiAllowClaudeCodeCodexPlugin: '允许在 Claude Code 中使用 Codex 插件',
         openaiAllowClaudeCodeCodexPluginDesc:
@@ -1621,36 +1633,14 @@ export default {
       columns: {
         name: '名称',
         description: '描述',
-        validation: '验证状态',
         grease: 'GREASE',
         alpn: 'ALPN',
         actions: '操作'
       },
 
-      validation: {
-        draft: '草稿',
-        verified: '已验证',
-        rejected: '已拒绝',
-        stale: '需重新验证'
-      },
-
-      verificationSource: {
-        authenticatedIngress: '已认证入站',
-        controlledConnect: '受控 CONNECT',
-        manual: '手工创建',
-        legacy: '旧版模板'
-      },
-
-      approval: {
-        pending: '待管理员批准',
-        approve: '批准使用',
-        success: '模板已批准，可供显式绑定',
-        failed: '批准模板失败'
-      },
-
       collector: {
         title: '内置指纹收集器',
-        description: '通过目标受限的 CONNECT 会话采集受控客户端 ClientHello；不会转发 Token、正文或业务请求。',
+        description: '启动临时 HTTPS 收集器，记录 Claude Code 和 Codex CLI 发出的 ClientHello。',
         running: '运行中',
         stopped: '已停止',
         start: '启动',
@@ -1661,38 +1651,19 @@ export default {
         generatedCert: '临时自签 CA',
         configuredCert: '配置证书',
         createSession: '创建采集会话',
-        clientKind: '客户端类型',
-        clientVersion: '客户端版本',
-        operatingSystem: '操作系统',
-        architecture: '架构',
-        runtime: '运行时（可选）',
-        runtimeVersion: '运行时版本（可选）',
-        targetHost: '验证目标',
-        targetChatGPT: 'chatgpt.com（OpenAI OAuth / Codex）',
-        targetOpenAIAPI: 'api.openai.com（仅生成验证证据）',
-        declaredClient: '声明的客户端',
-        coldStartConfirmed: '我确认将使用全新进程进行冷启动采集，不使用会话恢复连接',
-        controlledHint: '同一客户端配置至少采集 3 个独立冷启动连接。匿名 Nginx 旁路样本不能提升为模板。',
-        sessionValidationError: '请填写客户端版本、操作系统和架构，选择目标，并确认冷启动采集。',
         refreshCaptures: '刷新结果',
         captureURL: '采集地址',
-        proxyURL: '受控代理地址',
         expiresAt: '过期时间',
         claudeCommand: 'Claude Code',
         codexCommand: 'Codex CLI 命令',
         codexConfig: 'Codex CLI 配置',
-        controlledCommand: '受控采集命令',
-        commandStopsBeforeHTTP: '收集器只读取目标 ClientHello，随后主动断开；客户端显示连接失败属于预期行为。',
         copyCA: '复制 CA',
         downloadCA: '下载 CA',
         captures: '采集结果',
         captureCount: '{count} 条',
         noCaptures: '暂无采集结果。复制上方命令运行客户端后会自动出现。',
         copyYaml: '复制 YAML',
-        promoteCapture: '验证并创建模板',
-        ready: '可验证',
-        blocked: '暂不可用',
-        matchingSamples: '{count} 个一致冷启动连接',
+        applyCapture: '填入表单',
         unknownClient: '未知客户端',
         statusFailed: '加载收集器状态失败',
         startSuccess: '收集器已启动',
@@ -1701,38 +1672,11 @@ export default {
         sessionCreated: '采集会话已创建',
         sessionFailed: '创建采集会话失败',
         applied: '采集结果已填入表单',
-        promoteSuccess: '已通过回放与目标 TLS 握手验证，并创建可绑定模板',
-        promoteFailed: '采集验证或模板创建失败',
         copied: '已复制到剪贴板',
         copyFailed: '复制失败'
       },
 
-      authenticatedIngress: {
-        title: '已认证入站采集',
-        description: '客户正常调用本站 API 时，自动关联 TLS ClientHello 与已验证的内部客户身份；无需配置代理或安装 CA。这里只显示聚合运行状态。',
-        enabled: '已启用',
-        disabled: '未启用',
-        refresh: '刷新状态',
-        retry: '重新加载',
-        loading: '正在加载已认证入站采集状态…',
-        refreshing: '正在刷新…',
-        loadFailed: '加载已认证入站采集状态失败，请重试。',
-        pendingClientHellos: '待关联 ClientHello',
-        pendingAuthenticatedFlows: '待匹配认证请求',
-        matchedFlows: '成功关联流量',
-        rejectedFlows: '拒绝流量',
-        candidateGroups: '候选指纹组',
-        validationsInFlight: '验证中',
-        verifiedProfilesCreated: '新建已验证模板',
-        existingProfilesMatched: '命中现有模板',
-        noActivity: '尚未观察到可处理的已认证入站流量。客户正常调用 API 后，状态会自动更新。',
-        disabledHint: '已认证入站采集未启用；启用服务端配置后才会开始累计。',
-        lastVerified: '最近验证',
-        lastError: '最近一次处理错误'
-      },
-
       form: {
-        manualDraftWarning: '手工创建和 YAML 导入只会保存为草稿；修改已验证模板的握手字段会要求重新验证。可绑定模板必须来自已认证入站或受控 CONNECT 验证流程。',
         pasteYaml: '粘贴 YAML 配置',
         pasteYamlPlaceholder: '将 TLS 指纹采集器复制的 YAML 粘贴到这里...',
         pasteYamlHint: '粘贴从 TLS 指纹采集器复制的 YAML 配置，自动填充所有字段。',

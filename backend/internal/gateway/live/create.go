@@ -12,6 +12,7 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
+	"github.com/TokenFlux/TokenRouter/internal/gateway/media"
 	"github.com/TokenFlux/TokenRouter/internal/gateway/session"
 	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry"
 	wire "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
@@ -195,6 +196,7 @@ func (s *Creator) Create(
 			UpstreamModel:         upstreamModel,
 			ModelMappingChain:     mappingChain,
 			APIKeyModelMapping:    cloneModelMapping(identity.ModelMapping),
+			ImageToolModels:       media.SnapshotOpenAIImageToolModels(gjson.GetBytes(upstreamSession, "tools")),
 			CreatedAt:             now,
 			ExpiresAt:             now.Add(s.maxDuration),
 			Controller:            session.LiveControllerPending,

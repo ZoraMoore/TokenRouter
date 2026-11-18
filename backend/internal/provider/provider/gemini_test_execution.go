@@ -39,8 +39,10 @@ func (s *GeminiProviderTest) Execute(c *TestRun, value *providercore.Record, mod
 		testModelID = geminicli.DefaultTestModel
 	}
 
-	// 静态凭据仅应用原精确模型映射。
-	if value.Type == capability.ProviderTypeAPIKey || value.Type == capability.ProviderTypeServiceAccount {
+	// 测智题和网关按同一映射选模型。静态凭据的连接测试按精确模型名查找。
+	if c.FullAnswer {
+		testModelID = mappedTestModel(value, testModelID)
+	} else if value.Type == capability.ProviderTypeAPIKey || value.Type == capability.ProviderTypeServiceAccount {
 		mapping := providercore.ResolveModelMapping(value, ModelDefaults())
 		if len(mapping) > 0 {
 			if mappedModel, exists := mapping[testModelID]; exists {
@@ -89,6 +91,9 @@ func (s *GeminiProviderTest) Execute(c *TestRun, value *providercore.Record, mod
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if c.FullAnswer {
+		return c.readAnswerForModel(resp, answerGemini, payload, testModelID)
+	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return (TestStreamOutput{}).Error(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))

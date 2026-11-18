@@ -9,6 +9,78 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestCalculateTokenCostUltrafast 检查普通价、显式 Fast 价和长上下文在 UltraFast 结算时的各项金额。
+func TestCalculateTokenCostUltrafast(t *testing.T) {
+	fastMultiplier := 3.0
+	for _, tc := range []struct {
+		name          string
+		fast          *float64
+		longContext   bool
+		input, output float64
+		read, write   float64
+	}{
+		{"catalog_priority", nil, false, 48, 48, 15, 18},
+		{"configured_fast", &fastMultiplier, false, 48, 48, 15, 18},
+		{"long_context", &fastMultiplier, true, 96, 72, 30, 36},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			price := &ModelPricing{
+				InputPricePerToken: 2, OutputPricePerToken: 4,
+				CacheReadPricePerToken: 0.5, CacheCreationPricePerToken: 1,
+				InputPricePerTokenPriority: 10, OutputPricePerTokenPriority: 12,
+				CacheReadPricePerTokenPriority: 4, CacheCreationPricePerTokenPriority: 8,
+				FastMultiplier: tc.fast, LongContextInputThreshold: 8,
+				LongContextInputMultiplier: 2, LongContextOutputMultiplier: 1.5,
+			}
+			resolved := ResolvePriceCards(nil, price, PricingSourceCatalog, tc.longContext)
+			cost, err := CalculateTokenCost(resolved, CostInput{
+				Model: "custom", ServiceTier: " UltraFAST ", RateMultiplier: 0.25,
+				Tokens: UsageTokens{InputTokens: 4, OutputTokens: 2, CacheReadTokens: 5, CacheCreationTokens: 3},
+			})
+			require.NoError(t, err)
+			require.Equal(t, tc.input, cost.InputCost)
+			require.Equal(t, tc.output, cost.OutputCost)
+			require.Equal(t, tc.read, cost.CacheReadCost)
+			require.Equal(t, tc.write, cost.CacheCreationCost)
+			total := tc.input + tc.output + tc.read + tc.write
+			require.Equal(t, total, cost.TotalCost)
+			require.Equal(t, total*0.25, cost.ActualCost)
+			require.Equal(t, tc.longContext, cost.LongContextBillingApplied)
+		})
+	}
+}
+
+// TestCalculateTokenCostUltrafastCard 检查价卡的分时倍率和免费缓存写入。
+func TestCalculateTokenCostUltrafastCard(t *testing.T) {
+	zero := 0.0
+	resolved := ResolvePriceCards(&ModelPricingEntry{
+		BillingMode: BillingModeToken, CacheWritePrice: &zero,
+		TimePricing: &TimePricingConfig{Periods: []TimePricingPeriod{{StartTime: "01:00", EndTime: "03:00", Multiplier: 2}}},
+	}, &ModelPricing{InputPricePerToken: 2, CacheCreationPricePerToken: 3}, PricingSourceCatalog, true)
+	cost, err := CalculateTokenCost(resolved, CostInput{
+		Model: "custom", ServiceTier: "ultrafast", RateMultiplier: 0.25,
+		Tokens:    UsageTokens{InputTokens: 4, CacheCreationTokens: 8},
+		PricingAt: time.Date(2026, 6, 29, 2, 0, 0, 0, time.UTC), TimePricingLocation: time.UTC,
+	})
+	require.NoError(t, err)
+	require.Zero(t, cost.CacheCreationCost)
+	require.Equal(t, 96.0, cost.TotalCost)
+	require.Equal(t, 24.0, cost.ActualCost)
+}
+
+// TestCalculateCostUltrafastUnitPrices 检查按次、按张和按秒计费的单位价格。
+func TestCalculateCostUltrafastUnitPrices(t *testing.T) {
+	for _, mode := range []BillingMode{BillingModePerRequest, BillingModeImage, BillingModeVideo} {
+		t.Run(string(mode), func(t *testing.T) {
+			resolved := &ResolvedPricing{Mode: mode, DefaultPerRequestPrice: 0.5}
+			cost, err := CalculateCost(resolved, CostInput{ServiceTier: "ultrafast", UsageUnits: 3, RateMultiplier: 0.25})
+			require.NoError(t, err)
+			require.Equal(t, 1.5, cost.TotalCost)
+			require.Equal(t, 0.375, cost.ActualCost)
+		})
+	}
+}
+
 // TestCalculateTokenCostConfiguredContextTiers 检查普通价覆盖后的长上下文收费和展示。
 func TestCalculateTokenCostConfiguredContextTiers(t *testing.T) {
 	input, output, cache := 10e-6, 50e-6, 1e-6

@@ -91,6 +91,7 @@ func selectionOptions(cfg *config.Config) selection.Options {
 	if cfg == nil {
 		return options
 	}
+	options.OpenAICompactModel = cfg.Gateway.OpenAICompactModel
 	s := cfg.Gateway.Scheduling
 	options.Scheduling = scheduler.FlowOptions{LoadBatchEnabled: s.LoadBatchEnabled, PreferSoonestReset: s.PreferSoonestReset, FallbackMaxWaiting: s.FallbackMaxWaiting, StickySessionMaxWaiting: s.StickySessionMaxWaiting, FallbackSelectionMode: s.FallbackSelectionMode, FallbackWaitTimeout: s.FallbackWaitTimeout, StickySessionWaitTimeout: s.StickySessionWaitTimeout}
 	ws := cfg.Gateway.OpenAIWS

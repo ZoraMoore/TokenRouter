@@ -81,9 +81,70 @@ describe('CodexInviteResetModal', () => {
     showErrorMock.mockReset()
   })
 
+  it('按收件人数检查名额，把管理员的明确同意传给当前活动，每次只提交一次', async () => {
+    const eligibility = {
+      referral_key: 'codex_referral_workspace', invite_available: true, requires_consent: true,
+      available_invites: 1, available_count: 0, credits: []
+    }
+    getStatusMock.mockResolvedValueOnce(eligibility).mockResolvedValueOnce({ ...eligibility, available_invites: 0, invite_available: false })
+    let finish!: (value: { sent_count: number }) => void
+    sendInviteMock.mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    const wrapper = mountModal()
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+
+    const send = wrapper.findAll('button').find((button) => button.text().includes('inviteResetSendInvite'))!
+    const consume = wrapper.findAll('button').find((button) => button.text().includes('inviteResetUseReset'))!
+    expect(consume.attributes('disabled')).toBeDefined()
+    await wrapper.get('textarea').setValue('one@example.com')
+    expect(send.attributes('disabled')).toBeDefined()
+    await wrapper.get('input[type=checkbox]').setValue(true)
+    await wrapper.get('textarea').setValue('one@example.com two@example.com')
+    expect(send.attributes('disabled')).toBeDefined()
+    await wrapper.get('textarea').setValue('one@example.com')
+    expect(send.attributes('disabled')).toBeDefined()
+    await wrapper.get('input[type=checkbox]').setValue(true)
+    await Promise.all([send.trigger('click'), send.trigger('click')])
+    expect(sendInviteMock).toHaveBeenCalledTimes(1)
+    expect(sendInviteMock).toHaveBeenCalledWith(42, ['one@example.com'], 'codex_referral_workspace', true)
+    finish({ sent_count: 1 })
+    await flushPromises()
+    expect(getStatusMock).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('admin.providers.inviteResetInviteSuccess')
+    expect(send.attributes('disabled')).toBeDefined()
+  })
+
+  it('提交结果不明时保留邮箱并清除发送资格，手动刷新前不允许再发', async () => {
+    getStatusMock.mockResolvedValue({
+      referral_key: 'codex_referral_consumer', invite_available: true, requires_consent: false,
+      available_invites: 1, available_count: 0, credits: []
+    })
+    sendInviteMock.mockRejectedValue({ message: '请先核对发送记录' })
+    const wrapper = mountModal()
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    await wrapper.get('textarea').setValue('one@example.com')
+    const send = wrapper.findAll('button').find((button) => button.text().includes('inviteResetSendInvite'))!
+    await send.trigger('click')
+    await flushPromises()
+    expect(showSuccessMock).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('请先核对发送记录')
+    expect(send.attributes('disabled')).toBeDefined()
+    expect(wrapper.get('textarea').element.value).toBe('one@example.com')
+    expect(sendInviteMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('影子或 API Key 提供商不读取邀请资格', async () => {
+    const wrapper = mountModal()
+    await wrapper.setProps({ show: true, provider: { ...provider, parent_provider_id: 1 } as any })
+    await wrapper.setProps({ provider: { ...provider, type: 'apikey' } as any })
+    await flushPromises()
+    expect(getStatusMock).not.toHaveBeenCalled()
+  })
+
   it('邀请入口不可用时只禁用发送邀请，保留已有重置次数操作', async () => {
     getStatusMock.mockResolvedValue({
-      referral_key: 'codex_referral_persistent_invite',
+      referral_key: 'codex_referral_consumer',
       invite_available: false,
       invite_unavailable_reason: 'CODEX_INVITE_RESET_REFERRAL_UNAVAILABLE',
       invite_unavailable_message: '当前 Codex 推荐邀请入口暂不可用，但已有重置次数仍可使用',
@@ -120,7 +181,7 @@ describe('CodexInviteResetModal', () => {
 
   it('无奖励邀请显示无奖励而不是 Workspace credits', async () => {
     getStatusMock.mockResolvedValue({
-      referral_key: 'codex_referral_persistent_invite',
+      referral_key: 'codex_referral_consumer',
       invite_available: true,
       requires_consent: true,
       has_rewards: false,
@@ -139,7 +200,7 @@ describe('CodexInviteResetModal', () => {
 
   it('按过期时间升序选择默认重置机会', async () => {
     getStatusMock.mockResolvedValue({
-      referral_key: 'codex_referral_persistent_invite',
+      referral_key: 'codex_referral_consumer',
       invite_available: true,
       requires_consent: true,
       available_count: 2,
@@ -169,7 +230,7 @@ describe('CodexInviteResetModal', () => {
 
   it('usage 有次数但没有明细时使用通用重置', async () => {
     getStatusMock.mockResolvedValue({
-      referral_key: 'codex_referral_persistent_invite',
+      referral_key: 'codex_referral_consumer',
       invite_available: false,
       invite_unavailable_message: '邀请暂不可用',
       requires_consent: true,

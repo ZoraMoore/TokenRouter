@@ -16,6 +16,10 @@
                 <Icon name="play" size="sm" class="text-green-500" :stroke-width="2" />
                 {{ t('admin.providers.testConnection') }}
               </button>
+              <button @click="$emit('iq-test', provider); $emit('close')" class="dropdown-item">
+                <Icon name="brain" size="sm" class="text-primary-600 dark:text-primary-400" />
+                {{ t('providerIQ.title') }}
+              </button>
               <button @click="$emit('stats', provider); $emit('close')" class="dropdown-item">
                 <Icon name="chart" size="sm" class="text-indigo-500" />
                 {{ t('admin.providers.viewStats') }}
@@ -53,7 +57,7 @@
                 <Icon name="shield" size="sm" />
                 {{ t('admin.providers.setPrivacy') }}
               </button>
-              <button v-if="isOpenAIOAuth" @click="$emit('invite-reset', provider); $emit('close')" class="dropdown-item text-cyan-600">
+              <button v-if="isOpenAIOAuthParent" @click="$emit('invite-reset', provider); $emit('close')" class="dropdown-item text-cyan-600">
                 <Icon name="gift" size="sm" />
                 {{ t('admin.providers.inviteReset') }}
               </button>
@@ -87,7 +91,7 @@ import { Icon } from '@/components/icons'
 import type { Provider } from '@/types'
 
 const props = defineProps<{ show: boolean; provider: Provider | null; position: { top: number; left: number } | null }>()
-const emit = defineEmits(['close', 'test', 'stats', 'advanced-scheduler-score', 'schedule', 'duplicate', 'reauth', 'refresh-token', 'recover-state', 'reset-quota', 'set-privacy', 'invite-reset', 'create-spark-shadow', 'delete'])
+const emit = defineEmits(['close', 'test', 'iq-test', 'stats', 'advanced-scheduler-score', 'schedule', 'duplicate', 'reauth', 'refresh-token', 'recover-state', 'reset-quota', 'set-privacy', 'invite-reset', 'create-spark-shadow', 'delete'])
 const { t } = useI18n()
 const canDuplicate = computed(() => {
   if (!props.provider || props.provider.parent_provider_id != null) return false

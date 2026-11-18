@@ -326,51 +326,6 @@ services:
 # Networks
 # =============================================================================
 
-  tls-ingress-observer:
-    # 必须指向包含 /app/tls-ingress-observer 的当前不可变自定义镜像。
-    image: ${TOKENROUTER_IMAGE:?TOKENROUTER_IMAGE must match the application image}
-    container_name: tokenrouter-tls-ingress-observer
-    restart: unless-stopped
-    profiles: ["authenticated-ingress"]
-    entrypoint: ["/app/tls-ingress-observer"]
-    network_mode: host
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_RAW
-      - SETUID
-      - SETGID
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=8m
-    mem_limit: 192m
-    memswap_limit: 192m
-    cpus: "0.50"
-    pids_limit: 64
-    healthcheck:
-      disable: true
-    logging:
-      driver: json-file
-      options:
-        max-size: "20m"
-        max-file: "3"
-    environment:
-      - AUTHENTICATED_INGRESS_OBSERVER_ENDPOINT=http://127.0.0.1:${SERVER_PORT:-8080}/internal/tls-fingerprint/authenticated-ingress/observations
-      - AUTHENTICATED_INGRESS_OBSERVER_TOKEN=${TLS_FINGERPRINT_AUTHENTICATED_INGRESS_OBSERVER_TOKEN:-}
-      - AUTHENTICATED_INGRESS_OBSERVER_INTERFACE=${AUTHENTICATED_INGRESS_OBSERVER_INTERFACE:-}
-      - AUTHENTICATED_INGRESS_OBSERVER_SERVER_NAME=${AUTHENTICATED_INGRESS_OBSERVER_SERVER_NAME:-api.scienceedu.me}
-      - AUTHENTICATED_INGRESS_OBSERVER_FLOW_TTL_SECONDS=${AUTHENTICATED_INGRESS_OBSERVER_FLOW_TTL_SECONDS:-300}
-      - AUTHENTICATED_INGRESS_OBSERVER_MAX_FLOWS=${AUTHENTICATED_INGRESS_OBSERVER_MAX_FLOWS:-4096}
-      - AUTHENTICATED_INGRESS_OBSERVER_MAX_FLOW_BYTES=${AUTHENTICATED_INGRESS_OBSERVER_MAX_FLOW_BYTES:-262144}
-      - AUTHENTICATED_INGRESS_OBSERVER_MAX_TOTAL_BYTES=${AUTHENTICATED_INGRESS_OBSERVER_MAX_TOTAL_BYTES:-33554432}
-    depends_on:
-      tokenrouter:
-        condition: service_healthy
-
-
-
 networks:
   tokenrouter-network:
     driver: bridge

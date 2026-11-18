@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/TokenFlux/TokenRouter/internal/provider"
@@ -49,6 +51,32 @@ type UpdateOpenAI403CooldownSettingsRequest struct {
 // NewRuntimeSettingsHandler 注入唯一的提供商设置及其缓存。
 func NewRuntimeSettingsHandler(service *provider.RuntimeSettings) *RuntimeSettingsHandler {
 	return &RuntimeSettingsHandler{settingService: service}
+}
+
+// GetOpenAIOAuthModelWhitelist 返回管理员保存的白名单或新建账号的模型预设。
+func (h *RuntimeSettingsHandler) GetOpenAIOAuthModelWhitelist(c *gin.Context) {
+	list, err := h.settingService.GetOpenAIOAuthModelWhitelist(c.Request.Context())
+	if httpx.ErrorFrom(c, err) {
+		return
+	}
+	httpx.Success(c, list)
+}
+
+// UpdateOpenAIOAuthModelWhitelist 保存站点允许 OpenAI OAuth 账号使用的最终模型 ID。
+func (h *RuntimeSettingsHandler) UpdateOpenAIOAuthModelWhitelist(c *gin.Context) {
+	var request struct {
+		Models []string `json:"models"`
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, provider.OpenAIOAuthModelWhitelistMaxBytes)
+	if err := httpx.BindJSONStrict(c, &request); err != nil {
+		httpx.BadRequest(c, "Expected a JSON object with a models array.")
+		return
+	}
+	list, err := h.settingService.SetOpenAIOAuthModelWhitelist(c.Request.Context(), request.Models)
+	if httpx.ErrorFrom(c, err) {
+		return
+	}
+	httpx.Success(c, list)
 }
 
 // GetOverloadCooldownSettings 返回过载冷却设置。

@@ -131,10 +131,11 @@ func TestOpenAIPassthroughAPIKeyRestoresClientToolsStreaming(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
 
 	sse := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_stream_tools","model":"runtime-version","service_tier":"default"}}`,
 		`data: {"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"type":"function_call","id":"i1","call_id":"c1","name":"apply_patch","status":"in_progress"}}`,
 		`data: {"type":"response.function_call_arguments.done","sequence_number":1,"item_id":"i1","call_id":"c1","name":"apply_patch","arguments":"{\"input\":\"*** Begin Patch\"}"}`,
 		`data: {"type":"response.output_item.done","sequence_number":2,"output_index":0,"item":{"type":"function_call","id":"i1","call_id":"c1","name":"apply_patch","arguments":"{\"input\":\"*** Begin Patch\"}","status":"completed"}}`,
-		`data: {"type":"response.completed","sequence_number":3,"response":{"id":"resp_stream_tools","model":"runtime-version","status":"completed","output":[{"type":"function_call","id":"i1","call_id":"c1","name":"apply_patch","arguments":"{\"input\":\"*** Begin Patch\"}"}],"usage":{"input_tokens":1,"output_tokens":1}}}`,
+		`data: {"type":"response.completed","sequence_number":3,"response":{"id":"resp_stream_tools","service_tier":"ultrafast","status":"completed","output":[{"type":"function_call","id":"i1","call_id":"c1","name":"apply_patch","arguments":"{\"input\":\"*** Begin Patch\"}"}],"usage":{"input_tokens":1,"output_tokens":1}}}`,
 	}, "\n\n") + "\n\n"
 	upstream := &auxiliaryHTTPRecorder{resp: &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(sse))}}
 	svc := openAIClientToolsTestService(upstream)
@@ -145,6 +146,8 @@ func TestOpenAIPassthroughAPIKeyRestoresClientToolsStreaming(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "runtime-version", result.UpstreamResponseModel)
+	require.Equal(t, "ultrafast", result.UpstreamResponseServiceTier)
+	require.Nil(t, result.ServiceTier)
 	assertOpenAIClientToolsLowered(t, upstream.lastBody)
 	output := recorder.Body.String()
 	require.Contains(t, output, `"type":"custom_tool_call"`)

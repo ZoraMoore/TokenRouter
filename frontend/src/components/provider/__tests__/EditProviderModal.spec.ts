@@ -1007,6 +1007,56 @@ describe('EditProviderModal', () => {
     expect(wrapper.get('[data-testid="provider-scheduling-threshold-override-enabled"]').attributes('role')).toBe('switch')
   })
 
+  it('keeps existing UltraFast response-tier billing when only the name changes', async () => {
+    const provider = buildProvider()
+    provider.extra = { openai_response_tier_billing_enabled: true, images_url_to_b64_json: true }
+    updateProviderMock.mockResolvedValue(provider)
+    const wrapper = mountModal(provider)
+    expect(wrapper.get('[data-testid="edit-openai-ultrafast-billing-toggle"]').attributes('aria-checked')).toBe('true')
+    await wrapper.get('#edit-provider-name').setValue('Renamed')
+    await wrapper.get('#edit-provider-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateProviderMock).toHaveBeenCalledWith(provider.id, expect.objectContaining({
+      name: 'Renamed',
+      extra: expect.objectContaining(provider.extra)
+    }))
+  })
+
+  it.each([
+    ['apikey', true], ['apikey', false],
+    ['oauth', true], ['oauth', false]
+  ] as const)('changes UltraFast response-tier billing for %s from %s', async (type, enabled) => {
+    const provider = type === 'oauth' ? buildOpenAIOAuthProvider() : buildProvider()
+    provider.extra = { retained: 'original' }
+    if (enabled) provider.extra.openai_response_tier_billing_enabled = true
+    updateProviderMock.mockResolvedValue(provider)
+    const wrapper = mountModal(provider)
+    const toggle = wrapper.get('[data-testid="edit-openai-ultrafast-billing-toggle"]')
+    expect(toggle.attributes('aria-checked')).toBe(String(enabled))
+    await toggle.trigger('click')
+    await wrapper.get('#edit-provider-form').trigger('submit.prevent')
+    await flushPromises()
+    const extra = updateProviderMock.mock.calls[0][1].extra
+    expect(extra.retained).toBe('original')
+    if (enabled) {
+      expect(extra).not.toHaveProperty('openai_response_tier_billing_enabled')
+    } else {
+      expect(extra.openai_response_tier_billing_enabled).toBe(true)
+    }
+  })
+
+  it('refreshes the UltraFast switch when changing providers', async () => {
+    const provider = buildProvider()
+    provider.extra = { openai_response_tier_billing_enabled: true }
+    const wrapper = mountModal(provider)
+    const selector = '[data-testid="edit-openai-ultrafast-billing-toggle"]'
+    expect(wrapper.get(selector).attributes('aria-checked')).toBe('true')
+    await wrapper.setProps({ provider: buildOpenAIOAuthProvider() })
+    expect(wrapper.get(selector).attributes('aria-checked')).toBe('false')
+    await wrapper.setProps({ provider: { ...buildProvider(), id: 2 } })
+    expect(wrapper.get(selector).attributes('aria-checked')).toBe('false')
+  })
+
   // 关闭开关时删除显式 opt-in，并保留其他提供商配置。
   it('hydrates and disables image URL backfill independently', async () => {
     const provider = buildProvider()

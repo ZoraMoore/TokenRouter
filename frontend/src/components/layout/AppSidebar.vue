@@ -85,6 +85,25 @@
           </template>
         </div>
 
+        <div class="sidebar-section">
+          <div class="sidebar-section-title" :class="{ 'sidebar-section-title-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed">
+            <span class="sidebar-section-title-text" :class="{ 'sidebar-section-title-text-collapsed': sidebarCollapsed }">
+              {{ t('pelicanTests.smartOps') }}
+            </span>
+          </div>
+          <router-link
+            to="/admin/pelican-tests"
+            class="sidebar-link mb-1"
+            :class="{ 'sidebar-link-active': isActive('/admin/pelican-tests'), 'sidebar-link-collapsed': sidebarCollapsed }"
+            :aria-label="t('pelicanTests.title')"
+            :title="sidebarCollapsed ? t('pelicanTests.title') : undefined"
+            @click="handleMenuItemClick('/admin/pelican-tests')"
+          >
+            <Icon name="brain" size="md" class="flex-shrink-0" />
+            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed">{{ t('pelicanTests.title') }}</span>
+          </router-link>
+        </div>
+
         <!-- 管理员的个人功能区 -->
         <div class="sidebar-section">
           <div class="sidebar-section-title" :class="{ 'sidebar-section-title-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
@@ -150,10 +169,11 @@ import Collapse from '@/components/common/Collapse.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from '@/components/icons/Icon.vue'
 import type { IconName } from '@/components/icons/registry'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import { sanitizeSvg } from '@/utils/sanitize'
+import { clearPelicanVisibility, pelicanVisibility, PELICAN_VISIBILITY_INTERVAL, readPelicanVisibility } from '@/composables/usePelicanVisibility'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 
 interface NavItem {
@@ -169,6 +189,7 @@ interface NavItem {
 const { t } = useI18n()
 
 const route = useRoute()
+const router = useRouter()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const onboardingStore = useOnboardingStore()
@@ -193,6 +214,7 @@ const sidebarNavRef = ref<HTMLElement | null>(null)
 const groupExpandOverrides = ref<Map<string, boolean>>(new Map())
 
 // 批量图片入口还需要用户 API Key 和分组权限同时满足。
+const flagPelicanShowcase = () => pelicanVisibility.value?.enabled === true
 const flagBatchImageAccess = () => canUseBatchImage.value
 // 创作台入口由功能开关控制（默认开），可用模型以页面内目录为准。
 const flagCreativeStudioAccess = () => appStore.cachedPublicSettings?.creative_enabled !== false
@@ -204,11 +226,10 @@ const userNavItems = computed((): NavItem[] => {
   const items: NavItem[] = [
     { path: '/dashboard', label: t('nav.dashboard'), icon: 'dashboard' as const },
     { path: '/models', label: t('nav.modelMarketplace'), icon: 'modelMarketplace' as const },
+    { path: '/pelican-tests', label: t('pelicanTests.title'), icon: 'brain', featureFlag: flagPelicanShowcase },
     { path: '/usage-ranking', label: t('nav.usageRanking'), icon: 'ranking' as const, featureFlag: flagUsageRankingAccess },
     { path: '/keys', label: t('nav.apiKeys'), icon: 'key' as const },
-    { path: '/team', label: t('nav.team'), icon: 'users' as const, featureFlag: flagTeamAccess },
     { path: '/batch-image', label: t('nav.batchImage'), icon: 'batchImage' as const, featureFlag: flagBatchImageAccess },
-    { path: '/creative', label: t('nav.creative'), icon: 'creative' as const, featureFlag: flagCreativeStudioAccess },
     { path: '/usage', label: t('nav.usage'), icon: 'chart' as const },
     { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: 'creditCard' as const },
     ...(appStore.cachedPublicSettings?.payment_enabled
@@ -230,6 +251,8 @@ const userNavItems = computed((): NavItem[] => {
         ]
       : []),
     { path: '/redeem', label: t('nav.redeem'), icon: 'gift' as const },
+    { path: '/team', label: t('nav.team'), icon: 'users' as const, featureFlag: flagTeamAccess },
+    { path: '/creative', label: t('nav.creative'), icon: 'creative' as const, featureFlag: flagCreativeStudioAccess },
     ...(appStore.cachedPublicSettings?.affiliate_enabled === true
       ? [
           {
@@ -256,11 +279,10 @@ const personalNavItems = computed((): NavItem[] => {
   const items: NavItem[] = [
     { path: '/dashboard', label: t('nav.dashboard'), icon: 'dashboard' as const },
     { path: '/models', label: t('nav.modelMarketplace'), icon: 'modelMarketplace' as const },
+    { path: '/pelican-tests', label: t('pelicanTests.title'), icon: 'brain', featureFlag: flagPelicanShowcase },
     { path: '/usage-ranking', label: t('nav.usageRanking'), icon: 'ranking' as const, featureFlag: flagUsageRankingAccess },
     { path: '/keys', label: t('nav.apiKeys'), icon: 'key' as const },
-    { path: '/team', label: t('nav.team'), icon: 'users' as const, featureFlag: flagTeamAccess },
     { path: '/batch-image', label: t('nav.batchImage'), icon: 'batchImage' as const, featureFlag: flagBatchImageAccess },
-    { path: '/creative', label: t('nav.creative'), icon: 'creative' as const, featureFlag: flagCreativeStudioAccess },
     { path: '/usage', label: t('nav.usage'), icon: 'chart' as const },
     { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: 'creditCard' as const },
     ...(appStore.cachedPublicSettings?.payment_enabled
@@ -282,6 +304,8 @@ const personalNavItems = computed((): NavItem[] => {
         ]
       : []),
     { path: '/redeem', label: t('nav.redeem'), icon: 'gift' as const },
+    { path: '/team', label: t('nav.team'), icon: 'users' as const, featureFlag: flagTeamAccess },
+    { path: '/creative', label: t('nav.creative'), icon: 'creative' as const, featureFlag: flagCreativeStudioAccess },
     ...(appStore.cachedPublicSettings?.affiliate_enabled === true
       ? [
           {
@@ -423,6 +447,7 @@ function handleMenuItemClick(itemPath: string) {
 }
 
 function isActive(path: string): boolean {
+  if (path === '/pelican-tests' && route.name === 'PelicanTests') return true
   return route.path === path || route.path.startsWith(path + '/')
 }
 
@@ -451,6 +476,29 @@ watch(
   },
   { immediate: true }
 )
+
+// 账号切换时清除上一个会话的展示状态。重新查看标签页也会同步管理员刚保存的设置。
+watch(() => authStore.user?.id, (id, _previous, onCleanup) => {
+  if (!id) {
+    clearPelicanVisibility()
+    return
+  }
+  void readPelicanVisibility(id)
+  const refresh = () => {
+    if (!document.hidden) void readPelicanVisibility(id, true)
+  }
+  const timer = window.setInterval(refresh, PELICAN_VISIBILITY_INTERVAL)
+  document.addEventListener('visibilitychange', refresh)
+  onCleanup(() => {
+    window.clearInterval(timer)
+    document.removeEventListener('visibilitychange', refresh)
+  })
+}, { immediate: true, flush: 'sync' })
+watch(() => pelicanVisibility.value?.enabled, enabled => {
+  if (enabled === false && route.meta.requiresPelicanShowcase) {
+    void router.replace(authStore.isAdmin ? '/admin/pelican-tests' : '/dashboard')
+  }
+}, { immediate: true })
 
 onMounted(() => {
   void refreshBatchImageAccess()

@@ -10,16 +10,12 @@ func CloneTLSFingerprintProfile(p *TLSFingerprintProfile) *TLSFingerprintProfile
 		return nil
 	}
 	copied := *p
-	copied.SignatureAlgorithmsCert = append([]uint16(nil), p.SignatureAlgorithmsCert...)
-	copied.Verification.ValidatedTargets = append([]TLSFingerprintTargetValidation(nil), p.Verification.ValidatedTargets...)
-	copied.Verification.ClassifierEvidence = append([]string(nil), p.Verification.ClassifierEvidence...)
-	copied.Verification.Issues = append([]string(nil), p.Verification.Issues...)
-	copied.Verification.Warnings = append([]string(nil), p.Verification.Warnings...)
 	copied.Description = clonePointer(p.Description)
 	copied.CipherSuites = slices.Clone(p.CipherSuites)
 	copied.Curves = slices.Clone(p.Curves)
 	copied.PointFormats = slices.Clone(p.PointFormats)
 	copied.SignatureAlgorithms = slices.Clone(p.SignatureAlgorithms)
+	copied.SignatureAlgorithmsCert = slices.Clone(p.SignatureAlgorithmsCert)
 	copied.ALPNProtocols = slices.Clone(p.ALPNProtocols)
 	copied.SupportedVersions = slices.Clone(p.SupportedVersions)
 	copied.KeyShareGroups = slices.Clone(p.KeyShareGroups)

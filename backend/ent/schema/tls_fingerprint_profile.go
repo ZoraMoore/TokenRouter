@@ -8,14 +8,13 @@ import (
 	"entgo.io/ent/schema/field"
 
 	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
-	"github.com/TokenFlux/TokenRouter/internal/egress"
 )
 
 // TLSFingerprintProfile 定义 TLS 指纹配置模板的 schema。
 //
 // TLS 指纹模板用于模拟特定客户端（如 Claude Code / Node.js）的 TLS 握手特征。
 // 每个模板包含完整的 ClientHello 参数：加密套件、曲线、扩展等。
-// 通过 Account.Extra.tls_fingerprint_profile_id 绑定到具体账号。
+// 提供商通过 tls_fingerprint_profile_id 绑定模板。
 type TLSFingerprintProfile struct {
 	ent.Schema
 }
@@ -100,14 +99,6 @@ func (TLSFingerprintProfile) Fields() []ent.Field {
 		// extensions: TLS 扩展类型 ID 列表，按发送顺序排列
 		field.JSON("extensions", []uint16{}).
 			Optional().
-			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
-
-		// verification 保存模板来源和本地回放/目标握手验证证据。
-		field.JSON("verification", egress.TLSFingerprintProfileVerification{}).
-			Default(egress.TLSFingerprintProfileVerification{
-				SourceKind:       egress.TLSFingerprintProfileSourceLegacy,
-				ValidationStatus: egress.TLSFingerprintProfileValidationDraft,
-			}).
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 	}
 }

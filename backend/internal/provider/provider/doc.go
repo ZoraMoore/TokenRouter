@@ -14,4 +14,5 @@
 //   - oauth_usage.go、ollama_usage.go、upstream_usage.go 和 usage*.go：用量查询与响应解析。
 //   - refresh_errors.go、managed_refresh_key.go 和 privacy.go：刷新错误分类、缓存键和隐私请求。
 //   - runtime_status.go、scheduled_plans.go 和 scheduler_score.go：管理页面的运行状态与调度信息。
+//   - state_probe.go 使用指定 OpenAI 订阅账号的 HTTP 会话完成两次续接请求。
 package provider

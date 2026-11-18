@@ -3,8 +3,8 @@ package forward
 import (
 	"strings"
 
-	"github.com/TokenFlux/TokenRouter/internal/gateway/tierpolicy"
 	"github.com/TokenFlux/TokenRouter/internal/protocol"
+	"github.com/TokenFlux/TokenRouter/internal/protocol/openai"
 )
 
 // ResponseObserver 分别保存模型声明与实际服务档位，不改变出站请求和计费模型。
@@ -23,16 +23,16 @@ func (o *ResponseObserver) Observe(model string, terminal bool) {
 }
 
 func (o *ResponseObserver) ObserveOpenAI(payload []byte, eventType string) {
-	model := firstValidTrimmedGJSONModel(payload, "response.model", "model")
-	terminal := isUpstreamResponseModelTerminalEvent(eventType)
-	// 上游只有携带 model 的事件才同时提供可信的 service_tier；无 model 的
-	// 增量帧不能作为计费依据。
-	if model == "" {
+	if o == nil {
 		return
 	}
+	eventType = openai.EffectiveOpenAISSEEventType(payload, eventType)
+	if eventType == "" {
+		eventType = openai.OpenAIChatCompletionServiceTierEventType(payload)
+	}
 	o.model.ObserveOpenAI(payload, eventType)
-	// Responses 的非终止事件通常只是回显请求档位，只有终止事件和无类型的
-	// Chat Completions/非流式 JSON 才能作为实际处理档位的证据。
+	terminal := isUpstreamResponseModelTerminalEvent(eventType)
+	// Responses 的早期事件会回显请求档位。终态可能只声明实际档位，省略模型。
 	if !terminal && strings.TrimSpace(eventType) != "" {
 		return
 	}
@@ -83,14 +83,7 @@ func (o *ResponseObserver) ServiceTier() string {
 
 // NormalizeObservedOpenAIServiceTier 仅接受上游已知档位，保留 fast 的标准化规则。
 func NormalizeObservedOpenAIServiceTier(raw string) string {
-	switch value := strings.ToLower(strings.TrimSpace(raw)); value {
-	case "priority", "fast":
-		return tierpolicy.OpenAIFastTierPriority
-	case "default", "flex", "scale":
-		return value
-	default:
-		return ""
-	}
+	return openai.ObservedServiceTier(raw)
 }
 
 func normalizeObservedAnthropicSpeed(raw string) string {
@@ -117,16 +110,9 @@ func isUpstreamResponseModelTerminalEvent(event string) bool {
 	return protocol.IsResponseModelTerminalEvent(event)
 }
 
-// ResetModel 在再次发送上游请求前清空模型声明，保留既有服务档位处理。
-func (o *ResponseObserver) ResetModel() {
+// Reset 清除上一次尝试的模型与档位，避免将失败响应的声明用于下一次结算。
+func (o *ResponseObserver) Reset() {
 	if o != nil {
-		o.model = protocol.ResponseModelObserver{}
-	}
-}
-
-// ObserveOpenAIModel 仅补充模型声明，供原本不采集服务档位的透传路径使用。
-func (o *ResponseObserver) ObserveOpenAIModel(payload []byte, event string) {
-	if o != nil {
-		o.model.ObserveOpenAI(payload, event)
+		*o = ResponseObserver{}
 	}
 }

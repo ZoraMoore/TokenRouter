@@ -284,8 +284,6 @@ type RateLimitCacheInvalidator interface {
 }
 
 type APIKeyService struct {
-	authenticatedIngressMu    sync.RWMutex
-	authenticatedIngress      AuthenticatedIngressRequestObserver
 	calendar                  timezone.Calendar
 	groupFastPolicy           func(string, bool) string
 	runtimeStart              sync.Once

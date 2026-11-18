@@ -4,6 +4,11 @@ export interface ModelMappingRow {
   to: string
 }
 
+// OpenAI 全局白名单和探针使用完整模型 ID。模型可带供应商前缀。
+export function isValidOpenAIModelID(model: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,254}$/.test(model) && !model.includes('://')
+}
+
 /** ModelMappingIssue 与 keys.modelRedirect 下的文案键同名，调用方可直接拼接翻译键。 */
 export type ModelMappingIssue =
   | 'sourceRequired'

@@ -110,6 +110,21 @@ describe('global header and sidebar hierarchy', () => {
 })
 
 describe('AppSidebar admin personal menu', () => {
+  it.each(['userNavItems', 'personalNavItems'])('%s 将团队和创作台紧接在兑换之后', (name) => {
+    const start = componentSource.indexOf(`const ${name} = computed`)
+    const menu = componentSource.slice(start, componentSource.indexOf('const visibleItems', start))
+    const paths = Array.from(menu.matchAll(/path: '([^']+)'/g), match => match[1])
+    const redeem = paths.indexOf('/redeem')
+    expect(redeem).toBeGreaterThanOrEqual(0)
+    expect(paths.slice(redeem, redeem + 3)).toEqual(['/redeem', '/team', '/creative'])
+  })
+
+  it('在智能运维分区显示管理入口，个人菜单和用户菜单显示样本入口', () => {
+    const section = componentSource.match(/<div class="sidebar-section"[^>]*>[\s\S]*?t\('pelicanTests.smartOps'\)[\s\S]*?to="\/admin\/pelican-tests"/)
+    expect(section).not.toBeNull()
+    expect(componentSource.match(/path: '\/pelican-tests'.*featureFlag: flagPelicanShowcase/g)).toHaveLength(2)
+  })
+
   it('shows the regular dashboard under My Provider for admins', () => {
     const personalNavItemsBlockMatch = componentSource.match(
       /const personalNavItems = computed\(\(\): NavItem\[\] => \{[\s\S]*?const adminNavItems = computed/

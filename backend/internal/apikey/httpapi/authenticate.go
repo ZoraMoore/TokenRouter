@@ -142,7 +142,6 @@ func Authenticate(c *gin.Context, auth *apikey.APIKeyService, o AuthenticationOp
 		o.Loaded(c, access.KeyView())
 	}
 	if err == nil {
-		auth.ObserveAuthenticatedIngressRequest(takeAuthenticatedIngressRequestSnapshot(c.Request), access.KeyView())
 		return access, true
 	}
 	var failure *apikey.AuthenticationFailure

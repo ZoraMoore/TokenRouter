@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -23,7 +25,7 @@ func TestBuildProviderForCreateRequiresCustomGeminiThirdPartyBaseURL(t *testing.
 		},
 	}
 
-	_, err := BuildProviderForCreate(invalidInput, nil, CreationOptions{Now: time.Now, LoadLocation: time.LoadLocation, NewSeed: uuid.NewString})
+	_, err := BuildProviderForCreate(t.Context(), invalidInput, nil, CreationOptions{Now: time.Now, LoadLocation: time.LoadLocation, NewSeed: uuid.NewString})
 	require.Error(t, err)
 	require.Equal(t, "GEMINI_THIRD_PARTY_BASE_URL_REQUIRED", apperror.Reason(err))
 
@@ -36,7 +38,7 @@ func TestBuildProviderForCreateRequiresCustomGeminiThirdPartyBaseURL(t *testing.
 			"base_url":                      "https://provider.example.test",
 		},
 	}
-	provider, err := BuildProviderForCreate(validInput, nil, CreationOptions{Now: time.Now, LoadLocation: time.LoadLocation, NewSeed: uuid.NewString})
+	provider, err := BuildProviderForCreate(t.Context(), validInput, nil, CreationOptions{Now: time.Now, LoadLocation: time.LoadLocation, NewSeed: uuid.NewString})
 	require.NoError(t, err)
 	require.NotNil(t, provider)
 }
@@ -61,7 +63,7 @@ func TestBuildProviderForCreateNormalizesLegacyOpenAIConfigurationForCreateAndIm
 		"unrelated":                  map[string]any{"keep": true},
 	}
 
-	provider, err := BuildProviderForCreate(input, extra, CreationOptions{Now: time.Now, LoadLocation: time.LoadLocation, NewSeed: uuid.NewString})
+	provider, err := BuildProviderForCreate(t.Context(), input, extra, CreationOptions{Now: time.Now, LoadLocation: time.LoadLocation, NewSeed: uuid.NewString})
 
 	require.NoError(t, err)
 	require.Contains(t, provider.UpstreamProtocols(), protocol.ProtocolOpenAIResponses)
@@ -77,11 +79,51 @@ func TestBuildProviderForCreateNormalizesLegacyOpenAIConfigurationForCreateAndIm
 
 func TestBuildProviderForCreateAddsCodexModels(t *testing.T) {
 	for _, credentials := range []map[string]any{nil, {"model_whitelist": []any{}}, {"model_mapping": map[string]any{"gpt-6-sol": "gpt-6-sol"}}} {
-		value, err := BuildProviderForCreate(&CreateProviderInput{
+		value, err := BuildProviderForCreate(t.Context(), &CreateProviderInput{
 			Platform: PlatformOpenAI, Type: ProviderTypeOAuth, Credentials: credentials,
 		}, nil, CreationOptions{Now: time.Now, LoadLocation: time.LoadLocation, NewSeed: uuid.NewString})
 		require.NoError(t, err)
 		require.Len(t, value.Credentials["model_whitelist"], 7)
 		require.Contains(t, value.Credentials["model_whitelist"], "gpt-6.1-sol")
 	}
+}
+
+// TestBuildProviderForCreateUsesGlobalOAuthModels 覆盖未指定名单的账号和自带限制的导入账号。
+func TestBuildProviderForCreateUsesGlobalOAuthModels(t *testing.T) {
+	ctx := t.Context()
+	models := []string{"gpt-custom", "gpt-5.5"}
+	options := CreationOptions{
+		Now: time.Now, LoadLocation: time.LoadLocation, NewSeed: uuid.NewString,
+		ReadOpenAIOAuthModels: func(context.Context) (OpenAIOAuthModelPolicy, error) {
+			return NewOpenAIOAuthModelPolicy(models), nil
+		},
+	}
+
+	for _, tc := range []struct {
+		name        string
+		credentials map[string]any
+		want        []string
+	}{
+		{"use site models", nil, models},
+		{"mapped alias", map[string]any{"model_mapping": map[string]any{"alias": "gpt-outside"}}, models},
+		{"account subset", map[string]any{"model_whitelist": []any{"gpt-custom"}}, []string{"gpt-custom"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			value, err := BuildProviderForCreate(t.Context(), &CreateProviderInput{
+				Platform: PlatformOpenAI, Type: ProviderTypeOAuth, Credentials: tc.credentials,
+			}, nil, options)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, value.Credentials["model_whitelist"])
+		})
+	}
+
+	readErr := errors.New("settings offline")
+	options.ReadOpenAIOAuthModels = func(context.Context) (OpenAIOAuthModelPolicy, error) {
+		return OpenAIOAuthModelPolicy{}, readErr
+	}
+	_, err := BuildProviderForCreate(ctx, &CreateProviderInput{Platform: PlatformOpenAI, Type: ProviderTypeOAuth}, nil, options)
+	require.ErrorIs(t, err, readErr)
+	key, err := BuildProviderForCreate(ctx, &CreateProviderInput{Platform: PlatformOpenAI, Type: ProviderTypeAPIKey}, nil, options)
+	require.NoError(t, err)
+	require.NotContains(t, key.Credentials, "model_whitelist")
 }

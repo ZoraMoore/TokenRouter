@@ -376,3 +376,21 @@ func (s *openAIShadowFixture) CreateShadow(ctx context.Context, parentID int64, 
 		Extra:            map[string]any{},
 	}, nil
 }
+
+// TestOpenAIResetQuotaSkipsRecoveryForUnconfirmedRedemption 防止未消费的账号被意外恢复调度。
+func TestOpenAIResetQuotaSkipsRecoveryForUnconfirmedRedemption(t *testing.T) {
+	for _, code := range []string{"no_credit", "already_redeemed", "nothing_to_reset", "unknown-value"} {
+		t.Run(code, func(t *testing.T) {
+			quota := successfulOpenAIQuotaWorkflowStub()
+			quota.resetResult = &openai.OpenAIQuotaResetResult{Code: code}
+			recoverer := &openAIProviderStateRecovererStub{}
+			handler := &OpenAIOAuthHandler{Admin: recoveredOpenAIProviderStub(), Quota: quota, Recovery: recoverer}
+			status, envelope := performOpenAIQuotaResetRequest(t, handler, nil)
+			require.Equal(t, http.StatusOK, status)
+			require.Zero(t, recoverer.calls)
+			require.False(t, envelope.Data.ProviderStateRecovered)
+			require.NotNil(t, envelope.Data.Quota)
+			require.Equal(t, 1, quota.queryCalls)
+		})
+	}
+}

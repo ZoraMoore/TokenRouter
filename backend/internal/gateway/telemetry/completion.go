@@ -13,7 +13,7 @@ func ObserveCompletion(component, message string) {
 	logging.LegacyPrintf(component, "%s", message)
 }
 
-// CompletionBillingEvent 保留缺价、免费搜索与档位降级的级别及结构化字段。
+// CompletionBillingEvent 记录缺价、免费搜索和实际采用的计费档位。
 func CompletionBillingEvent(e completion.BillingEvent) {
 	switch e.Kind {
 	case "pricing_missing":
@@ -24,5 +24,9 @@ func CompletionBillingEvent(e completion.BillingEvent) {
 		logging.L().Info("openai_usage.search_price_per_1k_explicit_free", zap.Int("search_count", e.SearchCount), zap.String("model", e.Model), zap.Int64("api_key_id", e.KeyID), zap.Any("group_id", e.GroupID))
 	case "tier_downgrade":
 		slog.Info("billing.service_tier_downgraded", "component", e.Component, "request_id", e.RequestID, "requested_tier", e.RequestedTier, "response_tier", e.ObservedTier, "billed_tier", e.BilledTier, "platform", e.Platform, "provider_id", e.ProviderID)
+	case "tier_response":
+		slog.Info("billing.response_service_tier", "component", e.Component, "request_id", e.RequestID, "requested_tier", e.RequestedTier, "response_tier", e.ObservedTier, "billed_tier", e.BilledTier, "platform", e.Platform, "provider_id", e.ProviderID)
+	case "tier_response_missing":
+		slog.Warn("billing.response_service_tier_missing", "component", e.Component, "request_id", e.RequestID, "requested_tier", e.RequestedTier, "response_tier", e.ObservedTier, "billed_tier", e.BilledTier, "platform", e.Platform, "provider_id", e.ProviderID, "fallback_to_request", true)
 	}
 }

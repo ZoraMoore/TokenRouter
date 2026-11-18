@@ -10,6 +10,53 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/billing/pricing"
 )
 
+// TestCalculateCostUnifiedUltrafastCatalog 检查两种查价入口如何按目录快照中的上下文阶梯结算。
+func TestCalculateCostUnifiedUltrafastCatalog(t *testing.T) {
+	const model = "custom"
+	long := &pricing.CatalogModelPricing{
+		InputCostPerToken: 3, OutputCostPerToken: 5,
+		InputCostPerImageToken: 1, OutputCostPerImageToken: 7,
+		CacheReadInputTokenCost: 2, CacheCreationInputTokenCost: 4, CacheCreationInputTokenCostAbove1hr: 6,
+	}
+	catalog := defaultCatalogStub{entries: map[string]*pricing.CatalogModelPricing{
+		model: {InputCostPerToken: 1, OutputCostPerToken: 2, ContextPrices: []pricing.CatalogContextPrice{{Threshold: 8, Pricing: long}}},
+	}}
+	calculator := NewCalculator(nil, CalculatorOptions{}).WithPriceCatalog(catalog)
+	resolver := NewPriceResolver(nil, calculator, nil, nil)
+	for _, tc := range []struct {
+		name     string
+		resolver *PriceResolver
+	}{
+		{"catalog", nil},
+		{"resolved", resolver},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := CostInput{
+				Ctx: context.Background(), Model: model, Resolver: tc.resolver, ServiceTier: "ultrafast", RateMultiplier: 0.25,
+				Tokens: UsageTokens{
+					InputTokens: 4, ImageInputTokens: 1, OutputTokens: 4, ImageOutputTokens: 2,
+					CacheReadTokens: 3, CacheCreationTokens: 2, CacheCreation5mTokens: 1, CacheCreation1hTokens: 1,
+				},
+			}
+			cost, err := calculator.CalculateCostUnified(input)
+			require.NoError(t, err)
+			require.True(t, cost.LongContextBillingApplied)
+			require.Equal(t, 54.0, cost.InputCost)
+			require.Equal(t, 6.0, cost.ImageInputCost)
+			require.Equal(t, 60.0, cost.OutputCost)
+			require.Equal(t, 84.0, cost.ImageOutputCost)
+			require.Equal(t, 36.0, cost.CacheReadCost)
+			require.Equal(t, 60.0, cost.CacheCreationCost)
+			require.Equal(t, 300.0, cost.TotalCost)
+			require.Equal(t, 75.0, cost.ActualCost)
+
+			input.Model = "unpriced"
+			_, err = calculator.CalculateCostUnified(input)
+			require.ErrorIs(t, err, pricing.ErrModelPricingUnavailable)
+		})
+	}
+}
+
 // TestPerRequestContextPricingIgnoresModelName 验证模型名称不改变按次区间及默认价的选择。
 func TestPerRequestContextPricingIgnoresModelName(t *testing.T) {
 	for _, model := range []string{"custom-chat", "custom-image-analyzer", "gpt-image-alias"} {

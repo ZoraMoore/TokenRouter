@@ -40,6 +40,13 @@ func (s *AntigravityProbe) Execute(ctx context.Context, value *provider.Record, 
 	if strings.TrimSpace(request.Prompt) != "" {
 		prompt = strings.TrimSpace(request.Prompt)
 	}
+	proxy := ""
+	if value.ProxyID != nil && value.Proxy != nil {
+		proxy = value.Proxy.URL()
+	}
+	if request.FullAnswer {
+		return s.answer(ctx, value, request, project, model, prompt, token, proxy)
+	}
 	var body []byte
 	if strings.HasPrefix(request.Model, "gemini-") {
 		body, err = antigravity.BuildGeminiTestRequest(project, model, prompt)
@@ -48,10 +55,6 @@ func (s *AntigravityProbe) Execute(ctx context.Context, value *provider.Record, 
 	}
 	if err != nil {
 		return nil, fmt.Errorf("构建请求失败: %w", err)
-	}
-	proxy := ""
-	if value.ProxyID != nil && value.Proxy != nil {
-		proxy = value.Proxy.URL()
 	}
 	prefix := fmt.Sprintf("[antigravity-Test] provider=%d(%s)", value.ID, value.Name)
 	input := AntigravityRetryRequest{
@@ -65,4 +68,37 @@ func (s *AntigravityProbe) Execute(ctx context.Context, value *provider.Record, 
 	}
 	adapter, attempt := s.Retry.Bind(input)
 	return antigravity.Probe(ctx, attempt, adapter.Options, model, s.Retry.BodyLimit, s.Enter)
+}
+
+// answer 在提供商配置的地址发起一次生成，收到 STOP 后返回该模型的可见文字。
+func (s *AntigravityProbe) answer(ctx context.Context, value *provider.Record, request provider.PreparedTestRequest, project, model, prompt, token, proxy string) (*antigravity.TestConnectionResult, error) {
+	if s.Retry == nil || s.Retry.BaseURL == nil || s.Retry.Do == nil {
+		return nil, errAnswerUpstream
+	}
+	if s.Enter != nil {
+		done, err := s.Enter()
+		if err != nil {
+			return nil, errAnswerUpstream
+		}
+		defer done()
+	}
+	body, err := antigravity.BuildAnswerRequest(project, model, prompt, pelicanMaxTokens)
+	if err != nil {
+		return nil, errAnswerUpstream
+	}
+	req, err := antigravity.NewAPIRequestWithURL(ctx, s.Retry.BaseURL(value), "streamGenerateContent", token, body)
+	if err != nil {
+		return nil, errAnswerUpstream
+	}
+	if agent := strings.TrimSpace(request.UserAgent); agent != "" {
+		req.Header.Set("User-Agent", agent)
+	}
+	resp, err := s.Retry.Do(req, proxy, value.ID, value.Concurrency)
+	if err != nil || resp == nil || resp.Body == nil {
+		return nil, errAnswerUpstream
+	}
+	defer func() { _ = resp.Body.Close() }()
+	result := &antigravity.TestConnectionResult{MappedModel: model, ReasoningEffort: sentAnswerEffort(answerGemini, body)}
+	result.Text, err = completedTestAnswer(ctx, resp, answerGemini, testAnswerLimits(request.SVGAnswer, request.IQMode))
+	return result, err
 }

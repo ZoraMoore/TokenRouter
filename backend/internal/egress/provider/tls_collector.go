@@ -2,7 +2,6 @@ package provider
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -10,69 +9,64 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"net"
 	"net/http"
-	"net/url"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/TokenFlux/TokenRouter/internal/egress"
 	"github.com/TokenFlux/TokenRouter/internal/infra/httpclient/tlsfingerprint"
-	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry/logging"
 )
 
 const (
 	tlsFingerprintCollectorDefaultTTL        = 30 * time.Minute
 	tlsFingerprintCollectorDefaultMaxRecords = 20
-	// 受控采集允许 ClientHello 跨多个 record，但总量始终受硬上限约束。
-	tlsFingerprintCollectorClientHelloBufferSize = 256 << 10
-	tlsFingerprintCollectorMinimumColdSamples    = 3
-	tlsFingerprintCollectorReadTimeout           = 10 * time.Second
-
-	tlsFingerprintCaptureModeDirect            = "direct_base_url"
-	tlsFingerprintCaptureModeControlledConnect = "controlled_connect"
+	// 收集器通过 Peek 读取握手，随后由 TLS 服务器消费同一份记录。
+	tlsFingerprintCollectorClientHelloBufferSize = tlsfingerprint.MaxClientHelloCaptureBytes
 )
 
-var tlsFingerprintControlledTargets = map[string]struct{}{
-	"chatgpt.com":    {},
-	"api.openai.com": {},
+type (
+	TLSFingerprintCollectorStatus  = egress.TLSFingerprintCollectorStatus
+	TLSFingerprintCollectorSession = egress.TLSFingerprintCollectorSession
+	TLSFingerprintCaptureRecord    = egress.TLSFingerprintCaptureRecord
+)
+
+// CollectorOptions 包含 app 提供的 TLS 采集器配置。
+type CollectorOptions struct {
+	Host                 string
+	Port                 int
+	PublicBaseURL        string
+	CertFile             string
+	KeyFile              string
+	SessionTTLSeconds    int
+	MaxRecordsPerSession int
+	Now                  func() time.Time
+	Diagnostics          egress.Diagnostics
 }
 
-// TLSFingerprintCollectorSessionRequest 描述一次管理员受控采集的可信标签。
-// 普通公网旁路数据不经过该结构，也不能被提升为出站模板。
 // TLSFingerprintCollectorService 管理运行时 TLS 指纹收集器。
 type TLSFingerprintCollectorService struct {
-	closed  bool
-	options CollectorOptions
+	closed    bool
+	serveDone chan struct{}
+	options   CollectorOptions
+	now       func() time.Time
 
-	mu                sync.Mutex
-	server            *http.Server
-	listener          net.Listener
-	running           bool
-	startedAt         *time.Time
-	lastError         string
-	caPEM             string
-	cert              tls.Certificate
-	generatedCert     bool
-	sessions          map[string]*tlsFingerprintCollectorSessionState
-	probeTLSHandshake func(context.Context, *tlsfingerprint.Profile, string) (*tlsfingerprint.TLSHandshakeResult, error)
-}
-
-type tlsFingerprintCollectorSessionState struct {
-	token     string
-	expiresAt time.Time
-	records   []*TLSFingerprintCaptureRecord
-	request   TLSFingerprintCollectorSessionRequest
+	mu            sync.Mutex
+	server        *http.Server
+	listener      net.Listener
+	running       bool
+	startedAt     *time.Time
+	lastError     string
+	caPEM         string
+	cert          tls.Certificate
+	generatedCert bool
+	sessions      *egress.CaptureSessions
 }
 
 type tlsFingerprintCaptureContextKey struct{}
@@ -80,9 +74,6 @@ type tlsFingerprintCaptureContextKey struct{}
 type tlsFingerprintCaptureContext struct {
 	clientHello    *tlsfingerprint.CapturedClientHello
 	negotiatedALPN string
-	targetHost     string
-	httpProto      string
-	connectionID   string
 }
 
 type tlsFingerprintCaptureListener struct {
@@ -99,7 +90,6 @@ type tlsFingerprintCaptureConn struct {
 	handshakeOnce  sync.Once
 	handshakeErr   error
 	tlsConn        *tls.Conn
-	connectionID   string
 }
 
 type readerConn struct {
@@ -107,31 +97,17 @@ type readerConn struct {
 	reader *bufio.Reader
 }
 
-type CollectorOptions struct {
-	Host                 string
-	Port                 int
-	PublicBaseURL        string
-	CertFile             string
-	KeyFile              string
-	SessionTTLSeconds    int
-	MaxRecordsPerSession int
-	Now                  func() time.Time
-	Diagnostics          egress.Diagnostics
-}
-
-type TLSFingerprintCollectorSessionRequest = egress.TLSFingerprintCollectorSessionRequest
-
-type TLSFingerprintCollectorStatus = egress.TLSFingerprintCollectorStatus
-
-type TLSFingerprintCollectorSession = egress.TLSFingerprintCollectorSession
-
-type TLSFingerprintCaptureRecord = egress.TLSFingerprintCaptureRecord
-
-// NewTLSFingerprintCollectorService 创建运行时 TLS 指纹收集器服务。
 func NewTLSFingerprintCollectorService(options CollectorOptions) *TLSFingerprintCollectorService {
-	return &TLSFingerprintCollectorService{options: options, sessions: make(map[string]*tlsFingerprintCollectorSessionState)}
+	now := options.Now
+	if now == nil {
+		now = time.Now
+	}
+	return &TLSFingerprintCollectorService{options: options, now: now, sessions: egress.NewCaptureSessions(now)}
 }
 
+func (s *TLSFingerprintCollectorService) collectorConfigLocked() CollectorOptions { return s.options }
+
+// Status 返回收集器状态。
 func (s *TLSFingerprintCollectorService) Status() TLSFingerprintCollectorStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -143,7 +119,7 @@ func (s *TLSFingerprintCollectorService) Start(ctx context.Context) (TLSFingerpr
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return TLSFingerprintCollectorStatus{}, fmt.Errorf("collector is shut down")
+		return s.statusLocked(), errors.New("TLS fingerprint collector is shutting down")
 	}
 	if s.running {
 		return s.statusLocked(), nil
@@ -162,19 +138,20 @@ func (s *TLSFingerprintCollectorService) Start(ctx context.Context) (TLSFingerpr
 		return s.statusLocked(), err
 	}
 
-	now := time.Now()
+	now := s.now()
 	s.cert = cert
 	s.caPEM = caPEM
 	s.generatedCert = generated
 	s.startedAt = &now
 	s.lastError = ""
-	s.sessions = make(map[string]*tlsFingerprintCollectorSessionState)
-	s.listener = newTLSFingerprintCaptureListener(ln, &s.cert)
+	s.sessions = egress.NewCaptureSessions(s.now)
+	certificate := s.cert
+	s.listener = newTLSFingerprintCaptureListener(ln, &certificate)
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", s.handleCaptureRequest)
 	s.server = &http.Server{
-		// CONNECT 的 request-target 是 authority-form，URL.Path 可能为空；
-		// 直接使用 HandlerFunc，避免 ServeMux 在进入目标白名单校验前返回 404。
-		Handler:           http.HandlerFunc(s.handleCaptureRequest),
+		Handler:           mux,
 		ReadHeaderTimeout: 15 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		ConnContext: func(ctx context.Context, conn net.Conn) context.Context {
@@ -193,10 +170,17 @@ func (s *TLSFingerprintCollectorService) Start(ctx context.Context) (TLSFingerpr
 
 	server := s.server
 	listener := s.listener
+	done := make(chan struct{})
+	s.serveDone = done
 	go func() {
+		defer close(done)
 		if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			logging.LegacyPrintf("service.tls_fp_collector", "[TLSFPCollector] serve failed: %v", serveErr)
+			s.options.Diagnostics.Log("service.tls_fp_collector", "[TLSFPCollector] serve failed: %v", serveErr)
 			s.mu.Lock()
+			if s.server != server {
+				s.mu.Unlock()
+				return
+			}
 			s.running = false
 			s.lastError = serveErr.Error()
 			s.server = nil
@@ -211,6 +195,8 @@ func (s *TLSFingerprintCollectorService) Start(ctx context.Context) (TLSFingerpr
 func (s *TLSFingerprintCollectorService) Stop(ctx context.Context) error {
 	s.mu.Lock()
 	server := s.server
+	done := s.serveDone
+	s.serveDone = nil
 	s.running = false
 	s.server = nil
 	s.listener = nil
@@ -218,7 +204,7 @@ func (s *TLSFingerprintCollectorService) Stop(ctx context.Context) error {
 	s.caPEM = ""
 	s.cert = tls.Certificate{}
 	s.generatedCert = false
-	s.sessions = make(map[string]*tlsFingerprintCollectorSessionState)
+	s.sessions = egress.NewCaptureSessions(s.now)
 	s.mu.Unlock()
 
 	if server == nil {
@@ -230,204 +216,50 @@ func (s *TLSFingerprintCollectorService) Stop(ctx context.Context) error {
 		_ = server.Close()
 		return err
 	}
+
+	if done != nil {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	return nil
 }
 
-// CreateSession 创建短期采集会话。只有标签完整的 controlled_connect 会话可提升模板。
-func (s *TLSFingerprintCollectorService) CreateControlledSession(request TLSFingerprintCollectorSessionRequest) (*TLSFingerprintCollectorSession, error) {
-	normalized, err := normalizeTLSFingerprintCollectorSessionRequest(request)
-	if err != nil {
-		return nil, err
-	}
+// Shutdown 封闭按需启动入口，再停止当前监听；管理员普通 Stop 仍可再次启动。
+func (s *TLSFingerprintCollectorService) Shutdown(ctx context.Context) error {
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
+	return s.Stop(ctx)
+}
+
+func (s *TLSFingerprintCollectorService) CreateSession() (*TLSFingerprintCollectorSession, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.running {
 		return nil, errors.New("TLS fingerprint collector is not running")
 	}
-	s.pruneExpiredSessionsLocked(time.Now())
-	token, err := randomHexToken(24)
-	if err != nil {
-		return nil, err
-	}
-	expiresAt := time.Now().Add(s.sessionTTLLocked())
-	state := &tlsFingerprintCollectorSessionState{
-		token:     token,
-		expiresAt: expiresAt,
-		request:   normalized,
-	}
-	s.sessions[token] = state
-	return s.sessionDTOFromStateLocked(state), nil
+	return s.sessions.Create(s.publicBaseURLLocked(), s.caPEM, s.sessionTTLLocked())
 }
 
-// ListCaptures 返回指定会话的采集结果。
 func (s *TLSFingerprintCollectorService) ListCaptures(token string) ([]*TLSFingerprintCaptureRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state, err := s.sessionStateLocked(token)
-	if err != nil {
-		return nil, err
-	}
-	consistentConnections := make(map[string]map[string]struct{})
-	for _, record := range state.records {
-		if record == nil || record.Profile == nil || record.ReplayValidation == nil || !record.ReplayValidation.Reusable {
-			continue
-		}
-		key := strings.ToLower(strings.TrimSpace(record.TargetHost)) + ":" + record.Profile.FingerprintSHA256()
-		if consistentConnections[key] == nil {
-			consistentConnections[key] = make(map[string]struct{})
-		}
-		connectionID := strings.TrimSpace(record.ConnectionID)
-		if connectionID == "" {
-			connectionID = "record:" + record.ID
-		}
-		consistentConnections[key][connectionID] = struct{}{}
-	}
-	out := make([]*TLSFingerprintCaptureRecord, 0, len(state.records))
-	for _, record := range state.records {
-		if record == nil {
-			continue
-		}
-		clone := *record
-		clone.BlockedReasons = append([]string(nil), record.BlockedReasons...)
-		key := strings.ToLower(strings.TrimSpace(record.TargetHost))
-		if record.Profile != nil {
-			key += ":" + record.Profile.FingerprintSHA256()
-		}
-		clone.MatchingSampleCount = len(consistentConnections[key])
-		if clone.MatchingSampleCount < tlsFingerprintCollectorMinimumColdSamples {
-			clone.PromotionEligible = false
-			clone.BlockedReasons = append(clone.BlockedReasons, fmt.Sprintf(
-				"at least %d matching cold-start connections are required (got %d)",
-				tlsFingerprintCollectorMinimumColdSamples,
-				clone.MatchingSampleCount,
-			))
-		}
-		out = append(out, &clone)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].CapturedAt.After(out[j].CapturedAt)
-	})
-	return out, nil
+	return s.sessions.List(token)
 }
 
-// BuildVerifiedProfile 从受控 CONNECT 会话构建已验证模板。
-// 验证包括至少三次一致冷启动样本、本地 uTLS 回放和固定目标的无凭据 TLS-only 握手。
-func (s *TLSFingerprintCollectorService) BuildVerifiedProfile(ctx context.Context, token, captureID string) (*egress.TLSFingerprintProfile, error) {
-	s.mu.Lock()
-	state, err := s.sessionStateLocked(token)
-	if err != nil {
-		s.mu.Unlock()
-		return nil, err
-	}
-	request := state.request
-	records := append([]*TLSFingerprintCaptureRecord(nil), state.records...)
-	s.mu.Unlock()
-
-	if request.Mode != tlsFingerprintCaptureModeControlledConnect {
-		return nil, errors.New("only controlled CONNECT captures can be promoted")
-	}
-	var selected *TLSFingerprintCaptureRecord
-	for _, record := range records {
-		if record != nil && record.ID == captureID {
-			selected = record
-			break
-		}
-	}
-	if selected == nil || selected.Profile == nil || selected.RawTLSFingerprint == nil {
-		return nil, errors.New("capture not found")
-	}
-	if selected.SourceKind != egress.TLSFingerprintProfileSourceControlledConnect ||
-		!strings.EqualFold(strings.TrimSpace(selected.TargetHost), strings.TrimSpace(request.TargetHost)) {
-		return nil, errors.New("capture provenance does not match the controlled session")
-	}
-	replay := tlsfingerprint.ValidateCapturedProfile(selected.RawTLSFingerprint, ToTLSProfile(selected.Profile))
-	if !replay.Reusable {
-		return nil, fmt.Errorf("capture is not reproducible: %s", joinTLSFingerprintValidationFindings(replay.Issues))
-	}
-
-	fingerprintHash := selected.Profile.FingerprintSHA256()
-	consistentConnections := make(map[string]struct{})
-	for _, record := range records {
-		if record == nil || record.Profile == nil || !strings.EqualFold(record.TargetHost, request.TargetHost) {
-			continue
-		}
-		if record.Profile.FingerprintSHA256() == fingerprintHash && record.ReplayValidation != nil && record.ReplayValidation.Reusable {
-			connectionID := strings.TrimSpace(record.ConnectionID)
-			if connectionID == "" {
-				connectionID = "record:" + record.ID
-			}
-			consistentConnections[connectionID] = struct{}{}
-		}
-	}
-	consistentSamples := len(consistentConnections)
-	if consistentSamples < tlsFingerprintCollectorMinimumColdSamples {
-		return nil, fmt.Errorf("at least %d matching cold-start captures are required (got %d)", tlsFingerprintCollectorMinimumColdSamples, consistentSamples)
-	}
-
-	targetHost, err := normalizeTLSFingerprintTargetHost(request.TargetHost)
-	if err != nil {
-		return nil, err
-	}
-	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	probe, probeErr := s.runTLSFingerprintHandshakeProbe(probeCtx, ToTLSProfile(selected.Profile), net.JoinHostPort(targetHost, "443"))
-	now := time.Now()
-	targetValidation := egress.TLSFingerprintTargetValidation{
-		Host:        targetHost,
-		Success:     probeErr == nil,
-		ValidatedAt: now,
-	}
-	if probeErr != nil {
-		targetValidation.Error = truncateTLSFingerprintCollectorError(probeErr.Error())
-		return nil, fmt.Errorf("TLS-only target handshake failed: %w", probeErr)
-	}
-	targetValidation.NegotiatedVersion = probe.Version
-	targetValidation.CipherSuite = probe.CipherSuite
-	targetValidation.NegotiatedALPN = probe.ALPN
-
-	profile := cloneTLSFingerprintProfile(selected.Profile)
-	profile.Verification = egress.TLSFingerprintProfileVerification{
-		SourceKind:         egress.TLSFingerprintProfileSourceControlledConnect,
-		ClientKind:         request.ClientKind,
-		ClientVersion:      request.ClientVersion,
-		Runtime:            request.Runtime,
-		RuntimeVersion:     request.RuntimeVersion,
-		OperatingSystem:    request.OperatingSystem,
-		Architecture:       request.Architecture,
-		CaptureTarget:      targetHost,
-		ApprovedForUse:     true,
-		RandomPoolEligible: true,
-		ValidationStatus:   egress.TLSFingerprintProfileValidationVerified,
-		ValidatorVersion:   egress.TLSFingerprintProfileValidatorVersion,
-		ObservedJA3Hash:    replay.CapturedJA3Hash,
-		ReplayedJA3Hash:    replay.ReplayedJA3Hash,
-		FingerprintSHA256:  fingerprintHash,
-		Issues:             tlsFingerprintValidationFindingMessages(replay.Issues),
-		Warnings:           tlsFingerprintValidationFindingMessages(replay.Warnings),
-		ValidatedTargets:   []egress.TLSFingerprintTargetValidation{targetValidation},
-		ValidatedAt:        &now,
-	}
-	if err := profile.Validate(); err != nil {
-		return nil, err
-	}
-	return profile, nil
-}
-
-// DeleteSession 删除指定采集会话。
 func (s *TLSFingerprintCollectorService) DeleteSession(token string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.sessions, token)
+	s.sessions.Delete(token)
 }
 
 func (s *TLSFingerprintCollectorService) handleCaptureRequest(w http.ResponseWriter, r *http.Request) {
 	token := captureTokenFromRequest(r)
 	if token == "" {
 		writeCollectorJSON(w, http.StatusUnauthorized, map[string]any{"error": "missing token"})
-		return
-	}
-	if r.Method == http.MethodConnect {
-		s.handleControlledConnectCapture(w, r, token)
 		return
 	}
 	captureConn, _ := r.Context().Value(tlsFingerprintCaptureContextKey{}).(*tlsFingerprintCaptureConn)
@@ -441,16 +273,7 @@ func (s *TLSFingerprintCollectorService) handleCaptureRequest(w http.ResponseWri
 		return
 	}
 
-	request, err := s.sessionRequest(token)
-	if err != nil {
-		writeCollectorJSON(w, http.StatusUnauthorized, map[string]any{"error": err.Error()})
-		return
-	}
-	if request.Mode == tlsFingerprintCaptureModeControlledConnect {
-		writeCollectorJSON(w, http.StatusBadRequest, map[string]any{"error": "controlled capture requires an HTTPS CONNECT proxy request"})
-		return
-	}
-	record := s.buildCaptureRecord(r, captureCtx, request)
+	record := s.buildCaptureRecord(r, captureCtx)
 	if err := s.appendCapture(token, record); err != nil {
 		writeCollectorJSON(w, http.StatusUnauthorized, map[string]any{"error": err.Error()})
 		return
@@ -462,136 +285,16 @@ func (s *TLSFingerprintCollectorService) handleCaptureRequest(w http.ResponseWri
 	})
 }
 
-// handleControlledConnectCapture 只读取 CONNECT 隧道内面向固定目标的 ClientHello。
-// 它不会连接目标、完成内层 TLS 或转发任何 HTTP/认证数据，因此不是通用代理。
-func (s *TLSFingerprintCollectorService) handleControlledConnectCapture(w http.ResponseWriter, r *http.Request, token string) {
-	request, err := s.sessionRequest(token)
-	if err != nil {
-		writeCollectorJSON(w, http.StatusUnauthorized, map[string]any{"error": err.Error()})
-		return
-	}
-	if request.Mode != tlsFingerprintCaptureModeControlledConnect {
-		writeCollectorJSON(w, http.StatusForbidden, map[string]any{"error": "capture session does not allow CONNECT"})
-		return
-	}
-	targetHost, err := normalizeTLSFingerprintConnectTarget(r.Host)
-	if err != nil || !strings.EqualFold(targetHost, request.TargetHost) {
-		writeCollectorJSON(w, http.StatusForbidden, map[string]any{"error": "CONNECT target is not allowed for this session"})
-		return
-	}
-
-	hijacker, ok := w.(http.Hijacker)
-	if !ok {
-		writeCollectorJSON(w, http.StatusInternalServerError, map[string]any{"error": "CONNECT capture is unavailable"})
-		return
-	}
-	conn, readWriter, err := hijacker.Hijack()
-	if err != nil {
-		return
-	}
-	defer func() { _ = conn.Close() }()
-	_ = conn.SetDeadline(time.Now().Add(tlsFingerprintCollectorReadTimeout))
-	if _, err := readWriter.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
-		return
-	}
-	if err := readWriter.Flush(); err != nil {
-		return
-	}
-
-	records, err := readTLSFingerprintClientHelloRecords(readWriter.Reader, tlsFingerprintCollectorClientHelloBufferSize)
-	if err != nil {
-		logging.LegacyPrintf("service.tls_fp_collector", "[TLSFPCollector] controlled CONNECT capture failed target=%s: %v", targetHost, err)
-		return
-	}
-	clientHello, err := tlsfingerprint.ParseCapturedClientHelloRecords(records)
-	if err != nil {
-		logging.LegacyPrintf("service.tls_fp_collector", "[TLSFPCollector] controlled CONNECT parse failed target=%s: %v", targetHost, err)
-		return
-	}
-	connectionID := ""
-	if captureConn, ok := r.Context().Value(tlsFingerprintCaptureContextKey{}).(*tlsFingerprintCaptureConn); ok && captureConn != nil {
-		connectionID = captureConn.connectionID
-	}
-	record := s.buildCaptureRecord(r, &tlsFingerprintCaptureContext{
-		clientHello:  clientHello,
-		targetHost:   targetHost,
-		httpProto:    r.Proto,
-		connectionID: connectionID,
-	}, request)
-	if err := s.appendCapture(token, record); err != nil {
-		logging.LegacyPrintf("service.tls_fp_collector", "[TLSFPCollector] controlled CONNECT session append failed: %v", err)
-	}
-}
-
-func readTLSFingerprintClientHelloRecords(reader *bufio.Reader, maxBytes int) ([]byte, error) {
-	if reader == nil {
-		return nil, errors.New("missing CONNECT tunnel reader")
-	}
-	if maxBytes <= 0 || maxBytes > tlsFingerprintCollectorClientHelloBufferSize {
-		maxBytes = tlsFingerprintCollectorClientHelloBufferSize
-	}
-	var records bytes.Buffer
-	for range 32 {
-		var header [5]byte
-		if _, err := io.ReadFull(reader, header[:]); err != nil {
-			return nil, fmt.Errorf("read TLS record header: %w", err)
-		}
-		recordLength := int(header[3])<<8 | int(header[4])
-		if recordLength <= 0 || records.Len()+len(header)+recordLength > maxBytes {
-			return nil, errors.New("controlled ClientHello exceeds capture limit")
-		}
-		_, _ = records.Write(header[:])
-		payload := make([]byte, recordLength)
-		if _, err := io.ReadFull(reader, payload); err != nil {
-			return nil, fmt.Errorf("read TLS record payload: %w", err)
-		}
-		_, _ = records.Write(payload)
-		if _, err := tlsfingerprint.ParseCapturedClientHelloRecords(records.Bytes()); err == nil {
-			return append([]byte(nil), records.Bytes()...), nil
-		} else if !errors.Is(err, tlsfingerprint.ErrIncompleteClientHello) {
-			return nil, err
-		}
-	}
-	return nil, errors.New("controlled ClientHello spans too many TLS records")
-}
-
 func (s *TLSFingerprintCollectorService) appendCapture(token string, record *TLSFingerprintCaptureRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state, err := s.sessionStateLocked(token)
-	if err != nil {
-		return err
-	}
-	maxRecords := s.maxRecordsLocked()
-	state.records = append([]*TLSFingerprintCaptureRecord{record}, state.records...)
-	if len(state.records) > maxRecords {
-		state.records = state.records[:maxRecords]
-	}
-	return nil
+	return s.sessions.Append(token, record, s.maxRecordsLocked())
 }
 
-func (s *TLSFingerprintCollectorService) sessionRequest(token string) (TLSFingerprintCollectorSessionRequest, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	state, err := s.sessionStateLocked(token)
-	if err != nil {
-		return TLSFingerprintCollectorSessionRequest{}, err
-	}
-	return state.request, nil
-}
-
-func (s *TLSFingerprintCollectorService) buildCaptureRecord(r *http.Request, captureCtx *tlsFingerprintCaptureContext, sessionRequest TLSFingerprintCollectorSessionRequest) *TLSFingerprintCaptureRecord {
+func (s *TLSFingerprintCollectorService) buildCaptureRecord(r *http.Request, captureCtx *tlsFingerprintCaptureContext) *TLSFingerprintCaptureRecord {
 	now := time.Now()
 	ch := captureCtx.clientHello
-	detectedClientKind := detectTLSFingerprintClientKind(r)
-	clientKind := strings.TrimSpace(sessionRequest.ClientKind)
-	if clientKind == "" {
-		clientKind = detectedClientKind
-	}
-	sourceKind := egress.TLSFingerprintProfileSourceLegacy
-	if sessionRequest.Mode == tlsFingerprintCaptureModeControlledConnect {
-		sourceKind = egress.TLSFingerprintProfileSourceControlledConnect
-	}
+	clientKind := detectTLSFingerprintClientKind(r)
 	profile := &egress.TLSFingerprintProfile{
 		Name:                    defaultTLSFingerprintProfileName(clientKind, now),
 		Description:             tlsFingerprintCollectorStringPtr("由内置 TLS 指纹收集器采集"),
@@ -606,96 +309,25 @@ func (s *TLSFingerprintCollectorService) buildCaptureRecord(r *http.Request, cap
 		KeyShareGroups:          ch.KeyShareGroups,
 		PSKModes:                ch.PSKModes,
 		Extensions:              ch.Extensions,
-		Verification: egress.TLSFingerprintProfileVerification{
-			SourceKind:       sourceKind,
-			ClientKind:       clientKind,
-			ClientVersion:    sessionRequest.ClientVersion,
-			Runtime:          sessionRequest.Runtime,
-			RuntimeVersion:   sessionRequest.RuntimeVersion,
-			OperatingSystem:  sessionRequest.OperatingSystem,
-			Architecture:     sessionRequest.Architecture,
-			CaptureTarget:    sessionRequest.TargetHost,
-			ValidationStatus: egress.TLSFingerprintProfileValidationDraft,
-		},
-	}
-	replayValidation := tlsfingerprint.ValidateCapturedProfile(ch, ToTLSProfile(profile))
-	blockedReasons := tlsFingerprintValidationFindingMessages(replayValidation.Issues)
-	if sessionRequest.Mode != tlsFingerprintCaptureModeControlledConnect {
-		blockedReasons = append(blockedReasons, "capture must use controlled_connect mode")
-	}
-	if !sessionRequest.ColdStartConfirmed {
-		blockedReasons = append(blockedReasons, "capture must be confirmed as a cold start")
-	}
-	if strings.TrimSpace(sessionRequest.ClientKind) == "" || strings.TrimSpace(sessionRequest.ClientVersion) == "" || strings.TrimSpace(sessionRequest.OperatingSystem) == "" || strings.TrimSpace(sessionRequest.Architecture) == "" {
-		blockedReasons = append(blockedReasons, "controlled client labels are incomplete")
-	}
-	targetHost := strings.TrimSpace(captureCtx.targetHost)
-	if targetHost == "" {
-		targetHost = strings.TrimSpace(sessionRequest.TargetHost)
 	}
 	record := &TLSFingerprintCaptureRecord{
-		ID:                 fmt.Sprintf("%d", now.UnixNano()),
-		CapturedAt:         now,
-		ClientKind:         clientKind,
-		DetectedClientKind: detectedClientKind,
-		SourceKind:         sourceKind,
-		CaptureMode:        sessionRequest.Mode,
-		TargetHost:         targetHost,
-		PromotionEligible:  len(blockedReasons) == 0 && replayValidation.Reusable,
-		BlockedReasons:     blockedReasons,
-		ConnectionID:       captureCtx.connectionID,
-		RequestPath:        r.URL.Path,
-		Method:             r.Method,
-		UserAgent:          r.UserAgent(),
-		JA3Raw:             ch.JA3Raw,
-		JA3Hash:            ch.JA3Hash,
-		NegotiatedALPN:     captureCtx.negotiatedALPN,
-		HTTPProto:          firstNonEmptyCollectorString(captureCtx.httpProto, r.Proto),
-		Profile:            profile,
-		YAML:               tlsFingerprintProfileToYAML(profile),
-		HeadersSummary:     summarizeTLSFingerprintHeaders(r.Header),
-		StainlessSummary:   summarizeStainlessHeaders(r.Header),
-		RawTLSFingerprint:  ch,
-		ReplayValidation:   &replayValidation,
+		ID:                fmt.Sprintf("%d", now.UnixNano()),
+		CapturedAt:        now,
+		ClientKind:        clientKind,
+		RequestPath:       r.URL.Path,
+		Method:            r.Method,
+		UserAgent:         r.UserAgent(),
+		JA3Raw:            ch.JA3Raw,
+		JA3Hash:           ch.JA3Hash,
+		NegotiatedALPN:    captureCtx.negotiatedALPN,
+		HTTPProto:         r.Proto,
+		Profile:           profile,
+		YAML:              tlsFingerprintProfileToYAML(profile),
+		HeadersSummary:    summarizeTLSFingerprintHeaders(r.Header),
+		StainlessSummary:  summarizeStainlessHeaders(r.Header),
+		RawTLSFingerprint: (*egress.CapturedClientHello)(ch),
 	}
 	return record
-}
-
-func (s *TLSFingerprintCollectorService) sessionStateLocked(token string) (*tlsFingerprintCollectorSessionState, error) {
-	s.pruneExpiredSessionsLocked(time.Now())
-	state := s.sessions[token]
-	if state == nil {
-		return nil, errors.New("capture session not found or expired")
-	}
-	return state, nil
-}
-
-func (s *TLSFingerprintCollectorService) pruneExpiredSessionsLocked(now time.Time) {
-	for token, state := range s.sessions {
-		if now.After(state.expiresAt) {
-			delete(s.sessions, token)
-		}
-	}
-}
-
-func (s *TLSFingerprintCollectorService) sessionDTOFromStateLocked(state *tlsFingerprintCollectorSessionState) *TLSFingerprintCollectorSession {
-	return &TLSFingerprintCollectorSession{
-		Token:              state.token,
-		ExpiresAt:          state.expiresAt,
-		CaptureURL:         s.captureURLLocked(state.token),
-		ProxyURL:           s.proxyURLLocked(state.token),
-		Mode:               state.request.Mode,
-		ClientKind:         state.request.ClientKind,
-		ClientVersion:      state.request.ClientVersion,
-		Runtime:            state.request.Runtime,
-		RuntimeVersion:     state.request.RuntimeVersion,
-		OperatingSystem:    state.request.OperatingSystem,
-		Architecture:       state.request.Architecture,
-		TargetHost:         state.request.TargetHost,
-		ColdStartConfirmed: state.request.ColdStartConfirmed,
-		MinimumColdSamples: tlsFingerprintCollectorMinimumColdSamples,
-		CAPEM:              s.caPEM,
-	}
 }
 
 func (s *TLSFingerprintCollectorService) statusLocked() TLSFingerprintCollectorStatus {
@@ -729,8 +361,6 @@ func (s *TLSFingerprintCollectorService) loadOrGenerateCertificateLocked() (tls.
 	cert, caPEM, err := generateTLSFingerprintCollectorCertificate(s.publicHostLocked())
 	return cert, caPEM, true, err
 }
-
-func (s *TLSFingerprintCollectorService) collectorConfigLocked() CollectorOptions { return s.options }
 
 func (s *TLSFingerprintCollectorService) listenAddressLocked() string {
 	collectorCfg := s.collectorConfigLocked()
@@ -772,22 +402,6 @@ func (s *TLSFingerprintCollectorService) publicHostLocked() string {
 	return host
 }
 
-func (s *TLSFingerprintCollectorService) captureURLLocked(token string) string {
-	return s.publicBaseURLLocked() + "/capture/" + token
-}
-
-func (s *TLSFingerprintCollectorService) proxyURLLocked(token string) string {
-	parsed, err := url.Parse(s.publicBaseURLLocked())
-	if err != nil || parsed == nil {
-		return ""
-	}
-	parsed.Path = ""
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	parsed.User = url.UserPassword("capture", token)
-	return parsed.String()
-}
-
 func (s *TLSFingerprintCollectorService) sessionTTLLocked() time.Duration {
 	seconds := s.collectorConfigLocked().SessionTTLSeconds
 	if seconds <= 0 {
@@ -817,15 +431,10 @@ func (l *tlsFingerprintCaptureListener) Accept() (net.Conn, error) {
 }
 
 func newTLSFingerprintCaptureConn(conn net.Conn, cert *tls.Certificate) *tlsFingerprintCaptureConn {
-	connectionID, err := randomHexToken(12)
-	if err != nil {
-		connectionID = fmt.Sprintf("fallback-%d", time.Now().UnixNano())
-	}
 	return &tlsFingerprintCaptureConn{
-		Conn:         conn,
-		cert:         cert,
-		reader:       bufio.NewReaderSize(conn, tlsFingerprintCollectorClientHelloBufferSize),
-		connectionID: connectionID,
+		Conn:   conn,
+		cert:   cert,
+		reader: bufio.NewReaderSize(conn, tlsFingerprintCollectorClientHelloBufferSize),
 	}
 }
 
@@ -873,28 +482,31 @@ func (c *tlsFingerprintCaptureConn) ensureHandshake() error {
 
 func (c *tlsFingerprintCaptureConn) captureClientHello() error {
 	offset := 0
-	for range 32 {
-		headerView, err := c.reader.Peek(offset + 5)
+	for range tlsfingerprint.MaxClientHelloCaptureRecords {
+		headerEnd := offset + 5
+		if headerEnd > tlsFingerprintCollectorClientHelloBufferSize {
+			return errors.New("TLS ClientHello exceeds capture limit")
+		}
+		headers, err := c.reader.Peek(headerEnd)
 		if err != nil {
 			return err
 		}
-		header := headerView[offset : offset+5]
-		recordLen := int(header[3])<<8 | int(header[4])
-		nextOffset := offset + 5 + recordLen
-		if recordLen <= 0 || nextOffset > tlsFingerprintCollectorClientHelloBufferSize {
-			return errors.New("TLS ClientHello exceeds capture limit")
+		recordLen := int(headers[offset+3])<<8 | int(headers[offset+4])
+		nextOffset := headerEnd + recordLen
+		if recordLen == 0 || nextOffset > tlsFingerprintCollectorClientHelloBufferSize {
+			return errors.New("invalid TLS record length")
 		}
 		records, err := c.reader.Peek(nextOffset)
 		if err != nil {
 			return err
 		}
-		captured, parseErr := tlsfingerprint.ParseCapturedClientHelloRecords(records[:nextOffset])
-		if parseErr == nil {
+		captured, err := tlsfingerprint.ParseCapturedClientHello(records)
+		if err == nil {
 			c.captured = captured
 			return nil
 		}
-		if !errors.Is(parseErr, tlsfingerprint.ErrIncompleteClientHello) {
-			return parseErr
+		if !errors.Is(err, tlsfingerprint.ErrIncompleteClientHello) {
+			return err
 		}
 		offset = nextOffset
 	}
@@ -908,7 +520,6 @@ func (c *tlsFingerprintCaptureConn) captureContext() *tlsFingerprintCaptureConte
 	return &tlsFingerprintCaptureContext{
 		clientHello:    c.captured,
 		negotiatedALPN: c.negotiatedALPN,
-		connectionID:   c.connectionID,
 	}
 }
 
@@ -920,14 +531,6 @@ func writeCollectorJSON(w http.ResponseWriter, status int, payload map[string]an
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
-}
-
-func randomHexToken(bytesLen int) (string, error) {
-	buf := make([]byte, bytesLen)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(buf), nil
 }
 
 func generateTLSFingerprintCollectorCertificate(host string) (tls.Certificate, string, error) {
@@ -1024,9 +627,6 @@ func captureTokenFromRequest(r *http.Request) string {
 	if token := strings.TrimSpace(r.Header.Get("X-TLS-Fingerprint-Token")); token != "" {
 		return token
 	}
-	if token := proxyAuthorizationToken(r.Header.Get("Proxy-Authorization")); token != "" {
-		return token
-	}
 	// 客户端把采集地址配置为 base URL 后会继续追加自身 API 路径，因此从 /capture/{token}/... 中提取 token。
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(parts) >= 2 && parts[0] == "capture" {
@@ -1040,149 +640,6 @@ func captureTokenFromRequest(r *http.Request) string {
 		return token
 	}
 	return ""
-}
-
-func proxyAuthorizationToken(value string) string {
-	fields := strings.Fields(strings.TrimSpace(value))
-	if len(fields) != 2 {
-		return ""
-	}
-	if strings.EqualFold(fields[0], "Bearer") {
-		return strings.TrimSpace(fields[1])
-	}
-	if !strings.EqualFold(fields[0], "Basic") {
-		return ""
-	}
-	decoded, err := base64.StdEncoding.DecodeString(fields[1])
-	if err != nil {
-		return ""
-	}
-	username, password, ok := strings.Cut(string(decoded), ":")
-	if !ok || username != "capture" {
-		return ""
-	}
-	return strings.TrimSpace(password)
-}
-
-func normalizeTLSFingerprintCollectorSessionRequest(request TLSFingerprintCollectorSessionRequest) (TLSFingerprintCollectorSessionRequest, error) {
-	request.Mode = strings.ToLower(strings.TrimSpace(request.Mode))
-	if request.Mode == "" {
-		request.Mode = tlsFingerprintCaptureModeDirect
-	}
-	if request.Mode == tlsFingerprintCaptureModeDirect {
-		return request, nil
-	}
-	if request.Mode != tlsFingerprintCaptureModeControlledConnect {
-		return request, errors.New("capture mode must be controlled_connect")
-	}
-	request.ClientKind = strings.ToLower(strings.TrimSpace(request.ClientKind))
-	switch request.ClientKind {
-	case "codex", "node", "claude_code":
-	default:
-		return request, errors.New("client_kind must be codex, node, or claude_code")
-	}
-	request.ClientVersion = strings.TrimSpace(request.ClientVersion)
-	request.Runtime = strings.TrimSpace(request.Runtime)
-	request.RuntimeVersion = strings.TrimSpace(request.RuntimeVersion)
-	request.OperatingSystem = strings.TrimSpace(request.OperatingSystem)
-	request.Architecture = strings.TrimSpace(request.Architecture)
-	if request.ClientVersion == "" || request.OperatingSystem == "" || request.Architecture == "" {
-		return request, errors.New("client_version, operating_system, and architecture are required")
-	}
-	for _, value := range []string{request.ClientVersion, request.Runtime, request.RuntimeVersion, request.OperatingSystem, request.Architecture} {
-		if len(value) > 128 {
-			return request, errors.New("capture labels must be at most 128 characters")
-		}
-	}
-	targetHost, err := normalizeTLSFingerprintTargetHost(request.TargetHost)
-	if err != nil {
-		return request, err
-	}
-	request.TargetHost = targetHost
-	if !request.ColdStartConfirmed {
-		return request, errors.New("cold_start_confirmed must be true for controlled capture")
-	}
-	return request, nil
-}
-
-func normalizeTLSFingerprintTargetHost(raw string) (string, error) {
-	host := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(raw), "."))
-	if _, ok := tlsFingerprintControlledTargets[host]; !ok {
-		return "", errors.New("target_host must be chatgpt.com or api.openai.com")
-	}
-	return host, nil
-}
-
-func normalizeTLSFingerprintConnectTarget(raw string) (string, error) {
-	host, port, err := net.SplitHostPort(strings.TrimSpace(raw))
-	if err != nil || port != "443" {
-		return "", errors.New("CONNECT target must use port 443")
-	}
-	return normalizeTLSFingerprintTargetHost(host)
-}
-
-func firstNonEmptyCollectorString(values ...string) string {
-	for _, value := range values {
-		if value = strings.TrimSpace(value); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func tlsFingerprintValidationFindingMessages(values []tlsfingerprint.ProfileValidationFinding) []string {
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		message := strings.TrimSpace(value.Message)
-		if code := strings.TrimSpace(value.Code); code != "" {
-			message = code + ": " + message
-		}
-		if message != "" {
-			result = append(result, message)
-		}
-	}
-	return result
-}
-
-func joinTLSFingerprintValidationFindings(values []tlsfingerprint.ProfileValidationFinding) string {
-	messages := tlsFingerprintValidationFindingMessages(values)
-	if len(messages) == 0 {
-		return "unknown validation error"
-	}
-	return strings.Join(messages, "; ")
-}
-
-func truncateTLSFingerprintCollectorError(value string) string {
-	value = strings.TrimSpace(value)
-	if len(value) <= 300 {
-		return value
-	}
-	return value[:300]
-}
-
-func (s *TLSFingerprintCollectorService) runTLSFingerprintHandshakeProbe(ctx context.Context, profile *tlsfingerprint.Profile, target string) (*tlsfingerprint.TLSHandshakeResult, error) {
-	if s != nil && s.probeTLSHandshake != nil {
-		return s.probeTLSHandshake(ctx, profile, target)
-	}
-	return tlsfingerprint.ProbeTLSHandshake(ctx, profile, target)
-}
-
-func cloneTLSFingerprintProfile(source *egress.TLSFingerprintProfile) *egress.TLSFingerprintProfile {
-	if source == nil {
-		return nil
-	}
-	clone := *source
-	clone.CipherSuites = append([]uint16(nil), source.CipherSuites...)
-	clone.Curves = append([]uint16(nil), source.Curves...)
-	clone.PointFormats = append([]uint16(nil), source.PointFormats...)
-	clone.SignatureAlgorithms = append([]uint16(nil), source.SignatureAlgorithms...)
-	clone.SignatureAlgorithmsCert = append([]uint16(nil), source.SignatureAlgorithmsCert...)
-	clone.ALPNProtocols = append([]string(nil), source.ALPNProtocols...)
-	clone.SupportedVersions = append([]uint16(nil), source.SupportedVersions...)
-	clone.KeyShareGroups = append([]uint16(nil), source.KeyShareGroups...)
-	clone.PSKModes = append([]uint16(nil), source.PSKModes...)
-	clone.Extensions = append([]uint16(nil), source.Extensions...)
-	return &clone
 }
 
 func bearerTokenFromAuthorization(value string) string {
@@ -1321,17 +778,4 @@ func tlsFingerprintCollectorStringPtr(v string) *string {
 
 func strconvItoa(v int) string {
 	return fmt.Sprintf("%d", v)
-}
-
-// CreateSession 要求调用方提供受控采集声明。
-func (s *TLSFingerprintCollectorService) CreateSession() (*TLSFingerprintCollectorSession, error) {
-	return nil, fmt.Errorf("controlled capture requires client identity and target")
-}
-
-// Shutdown 关闭监听并清理内存采集记录。
-func (s *TLSFingerprintCollectorService) Shutdown(ctx context.Context) error {
-	s.mu.Lock()
-	s.closed = true
-	s.mu.Unlock()
-	return s.Stop(ctx)
 }

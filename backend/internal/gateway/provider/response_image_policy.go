@@ -4,9 +4,11 @@ import (
 	"context"
 
 	"github.com/TokenFlux/TokenRouter/internal/apikey"
+	"github.com/TokenFlux/TokenRouter/internal/gateway/media"
 	"github.com/TokenFlux/TokenRouter/internal/gateway/requeststate"
 	protocolcore "github.com/TokenFlux/TokenRouter/internal/protocol"
 	providercore "github.com/TokenFlux/TokenRouter/internal/provider"
+	provideradapter "github.com/TokenFlux/TokenRouter/internal/provider/provider"
 	"github.com/TokenFlux/TokenRouter/internal/routing"
 	"github.com/TokenFlux/TokenRouter/internal/routing/capability"
 )
@@ -54,6 +56,11 @@ func APIKeyGroup(apiKey *apikey.APIKey) *routing.Group {
 }
 
 func (s *ResponseImagePolicy) Enabled(ctx context.Context, provider *ExecutionProvider, apiKey *apikey.APIKey) bool {
+	// 自动挂载工具时上游使用默认图片型号，纯文本账号仍可发送普通请求。
+	value := provider.View()
+	if !value.AllowsOpenAIOAuthTarget(value.OpenAIOAuthFinalModelPolicy(ctx), media.DefaultOpenAIImageModel, provideradapter.ModelDefaults()) {
+		return false
+	}
 	if group := ResponsesPolicyGroup(ctx, APIKeyGroup(apiKey)); group != nil {
 		switch group.ResponsesImagePolicy {
 		case "enabled":

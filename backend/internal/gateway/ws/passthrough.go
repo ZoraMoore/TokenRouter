@@ -139,7 +139,7 @@ func (s *PassthroughSession) Run(ctx context.Context, clientConn ClientSocket, f
 		firstClientMessage = providerScopedFirst
 	}
 	firstPolicyCtx := ctx
-	updatedFirst, blocked, policyErr := p.FastPolicy(firstPolicyCtx, 1, firstUpstreamModel, firstClientMessage, true)
+	updatedFirst, blocked, policyErr := p.FramePolicy(firstPolicyCtx, 1, firstUpstreamModel, firstClientMessage, true)
 	if policyErr != nil {
 		return fmt.Errorf("apply openai fast policy on first ws frame: %w", policyErr)
 	}
@@ -387,7 +387,7 @@ func (s *PassthroughSession) Run(ctx context.Context, clientConn ClientSocket, f
 					storeCapturedSessionModels(sessionRequestedModel, resolvedRoutingModel, upstreamModel)
 				}
 			}
-			out, blocked, policyErr := p.FastPolicy(ctx, turnNo, model, payload, eventType == "response.create")
+			out, blocked, policyErr := p.FramePolicy(ctx, turnNo, model, payload, eventType == "response.create")
 
 			// 通过策略检查的 response.create 使用 filter 后的 payload 更新 usageMeta，与首帧处理相同。
 			// 其他事件、策略拒绝和策略错误保持前一轮 metadata。

@@ -17,9 +17,13 @@ type TestRun struct {
 	Headers http.Header
 	// 这些状态供本次同步测试流程使用。
 	RequestedProtocol  provider.TextProtocol
+	ReasoningEffort    string
 	TaskRecoveryTried  bool
 	ModelFallbackTried bool
 	Automatic          bool
+	FullAnswer         bool
+	SVGAnswer          bool
+	IQMode             string
 	sink               provider.TestEventSink
 	mu                 sync.Mutex
 	err                error

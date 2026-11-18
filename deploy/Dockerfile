@@ -75,8 +75,7 @@ RUN VERSION_VALUE="${VERSION}" && \
     -tags embed \
     -ldflags="-s -w -X main.Version=${VERSION_VALUE} -X main.Commit=${COMMIT} -X main.Date=${DATE_VALUE} -X main.BuildType=release" \
     -o /app/tokenrouter \
-    ./cmd/server && \
-    CGO_ENABLED=0 GOOS=linux GOMAXPROCS=2 GOGC=50 go build -ldflags="-s -w" -o /app/tls-ingress-observer ./cmd/tls-ingress-observer
+    ./cmd/server
 
 # -----------------------------------------------------------------------------
 # Stage 3: Final Runtime Image
@@ -105,7 +104,6 @@ WORKDIR /app
 
 # 从构建阶段复制已内嵌默认价格补充的二进制。
 COPY --from=backend-builder /app/tokenrouter /app/tokenrouter
-COPY --from=backend-builder /app/tls-ingress-observer /app/tls-ingress-observer
 
 # Create data directory
 RUN mkdir -p /app/data && chown -R tokenrouter:tokenrouter /app

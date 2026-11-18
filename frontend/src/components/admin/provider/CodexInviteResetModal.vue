@@ -18,7 +18,7 @@
             </div>
           </div>
         </div>
-        <button type="button" class="btn btn-secondary shrink-0" :disabled="loading" @click="loadStatus()">
+        <button type="button" class="btn btn-secondary shrink-0" :disabled="busy" @click="loadStatus()">
           <Icon name="refresh" size="sm" :class="loading && 'animate-spin'" />
           {{ t('admin.providers.inviteResetRefresh') }}
         </button>
@@ -49,6 +49,10 @@
 
             <div class="grid grid-cols-1 gap-2 rounded-control bg-gray-50 p-3 text-sm dark:bg-dark-800">
               <div class="flex items-center justify-between gap-3">
+                <span class="text-gray-500 dark:text-gray-400">{{ t('admin.providers.inviteResetSlots') }}</span>
+                <span data-testid="invite-capacity">{{ status?.available_invites ?? '—' }}</span>
+              </div>
+              <div class="flex items-center justify-between gap-3">
                 <span class="text-gray-500 dark:text-gray-400">{{ t('admin.providers.inviteResetRewardType') }}</span>
                 <span class="text-right font-medium text-gray-900 dark:text-white">{{ rewardTypeLabel }}</span>
               </div>
@@ -60,10 +64,7 @@
                 <span class="text-gray-500 dark:text-gray-400">{{ t('admin.providers.inviteResetShouldShow') }}</span>
                 <span :class="['rounded-full px-2 py-0.5 text-xs font-medium', shouldShowClass]">{{ shouldShowLabel }}</span>
               </div>
-              <div v-if="showGrantAction" class="flex items-center justify-between gap-3">
-                <span class="text-gray-500 dark:text-gray-400">{{ t('admin.providers.inviteResetGrantAction') }}</span>
-                <span class="max-w-[12rem] truncate text-right font-mono text-xs text-gray-700 dark:text-gray-200">{{ status?.grant_action }}</span>
-              </div>
+
             </div>
 
             <div v-if="availableCredits.length > 0" class="space-y-3">
@@ -144,6 +145,7 @@
               <textarea
                 id="codex-invite-reset-emails"
                 v-model="emailInput"
+                :disabled="busy"
                 rows="8"
                 class="input mt-2 min-h-[180px] resize-y font-mono text-sm leading-6"
                 :placeholder="t('admin.providers.inviteResetPlaceholder')"
@@ -153,9 +155,10 @@
               </p>
             </div>
 
-            <label class="flex items-start gap-2 rounded-control border border-gray-200 p-3 text-sm text-gray-700 dark:border-dark-600 dark:text-gray-300">
+            <label v-if="status?.requires_consent !== false" class="flex items-start gap-2 rounded-control border border-gray-200 p-3 text-sm text-gray-700 dark:border-dark-600 dark:text-gray-300">
               <input
                 v-model="consentConfirmed"
+                :disabled="busy"
                 type="checkbox"
                 class="mt-0.5 h-4 w-4 rounded-compact border-gray-300 text-primary-600 focus:ring-primary-500"
               />
@@ -166,6 +169,7 @@
               {{ inviteUnavailableMessage }}
             </div>
 
+            <div v-if="refreshFailed" class="text-sm text-amber-700 dark:text-amber-300">{{ t('admin.providers.inviteResetStatusRefreshFailed') }}</div>
             <div v-if="message" :class="['rounded-control p-3 text-sm', messageClass]">
               {{ message }}
             </div>
@@ -216,15 +220,19 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  updated: []
+  updated: [providerId: number]
 }>()
 
 const { t } = useI18n()
 const appStore = useAppStore()
 
 const loading = ref(false)
+const refreshFailed = ref(false)
+let generation = 0
+const supported = computed(() => props.provider?.platform === 'openai' && props.provider.type === 'oauth' && props.provider.parent_provider_id == null)
 const sendingInvite = ref(false)
 const consuming = ref(false)
+const busy = computed(() => loading.value || consuming.value || sendingInvite.value)
 const status = ref<CodexInviteResetStatus | null>(null)
 const selectedCreditId = ref<string | null>(null)
 const emailInput = ref('')
@@ -250,7 +258,7 @@ const availableCount = computed(() => status.value?.available_count ?? available
 
 const rules = computed(() => status.value?.eligibility_rules ?? [])
 
-// 管理端始终展示上游资格信息，should_show 只作为 Codex Desktop 主动展示建议。
+// 奖励类型和可用重置次数分别来自活动和用量接口。
 const rewardTypeLabel = computed(() => {
   if (status.value?.grant_type === 'none') {
     return t('admin.providers.inviteResetGrantTypeNone')
@@ -285,8 +293,6 @@ const shouldShowClass = computed(() => {
   return 'bg-gray-200 text-gray-600 dark:bg-dark-600 dark:text-gray-300'
 })
 
-const showGrantAction = computed(() => Boolean(status.value?.grant_action) && status.value?.grant_type === 'unknown')
-
 const creditOptions = computed<SelectOption[]>(() => {
   return availableCredits.value.map((credit, index) => ({
     value: credit.id,
@@ -308,7 +314,7 @@ const creditExpirations = computed(() => {
 })
 
 const canConsume = computed(() => {
-  if (loading.value || consuming.value || availableCount.value <= 0) return false
+  if (!supported.value || busy.value || availableCount.value <= 0) return false
   // usage 有次数但明细不可用时，允许不带 credit_id 使用上游自动选择模式。
   return availableCredits.value.length === 0 || Boolean(selectedCreditId.value)
 })
@@ -319,7 +325,10 @@ const inviteUnavailableMessage = computed(() => {
 })
 
 const canSendInvite = computed(() => {
-  return Boolean(status.value) && !loading.value && !sendingInvite.value && status.value?.invite_available !== false
+  const capacity = status.value?.available_invites
+  if (!supported.value || busy.value || !status.value?.invite_available || typeof capacity !== 'number' || capacity <= 0) return false
+  if (status.value.requires_consent && !consentConfirmed.value) return false
+  try { return parseEmails().length <= capacity } catch { return false }
 })
 
 const messageClass = computed(() => {
@@ -381,11 +390,16 @@ const parseEmails = () => {
   if (unique.length > maxEmails) {
     throw new Error(t('admin.providers.inviteResetEmailLimit', { max: maxEmails }))
   }
-  const invalid = unique.find((email) => !emailPattern.test(email))
+  const invalid = unique.find((email) => email.length > 254 || !emailPattern.test(email))
   if (invalid) {
     throw new Error(t('admin.providers.inviteResetInvalidEmail', { email: invalid }))
   }
   return unique
+}
+
+const errorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && error.message) return error.message
+  return t(fallback)
 }
 
 const setMessage = (type: 'success' | 'error', text: string) => {
@@ -404,81 +418,92 @@ const selectDefaultCredit = () => {
 }
 
 const loadStatus = async (clearMessage = true) => {
-  if (!props.provider) return
+  if (!props.provider || !props.show || !supported.value || loading.value) return
+  const current = generation
   loading.value = true
+  refreshFailed.value = false
   if (clearMessage) {
     message.value = ''
     messageType.value = ''
   }
   try {
-    status.value = await adminAPI.providers.getCodexInviteResetStatus(props.provider.id)
+    const fresh = await adminAPI.providers.getCodexInviteResetStatus(props.provider.id)
+    if (current !== generation) return
+    status.value = fresh
     selectDefaultCredit()
-  } catch (error: any) {
+  } catch (error) {
+    if (current !== generation) return
     status.value = null
-    setMessage('error', error?.message || t('admin.providers.inviteResetLoadFailed'))
-    appStore.showError(error?.message || t('admin.providers.inviteResetLoadFailed'))
+    if (clearMessage) setMessage('error', errorMessage(error, 'admin.providers.inviteResetLoadFailed'))
+    else refreshFailed.value = true
   } finally {
-    loading.value = false
+    if (current === generation) loading.value = false
   }
 }
 
 const handleSendInvite = async () => {
-  if (!props.provider || sendingInvite.value) return
+  if (!props.provider || !canSendInvite.value || !status.value) return
+  const current = generation
+  const id = props.provider.id
+  sendingInvite.value = true
   try {
-    if (!status.value) {
-      throw new Error(t('admin.providers.inviteResetLoadFailed'))
+    const recipients = parseEmails()
+    const result = await adminAPI.providers.sendCodexInviteResetInvite(id, recipients, status.value.referral_key, consentConfirmed.value)
+    if (current !== generation) return
+    const failed = result.failed_emails ?? []
+    if (result.sent_count !== recipients.length - failed.length || failed.some((email) => !recipients.includes(email))) {
+      throw new Error(t('admin.providers.inviteResetSendUnknown'))
     }
-    if (inviteUnavailableMessage.value) {
-      setMessage('error', inviteUnavailableMessage.value)
-      return
-    }
-    const emails = parseEmails()
-    if ((status.value?.requires_consent ?? true) && !consentConfirmed.value) {
-      throw new Error(t('admin.providers.inviteResetConsentRequired'))
-    }
-    sendingInvite.value = true
-    const result = await adminAPI.providers.sendCodexInviteResetInvite(props.provider.id, emails)
-    const failed = result.failed_emails?.filter(Boolean) ?? []
+    emailInput.value = failed.join('\n')
+    consentConfirmed.value = false
     if (failed.length > 0) {
       setMessage('error', t('admin.providers.inviteResetInvitePartialFailed', { emails: failed.join(', ') }))
-      return
+    } else {
+      setMessage('success', t('admin.providers.inviteResetInviteSuccess'))
+      appStore.showSuccess(t('admin.providers.inviteResetInviteSuccess'))
     }
-    emailInput.value = ''
-    setMessage('success', result.message || t('admin.providers.inviteResetInviteSuccess'))
-    appStore.showSuccess(t('admin.providers.inviteResetInviteSuccess'))
-  } catch (error: any) {
-    setMessage('error', error?.message || t('admin.providers.inviteResetInviteFailed'))
+    await loadStatus(false)
+  } catch (error) {
+    if (current === generation) {
+      // 请求可能已经送达，重新查询资格后才允许再次提交。
+      if (status.value) status.value = { ...status.value, available_invites: null }
+      consentConfirmed.value = false
+      setMessage('error', errorMessage(error, 'admin.providers.inviteResetSendUnknown'))
+    }
   } finally {
-    sendingInvite.value = false
+    if (current === generation) sendingInvite.value = false
   }
 }
 
 const consumeSuccessMessage = (code?: string) => {
+  if (code === 'reset') return t('admin.providers.inviteResetConsumeSuccess')
   if (code === 'nothing_to_reset') return t('admin.providers.inviteResetNothingToReset')
   if (code === 'already_redeemed') return t('admin.providers.inviteResetAlreadyRedeemed')
   if (code === 'no_credit') return t('admin.providers.inviteResetNoCredit')
-  return t('admin.providers.inviteResetConsumeSuccess')
+  return t('admin.providers.inviteResetConsumeUnknown')
 }
 
 const handleConsume = async () => {
   if (!props.provider || !canConsume.value) return
+  const current = generation
+  const id = props.provider.id
   consuming.value = true
   try {
-    const result = await adminAPI.providers.consumeCodexInviteReset(
-      props.provider.id,
-      selectedCreditId.value ?? undefined
-    )
-    const text = consumeSuccessMessage(result.code)
-    setMessage(result.code === 'reset' || !result.code ? 'success' : 'error', text)
-    if (result.code === 'reset' || !result.code) {
-      appStore.showSuccess(text)
-      emit('updated')
-    }
+    const result = await adminAPI.providers.consumeCodexInviteReset(id, selectedCreditId.value ?? undefined)
+    emit('updated', id)
+    if (current !== generation) return
+    const code = result.code === 'success' || ((!result.code || result.code === 'ok') && result.windows_reset > 0) ? 'reset' : result.code
+    const text = consumeSuccessMessage(code)
+    setMessage(code === 'reset' ? 'success' : 'error', text)
+    if (code === 'reset') appStore.showSuccess(text)
     await loadStatus(false)
-  } catch (error: any) {
-    setMessage('error', error?.message || t('admin.providers.inviteResetConsumeFailed'))
+  } catch (error) {
+    if (current === generation) {
+      status.value = null
+      setMessage('error', errorMessage(error, 'admin.providers.inviteResetConsumeUnknown'))
+    }
   } finally {
-    consuming.value = false
+    if (current === generation) consuming.value = false
   }
 }
 
@@ -493,19 +518,24 @@ const resetLocalState = () => {
 }
 
 const handleClose = () => {
-  emit('close')
+  if (!sendingInvite.value && !consuming.value) emit('close')
 }
 
 watch(
-  () => [props.show, props.provider?.id],
+  [() => props.show, () => props.provider?.id, supported],
   ([visible]) => {
-    if (visible && props.provider) {
-      loadStatus()
-      return
-    }
+    generation++
+    loading.value = false
+    sendingInvite.value = false
+    consuming.value = false
+    refreshFailed.value = false
     resetLocalState()
-  }
+    if (visible && supported.value) void loadStatus()
+  },
+  { immediate: true, flush: 'sync' }
 )
 
+// 收件人改变后，管理员需要为新的邮箱重新确认同意。
+watch(emailInput, () => { consentConfirmed.value = false }, { flush: 'sync' })
 watch(availableCredits, selectDefaultCredit)
 </script>

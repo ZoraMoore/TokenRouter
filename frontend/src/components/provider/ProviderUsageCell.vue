@@ -131,30 +131,6 @@
           :show-now-when-idle="true"
           color="emerald"
         />
-        <OpenAIQuotaResetCell :provider="provider">
-          <template #pre-actions>
-            <button
-              type="button"
-              class="inline-flex items-center gap-0.5 rounded-compact px-1.5 py-0.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-primary-500 dark:hover:bg-primary-500/8"
-              :disabled="activeQueryLoading"
-              @click="loadActiveUsage"
-            >
-              <Icon
-                name="refresh"
-                size="xs"
-                :class="{ 'animate-spin': activeQueryLoading }"
-                :stroke-width="2"
-              />
-              {{ t('admin.providers.usageWindow.activeQuery') }}
-            </button>
-          </template>
-          <span
-            v-if="openAIQuotaAutoPaused"
-            class="inline-flex items-center rounded-compact bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
-          >
-            {{ t('admin.providers.usageWindow.quotaAutoPaused') }}
-          </span>
-        </OpenAIQuotaResetCell>
       </div>
       <div v-else-if="loading" class="space-y-1.5">
         <div class="flex items-center gap-1">
@@ -170,8 +146,37 @@
       </div>
       <div v-else>
         <div class="text-xs text-gray-400">-</div>
-        <OpenAIQuotaResetCell :provider="provider" class="mt-1" />
       </div>
+      <OpenAIQuotaResetCell
+        :provider="provider"
+        :refresh-token="quotaRefreshToken"
+        @invite-reset="emit('invite-reset', $event)"
+        @provider-updated="emit('provider-updated', $event)"
+        @quota-updated="applyOpenAIQuota"
+      >
+        <template #pre-actions>
+          <button
+            type="button"
+            class="inline-flex items-center gap-0.5 rounded-compact px-1.5 py-0.5 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-primary-500 dark:hover:bg-primary-500/8"
+            :disabled="activeQueryLoading"
+            @click="loadActiveUsage"
+          >
+            <Icon
+              name="refresh"
+              size="xs"
+              :class="{ 'animate-spin': activeQueryLoading }"
+              :stroke-width="2"
+            />
+            {{ t('admin.providers.usageWindow.activeQuery') }}
+          </button>
+        </template>
+        <span
+          v-if="openAIQuotaAutoPaused"
+          class="inline-flex items-center rounded-compact bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+        >
+          {{ t('admin.providers.usageWindow.quotaAutoPaused') }}
+        </span>
+      </OpenAIQuotaResetCell>
     </template>
 
     <!-- Antigravity OAuth providers: fetch usage from API -->
@@ -684,6 +689,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
+import type { OpenAIQuotaUsage, OpenAIRateLimitWindow } from '@/api/admin/providers'
 import { COPY_FEEDBACK_MS } from '@/constants/ui'
 import type {
   Provider,
@@ -717,6 +723,7 @@ const props = withDefaults(
     provider: Provider
     todayStats?: WindowStats | null
     todayStatsLoading?: boolean
+    quotaRefreshToken?: number
     manualRefreshToken?: number
     batchedUsage?: ProviderUsageInfo | null
     batchedUsageError?: string | null
@@ -744,6 +751,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'provider-updated': [provider: Provider]
+  'invite-reset': [provider: Provider]
 }>()
 
 const { t } = useI18n()
@@ -759,6 +767,8 @@ const loading = ref(false)
 const activeQueryLoading = ref(false)
 const error = ref<string | null>(null)
 const usageInfo = ref<ProviderUsageInfo | null>(null)
+// 同一账号的被动快照可能晚于手动查询抵达。
+let latestQuota: { providerID: number; fetchedAt: number } | null = null
 const rootRef = ref<HTMLElement | null>(null)
 const isDesktopViewport = ref(getDesktopViewportMatches())
 const hasEnteredViewport = ref(false)
@@ -1463,7 +1473,11 @@ const requestParentBatchUsage = (options?: { force?: boolean }) => {
 
 const syncManagedUsageState = () => {
   if (!isBatchManaged.value) return
-  usageInfo.value = props.batchedUsage ?? null
+  const batched = props.batchedUsage ?? null
+  const observed = batched?.updated_at ? Date.parse(batched.updated_at) : 0
+  if (latestQuota?.providerID !== props.provider.id || observed > latestQuota.fetchedAt) {
+    usageInfo.value = batched
+  }
   error.value = props.batchedUsageError ?? null
   loading.value = props.batchedUsageLoading === true
 }
@@ -1488,15 +1502,17 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
   loading.value = true
   error.value = null
 
+  const providerID = props.provider.id
+  const quotaAtStart = latestQuota
   try {
     const fetchFn = () =>
       options?.source
         ? adminAPI.providers.getUsage(props.provider.id, options.source)
         : adminAPI.providers.getUsage(props.provider.id)
     const result = await enqueueUsageRequest(props.provider, fetchFn)
-    if (!unmounted.value) {
+    if (!unmounted.value && props.provider.id === providerID && latestQuota === quotaAtStart) {
       usageInfo.value = result
-      _usageCache.set(props.provider.id, { data: result, ts: Date.now() })
+      _usageCache.set(providerID, { data: result, ts: Date.now() })
     }
   } catch (e: any) {
     if (!unmounted.value) {
@@ -1558,11 +1574,50 @@ const attachVisibilityObserver = () => {
   visibilityObserver.observe(rootRef.value)
 }
 
+// 直接使用本次查询的额度更新进度条，窗口切换后清除上一窗口的本地统计。
+const applyOpenAIQuota = (quota: OpenAIQuotaUsage) => {
+  const primary = quota.rate_limit?.primary_window
+  const secondary = quota.rate_limit?.secondary_window
+  if (!primary && !secondary) return
+  const now = quota.fetched_at > 0 ? quota.fetched_at : Date.now() / 1000
+  latestQuota = { providerID: props.provider.id, fetchedAt: now * 1000 }
+  const next: ProviderUsageInfo = {
+    five_hour: null, seven_day: null, seven_day_sonnet: null,
+    ...usageInfo.value,
+    updated_at: new Date(now * 1000).toISOString()
+  }
+  const apply = (key: 'five_hour' | 'seven_day', window?: OpenAIRateLimitWindow | null) => {
+    if (!window) {
+      next[key] = null
+      return
+    }
+    const reset = window.reset_at || (window.reset_after_seconds > 0 ? now + window.reset_after_seconds : 0)
+    const time = new Date(reset * 1000)
+    const resetsAt = reset > 0 && Number.isFinite(time.getTime()) ? time.toISOString() : null
+    next[key] = {
+      utilization: window.used_percent,
+      remaining_seconds: resetsAt ? Math.max(0, reset - now) : 0,
+      resets_at: resetsAt,
+      window_stats: resetsAt && next[key]?.resets_at === resetsAt ? next[key]?.window_stats : null
+    }
+  }
+  // 双窗口按长度排序，单窗口按 Codex 的六小时分界归入 5h 或 7d。
+  const primaryShort = primary && secondary ? primary.limit_window_seconds < secondary.limit_window_seconds
+    : primary ? primary.limit_window_seconds <= 21600 : (secondary?.limit_window_seconds ?? 0) > 21600
+  apply('five_hour', primaryShort ? primary : secondary)
+  apply('seven_day', primaryShort ? secondary : primary)
+  usageInfo.value = next
+  _usageCache.set(props.provider.id, { data: next, ts: Date.now() })
+}
+
 const loadActiveUsage = async () => {
   activeQueryLoading.value = true
   error.value = null
+  const providerID = props.provider.id
+  const quotaAtStart = latestQuota
   try {
-    const result = await adminAPI.providers.getUsage(props.provider.id, 'active', true)
+    const result = await adminAPI.providers.getUsage(providerID, 'active', true)
+    if (unmounted.value || props.provider.id !== providerID || latestQuota !== quotaAtStart) return
     usageInfo.value = result
     _usageCache.set(props.provider.id, { data: result, ts: Date.now() })
   } catch (e: any) {
@@ -1707,9 +1762,11 @@ watch(openAIUsageRefreshKey, (nextKey, prevKey) => {
   if (!prevKey || nextKey === prevKey) return
   if (props.provider.platform !== 'openai' || props.provider.type !== 'oauth') return
 
-	_usageCache.delete(props.provider.id)
-	usageInfo.value = null
-	requestAutoLoad()
+  if (latestQuota?.providerID !== props.provider.id) {
+    _usageCache.delete(props.provider.id)
+    usageInfo.value = null
+  }
+  requestAutoLoad()
 })
 
 watch(

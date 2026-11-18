@@ -9,7 +9,7 @@ vi.mock('@/api/client', () => ({
   apiClient: { get, post }
 }))
 
-import { authenticatedIngressStatus, setApproval } from '@/api/admin/tlsFingerprintProfile'
+import { createCollectorSession, list } from '@/api/admin/tlsFingerprintProfile'
 
 describe('管理员 TLS 指纹模板 API', () => {
   beforeEach(() => {
@@ -17,32 +17,23 @@ describe('管理员 TLS 指纹模板 API', () => {
     post.mockReset()
   })
 
-  it('从专用端点读取已认证入站聚合状态', async () => {
-    const status = {
-      enabled: true,
-      pending_client_hellos: 2,
-      pending_authenticated_flows: 1,
-      candidate_groups: 1,
-      validations_in_flight: 0,
-      matched_flows: 8,
-      rejected_flows: 0,
-      verified_profiles_created: 1,
-      existing_profiles_matched: 7
-    }
-    get.mockResolvedValue({ data: status })
+  it('读取模板列表时不带查询参数', async () => {
+    const profiles = [{ id: 9, name: '手动配置的模板' }]
+    get.mockResolvedValue({ data: profiles })
 
-    await expect(authenticatedIngressStatus()).resolves.toEqual(status)
-    expect(get).toHaveBeenCalledWith('/admin/tls-fingerprint-profiles/collector/authenticated-ingress/status')
+    await expect(list()).resolves.toEqual(profiles)
+    expect(get).toHaveBeenCalledWith('/admin/tls-fingerprint-profiles')
   })
 
-  it('通过专用审批端点发布已验证模板且默认不加入随机池', async () => {
-    const profile = { id: 9, name: 'authenticated-codex' }
-    post.mockResolvedValue({ data: profile })
+  it('创建诊断采集会话时发送空请求体', async () => {
+    const session = {
+      token: 'test-token',
+      expires_at: '2026-06-01T00:30:00Z',
+      capture_url: 'https://collector.example:8443/capture/test-token'
+    }
+    post.mockResolvedValue({ data: session })
 
-    await expect(setApproval(9, { approved_for_use: true, random_pool_eligible: false })).resolves.toEqual(profile)
-    expect(post).toHaveBeenCalledWith('/admin/tls-fingerprint-profiles/9/approval', {
-      approved_for_use: true,
-      random_pool_eligible: false
-    })
+    await expect(createCollectorSession()).resolves.toEqual(session)
+    expect(post).toHaveBeenCalledWith('/admin/tls-fingerprint-profiles/collector/sessions')
   })
 })

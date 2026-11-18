@@ -130,6 +130,131 @@ func TestExportDataIncludesSecrets(t *testing.T) {
 	require.Equal(t, "secret", resp.Data.Providers[0].Credentials["token"])
 }
 
+// TestExportDataSub2APIRoundTrip 用同一份账号文件检查下载字段和本地重新导入后的代理绑定。
+func TestExportDataSub2APIRoundTrip(t *testing.T) {
+	router, adminSvc := setupProviderDataRouter()
+	proxyID := int64(11)
+	parentID := int64(21)
+	expiry := time.Date(2028, 1, 2, 3, 4, 5, 0, time.UTC)
+	notes := "fixture notes"
+	rate := 1.25
+	adminSvc.proxies = []egress.Proxy{
+		{
+			ID: proxyID, Name: "fixture proxy", Protocol: "socks5", Host: "proxy.example.test", Port: 1080,
+			Username: "fixture-user", Password: "fixture-password", Status: egress.StatusActive,
+		},
+		{ID: 12, Name: "unused proxy", Protocol: "http", Host: "unused.example.test", Port: 80},
+	}
+	extra := map[string]any{
+		"fixture_setting":             true,
+		"codex_turn_ticket:test":      map[string]any{"state": "fixture-private-ticket"},
+		"codex_harvest_proxy_url":     "https://fixture-private-url.example.test",
+		"openai_excel_bps_proxy_ids":  []int{18},
+		"openai_excel_bps_proxy_mode": "request",
+		"openai_proxy_ids":            []int{19},
+		"openai_proxy_mode":           "request",
+		"ollama_cloud_usage_session":  "fixture-private-session",
+		"upstream_usage_query":        map[string]any{"enabled": true, "cookie": "fixture-private-cookie"},
+	}
+	adminSvc.providers = []providercore.Record{
+		{
+			ID: parentID, Name: "fixture OAuth", Notes: &notes, Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeOAuth,
+			Credentials: map[string]any{"access_token": "fixture-access", "plan_type": "plus"},
+			Extra:       extra, ProxyID: &proxyID, Concurrency: 3, RateMultiplier: &rate, ExpiresAt: &expiry,
+		},
+		{ID: 22, Name: "fixture shadow", ParentProviderID: &parentID, QuotaDimension: providercore.QuotaDimensionSpark},
+		{ID: 23, Name: "fixture Qoder", Platform: capability.PlatformQoder, Type: capability.ProviderTypeCosy, Credentials: map[string]any{"pat": "fixture-pat"}},
+		{ID: 24, Name: "unselected", Credentials: map[string]any{"token": "fixture-unselected"}},
+	}
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/providers/data?format=sub2api&ids=21,22,23&search=ignored", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	var response struct {
+		Data map[string]json.RawMessage `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.NotEmpty(t, response.Data["accounts"])
+	require.Len(t, response.Data, 4)
+	require.JSONEq(t, "1", string(response.Data["skipped_shadows"]))
+	var exportedAt time.Time
+	require.NoError(t, json.Unmarshal(response.Data["exported_at"], &exportedAt))
+	var proxies []egress.TransferProxy
+	require.NoError(t, json.Unmarshal(response.Data["proxies"], &proxies))
+	require.Len(t, proxies, 1)
+	proxyKey := "socks5|proxy.example.test|1080|fixture-user|fixture-password"
+	require.Equal(t, proxyKey, proxies[0].ProxyKey)
+	var accounts []transfer.DataProvider
+	require.NoError(t, json.Unmarshal(response.Data["accounts"], &accounts))
+	require.Len(t, accounts, 2)
+	account := accounts[0]
+	require.Equal(t, "fixture OAuth", account.Name)
+	require.Equal(t, &notes, account.Notes)
+	require.Equal(t, capability.PlatformOpenAI, account.Platform)
+	require.Equal(t, capability.ProviderTypeOAuth, account.Type)
+	require.Equal(t, adminSvc.providers[0].Credentials, account.Credentials)
+	require.Equal(t, &proxyKey, account.ProxyKey)
+	require.NotNil(t, account.Concurrency)
+	require.Equal(t, 3, *account.Concurrency)
+	require.NotNil(t, account.Priority)
+	require.Equal(t, 0, *account.Priority)
+	require.Equal(t, &rate, account.RateMultiplier)
+	require.NotNil(t, account.ExpiresAt)
+	require.Equal(t, expiry.Unix(), *account.ExpiresAt)
+	require.NotNil(t, account.AutoPauseOnExpired)
+	require.False(t, *account.AutoPauseOnExpired)
+	require.Equal(t, map[string]any{"fixture_setting": true, "upstream_usage_query": map[string]any{"enabled": true}}, account.Extra)
+	require.Equal(t, capability.ProviderTypeCosy, accounts[1].Type)
+	require.Equal(t, capability.PlatformQoder, accounts[1].Platform)
+	require.Contains(t, extra, "codex_turn_ticket:test")
+	require.NotContains(t, rec.Body.String(), "fixture-private")
+	require.NotContains(t, rec.Body.String(), "fixture-unselected")
+	require.Zero(t, adminSvc.list.lastListProviders.calls)
+
+	body, err := json.Marshal(response)
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/providers/data", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	imported := httptest.NewRecorder()
+	router.ServeHTTP(imported, req)
+	require.Equal(t, http.StatusOK, imported.Code)
+	result := decodeImportResult(t, imported).Data
+	require.Equal(t, 1, result.ProxyReused)
+	require.Equal(t, 2, result.ProviderCreated)
+	require.Empty(t, result.Errors)
+	require.Equal(t, &proxyID, adminSvc.createdProviders[0].ProxyID)
+}
+
+// TestExportDataSub2APIWithoutProxies 检查按筛选导出、关闭代理以及空结果时的文件。
+func TestExportDataSub2APIWithoutProxies(t *testing.T) {
+	router, adminSvc := setupProviderDataRouter()
+	proxyID := int64(4)
+	adminSvc.providers = []providercore.Record{
+		{ID: 7, Name: "fixture", Platform: capability.PlatformDeepseek, Type: capability.ProviderTypeAPIKey, Credentials: map[string]any{"api_key": "fixture-key"}, ProxyID: &proxyID},
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/providers/data?format=sub2api&include_proxies=false&platform=deepseek&group=ungrouped", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	var response struct {
+		Data map[string]json.RawMessage `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Len(t, response.Data, 3)
+	require.JSONEq(t, "[]", string(response.Data["proxies"]))
+	require.NotContains(t, string(response.Data["accounts"]), "proxy_key")
+	require.Contains(t, string(response.Data["accounts"]), "fixture-key")
+	require.Equal(t, capability.PlatformDeepseek, adminSvc.list.lastListProviders.platform)
+	require.EqualValues(t, providercore.ProviderListGroupUngrouped, adminSvc.list.lastListProviders.groupID)
+
+	adminSvc.providers = nil
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/providers/data?format=sub2api", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.JSONEq(t, "[]", string(response.Data["accounts"]))
+	require.JSONEq(t, "[]", string(response.Data["proxies"]))
+}
+
 func TestExportDataWithoutProxies(t *testing.T) {
 	router, adminSvc := setupProviderDataRouter()
 

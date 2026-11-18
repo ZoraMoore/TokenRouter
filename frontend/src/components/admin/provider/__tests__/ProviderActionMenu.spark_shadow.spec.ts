@@ -49,6 +49,21 @@ const getBodyText = () => document.body.textContent ?? ''
 const getBodyButtons = () => Array.from(document.body.querySelectorAll('button'))
 
 describe('ProviderActionMenu — spark shadow 按钮可见性', () => {
+  it('从当前账号打开智商测试，影子账号没有邀请重置入口', async () => {
+    const provider = makeProvider({ id: 9, parent_provider_id: 3 })
+    const wrapper = mount(ProviderActionMenu, {
+      props: { show: true, provider, position },
+      global: { stubs: { teleport: true } },
+    })
+    const action = wrapper.findAll('button').find(button => button.text().includes('providerIQ.title'))
+    expect(action).toBeDefined()
+    await action!.trigger('click')
+    expect(wrapper.emitted('iq-test')?.[0]).toEqual([provider])
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    expect(wrapper.text()).not.toContain('admin.providers.inviteReset')
+    wrapper.unmount()
+  })
+
   it('删除位于菜单末尾，传递当前提供商并关闭菜单', async () => {
     const provider = makeProvider({ type: 'apikey' })
     const wrapper = mount(ProviderActionMenu, {

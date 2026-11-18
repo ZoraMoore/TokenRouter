@@ -26,6 +26,8 @@ func (t grokTestTarget) Execute(ctx context.Context, request provider.PreparedTe
 	headers.Set("User-Agent", request.UserAgent)
 	headers.Set("originator", request.Originator)
 	run := NewTestRun(ctx, headers, sink)
+	run.FullAnswer = request.FullAnswer
+	run.SVGAnswer = request.SVGAnswer
 	defer run.Cancel()
 	return run.Result(t.executor.Execute(run, t.record, request.Model, request.Prompt, request.TestType))
 }

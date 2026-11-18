@@ -59,6 +59,34 @@ func TestResolveBillingServiceTier(t *testing.T) {
 	}
 }
 
+// TestResponseTierBillingSelectedProvider 检查凭据继承和响应计费各自读取的提供商。
+func TestResponseTierBillingSelectedProvider(t *testing.T) {
+	var events []BillingEvent
+	recorder := &Recorder{emit: func(e BillingEvent) { events = append(events, e) }}
+	parent := &ProviderSnapshot{ID: 10, OpenAIResponseTierBillingEnabled: true}
+	selected := &ProviderSnapshot{ID: 11}
+	result := &Result{UpstreamResponseServiceTier: "ultrafast"}
+	recorder.normalizeResult(result, parent, true, selected, "req")
+	require.Nil(t, result.ServiceTier)
+	require.Empty(t, events)
+
+	selected.OpenAIResponseTierBillingEnabled = true
+	recorder.normalizeResult(result, parent, true, selected, "req")
+	require.Equal(t, "ultrafast", *result.ServiceTier)
+	require.Len(t, events, 1)
+	require.Equal(t, selected.ID, events[0].ProviderID)
+	require.Equal(t, "tier_response", events[0].Kind)
+	require.Equal(t, "ultrafast", events[0].BilledTier)
+
+	result.UpstreamResponseServiceTier = "unknown"
+	recorder.normalizeResult(result, parent, true, selected, "req")
+	require.Len(t, events, 2)
+	require.Equal(t, "tier_response_missing", events[1].Kind)
+	require.Empty(t, events[1].ObservedTier)
+	require.Equal(t, "ultrafast", events[1].RequestedTier)
+	require.Equal(t, "ultrafast", events[1].BilledTier)
+}
+
 func TestApplyServiceTierBillingResolutionOnlyRewritesDowngrades(t *testing.T) {
 	t.Run("codex exception only covers OpenAI default", func(t *testing.T) {
 		require.True(t, CodexOAuthResponseTierIsNonAuthoritative("default"))

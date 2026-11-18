@@ -456,7 +456,7 @@ async function loadRouters() {
 
 async function loadProfiles() {
   try {
-    profiles.value = await adminAPI.tlsFingerprintProfiles.list({ bindable: true, targetHost: 'chatgpt.com' })
+    profiles.value = await adminAPI.tlsFingerprintProfiles.list()
   } catch {
     profiles.value = []
   }

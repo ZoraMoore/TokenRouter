@@ -38,13 +38,14 @@ type RuntimeSettingsStore interface {
 	Set(context.Context, string, string) error
 }
 
-// RuntimeSettings 独占提供商健康配置及其已有缓存。
+// RuntimeSettings 读取提供商健康设置和 OpenAI OAuth 模型白名单。
 type RuntimeSettings struct {
 	providerSchedulingThresholdsCache atomic.Value
 	providerSchedulingThresholdsSF    singleflight.Group
 	settingRepo                       RuntimeSettingsStore
 	notFound                          error
 	openAIAPIKeyHealthBreakerCache    atomic.Value
+	openAIOAuthModels                 openAIOAuthModelCache
 }
 
 // OpenAIImagesOAuthUnavailableCooldownSettings 保存 OAuth 图片不可用时的冷却设置。

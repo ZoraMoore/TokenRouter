@@ -111,6 +111,32 @@ func TestCreativeExecutorForwardsModelAllowedByGroupScheduler(t *testing.T) {
 	require.Equal(t, []string{"gpt-image-2"}, group.RoutingPolicy.AllowedModels)
 }
 
+// TestCreativeExecutorRechecksOAuthModels 检查已获调度槽位的任务也能读到管理员刚删除的型号。
+func TestCreativeExecutorRechecksOAuthModels(t *testing.T) {
+	ctx := t.Context()
+	group := &routing.Group{ID: 12, Status: "active", AllowedProtocols: []capability.ProtocolID{capability.ProtocolImagesGenerations}}
+	groups := creativePolicyGroups{group}
+	policy := provider.NewOpenAIOAuthModelPolicy([]string{"gpt-image-2", "gpt-6-sol"})
+	record := &provider.Record{
+		ID: 55, Platform: provider.PlatformOpenAI, Type: provider.ProviderTypeOAuth,
+		Status: provider.StatusActive, Schedulable: true, GroupIDs: []int64{group.ID},
+		OpenAIOAuthModelWhitelist: func(context.Context) (provider.OpenAIOAuthModelPolicy, error) { return policy, nil },
+	}
+	choices := selection.NewCompatible(selection.CompatibleDependencies{
+		Reads: selection.Reads{Providers: creativePolicyProviders{value: gatewayprovider.NewExecutionProvider(record)}, Groups: groups},
+	}, selection.DefaultOptions())
+	executor := provideCreativeExecutor(nil, groups, &gatewayprovider.CreativeTargets{}, nil, choices)
+	run := creative.CreativeRun{GroupID: group.ID, Model: "gpt-image-2", Operation: creative.CreativeOperationGenerate}
+	prepared, err := executor.Prepare(ctx, run)
+	require.NoError(t, err)
+	t.Cleanup(prepared.ReleaseFunc)
+	require.Equal(t, run.Model, prepared.UpstreamModel)
+
+	policy = provider.NewOpenAIOAuthModelPolicy([]string{"gpt-6-sol"})
+	_, err = prepared.Target.Execute(ctx, run, creative.CreativeRunPayload{})
+	require.ErrorIs(t, err, provider.ErrOpenAIOAuthModelNotAllowed)
+}
+
 // TestCreativeExecutorKeepsPersistedGroupWhenClientRestricted 检查已保存的任务遇到客户端限制时仍使用原分组。
 func TestCreativeExecutorKeepsPersistedGroupWhenClientRestricted(t *testing.T) {
 	fallback := int64(99)

@@ -39,7 +39,7 @@ func TestModelAvailabilityUsesPersistentProviderStore(t *testing.T) {
 	require.NoError(t, err)
 	_, err = f.client.ProviderGroup.Create().SetProviderID(row.ID).SetGroupID(group.ID).Save(ctx)
 	require.NoError(t, err)
-	store := NewProviderStoreForTest(f.client, f.db, nil)
+	store := NewProviderStoreForTest(f.client, f.db, nil, nil)
 	diagnoser := NewModelAvailabilityForTest(store, nil)
 	t.Run("configured_cooling_provider", func(t *testing.T) {
 		result := diagnoser.Compatible.DiagnoseModelAvailabilityForPlatform(ctx, &group.ID, "public-known", capability.PlatformOpenAI)

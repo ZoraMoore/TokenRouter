@@ -34,16 +34,19 @@ const (
 
 // TestEvent represents a SSE event for provider testing.
 type TestEvent struct {
-	Type     string `json:"type"`
-	Text     string `json:"text,omitempty"`
-	Model    string `json:"model,omitempty"`
-	Status   string `json:"status,omitempty"`
-	Code     string `json:"code,omitempty"`
-	ImageURL string `json:"image_url,omitempty"`
-	MimeType string `json:"mime_type,omitempty"`
-	Data     any    `json:"data,omitempty"`
-	Success  bool   `json:"success,omitempty"`
-	Error    string `json:"error,omitempty"`
+	Type            string `json:"type"`
+	Text            string `json:"text,omitempty"`
+	Model           string `json:"model,omitempty"`
+	Status          string `json:"status,omitempty"`
+	Code            string `json:"code,omitempty"`
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	Protocol        string `json:"protocol,omitempty"`
+	SystemPrompt    string `json:"system_prompt,omitempty"`
+	ImageURL        string `json:"image_url,omitempty"`
+	MimeType        string `json:"mime_type,omitempty"`
+	Data            any    `json:"data,omitempty"`
+	Success         bool   `json:"success,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // TestRequest 表达测试意图；Type 为 nil 时保留历史模型名推断，客户端元数据不包含凭据。
@@ -54,6 +57,13 @@ type TestRequest struct {
 	Protocol              string
 	UserAgent, Originator string
 	Automatic             bool
+	// FullAnswer 要求选中的上游完成一次整题作答。
+	FullAnswer      bool
+	ReasoningEffort string
+	// SVGAnswer 为文字协议返回的绘图作品选择采集上限。
+	SVGAnswer bool
+	// IQMode 区分管理员发起的题目和数字指纹采样。
+	IQMode string
 }
 type TestRoute uint8
 
@@ -88,8 +98,11 @@ type TestOptions struct {
 	WriteError func(error)
 }
 type TestService struct {
-	loader  TestLoader
-	options TestOptions
+	stateProbes sync.Map
+	loader      TestLoader
+	options     TestOptions
+	iqMu        sync.Mutex
+	iqActive    map[int64]iqActivity
 }
 
 // 首次输出失败立即取消执行上下文，后续写出复用相同错误。
@@ -169,17 +182,22 @@ func NewTestService(loader TestLoader, options TestOptions) *TestService {
 }
 
 func (s *TestService) Test(ctx context.Context, request TestRequest, sink TestEventSink) error {
+	return s.testTarget(ctx, nil, request, sink)
+}
+
+// testTarget 让手动检测在刚校验过的账号快照上执行一次。
+func (s *TestService) testTarget(ctx context.Context, target TestTarget, request TestRequest, sink TestEventSink) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	guarded := &testGuardedSink{next: sink, cancel: cancel}
-	err := s.execute(runCtx, request, guarded)
+	err := s.execute(runCtx, target, request, guarded)
 	if writeErr := guarded.failure(); writeErr != nil && !errors.Is(err, writeErr) {
 		return errors.Join(err, writeErr)
 	}
 	return err
 }
 
-func (s *TestService) execute(ctx context.Context, request TestRequest, sink TestEventSink) error {
+func (s *TestService) execute(ctx context.Context, target TestTarget, request TestRequest, sink TestEventSink) error {
 	if request.Protocol != "" && TestProtocolID(request.Protocol) == "" {
 		return s.fail(ctx, sink, "Invalid test protocol")
 	}
@@ -191,16 +209,26 @@ func (s *TestService) execute(ctx context.Context, request TestRequest, sink Tes
 	if explicit && kind == ProviderTestTypeImage {
 		mode = ProviderTestModeDefault
 	}
-	target, err := s.loader.LoadTestTarget(ctx, request)
-	if err != nil {
-		return s.fail(ctx, sink, "Provider not found")
+	if target == nil {
+		var err error
+		target, err = s.loader.LoadTestTarget(ctx, request)
+		if err != nil {
+			return s.fail(ctx, sink, "Provider not found")
+		}
 	}
 	info := target.Information()
+	claudeIQ := request.IQMode != "" && info.Platform == PlatformAnthropic && (info.Type == ProviderTypeAPIKey || info.Type == ProviderTypeOAuth || info.Type == ProviderTypeSetupToken)
+	if request.FullAnswer && request.ReasoningEffort != "" && info.Platform != PlatformOpenAI && !claudeIQ {
+		return ErrTestAnswerEffort
+	}
 	if explicit && kind == ProviderTestTypeImage && info.Platform != PlatformOpenAI && info.Platform != PlatformGemini && info.Platform != PlatformGrok {
 		return s.fail(ctx, sink, fmt.Sprintf("Image tests are not supported for platform %s", info.Platform))
 	}
-	if request.Protocol != "" && kind != ProviderTestTypeImage && !testProtocolAllowed(info, request.Protocol) {
-		return s.fail(ctx, sink, fmt.Sprintf("Test protocol %s is not supported for this provider", request.Protocol))
+	if request.Protocol != "" && kind != ProviderTestTypeImage {
+		disabled := request.FullAnswer && !slices.Contains(info.EnabledProtocols, TestProtocolID(request.Protocol))
+		if disabled || !testProtocolAllowed(info, request.Protocol) {
+			return s.fail(ctx, sink, fmt.Sprintf("Test protocol %s is not supported for this provider", request.Protocol))
+		}
 	}
 	prepared := PreparedTestRequest{TestRequest: request, TestType: kind, ExplicitType: explicit}
 	prepared.Mode = mode

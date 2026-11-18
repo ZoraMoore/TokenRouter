@@ -33,6 +33,16 @@ type DataPayload struct {
 	SkippedShadows int `json:"skipped_shadows,omitempty"`
 }
 
+// Sub2APIDataPayload 是 Sub2API 的账号文件。导出省略类型和版本，导入也接受带版本 1 标识的文件。
+type Sub2APIDataPayload struct {
+	Type           string         `json:"type,omitempty"`
+	Version        *int           `json:"version,omitempty"`
+	ExportedAt     string         `json:"exported_at"`
+	Proxies        []DataProxy    `json:"proxies"`
+	Accounts       []DataProvider `json:"accounts"`
+	SkippedShadows int            `json:"skipped_shadows,omitempty"`
+}
+
 // DataProvider 用于管理员备份导出，Credentials 包含凭据原文。
 // 格式不包含 parent_provider_id 或 quota_dimension，导入要求凭据非空，无法重建影子的父子链接。
 // Spark 影子及其独立优先级、并发、分组和状态不在导出范围，前端会提示跳过的影子数量。
@@ -114,14 +124,7 @@ func (p *DataPayload) UnmarshalJSON(data []byte) error {
 		if _, mixed := fields["providers"]; mixed {
 			return errors.New("accounts and providers cannot appear together")
 		}
-		var value struct {
-			Type           string         `json:"type"`
-			Version        *int           `json:"version"`
-			ExportedAt     string         `json:"exported_at"`
-			Proxies        []DataProxy    `json:"proxies"`
-			Accounts       []DataProvider `json:"accounts"`
-			SkippedShadows int            `json:"skipped_shadows"`
-		}
+		var value Sub2APIDataPayload
 		decoder := json.NewDecoder(bytes.NewReader(data))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&value); err != nil {
