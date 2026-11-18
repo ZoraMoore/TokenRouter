@@ -41,7 +41,7 @@
             {{ t(isProbe ? 'pelicanTests.probe.observation' : isPelicanArtwork(sample.question_kind) ? 'pelicanTests.artwork' : 'pelicanTests.answer') }}
           </h3>
           <div
-            v-if="!review && imageSource && !imageFailed" v-segmented class="segmented"
+            v-if="(imageSource || originalDocument) && !imageFailed" v-segmented class="segmented"
             role="group" :aria-label="t('pelicanTests.showcase.previewSizing')"
           >
             <button
@@ -52,17 +52,10 @@
           </div>
         </div>
         <PelicanArtworkPreview
-          v-if="!review && imageSource && !imageFailed" :key="sample.id" :source="imageSource" :mode="previewMode"
+          v-if="(imageSource || originalDocument) && !imageFailed" :key="sample.id" :source="imageSource" :mode="previewMode"
+          :document="originalDocument"
           :alt="t('pelicanTests.artworkAlt', { model: sample.model_id })"
           class="h-[60dvh] rounded-surface border border-gray-200 dark:border-dark-700"
-          @error="imageFailed = true"
-        />
-        <img
-          v-else-if="imageSource && !imageFailed"
-          :key="sample.id"
-          :src="imageSource"
-          :alt="t('pelicanTests.artworkAlt', { model: sample.model_id })"
-          class="max-h-[60dvh] w-full rounded-surface border border-gray-200 bg-white object-contain dark:border-dark-700"
           @error="imageFailed = true"
         />
         <p
@@ -70,6 +63,22 @@
           class="whitespace-pre-wrap break-words rounded-surface bg-gray-50 p-4 font-mono text-sm dark:bg-dark-800"
         >{{ sample.answer }}</p>
         <p v-else class="text-sm text-gray-500 dark:text-dark-400">{{ t(isProbe ? 'pelicanTests.probe.noObservation' : 'pelicanTests.noAnswer') }}</p>
+      </section>
+      <section v-if="originalDocument" class="space-y-2">
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button" class="btn btn-secondary btn-sm" data-testid="pelican-show-source"
+            :aria-expanded="showSource" @click="showSource = !showSource"
+          >{{ t(showSource ? 'pelicanTests.hideSource' : 'pelicanTests.showSource') }}</button>
+          <a
+            :href="sourceDownload" :download="`pelican-${sample.id}.html`"
+            class="btn btn-secondary btn-sm" data-testid="pelican-download-source"
+          >{{ t('pelicanTests.downloadSource') }}</a>
+        </div>
+        <pre
+          v-if="showSource" data-testid="pelican-original-source"
+          class="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-surface bg-gray-50 p-4 font-mono text-sm text-gray-700 dark:bg-dark-800 dark:text-dark-200"
+        >{{ sample.raw_answer }}</pre>
       </section>
       <SettingsNotice v-if="reviewFailed" tone="error">{{ t('pelicanTests.reviewFailed') }}</SettingsNotice>
     </div>
@@ -106,7 +115,7 @@ import { overriddenQuestionName } from '@/i18n/pelicanQuestionNames'
 import { formatDateTime } from '@/utils/format'
 import PelicanArtworkPreview from './PelicanArtworkPreview.vue'
 import PelicanStatus from './PelicanStatus.vue'
-import { effortLabel, pelicanImageSource } from './pelicanArtwork'
+import { effortLabel, pelicanImageSource, pelicanPreviewDocument } from './pelicanArtwork'
 import { PELICAN_SLOW_POLL_MS, usePelicanResource } from './usePelicanResource'
 
 const props = defineProps<{
@@ -125,6 +134,7 @@ const { data: sample, loading, failed, refresh } = usePelicanResource(
 const reviewing = ref<PelicanReviewStatus | null>(null)
 const reviewFailed = ref(false)
 const imageFailed = ref(false)
+const showSource = ref(false)
 const previewModes = ['fit', 'actual'] as const
 const previewMode = ref<typeof previewModes[number]>('fit')
 const isProbe = computed(() => sample.value?.question_kind === 'state_probe')
@@ -144,11 +154,15 @@ const reason = computed(() => {
 
 const imageSource = computed(() => sample.value && isPelicanArtwork(sample.value.question_kind)
   ? pelicanImageSource(sample.value.answer || '') : '')
+const originalDocument = computed(() => sample.value && isPelicanArtwork(sample.value.question_kind)
+  ? pelicanPreviewDocument(sample.value.raw_answer || '') : '')
+const sourceDownload = computed(() => 'data:text/plain;charset=utf-8,' + encodeURIComponent(sample.value?.raw_answer || ''))
 
 watch(() => props.resultId, () => {
   previewMode.value = 'fit'
   imageFailed.value = false
   reviewFailed.value = false
+  showSource.value = false
 })
 
 function close() {

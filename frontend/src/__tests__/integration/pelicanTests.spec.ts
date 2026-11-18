@@ -7,6 +7,7 @@ import enPelican from '@/i18n/locales/en/pelicanTests'
 import zhPelican from '@/i18n/locales/zh/pelicanTests'
 import AdminPelicanTestsView from '@/views/admin/PelicanTestsView.vue'
 import UserPelicanTestsView from '@/views/user/PelicanTestsView.vue'
+import { pelicanPreviewDocument } from '@/components/pelican/pelicanArtwork'
 
 const language = ref('zh-Hans')
 const http = vi.hoisted(() => ({
@@ -679,6 +680,49 @@ describe('用户样本', () => {
     setPelicanVisibility({ enabled: false, api_enabled: true })
     await flushPromises()
     expect(view.find('[role="note"]').exists()).toBe(false)
+  })
+
+  it('样本详情保存完整代码，并隔离预览 SVG 外的样式和脚本', async () => {
+    const raw = '<!doctype html><html><head><style>.wheel{stroke:red}</style></head><body><svg viewBox="0 0 600 400"><circle class="wheel" r="4"/></svg><script>document.querySelector("circle").setAttribute("r","8")</script></body></html>'
+    mockReads(path => path === '/pelican-tests'
+      ? [{ group_id: 2, group_name: 'Group A', models: [{ ...plan, latest: result }] }]
+      : { ...detail, raw_answer: raw })
+    const view = mount(UserPelicanTestsView, { global })
+    await flushPromises()
+    await view.get('[data-testid="open-sample-26"]').trigger('click')
+    await flushPromises()
+    const dialog = view.get('[role="dialog"]')
+    const frame = dialog.get('iframe')
+    expect(frame.attributes('sandbox')).toBe('allow-scripts')
+    expect(frame.attributes('referrerpolicy')).toBe('no-referrer')
+    expect(frame.attributes('srcdoc')).toContain('.wheel{stroke:red}')
+    expect(frame.attributes('srcdoc')).toContain('document.querySelector')
+    expect(frame.attributes('srcdoc')).toContain("default-src 'none'")
+    expect(frame.attributes('srcdoc')).toContain("connect-src 'none'")
+    expect(dialog.find('script, svg').exists()).toBe(false)
+    await dialog.get('[data-testid="pelican-show-source"]').trigger('click')
+    expect(dialog.get('[data-testid="pelican-original-source"]').text()).toBe(raw)
+    expect(dialog.get('[data-testid="pelican-download-source"]').attributes('download')).toBe('pelican-26.html')
+    expect(decodeURIComponent(dialog.get('[data-testid="pelican-download-source"]').attributes('href').split(',')[1])).toBe(raw)
+  })
+
+  it('预览处理代码围栏、刷新标签与本站 CSP nonce，原文保持不变', () => {
+    const nonce = document.createElement('script')
+    nonce.nonce = 'page-nonce'
+    document.head.appendChild(nonce)
+    try {
+      const raw = '```html\n<html><head><base href="https://fixture.invalid"><meta http-equiv="refresh" content="0;url=https://fixture.invalid"><style>.wheel{stroke:red}</style></head><body><svg/><script>window.frame=1</script></body></html>\n```'
+      const preview = pelicanPreviewDocument(raw)
+      const parsed = new DOMParser().parseFromString(preview, 'text/html')
+      expect(parsed.querySelector('base,meta[http-equiv="refresh"]')).toBeNull()
+      expect(parsed.querySelector('script')?.nonce).toBe('page-nonce')
+      expect(parsed.head.firstElementChild?.getAttribute('http-equiv')).toBe('Content-Security-Policy')
+      expect(preview).not.toContain('```')
+      expect(preview).toContain('window.frame=1')
+      expect(raw).toContain('```html')
+    } finally {
+      nonce.remove()
+    }
   })
 
   it.each([

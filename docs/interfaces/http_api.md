@@ -221,6 +221,8 @@ POST /api/v1/creative/runs/{id}/outputs/{index}/ack
 
 打开样本时，`GET /api/v1/pelican-tests/results/:id` 返回题目、判据和完整作答。关闭网页展示或请求不可见的样本时返回 404。
 
+绘图详情的 `answer` 是提取出的 SVG，`raw_answer` 是模型完成回答后的原文，包含 HTML、CSS 和 JavaScript。管理员详情与组内用户详情均返回 `raw_answer`，列表摘要省略正文。历史记录没有保存原文时省略该字段。原文最多 2 MiB，随样本记录清理。预览使用隔离页面，下载使用原文。
+
 两个展示开关均开启时，本站 API Key 可通过 `GET /api/v1/public/pelican-showcase` 读取作品目录，通过 `GET /api/v1/public/pelican-showcase/items/:id` 读取单幅作品。两条路径都支持 HEAD。凭据放在 Authorization Bearer、X-API-Key 或 X-Goog-API-Key 请求头中。目录只列出该 Key 绑定且用户当前有权使用的分组。清单的 `max_items_per_group` 是每组张数上限，`latest_generated_at` 是当前可见作品中最新的生成时间。每幅作品的 `content_url` 指向详情，`response_text` 提供 SVG 正文。读取使用已保存的数据，不消耗模型额度。详情与网页遵循相同的留存范围。
 
 ### 高级调度评分诊断

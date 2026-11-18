@@ -33,6 +33,7 @@ type PelicanQuestionConfig struct {
 // PelicanEvidence 保存本次实际发送的题目、评判要求和可供管理员查看的回答。
 type PelicanEvidence struct {
 	Status, DetailCode, Prompt, Answer string
+	RawAnswer                          string
 	Criteria                           []string
 	ReasoningEffort                    string
 }
@@ -127,6 +128,18 @@ func (s *TestService) RunConfiguredPelican(ctx context.Context, providerID int64
 func (e *PelicanEvidence) grade(kind, raw, expected string) {
 	text := strings.TrimSpace(raw)
 	expected = strings.TrimSpace(expected)
+	if isPelicanDrawing(kind) {
+		if len(raw) > PelicanDrawingLimit {
+			e.DetailCode = "output_limit"
+			return
+		}
+		if !utf8.ValidString(raw) || strings.ContainsRune(raw, '\x00') {
+			e.DetailCode = "incomplete"
+			return
+		}
+		// 原文包含 HTML 包装页的样式和脚本，格式错误的作品也需要留给管理员复查。
+		e.RawAnswer = raw
+	}
 	switch {
 	case text == "":
 		e.DetailCode = "empty_output"

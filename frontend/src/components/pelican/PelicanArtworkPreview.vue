@@ -10,7 +10,14 @@
       class="relative flex h-full min-h-full min-w-full items-center justify-center overflow-clip"
       :style="mode === 'actual' ? canvasStyle : undefined"
     >
+      <iframe
+        v-if="document" :srcdoc="document" :title="alt"
+        sandbox="allow-scripts" referrerpolicy="no-referrer"
+        class="absolute block max-w-none border-0"
+        :style="{ ...canvasStyle, transform: 'scale(' + scale + ')' }"
+      />
       <img
+        v-else
         :src="source" :alt="alt" decoding="async" class="absolute block max-w-none"
         :style="{ ...canvasStyle, transform: 'scale(' + scale + ')' }"
         @error="emit('error')"
@@ -22,7 +29,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-const props = withDefaults(defineProps<{ source: string; alt: string; mode?: 'fit' | 'actual' }>(), { mode: 'fit' })
+const props = withDefaults(defineProps<{ source: string; alt: string; document?: string; mode?: 'fit' | 'actual' }>(), { mode: 'fit', document: '' })
 const emit = defineEmits<{ error: [] }>()
 const stage = ref<HTMLElement | null>(null)
 const available = ref({ width: 0, height: 0 })

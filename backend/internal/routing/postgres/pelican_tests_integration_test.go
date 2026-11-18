@@ -29,6 +29,47 @@ func TestPelicanTestStore(t *testing.T) {
 	t.Run("state_probe", func(t *testing.T) { testPelicanStateProbe(t, db) })
 }
 
+// TestPelicanRawAnswerStore 覆盖完整原文的保存、组内读取、历史兼容和数据库大小限制。
+func TestPelicanRawAnswerStore(t *testing.T) {
+	db := postgrescontainer.New(t)
+	store := NewPelicanTestStore(db)
+	ctx := t.Context()
+	groupID := newPelicanGroup(t, db, "raw-artwork")
+	plan, err := store.SavePlan(ctx, routing.PelicanPlan{
+		GroupID: groupID, ModelID: "drawing", QuestionKind: "pelican", CronExpression: "0 * * * *",
+	})
+	require.NoError(t, err)
+	raw := " \n<!doctype html><style>.wheel{stroke:red}</style><svg><circle r=\"4\"/></svg><script>window.frame=1</script>\n"
+	for _, tc := range []struct{ raw, answer, status string }{
+		{raw, `<svg><circle r="4"/></svg>`, "pending_review"},
+		{raw, "", "inconclusive"},
+		{"", `<svg><circle r="4"/></svg>`, "pending_review"},
+	} {
+		require.NoError(t, store.QueuePlan(ctx, plan.ID))
+		now := time.Now().UTC()
+		claimed, err := store.ClaimNext(ctx, now, now.Add(15*time.Minute), "raw-test")
+		require.NoError(t, err)
+		require.NotNil(t, claimed)
+		require.NoError(t, store.Finish(ctx, *claimed, routing.PelicanResult{
+			PelicanSummary: routing.PelicanSummary{Status: tc.status, TestedAt: now}, Answer: tc.answer, RawAnswer: tc.raw,
+		}, nil))
+		history, err := store.ListResults(ctx, plan.ID)
+		require.NoError(t, err)
+		require.NotEmpty(t, history)
+		require.Empty(t, history[0].RawAnswer)
+		for _, scope := range [][]int64{nil, {groupID}} {
+			sample, err := store.Result(ctx, history[0].ID, scope)
+			require.NoError(t, err)
+			require.Equal(t, tc.raw, sample.RawAnswer)
+			require.Equal(t, tc.answer, sample.Answer)
+		}
+		_, err = store.Result(ctx, history[0].ID, []int64{-1})
+		require.ErrorIs(t, err, routing.ErrPelicanNotFound)
+		_, err = db.ExecContext(ctx, `UPDATE pelican_test_results SET raw_answer=$1 WHERE id=$2`, strings.Repeat("x", (2<<20)+1), history[0].ID)
+		require.Error(t, err)
+	}
+}
+
 func testPelicanCandyAnswers(t *testing.T, db *sql.DB) {
 	ctx := t.Context()
 	store := NewPelicanTestStore(db)

@@ -73,14 +73,16 @@ type PelicanResult struct {
 	Prompt       string   `json:"prompt,omitempty"`
 	Criteria     []string `json:"criteria,omitempty"`
 	Answer       string   `json:"answer,omitempty"`
+	RawAnswer    string   `json:"raw_answer,omitempty"`
 }
 
 // PelicanArtwork 是用户打开一次测试时可查看的题目和作答。
 type PelicanArtwork struct {
 	PelicanSummary
-	Prompt   string   `json:"prompt"`
-	Criteria []string `json:"criteria"`
-	Answer   string   `json:"answer"`
+	Prompt    string   `json:"prompt"`
+	Criteria  []string `json:"criteria"`
+	Answer    string   `json:"answer"`
+	RawAnswer string   `json:"raw_answer,omitempty"`
 }
 
 // PelicanAnswerPreview 在糖果题历史中显示模型当次的回答，完整正文由详情接口返回。
@@ -346,7 +348,7 @@ func (s *PelicanService) UserResult(ctx context.Context, userID, resultID int64)
 	if err != nil {
 		return nil, err
 	}
-	return &PelicanArtwork{PelicanSummary: result.PelicanSummary, Prompt: result.Prompt, Criteria: result.Criteria, Answer: result.Answer}, nil
+	return &PelicanArtwork{PelicanSummary: result.PelicanSummary, Prompt: result.Prompt, Criteria: result.Criteria, Answer: result.Answer, RawAnswer: result.RawAnswer}, nil
 }
 
 func pelicanGroupIDs(groups []Group) []int64 {

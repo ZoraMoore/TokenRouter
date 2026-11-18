@@ -54,6 +54,21 @@ func TestIQQuestionAndQualityEvidence(t *testing.T) {
 	require.Equal(t, 1+quality.Total, run)
 }
 
+// TestIQQuestionKeepsRawDrawing 手动测智也返回提取前的 HTML，便于下载复查。
+func TestIQQuestionKeepsRawDrawing(t *testing.T) {
+	const raw = `<style>.wheel{stroke:red}</style><svg><circle r="4"/></svg><script>window.frame=1</script>`
+	fixture := &iqFixture{info: TestTargetInfo{ProviderSnapshot: ProviderSnapshot{ID: 7, Platform: PlatformOpenAI, Type: ProviderTypeAPIKey}}}
+	fixture.execute = func(ctx context.Context, _ PreparedTestRequest, out TestEventSink) error {
+		require.NoError(t, out.Emit(ctx, TestEvent{Type: "content", Text: raw}))
+		return out.Emit(ctx, TestEvent{Type: "test_complete", Success: true})
+	}
+	service := NewTestService(fixture, TestOptions{})
+	result, err := service.RunIQQuestion(t.Context(), 7, IQTestRequest{ModelID: "drawing", QuestionKind: "pelican"})
+	require.NoError(t, err)
+	require.Equal(t, raw, result.RawAnswer)
+	require.Equal(t, "pending_review", result.Status)
+}
+
 func TestIQQuestionDeadlineByKind(t *testing.T) {
 	for _, tt := range []struct {
 		kind string

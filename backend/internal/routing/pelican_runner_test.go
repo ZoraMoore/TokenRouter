@@ -99,6 +99,24 @@ func TestPelicanRunnerDeadlineByKind(t *testing.T) {
 	}
 }
 
+// TestPelicanRunnerStoresRawAnswer 原文和提取后的图像在同一次结果提交中交给存储。
+func TestPelicanRunnerStoresRawAnswer(t *testing.T) {
+	repo := &pelicanFinishFixture{}
+	const raw = `<style>.wheel{stroke:red}</style><svg><circle/></svg><script>window.frame=1</script>`
+	service := NewPelicanService(repo, PelicanOptions{
+		Now: time.Now,
+		Acquire: func(context.Context, PelicanPlan) (PelicanTarget, func(), error) {
+			return PelicanTarget{ProviderID: 4, ModelID: "drawing"}, func() {}, nil
+		},
+		Run: func(context.Context, int64, string, string, string, string, provider.PelicanQuestionConfig) provider.PelicanEvidence {
+			return provider.PelicanEvidence{Status: "pending_review", Answer: `<svg><circle/></svg>`, RawAnswer: raw}
+		},
+	})
+	require.NoError(t, service.finishRound(t.Context(), PelicanPlan{ID: 1, QuestionKind: "pelican"}))
+	require.Equal(t, raw, repo.result.RawAnswer)
+	require.Equal(t, `<svg><circle/></svg>`, repo.result.Answer)
+}
+
 func (f *pelicanFinishFixture) Finish(_ context.Context, _ PelicanPlan, result PelicanResult, next *time.Time) error {
 	f.result, f.next = result, next
 	return nil

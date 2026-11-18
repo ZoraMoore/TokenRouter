@@ -161,7 +161,7 @@ func (s *PelicanService) finishRound(ctx context.Context, plan PelicanPlan) erro
 	result := PelicanResult{
 		PelicanSummary: PelicanSummary{QuestionName: plan.QuestionName, ReasoningEffort: evidence.ReasoningEffort, ModelID: plan.ModelID, QuestionKind: plan.QuestionKind, Status: evidence.Status, DetailCode: evidence.DetailCode, TestedAt: finished, LatencyMs: max(0, finished.Sub(started).Milliseconds())},
 		PlanID:         plan.ID, GroupID: plan.GroupID, ProviderID: providerID,
-		Prompt: evidence.Prompt, Criteria: evidence.Criteria, Answer: evidence.Answer,
+		Prompt: evidence.Prompt, Criteria: evidence.Criteria, Answer: evidence.Answer, RawAnswer: evidence.RawAnswer,
 	}
 	saveCtx, stop := context.WithTimeout(ctx, 15*time.Second)
 	defer stop()

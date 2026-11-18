@@ -115,6 +115,18 @@ Apple container 的新栈使用 `org.tokenrouter.stack` 标签；已有的 `sub2
 
 ## 本部署的安全运行版本
 
+2026 年 11 月 19 日的三个应用节点使用 `tokenrouter:0.2.10-custom-20261119-a7ef2a4d2`，镜像 ID 为 `sha256:5cc74598dd2e4d517004d715583d1f26909dac5d6873e218ec45084153da22d0`。源码来自 `ZoraMoore/TokenRouter` 的 `6f4b830b1f053fe540d6af4aea7589693f4ac716`，本机同步提交为 `a7ef2a4d279a236af1597ccab30e54b3db6d80f2`。远端快照 `e633356a3` 与本机同步前的 `1794c6bbf` 文件树相同，合并提交连接两份历史，运行代码采用远端版本。
+
+镜像使用 Go 1.27.3 编译，前端由 Node 26.12.1 构建。运行层基于 `tokenrouter:0.2.10-header-activity-20261118-c7b73cb89`，更新主程序并移除 `/app/tls-ingress-observer`。构建产物、镜像归档、版本信息和节点核对记录位于 `/home/ubuntu/.local/state/tokenrouter-upgrade-20261119-6f4b830b1`。
+
+迁移表共 358 条记录，最新为 `302_pelican_state_probe.sql`。新增的 299 至 302 为分组题库、作品展示和状态探针建立表及约束，已有迁移的校验和一致。升级前后的用户、API Key、分组、提供商、提供商分组关系、订单和价格配置数量一致。三个节点的私有首页、健康检查和全局白名单管理接口均返回 200，容器重启次数为 0。
+
+OpenAI OAuth 全局最终模型白名单在“网关服务”的“OpenAI”设置中维护，规则见[运行时设置](../interfaces/configuration.md#runtime_settings)。本次部署后该名单尚未保存，模型准入继续使用账号自身的规则。
+
+本次测试由用户完成，发布期间按要求停止测试套件并跳过数据库备份。主节点配置副本位于 `/mnt/data/sub2api/backups/remote-custom-20261119-6f4b830b1`，副节点配置副本位于各自的 `/opt/sub2api/backups/remote-custom-20261119-6f4b830b1`。回退镜像为 `tokenrouter:0.2.10-header-activity-20261118-c7b73cb89`。本次四个迁移增加题库相关表，旧应用可以忽略这些表；回退应用时恢复对应节点的配置副本和旧镜像，数据库中的迁移记录继续保留。
+
+TLS 自动入站采集、observer 和模板验证按远端版本退役。主节点的三个 observer 容器、Compose 服务、专用环境变量、Nginx 请求头和 `18089`、`18090` 转发监听均已移除。公网 `/internal/` 路径继续受 Nginx 保护。运行日志中有升级前已存在的历史订单补发重试告警，详情保存在本次节点核对记录中。
+
 2026 年 11 月 18 日的生产主服务使用镜像 `tokenrouter:0.2.10-header-activity-20261118-c7b73cb89`，主程序来自提交 `c7b73cb89bb072244834ff369d20e5f4ed1e6486`，业务定制基于 `af7fd1a3e982ff4b09331cd32b047b365c2c1666`。Edu 账号按套餐标识关闭加速，GPT 官key 分组使用 `follow_request`，规则见 [Fast 与 Ultra Fast 策略](../interfaces/openai_upstream.md#openai_fast_policy)。该版本包含 `18decad28b7157bf7e4890338cc1988d8f876351` 的 Fast 长上下文计价修复，账号 233 在分组 8 的使用记录、CSV 倍率列、个人密钥及本人所有的团队密钥把 0.2 展示为 0.14。预览记录使用响应式副本，费用、Token 和耗时明细浮层能够完成悬停目标比较。扣费、原始记录和后端接口使用计费数据，具体规则见[记录与对账](../domains/routing_and_billing.md#记录与对账)。镜像使用 Go 1.27.3 编译，运行于 Alpine 3.24.2，前端构建使用 Node 26.12.1。
 
 Edu 兼容版本的源码、缓存构建配方和验收记录位于 `/mnt/data/edu-standard-20261106/`。后端完整单元测试有 210 个包通过。上线后已确认 Edu 的强制 Fast Key 按普通模式结算，商业 Pro 继续使用 Fast，价卡和提供商分组关联的校验值一致。主服务健康检查和首页返回 200，非法 Key 返回 401。迁移表有 354 条记录，最大迁移为 `298_preserve_custom_image_billing.sql`。本次按用户要求跳过备份。镜像回退使用 `tokenrouter:0.2.10-user-rate-tooltip-20261105-3b8c4ea1c`。
@@ -149,7 +161,7 @@ TokenRouter、PostgreSQL 和 Redis 的 Docker 标准输出日志各配置为单�
 <a id="multi_node_deployment"></a>
 ## 多节点部署与应用更新
 
-三个应用节点共用 `15.204.66.161` 上的 PostgreSQL 和 Redis，用户、余额、订阅、提供商、调度锁和并发计数使用同一套数据。三个应用使用 `tokenrouter:0.2.10-header-activity-20261118-c7b73cb89`，镜像 ID 为 `sha256:ff4374a3e038d8e0a3a4e55550f959eebe3a9114003afacb9dae132b511d8b86`。
+三个应用节点共用 `15.204.66.161` 上的 PostgreSQL 和 Redis，用户、余额、订阅、提供商、调度锁和并发计数使用同一套数据。三个应用使用 `tokenrouter:0.2.10-custom-20261119-a7ef2a4d2`，镜像 ID 为 `sha256:5cc74598dd2e4d517004d715583d1f26909dac5d6873e218ec45084153da22d0`。
 
 三个应用的 `GATEWAY_IMAGE_CONCURRENCY_ENABLED=false`、`GATEWAY_IMAGE_CONCURRENCY_MAX_CONCURRENT_REQUESTS=0`，关闭进程内的生图独立并发限制。用户和提供商并发仍按共享调度规则检查。该图片限制器在启用时按进程计数，多节点上限需要分别配置。
 
@@ -180,6 +192,8 @@ WireGuard 接口为 `wg-sci`，主节点地址为 `10.203.76.1`，secondary 地�
 应用负载均衡容器 `sub2api-load-balancer` 使用主机网络，primary 通过本机回环连接应用，secondary 和 tertiary 通过 WireGuard 连接应用。这个布局与各应用的可信代理地址匹配。
 
 主节点服务单元为 `scienceedu-load-balancer.service`，secondary 和 tertiary 分别使用 `scienceedu-node2.service`、`scienceedu-node3.service`。这些服务在 Docker 和 `wg-quick@wg-sci.service` 启动后运行。secondary 和 tertiary 的运行配置位于各自的 `/opt/sub2api/runtime.env`，权限为 `0600`。
+
+Compose 项目名分别为 `sub2api`、`scienceedu-node2`、`scienceedu-node3`。更新容器时用 `--project-name` 指定该节点的项目名；使用目录推导的项目名会创建另一个项目，并与已有的 `sub2api` 容器发生名称冲突。
 
 三个应用的数据目录分别保存日志、审计文件、模型目录和定价快照。文件配置的变更需要同步到各节点，数据库中的业务设置由三个应用共享。
 

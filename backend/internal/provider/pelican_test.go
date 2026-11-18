@@ -83,6 +83,27 @@ func TestRunPelicanRequiresCompletedAnswer(t *testing.T) {
 	}
 }
 
+// TestPelicanKeepsOriginalDrawing 保存提取前的 HTML，供复核样式、脚本和格式错误。
+func TestPelicanKeepsOriginalDrawing(t *testing.T) {
+	for _, drawing := range []string{`<svg><circle r="7"/></svg>`, `<svg><g></svg>`} {
+		raw := " \n<!doctype html><html><head><style>.wheel{animation:spin 1s infinite}</style></head><body>" + drawing + `<script>window.frame=1;</script></body></html>` + "\n"
+		evidence := PelicanEvidence{Status: "inconclusive"}
+		evidence.grade("pelican", raw, "")
+		require.Equal(t, raw, evidence.RawAnswer)
+		if strings.Contains(drawing, "circle") {
+			require.Equal(t, "pending_review", evidence.Status)
+			require.NotContains(t, evidence.Answer, "<script>")
+		} else {
+			require.Equal(t, "invalid_artwork", evidence.DetailCode)
+		}
+	}
+	for _, raw := range []string{"<svg>\x00</svg>", string([]byte{0xff}), strings.Repeat("x", PelicanDrawingLimit+1)} {
+		evidence := PelicanEvidence{Status: "inconclusive"}
+		evidence.grade("pelican", raw, "")
+		require.Empty(t, evidence.RawAnswer)
+	}
+}
+
 func TestRunPelicanCancelledBeforeOrDuringRequest(t *testing.T) {
 	for _, alreadyCancelled := range []bool{true, false} {
 		ctx, cancel := context.WithCancel(t.Context())

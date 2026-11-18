@@ -221,12 +221,12 @@ func (s *PelicanTestStore) Finish(ctx context.Context, plan routing.PelicanPlan,
 		)
 		INSERT INTO pelican_test_results
 			(plan_id, target_provider_id, provider_id, model_id, question_kind, question_name, plan_revision,
-			 status, detail_code, prompt, criteria, answer, tested_at, latency_ms, reasoning_effort, published)
+			 status, detail_code, prompt, criteria, answer, tested_at, latency_ms, reasoning_effort, published, raw_answer)
 		SELECT id, provider_id, $5, model_id, question_kind, question_name, plan_revision,
 			$6, $7, $8, $9::jsonb, $10, $4, $11, $12,
-			question_kind IN `+pelicanDrawingKinds+` AND $6::text IN `+pelicanDrawingStatuses+` AND octet_length($10::text)>0
+			question_kind IN `+pelicanDrawingKinds+` AND $6::text IN `+pelicanDrawingStatuses+` AND octet_length($10::text)>0, $13
 		FROM finished`, plan.ID, plan.LeaseToken, next, result.TestedAt, result.ProviderID, result.Status,
-		result.DetailCode, result.Prompt, string(criteria), result.Answer, result.LatencyMs, result.ReasoningEffort)
+		result.DetailCode, result.Prompt, string(criteria), result.Answer, result.LatencyMs, result.ReasoningEffort, result.RawAnswer)
 	if err := checkPelicanAffected(insert, err, routing.ErrPelicanConflict); err != nil {
 		return err
 	}
@@ -271,8 +271,8 @@ func (s *PelicanTestStore) Result(ctx context.Context, id int64, allowed []int64
 	}
 	var result routing.PelicanResult
 	var criteria []byte
-	dest := append(pelicanResultDest(&result), &result.Prompt, &criteria, &result.Answer)
-	query := `SELECT ` + fields + `, r.prompt, r.criteria, r.answer` + from + filter
+	dest := append(pelicanResultDest(&result), &result.Prompt, &criteria, &result.Answer, &result.RawAnswer)
+	query := `SELECT ` + fields + `, r.prompt, r.criteria, r.answer, r.raw_answer` + from + filter
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(dest...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, routing.ErrPelicanNotFound

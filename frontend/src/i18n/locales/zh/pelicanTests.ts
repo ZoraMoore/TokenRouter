@@ -5,6 +5,9 @@ export default {
   smartOps: '智能运维',
   adminDescription: '为分组中的模型安排测试，查看样本并复核 SVG 作品。',
   userDescription: '按题型和分组浏览模型作品、测试结果和作答记录。',
+  showSource: '查看完整代码',
+  hideSource: '收起代码',
+  downloadSource: '下载原始 HTML',
   showcase: {
     title: '用户展示',
     artworkNotice: '鹈鹕测智对部分模型设置了最大输出 token 数。有些图里的鹈鹕可能没有腿，或者自行车的轮子不转，这都很正常。只要绘画风格符合题目要求，就可以判断模型在这道题上没有降智。',

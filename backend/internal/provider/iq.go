@@ -52,6 +52,7 @@ type IQQuestionResult struct {
 	Prompt          string    `json:"prompt"`
 	Criteria        []string  `json:"criteria"`
 	Answer          string    `json:"answer"`
+	RawAnswer       string    `json:"raw_answer,omitempty"`
 	Status          string    `json:"status"`
 	DetailCode      string    `json:"detail_code,omitempty"`
 	StartedAt       time.Time `json:"started_at"`
@@ -241,6 +242,7 @@ func (s *TestService) iqQuestion(ctx context.Context, id int64, req IQTestReques
 		graded := PelicanEvidence{Status: "inconclusive"}
 		graded.grade(result.QuestionKind, raw, req.ExpectedAnswer)
 		result.Status, result.DetailCode, result.Answer = graded.Status, graded.DetailCode, graded.Answer
+		result.RawAnswer = graded.RawAnswer
 	}
 	return result, nil
 }

@@ -28,7 +28,7 @@ func (pelicanDetailFixture) Result(_ context.Context, id int64, groups []int64) 
 		return nil, routing.ErrPelicanNotFound
 	}
 	account := int64(45)
-	sample := &routing.PelicanResult{PelicanSummary: routing.PelicanSummary{ID: id, Status: "passed"}, ProviderID: &account, ProviderName: "private-provider", Answer: "21"}
+	sample := &routing.PelicanResult{PelicanSummary: routing.PelicanSummary{ID: id, Status: "passed"}, ProviderID: &account, ProviderName: "private-provider", Answer: "21", RawAnswer: "<html><style>.wheel{stroke:red}</style><script>window.frame=1</script></html>"}
 	if id == 6 {
 		sample.QuestionKind = routing.PelicanStateProbe
 		sample.Answer = "首次请求 HTTP 200，状态长度 20 字节。"
@@ -68,6 +68,7 @@ func TestPelicanShowcasePermission(t *testing.T) {
 				require.NotContains(t, rec.Body.String(), "private-provider")
 			} else {
 				require.Equal(t, "21", envelope.Data["answer"])
+				require.Contains(t, envelope.Data["raw_answer"], "<script>window.frame=1</script>")
 			}
 			require.NotContains(t, envelope.Data, "provider_id")
 			require.NotContains(t, envelope.Data, "provider_name")

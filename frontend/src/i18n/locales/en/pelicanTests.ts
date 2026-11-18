@@ -2,6 +2,9 @@ import { pelicanBuiltinNames } from '@/i18n/pelicanQuestionNames'
 
 export default {
   title: 'Pelican Tests',
+  showSource: 'View full code',
+  hideSource: 'Hide code',
+  downloadSource: 'Download original HTML',
   smartOps: 'Smart Operations',
   adminDescription: 'Schedule model tests by group, inspect samples and review SVG drawings.',
   userDescription: 'Browse model artwork, answers and test results by question and group.',

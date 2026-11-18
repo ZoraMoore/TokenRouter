@@ -28,6 +28,7 @@ export interface PelicanResultDetail extends PelicanResult {
   prompt: string
   criteria: string[]
   answer: string
+  raw_answer?: string
 }
 
 // 用户列表随糖果作答返回纯文本预览，详情接口提供完整作答。
