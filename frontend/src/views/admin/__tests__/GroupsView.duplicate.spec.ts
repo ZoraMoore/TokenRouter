@@ -1,3 +1,4 @@
+import { useProtocolCatalogFixture } from '@/__tests__/helpers/protocolCatalog'
 import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,6 +9,8 @@ import GroupsView from '@/views/admin/GroupsView.vue'
 const {
   listGroups,
   duplicateGroup,
+  updateGroup,
+  getAll,
   getModelsListCandidates,
   getUsageSummary,
   getCapacitySummary,
@@ -17,6 +20,8 @@ const {
 } = vi.hoisted(() => ({
   listGroups: vi.fn(),
   duplicateGroup: vi.fn(),
+  updateGroup: vi.fn(),
+  getAll: vi.fn(),
   getModelsListCandidates: vi.fn(),
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
@@ -34,13 +39,13 @@ vi.mock('@/api/admin', () => ({
       getUsageSummary,
       getCapacitySummary,
       getLiveCapability,
-      getAll: vi.fn(),
+      getAll,
       create: vi.fn(),
-      update: vi.fn(),
+      update: updateGroup,
       delete: vi.fn(),
       updateSortOrder: vi.fn()
     },
-    accounts: {
+    providers: {
       list: vi.fn(),
       getById: vi.fn()
     }
@@ -82,18 +87,10 @@ const sourceGroup: AdminGroup = {
   monthly_limit_usd: null,
   allow_image_generation: false,
   allow_batch_image_generation: false,
-  image_rate_independent: false,
-  image_rate_multiplier: 1,
+
   batch_image_discount_multiplier: 0.5,
   batch_image_hold_multiplier: 0.6,
-  image_price_1k: null,
-  image_price_2k: null,
-  image_price_4k: null,
-  video_rate_independent: false,
-  video_rate_multiplier: 1,
-  video_price_480p: null,
-  video_price_720p: null,
-  video_price_1080p: null,
+
   web_search_price_per_call: null,
   peak_rate_enabled: false,
   peak_start: '',
@@ -105,7 +102,6 @@ const sourceGroup: AdminGroup = {
   allow_messages_dispatch: false,
   allow_live: false,
   default_mapped_model: '',
-  messages_dispatch_model_config: undefined,
   require_oauth_only: false,
   require_privacy_set: false,
   created_at: '2026-07-16T00:00:00Z',
@@ -114,9 +110,9 @@ const sourceGroup: AdminGroup = {
   model_routing_enabled: false,
   mcp_xml_inject: true,
   supported_model_scopes: [],
-  account_count: 1,
-  active_account_count: 1,
-  rate_limited_account_count: 0,
+  provider_count: 1,
+  active_provider_count: 1,
+  rate_limited_provider_count: 0,
   models_list_config: undefined,
   sort_order: 10
 }
@@ -138,15 +134,23 @@ const DataTableStub = defineComponent({
   template: '<div><div v-for="row in data" :key="row.id"><slot name="cell-actions" :row="row" /></div></div>'
 })
 
+const BaseDialogStub = defineComponent({
+  props: {
+    show: { type: Boolean, default: false }
+  },
+  template: '<div v-if="show"><slot /><slot name="footer" /></div>'
+})
+
 function mountView() {
   return mount(GroupsView, {
     global: {
       stubs: {
+        Teleport: true,
         AppLayout: AppLayoutStub,
         TablePageLayout: TablePageLayoutStub,
         DataTable: DataTableStub,
         Pagination: true,
-        BaseDialog: true,
+        BaseDialog: BaseDialogStub,
         ConfirmDialog: true,
         EmptyState: true,
         Select: true,
@@ -168,6 +172,8 @@ describe('GroupsView duplicate action', () => {
     for (const fn of [
       listGroups,
       duplicateGroup,
+      updateGroup,
+      getAll,
       getModelsListCandidates,
       getUsageSummary,
       getCapacitySummary,
@@ -177,6 +183,7 @@ describe('GroupsView duplicate action', () => {
     ]) {
       fn.mockReset()
     }
+    getAll.mockResolvedValue([])
 
     listGroups.mockResolvedValue({
       items: [sourceGroup],
@@ -205,6 +212,8 @@ describe('GroupsView duplicate action', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    expect(wrapper.find('[data-testid="group-duplicate"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="group-more"]').trigger('click')
     await wrapper.get('[data-testid="group-duplicate"]').trigger('click')
     await flushPromises()
 
@@ -212,6 +221,7 @@ describe('GroupsView duplicate action', () => {
     expect(duplicateGroup).toHaveBeenCalledWith(42)
     expect(showSuccess).toHaveBeenCalledWith('admin.groups.duplicateSuccess')
     expect(listGroups).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[role="menu"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -223,14 +233,18 @@ describe('GroupsView duplicate action', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    await wrapper.get('[data-testid="group-more"]').trigger('click')
     const button = wrapper.get('[data-testid="group-duplicate"]')
     void button.trigger('click')
     void button.trigger('click')
     await wrapper.vm.$nextTick()
 
     expect(duplicateGroup).toHaveBeenCalledTimes(1)
-    expect(button.attributes('disabled')).toBeDefined()
-    expect(button.attributes('title')).toBe('admin.groups.duplicating')
+    // 请求期间复制按钮保持禁用，重新打开菜单时也使用此状态。
+    await wrapper.get('[data-testid="group-more"]').trigger('click')
+    const pendingButton = wrapper.get('[data-testid="group-duplicate"]')
+    expect(pendingButton.attributes('disabled')).toBeDefined()
+    expect(pendingButton.attributes('title')).toBe('admin.groups.duplicating')
 
     resolveDuplicate({ ...sourceGroup, id: 43, name: 'Primary (Copy)', status: 'inactive' })
     await flushPromises()
@@ -243,10 +257,12 @@ describe('GroupsView duplicate action', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    await wrapper.get('[data-testid="group-more"]').trigger('click')
     await wrapper.get('[data-testid="group-duplicate"]').trigger('click')
     await flushPromises()
 
     expect(showError).toHaveBeenCalledWith('duplicate failed')
+    await wrapper.get('[data-testid="group-more"]').trigger('click')
     expect(wrapper.get('[data-testid="group-duplicate"]').attributes('disabled')).toBeUndefined()
     wrapper.unmount()
   })
@@ -264,6 +280,7 @@ describe('GroupsView duplicate action', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    await wrapper.get('[data-testid="group-more"]').trigger('click')
     await wrapper.get('[data-testid="group-duplicate"]').trigger('click')
     await flushPromises()
 
@@ -272,4 +289,28 @@ describe('GroupsView duplicate action', () => {
     expect(showError).not.toHaveBeenCalledWith('admin.groups.duplicateFailed')
     wrapper.unmount()
   })
+
+  it('shows the standardized API message when updating a group fails', async () => {
+    updateGroup.mockRejectedValueOnce({
+      status: 409,
+      code: 409,
+      message: 'group name already exists',
+      reason: 'GROUP_EXISTS'
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((button) => button.text() === 'common.edit')
+    expect(editButton).toBeTruthy()
+    await editButton!.trigger('click')
+    await flushPromises()
+    await wrapper.get('#edit-group-form').trigger('submit')
+    await flushPromises()
+
+    expect(updateGroup).toHaveBeenCalledTimes(1)
+    expect(showError).toHaveBeenCalledWith('group name already exists')
+    wrapper.unmount()
+  })
 })
+
+useProtocolCatalogFixture()

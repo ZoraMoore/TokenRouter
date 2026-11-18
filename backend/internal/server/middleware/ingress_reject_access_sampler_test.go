@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry/logging"
 )
 
 func TestIngressRejectAccessSamplerConcurrentGlobalLimit(t *testing.T) {
@@ -18,21 +19,18 @@ func TestIngressRejectAccessSamplerConcurrentGlobalLimit(t *testing.T) {
 	now := time.Now()
 	var allowed atomic.Int64
 	var wg sync.WaitGroup
-	for i := 0; i < 200; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 200 {
+		wg.Go(func() {
 			if ok, _ := sampler.allow(now); ok {
 				allowed.Add(1)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	require.Equal(t, int64(10), allowed.Load())
 }
 
 func TestLoggerIngressRejectSamplingIsBoundedAndSummarySkipsOpsSink(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	original := globalIngressRejectAccessSampler
 	globalIngressRejectAccessSampler = newIngressRejectAccessSampler(2, time.Hour, time.Hour)
 	t.Cleanup(func() { globalIngressRejectAccessSampler = original })
@@ -43,7 +41,7 @@ func TestLoggerIngressRejectSamplingIsBoundedAndSummarySkipsOpsSink(t *testing.T
 		MarkIngressRejected(c, IngressRejectInvalidAPIKey)
 		c.Status(http.StatusUnauthorized)
 	})
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/messages", nil))
 	}
 	var accessEvents, summaries int
@@ -53,7 +51,7 @@ func TestLoggerIngressRejectSamplingIsBoundedAndSummarySkipsOpsSink(t *testing.T
 			accessEvents++
 		case "ingress rejection access logs dropped":
 			summaries++
-			if skipped, _ := event.Fields[logger.OpsSystemLogSkipField].(bool); !skipped {
+			if skipped, _ := event.Fields[logging.OpsSystemLogSkipField].(bool); !skipped {
 				t.Fatalf("dropped summary must skip ops system log sink")
 			}
 		}

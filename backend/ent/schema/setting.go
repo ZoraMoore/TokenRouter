@@ -13,7 +13,7 @@ import (
 // Setting holds the schema definition for the Setting entity.
 //
 // 删除策略：硬删除
-// Setting 使用硬删除而非软删除，原因如下：
+// Setting 使用硬删除：
 //   - 系统设置是简单的键值对，删除即意味着恢复默认值
 //   - 设置变更通常通过应用日志追踪，无需在数据库层面保留历史
 //   - 保持表结构简洁，避免无效数据积累

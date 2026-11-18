@@ -12,7 +12,7 @@ export async function list(
   const params: Record<string, number> = {}
   if (unreadOnly) params.unread_only = 1
 
-  // 用户主动刷新时改变请求地址，避免浏览器复用个性化公告列表的旧响应。
+  // 主动刷新时在地址中加入时间戳，浏览器重新请求个性化公告。
   if (bypassCache) params.refresh_timestamp = Date.now()
 
   const { data } = await apiClient.get<UserAnnouncement[]>('/announcements', {

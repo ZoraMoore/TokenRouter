@@ -1,7 +1,7 @@
 <template>
   <div class="flex min-h-screen items-center justify-center bg-slate-50 p-4 dark:bg-slate-950">
-    <div
-      class="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+    <div v-content-reveal="route.path"
+      class="w-full max-w-md space-y-4 rounded-surface border border-slate-200 bg-white p-6 shadow-lg dark:border-dark-600 dark:bg-slate-900"
     >
       <!-- Amount + Order ID -->
       <div v-if="amount" class="text-center">
@@ -14,7 +14,7 @@
       <!-- Error -->
       <div v-if="error" class="space-y-3">
         <div
-          class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600 dark:border-red-700 dark:bg-red-900/30 dark:text-red-400"
+          class="rounded-control border border-red-200 bg-red-50 p-3 text-sm text-red-600 dark:border-red-700 dark:bg-red-900/30 dark:text-red-400"
         >
           {{ error }}
         </div>
@@ -29,8 +29,8 @@
 
       <!-- Success -->
       <div v-else-if="success" class="space-y-3 py-4 text-center">
-        <div class="text-5xl text-green-600 dark:text-green-400">✓</div>
-        <p class="text-sm text-gray-500 dark:text-slate-400">{{ t('payment.result.success') }}</p>
+        <Icon name="checkCircle" size="xl" :animate-on-hover="false" class="mx-auto h-12 w-12 text-green-600 dark:text-green-400" />
+        <p class="text-sm text-gray-500 dark:text-dark-300">{{ t('payment.result.success') }}</p>
         <button
           class="text-sm underline dark:text-blue-400 dark:hover:text-blue-300"
           :style="{ color: methodColor }"
@@ -43,16 +43,20 @@
       <!-- Loading / Redirecting -->
       <div v-else class="flex items-center justify-center py-8">
         <div
-          class="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
-          :style="{ borderColor: methodColor, borderTopColor: 'transparent' }"
+          class="spinner h-8 w-8"
+          :style="{ color: methodColor }"
         />
-        <span class="ml-3 text-sm text-gray-500 dark:text-slate-400">{{ hint }}</span>
+        <span class="ml-3 text-sm text-gray-500 dark:text-dark-300">{{ hint }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { getLocale } from '@/i18n'
+import { vContentReveal } from '@/directives/contentReveal'
+import Icon from '@/components/icons/Icon.vue'
+
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
@@ -105,7 +109,7 @@ onMounted(() => {
   messageHandler = (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return
     if (event.data?.type !== 'STRIPE_POPUP_INIT') return
-    // INIT 已到达，取消兜底超时，避免长时间的扫码支付被误判为超时。
+    // INIT 到达后取消初始化超时计时，扫码支付可以继续等待。
     clearInitTimeout()
     if (messageHandler) {
       window.removeEventListener('message', messageHandler)
@@ -186,7 +190,7 @@ async function pollOrderStatus() {
     // 认证令牌固定存储在 auth_token，弹窗查询也必须携带它。
     const token = localStorage.getItem('auth_token') || ''
     const res = await fetch(buildApiUrl(`/payment/orders/${orderId}`), {
-      headers: token ? { Authorization: 'Bearer ' + token } : {},
+      headers: { 'Accept-Language': getLocale(), ...(token ? { Authorization: 'Bearer ' + token } : {}) },
       credentials: 'include',
     })
     if (!res.ok) return

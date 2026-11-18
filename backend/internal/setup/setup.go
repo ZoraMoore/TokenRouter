@@ -3,8 +3,6 @@ package setup
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -12,35 +10,64 @@ import (
 	"strings"
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/config"
-	"github.com/TokenFlux/TokenRouter/internal/pkg/logger"
-	"github.com/TokenFlux/TokenRouter/internal/repository"
-	"github.com/TokenFlux/TokenRouter/internal/service"
-
 	_ "github.com/lib/pq"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
+
+	"github.com/TokenFlux/TokenRouter/internal/app/bootstrap"
+	"github.com/TokenFlux/TokenRouter/internal/identity"
+	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry/logging"
 )
 
-// Config paths
 const (
-	ConfigFileName             = "config.yaml"
-	InstallLockFile            = ".installed"
-	defaultUserConcurrency     = 5
-	simpleModeAdminConcurrency = 30
-	defaultMigrationTimeout    = 60 * time.Second
+	// Config paths.
+	ConfigFileName          = "config.yaml"
+	InstallLockFile         = ".installed"
+	defaultUserConcurrency  = 5
+	defaultMigrationTimeout = 60 * time.Second
+
+	adminBootstrapReasonAdminExists            = "admin_exists"
+	adminBootstrapReasonUsersExistWithoutAdmin = "users_exist_without_admin"
 )
 
+// SetupConfig 保存初始设置所需的配置。
+type SetupConfig struct {
+	Database                DatabaseConfig `json:"database" yaml:"database"`
+	Redis                   RedisConfig    `json:"redis" yaml:"redis"`
+	Admin                   AdminConfig    `json:"admin" yaml:"-"` // 不写入配置文件。
+	Server                  ServerConfig   `json:"server" yaml:"server"`
+	JWT                     JWTConfig      `json:"jwt" yaml:"jwt"`
+	Timezone                string         `json:"timezone" yaml:"timezone"` // 例如 "Asia/Shanghai" 或 "UTC"。
+	MigrationTimeoutSeconds int            `json:"migration_timeout_seconds" yaml:"migration_timeout_seconds,omitempty"`
+}
+
+type DatabaseConfig = bootstrap.SetupDatabaseConfig
+
+type RedisConfig = bootstrap.SetupRedisConfig
+
+type AdminConfig struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type ServerConfig struct {
+	Host string `json:"host" yaml:"host"`
+	Port int    `json:"port" yaml:"port"`
+	Mode string `json:"mode" yaml:"mode"`
+}
+
+type JWTConfig struct {
+	Secret     string `json:"secret" yaml:"secret"`
+	ExpireHour int    `json:"expire_hour" yaml:"expire_hour"`
+}
+
+// setupDefaultAdminConcurrency 使用统一的首次管理员并发默认值。
 func setupDefaultAdminConcurrency() int {
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("RUN_MODE")), config.RunModeSimple) {
-		return simpleModeAdminConcurrency
-	}
 	return defaultUserConcurrency
 }
 
 // GetDataDir returns the data directory for storing config and lock files.
-// Priority: DATA_DIR env > /app/data (if exists and writable) > current directory
+// Priority: DATA_DIR env > /app/data (if exists and writable) > current directory.
 func GetDataDir() string {
 	// Check DATA_DIR environment variable first
 	if dir := os.Getenv("DATA_DIR"); dir != "" {
@@ -63,89 +90,14 @@ func GetDataDir() string {
 	return "."
 }
 
-// GetConfigFilePath returns the full path to config.yaml
+// GetConfigFilePath returns the full path to config.yaml.
 func GetConfigFilePath() string {
 	return GetDataDir() + "/" + ConfigFileName
 }
 
-// GetInstallLockPath returns the full path to .installed lock file
+// GetInstallLockPath returns the full path to .installed lock file.
 func GetInstallLockPath() string {
 	return GetDataDir() + "/" + InstallLockFile
-}
-
-// SetupConfig 保存初始设置所需的配置。
-type SetupConfig struct {
-	Database                DatabaseConfig `json:"database" yaml:"database"`
-	Redis                   RedisConfig    `json:"redis" yaml:"redis"`
-	Admin                   AdminConfig    `json:"admin" yaml:"-"` // 不写入配置文件。
-	Server                  ServerConfig   `json:"server" yaml:"server"`
-	JWT                     JWTConfig      `json:"jwt" yaml:"jwt"`
-	Timezone                string         `json:"timezone" yaml:"timezone"` // 例如 "Asia/Shanghai" 或 "UTC"。
-	MigrationTimeoutSeconds int            `json:"migration_timeout_seconds" yaml:"migration_timeout_seconds,omitempty"`
-}
-
-type DatabaseConfig struct {
-	Host     string `json:"host" yaml:"host"`
-	Port     int    `json:"port" yaml:"port"`
-	User     string `json:"user" yaml:"user"`
-	Password string `json:"password" yaml:"password"`
-	DBName   string `json:"dbname" yaml:"dbname"`
-	SSLMode  string `json:"sslmode" yaml:"sslmode"`
-}
-
-type RedisConfig struct {
-	Host      string `json:"host" yaml:"host"`
-	Port      int    `json:"port" yaml:"port"`
-	Username  string `json:"username" yaml:"username"`
-	Password  string `json:"password" yaml:"password"`
-	DB        int    `json:"db" yaml:"db"`
-	EnableTLS bool   `json:"enable_tls" yaml:"enable_tls"`
-}
-
-type AdminConfig struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-type ServerConfig struct {
-	Host string `json:"host" yaml:"host"`
-	Port int    `json:"port" yaml:"port"`
-	Mode string `json:"mode" yaml:"mode"`
-}
-
-type JWTConfig struct {
-	Secret     string `json:"secret" yaml:"secret"`
-	ExpireHour int    `json:"expire_hour" yaml:"expire_hour"`
-}
-
-const (
-	adminBootstrapReasonEmptyDatabase          = "empty_database"
-	adminBootstrapReasonAdminExists            = "admin_exists"
-	adminBootstrapReasonUsersExistWithoutAdmin = "users_exist_without_admin"
-)
-
-type adminBootstrapDecision struct {
-	shouldCreate bool
-	reason       string
-}
-
-func decideAdminBootstrap(totalUsers, adminUsers int64) adminBootstrapDecision {
-	if adminUsers > 0 {
-		return adminBootstrapDecision{
-			shouldCreate: false,
-			reason:       adminBootstrapReasonAdminExists,
-		}
-	}
-	if totalUsers > 0 {
-		return adminBootstrapDecision{
-			shouldCreate: false,
-			reason:       adminBootstrapReasonUsersExistWithoutAdmin,
-		}
-	}
-	return adminBootstrapDecision{
-		shouldCreate: true,
-		reason:       adminBootstrapReasonEmptyDatabase,
-	}
 }
 
 // skipSetupEnabled 解析显式跳过首次安装向导的环境开关。
@@ -159,10 +111,10 @@ func skipSetupEnabled() bool {
 }
 
 // NeedsSetup checks if the system needs initial setup
-// Uses multiple checks to prevent attackers from forcing re-setup by deleting config
+// Uses multiple checks to prevent attackers from forcing re-setup by deleting config.
 func NeedsSetup() bool {
 	if skipSetupEnabled() {
-		logger.L().Debug("setup.needs_setup_bypassed", zap.String("reason", "skip_setup_enabled"))
+		logging.L().Debug("setup.needs_setup_bypassed", zap.String("reason", "skip_setup_enabled"))
 		return false
 	}
 
@@ -179,121 +131,10 @@ func NeedsSetup() bool {
 	return true
 }
 
-func buildPostgresDSN(cfg *DatabaseConfig, dbName string) string {
-	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, dbName, cfg.SSLMode,
-	)
-}
-
-func buildDatabaseConnectionDSNs(cfg *DatabaseConfig) (bootstrapDSN, targetDSN string) {
-	return buildPostgresDSN(cfg, "postgres"), buildPostgresDSN(cfg, cfg.DBName)
-}
-
-// 测试数据库连接，并在目标数据库不存在时创建它。
 func TestDatabaseConnection(cfg *DatabaseConfig) error {
-	// 先连接维护数据库，否则目标数据库尚未创建时会直接连接失败。
-	defaultDSN, targetDSN := buildDatabaseConnectionDSNs(cfg)
-
-	db, err := sql.Open("postgres", defaultDSN)
-	if err != nil {
-		return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
-	}
-
-	defer func() {
-		if db == nil {
-			return
-		}
-		if err := db.Close(); err != nil {
-			logger.LegacyPrintf("setup", "failed to close postgres connection: %v", err)
-		}
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := db.PingContext(ctx); err != nil {
-		return fmt.Errorf("ping failed: %w", err)
-	}
-
-	// Check if target database exists
-	var exists bool
-	row := db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)", cfg.DBName)
-	if err := row.Scan(&exists); err != nil {
-		return fmt.Errorf("failed to check database existence: %w", err)
-	}
-
-	// 目标数据库不存在时创建它。
-	if !exists {
-		// 注意：数据库名不能参数化，依赖前置输入校验保障安全。
-		_, err := db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE %s", cfg.DBName))
-		if err != nil {
-			return fmt.Errorf("failed to create database '%s': %w", cfg.DBName, err)
-		}
-		logger.LegacyPrintf("setup", "Database '%s' created successfully", cfg.DBName)
-	}
-
-	// 再连接目标数据库，验证创建后的真实可用性。
-	if err := db.Close(); err != nil {
-		logger.LegacyPrintf("setup", "failed to close postgres connection: %v", err)
-	}
-	db = nil
-
-	targetDB, err := sql.Open("postgres", targetDSN)
-	if err != nil {
-		return fmt.Errorf("failed to connect to database '%s': %w", cfg.DBName, err)
-	}
-
-	defer func() {
-		if err := targetDB.Close(); err != nil {
-			logger.LegacyPrintf("setup", "failed to close postgres connection: %v", err)
-		}
-	}()
-
-	ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel2()
-
-	if err := targetDB.PingContext(ctx2); err != nil {
-		return fmt.Errorf("ping target database failed: %w", err)
-	}
-
-	return nil
+	return bootstrap.TestSetupDatabaseConnection(cfg)
 }
-
-// TestRedisConnection tests the Redis connection
-func TestRedisConnection(cfg *RedisConfig) error {
-	opts := &redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		Username: cfg.Username,
-		Password: cfg.Password,
-		DB:       cfg.DB,
-	}
-
-	if cfg.EnableTLS {
-		opts.TLSConfig = &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			ServerName: cfg.Host,
-		}
-	}
-
-	rdb := redis.NewClient(opts)
-	defer func() {
-		if err := rdb.Close(); err != nil {
-			logger.LegacyPrintf("setup", "failed to close redis client: %v", err)
-		}
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := rdb.Ping(ctx).Err(); err != nil {
-		return fmt.Errorf("ping failed: %w", err)
-	}
-
-	return nil
-}
-
-// Install performs the installation with the given configuration
+func TestRedisConnection(cfg *RedisConfig) error { return bootstrap.TestSetupRedisConnection(cfg) }
 func Install(cfg *SetupConfig) error {
 	// Security check: prevent re-installation if already installed
 	if !NeedsSetup() {
@@ -307,7 +148,7 @@ func Install(cfg *SetupConfig) error {
 			return fmt.Errorf("failed to generate jwt secret: %w", err)
 		}
 		cfg.JWT.Secret = secret
-		logger.LegacyPrintf("setup", "%s", "Warning: JWT secret auto-generated. Consider setting a fixed secret for production.")
+		logging.LegacyPrintf("setup", "%s", "Warning: JWT secret auto-generated. Consider setting a fixed secret for production.")
 	}
 
 	// Test connections
@@ -342,33 +183,14 @@ func Install(cfg *SetupConfig) error {
 	return nil
 }
 
-// createInstallLock creates a lock file to prevent re-installation attacks
+// createInstallLock creates a lock file to prevent re-installation attacks.
 func createInstallLock() error {
 	content := fmt.Sprintf("installed_at=%s\n", time.Now().UTC().Format(time.RFC3339))
-	return os.WriteFile(GetInstallLockPath(), []byte(content), 0400) // Read-only for owner
+	return os.WriteFile(GetInstallLockPath(), []byte(content), 0o400) // Read-only for owner
 }
 
 func initializeDatabase(cfg *SetupConfig) error {
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Database.Host, cfg.Database.Port, cfg.Database.User,
-		cfg.Database.Password, cfg.Database.DBName, cfg.Database.SSLMode,
-	)
-
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if err := db.Close(); err != nil {
-			logger.LegacyPrintf("setup", "failed to close postgres connection: %v", err)
-		}
-	}()
-
-	migrationCtx, cancel := context.WithTimeout(context.Background(), cfg.migrationTimeout())
-	defer cancel()
-	return repository.ApplyMigrations(migrationCtx, db)
+	return bootstrap.InitializeSetupDatabase(context.Background(), &cfg.Database, cfg.migrationTimeout())
 }
 
 func (cfg *SetupConfig) migrationTimeout() time.Duration {
@@ -379,81 +201,16 @@ func (cfg *SetupConfig) migrationTimeout() time.Duration {
 }
 
 func createAdminUser(cfg *SetupConfig) (bool, string, error) {
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Database.Host, cfg.Database.Port, cfg.Database.User,
-		cfg.Database.Password, cfg.Database.DBName, cfg.Database.SSLMode,
-	)
-
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		return false, "", err
-	}
-
-	defer func() {
-		if err := db.Close(); err != nil {
-			logger.LegacyPrintf("setup", "failed to close postgres connection: %v", err)
-		}
-	}()
-
-	// 使用超时上下文避免安装流程因数据库异常而长时间阻塞。
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var totalUsers int64
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(1) FROM users").Scan(&totalUsers); err != nil {
-		return false, "", err
-	}
-	var adminUsers int64
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(1) FROM users WHERE role = $1", service.RoleAdmin).Scan(&adminUsers); err != nil {
-		return false, "", err
-	}
-	decision := decideAdminBootstrap(totalUsers, adminUsers)
-	if !decision.shouldCreate {
-		return false, decision.reason, nil
-	}
-
-	if strings.TrimSpace(cfg.Admin.Password) == "" {
-		password, genErr := generateSecret(16)
-		if genErr != nil {
-			return false, "", fmt.Errorf("failed to generate admin password: %w", genErr)
+	return bootstrap.InitializeSetupAdmin(context.Background(), &cfg.Database, identity.InitialAdminInput{Email: cfg.Admin.Email, Password: cfg.Admin.Password, Concurrency: setupDefaultAdminConcurrency(), Now: time.Now}, func() (string, error) {
+		password, err := generateSecret(16)
+		if err != nil {
+			return "", err
 		}
 		cfg.Admin.Password = password
-		fmt.Printf("Generated admin password (one-time): %s\n", cfg.Admin.Password)
+		fmt.Printf("Generated admin password (one-time): %s\n", password)
 		fmt.Println("IMPORTANT: Save this password! It will not be shown again.")
-	}
-
-	admin := &service.User{
-		Email:       cfg.Admin.Email,
-		Role:        service.RoleAdmin,
-		Status:      service.StatusActive,
-		Balance:     0,
-		Concurrency: setupDefaultAdminConcurrency(),
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-	}
-
-	if err := admin.SetPassword(cfg.Admin.Password); err != nil {
-		return false, "", err
-	}
-
-	_, err = db.ExecContext(
-		ctx,
-		`INSERT INTO users (email, password_hash, role, balance, concurrency, status, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		admin.Email,
-		admin.PasswordHash,
-		admin.Role,
-		admin.Balance,
-		admin.Concurrency,
-		admin.Status,
-		admin.CreatedAt,
-		admin.UpdatedAt,
-	)
-	if err != nil {
-		return false, "", err
-	}
-	return true, decision.reason, nil
+		return password, nil
+	})
 }
 
 func writeConfigFile(cfg *SetupConfig) error {
@@ -520,7 +277,7 @@ func writeConfigFile(cfg *SetupConfig) error {
 		return err
 	}
 
-	return os.WriteFile(GetConfigFilePath(), data, 0600)
+	return os.WriteFile(GetConfigFilePath(), data, 0o600)
 }
 
 func generateSecret(length int) (string, error) {
@@ -531,17 +288,15 @@ func generateSecret(length int) (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-// =============================================================================
 // Auto Setup for Docker Deployment
-// =============================================================================
 
-// AutoSetupEnabled checks if auto setup is enabled via environment variable
+// AutoSetupEnabled checks if auto setup is enabled via environment variable.
 func AutoSetupEnabled() bool {
 	val := os.Getenv("AUTO_SETUP")
 	return val == "true" || val == "1" || val == "yes"
 }
 
-// getEnvOrDefault gets environment variable or returns default value
+// getEnvOrDefault gets environment variable or returns default value.
 func getEnvOrDefault(key, defaultValue string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
@@ -549,7 +304,7 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-// getEnvIntOrDefault gets environment variable as int or returns default value
+// getEnvIntOrDefault gets environment variable as int or returns default value.
 func getEnvIntOrDefault(key string, defaultValue int) int {
 	if val := os.Getenv(key); val != "" {
 		if i, err := strconv.Atoi(val); err == nil {
@@ -560,10 +315,10 @@ func getEnvIntOrDefault(key string, defaultValue int) int {
 }
 
 // AutoSetupFromEnv performs automatic setup using environment variables
-// This is designed for Docker deployment where all config is passed via env vars
+// This is designed for Docker deployment where all config is passed via env vars.
 func AutoSetupFromEnv() error {
-	logger.LegacyPrintf("setup", "%s", "Auto setup enabled, configuring from environment variables...")
-	logger.LegacyPrintf("setup", "Data directory: %s", GetDataDir())
+	logging.LegacyPrintf("setup", "%s", "Auto setup enabled, configuring from environment variables...")
+	logging.LegacyPrintf("setup", "Data directory: %s", GetDataDir())
 
 	// Get timezone from TZ or TIMEZONE env var (TZ is standard for Docker)
 	tz := getEnvOrDefault("TZ", "")
@@ -578,7 +333,7 @@ func AutoSetupFromEnv() error {
 			Port:     getEnvIntOrDefault("DATABASE_PORT", 5432),
 			User:     getEnvOrDefault("DATABASE_USER", "postgres"),
 			Password: getEnvOrDefault("DATABASE_PASSWORD", ""),
-			DBName:   getEnvOrDefault("DATABASE_DBNAME", "sub2api"),
+			DBName:   getEnvOrDefault("DATABASE_DBNAME", "tokenrouter"),
 			SSLMode:  getEnvOrDefault("DATABASE_SSLMODE", "disable"),
 		},
 		Redis: RedisConfig{
@@ -590,7 +345,7 @@ func AutoSetupFromEnv() error {
 			EnableTLS: getEnvOrDefault("REDIS_ENABLE_TLS", "false") == "true",
 		},
 		Admin: AdminConfig{
-			Email:    getEnvOrDefault("ADMIN_EMAIL", "admin@sub2api.local"),
+			Email:    getEnvOrDefault("ADMIN_EMAIL", "admin@tokenrouter.local"),
 			Password: getEnvOrDefault("ADMIN_PASSWORD", ""),
 		},
 		Server: ServerConfig{
@@ -613,62 +368,62 @@ func AutoSetupFromEnv() error {
 			return fmt.Errorf("failed to generate jwt secret: %w", err)
 		}
 		cfg.JWT.Secret = secret
-		logger.LegacyPrintf("setup", "%s", "Warning: JWT secret auto-generated. Consider setting a fixed secret for production.")
+		logging.LegacyPrintf("setup", "%s", "Warning: JWT secret auto-generated. Consider setting a fixed secret for production.")
 	}
 
 	// Test database connection
-	logger.LegacyPrintf("setup", "%s", "Testing database connection...")
+	logging.LegacyPrintf("setup", "%s", "Testing database connection...")
 	if err := TestDatabaseConnection(&cfg.Database); err != nil {
 		return fmt.Errorf("database connection failed: %w", err)
 	}
-	logger.LegacyPrintf("setup", "%s", "Database connection successful")
+	logging.LegacyPrintf("setup", "%s", "Database connection successful")
 
 	// Test Redis connection
-	logger.LegacyPrintf("setup", "%s", "Testing Redis connection...")
+	logging.LegacyPrintf("setup", "%s", "Testing Redis connection...")
 	if err := TestRedisConnection(&cfg.Redis); err != nil {
 		return fmt.Errorf("redis connection failed: %w", err)
 	}
-	logger.LegacyPrintf("setup", "%s", "Redis connection successful")
+	logging.LegacyPrintf("setup", "%s", "Redis connection successful")
 
 	// Initialize database
-	logger.LegacyPrintf("setup", "%s", "Initializing database...")
+	logging.LegacyPrintf("setup", "%s", "Initializing database...")
 	if err := initializeDatabase(cfg); err != nil {
 		return fmt.Errorf("database initialization failed: %w", err)
 	}
-	logger.LegacyPrintf("setup", "%s", "Database initialized successfully")
+	logging.LegacyPrintf("setup", "%s", "Database initialized successfully")
 
 	// Create admin user
-	logger.LegacyPrintf("setup", "%s", "Creating admin user...")
+	logging.LegacyPrintf("setup", "%s", "Creating admin user...")
 	created, reason, err := createAdminUser(cfg)
 	if err != nil {
 		return fmt.Errorf("admin user creation failed: %w", err)
 	}
 	if created {
-		logger.LegacyPrintf("setup", "Admin user created: %s", cfg.Admin.Email)
+		logging.LegacyPrintf("setup", "Admin user created: %s", cfg.Admin.Email)
 	} else {
 		switch reason {
 		case adminBootstrapReasonAdminExists:
-			logger.LegacyPrintf("setup", "%s", "Admin user already exists, skipping admin bootstrap")
+			logging.LegacyPrintf("setup", "%s", "Admin user already exists, skipping admin bootstrap")
 		case adminBootstrapReasonUsersExistWithoutAdmin:
-			logger.LegacyPrintf("setup", "%s", "Database already has user data; skipping auto admin bootstrap to avoid password overwrite")
+			logging.LegacyPrintf("setup", "%s", "Database already has user data; skipping auto admin bootstrap to avoid password overwrite")
 		default:
-			logger.LegacyPrintf("setup", "%s", "Admin bootstrap skipped")
+			logging.LegacyPrintf("setup", "%s", "Admin bootstrap skipped")
 		}
 	}
 
 	// Write config file
-	logger.LegacyPrintf("setup", "%s", "Writing configuration file...")
+	logging.LegacyPrintf("setup", "%s", "Writing configuration file...")
 	if err := writeConfigFile(cfg); err != nil {
 		return fmt.Errorf("config file creation failed: %w", err)
 	}
-	logger.LegacyPrintf("setup", "%s", "Configuration file created")
+	logging.LegacyPrintf("setup", "%s", "Configuration file created")
 
 	// Create installation lock file
 	if err := createInstallLock(); err != nil {
 		return fmt.Errorf("failed to create install lock: %w", err)
 	}
-	logger.LegacyPrintf("setup", "%s", "Installation lock created")
+	logging.LegacyPrintf("setup", "%s", "Installation lock created")
 
-	logger.LegacyPrintf("setup", "%s", "Auto setup completed successfully!")
+	logging.LegacyPrintf("setup", "%s", "Auto setup completed successfully!")
 	return nil
 }

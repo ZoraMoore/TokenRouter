@@ -3,21 +3,23 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${SUB2API_ENV_FILE:-${SCRIPT_DIR}/.env}"
+ENV_FILE="${TOKENROUTER_ENV_FILE:-${SUB2API_ENV_FILE:-${SCRIPT_DIR}/.env}}"
 
-STACK_LABEL_KEY="org.sub2api.stack"
+STACK_LABEL_KEY="org.tokenrouter.stack"
 STACK_LABEL_VALUE="apple-container"
-NETWORK_NAME="sub2api-apple"
-APP_CONTAINER="sub2api-apple"
-POSTGRES_CONTAINER="sub2api-apple-postgres"
-REDIS_CONTAINER="sub2api-apple-redis"
-APP_VOLUME="sub2api-apple-data"
-POSTGRES_VOLUME="sub2api-apple-postgres-data"
-REDIS_VOLUME="sub2api-apple-redis-data"
+NETWORK_NAME="tokenrouter-apple"
+APP_CONTAINER="tokenrouter-apple"
+POSTGRES_CONTAINER="tokenrouter-apple-postgres"
+REDIS_CONTAINER="tokenrouter-apple-redis"
+APP_VOLUME="tokenrouter-apple-data"
+POSTGRES_VOLUME="tokenrouter-apple-postgres-data"
+REDIS_VOLUME="tokenrouter-apple-redis-data"
 PLATFORM="linux/arm64"
 
 TEMP_DIR=""
+# 兼容旧脚本的互斥锁，避免两种入口同时修改同一旧栈。
 LOCK_DIR="${TMPDIR:-/tmp}/sub2api-apple-container.lock"
+STACK_NAME="tokenrouter"
 LOCK_ACQUIRED=false
 
 APP_IMAGE=""
@@ -70,7 +72,7 @@ Destroy options:
   --yes                 Skip the confirmation prompt
 
 Environment:
-  SUB2API_ENV_FILE      Path to the deployment env file (default: deploy/.env)
+  TOKENROUTER_ENV_FILE      Path to the deployment env file (default: deploy/.env)
 EOF
 }
 
@@ -191,7 +193,35 @@ assert_resource_owned() {
     fi
 }
 
+# 依据资源名和归属标签接管旧栈，不重命名或复制持久卷。
+select_stack_identity() {
+    local resource_type resource_name resources new_found=false old_found=false
+    for resource_type in container network volume; do
+        resources="$(list_resource_ids "${resource_type}")" || die "Unable to list ${resource_type} resources."
+        while IFS= read -r resource_name; do
+            case "${resource_name}" in
+                tokenrouter-apple|tokenrouter-apple-postgres|tokenrouter-apple-redis|tokenrouter-apple-data|tokenrouter-apple-postgres-data|tokenrouter-apple-redis-data) new_found=true ;;
+                sub2api-apple|sub2api-apple-postgres|sub2api-apple-redis|sub2api-apple-data|sub2api-apple-postgres-data|sub2api-apple-redis-data) old_found=true ;;
+            esac
+        done <<<"${resources}"
+    done
+    if [[ "${new_found}" == true && "${old_found}" == true ]]; then
+        die "Both TokenRouter and legacy Sub2API stacks exist; refusing to merge their resources."
+    fi
+    STACK_NAME=tokenrouter
+    if [[ "${old_found}" == true ]]; then STACK_NAME=sub2api; fi
+    STACK_LABEL_KEY="org.${STACK_NAME}.stack"
+    NETWORK_NAME="${STACK_NAME}-apple"
+    APP_CONTAINER="${STACK_NAME}-apple"
+    POSTGRES_CONTAINER="${STACK_NAME}-apple-postgres"
+    REDIS_CONTAINER="${STACK_NAME}-apple-redis"
+    APP_VOLUME="${STACK_NAME}-apple-data"
+    POSTGRES_VOLUME="${STACK_NAME}-apple-postgres-data"
+    REDIS_VOLUME="${STACK_NAME}-apple-redis-data"
+}
+
 preflight_stack_ownership() {
+    select_stack_identity
     local resource_name
 
     for resource_name in "${APP_CONTAINER}" "${REDIS_CONTAINER}" "${POSTGRES_CONTAINER}"; do
@@ -263,6 +293,7 @@ ensure_system() {
     require_container_version
     require_command curl
     start_system
+    preflight_stack_ownership
 }
 
 container_ipv4_address() {
@@ -358,7 +389,7 @@ cmd_init() {
     mv "${temp_file}" "${ENV_FILE}"
 
     info "Created ${ENV_FILE} with generated secrets."
-    info "Review the file, then run: SUB2API_ENV_FILE='${ENV_FILE}' ${SCRIPT_DIR}/apple-container.sh up"
+    info "Review the file, then run: TOKENROUTER_ENV_FILE='${ENV_FILE}' ${SCRIPT_DIR}/apple-container.sh up"
 }
 
 validate_port() {
@@ -400,14 +431,17 @@ validate_env_file_security() {
 prepare_environment() {
     validate_env_file_security
 
-    APP_IMAGE="$(read_env_value APPLE_CONTAINER_SUB2API_IMAGE ghcr.io/tokenflux/tokenrouter:latest)"
+    APP_IMAGE="$(read_env_value APPLE_CONTAINER_TOKENROUTER_IMAGE)"
+    if [[ -z "${APP_IMAGE}" ]]; then
+        APP_IMAGE="$(read_env_value APPLE_CONTAINER_SUB2API_IMAGE ghcr.io/tokenflux/tokenrouter:latest)"
+    fi
     POSTGRES_IMAGE="$(read_env_value APPLE_CONTAINER_POSTGRES_IMAGE postgres:18-alpine)"
     REDIS_IMAGE="$(read_env_value APPLE_CONTAINER_REDIS_IMAGE redis:8-alpine)"
     BIND_HOST="$(read_env_value BIND_HOST 0.0.0.0)"
     HOST_PORT="$(read_env_value SERVER_PORT 8080)"
-    POSTGRES_USER="$(read_env_value POSTGRES_USER sub2api)"
+    POSTGRES_USER="$(read_env_value POSTGRES_USER "${STACK_NAME}")"
     POSTGRES_PASSWORD="$(read_env_value POSTGRES_PASSWORD)"
-    POSTGRES_DB="$(read_env_value POSTGRES_DB sub2api)"
+    POSTGRES_DB="$(read_env_value POSTGRES_DB "${STACK_NAME}")"
     REDIS_PASSWORD="$(read_env_value REDIS_PASSWORD)"
     TZ_VALUE="$(read_env_value TZ Asia/Shanghai)"
 
@@ -425,7 +459,7 @@ prepare_environment() {
         die "Set a secure POSTGRES_PASSWORD in ${ENV_FILE}."
     fi
 
-    TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sub2api-apple.XXXXXX")"
+    TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tokenrouter-apple.XXXXXX")"
     APP_ENV_FILE="${TEMP_DIR}/app.env"
     POSTGRES_ENV_FILE="${TEMP_DIR}/postgres.env"
     POSTGRES_PROBE_ENV_FILE="${TEMP_DIR}/postgres-probe.env"
@@ -518,7 +552,7 @@ create_app_container() {
         --volume "${APP_VOLUME}:/app/storage" \
         --entrypoint /bin/sh \
         "${APP_IMAGE}" \
-        -c 'set -e; mkdir -p "$DATA_DIR"; chown -R sub2api:sub2api "$DATA_DIR"; exec su-exec sub2api /app/sub2api' \
+        -c 'set -e; mkdir -p "$DATA_DIR"; chown -R tokenrouter:tokenrouter "$DATA_DIR"; exec su-exec tokenrouter /app/tokenrouter' \
         >/dev/null
 }
 
@@ -777,15 +811,16 @@ cmd_logs() {
         exit 2
     fi
 
+    require_container_version
+    system_is_running || die "Apple container services are not running."
+    preflight_stack_ownership
     case "${service}" in
-        app|sub2api) container_name="${APP_CONTAINER}" ;;
+        app|tokenrouter|sub2api) container_name="${APP_CONTAINER}" ;;
         postgres) container_name="${POSTGRES_CONTAINER}" ;;
         redis) container_name="${REDIS_CONTAINER}" ;;
         *) die "Unknown service '${service}'. Use app, postgres, or redis." ;;
     esac
 
-    require_container_version
-    system_is_running || die "Apple container services are not running."
     resource_exists container "${container_name}" || die "Container not found: ${container_name}"
     assert_resource_owned container "${container_name}"
     if [[ -n "${follow}" ]]; then

@@ -17,7 +17,7 @@
             <input v-model="form.password" type="text" required class="input pr-10" :placeholder="t('admin.users.enterPassword')" />
           </div>
           <button type="button" @click="generateRandomPassword" class="btn btn-secondary px-3">
-            <Icon name="refresh" size="md" />
+            <Icon name="refresh" size="sm" />
           </button>
         </div>
       </div>

@@ -37,7 +37,7 @@ func TestManualBackfillStateMigrationAvoidsUsageLogs(t *testing.T) {
 	require.NotContains(t, sql, "FROM USAGE_LOGS")
 }
 
-// TestUsageAnalyticsModelDimensionResetInvalidatesOldBuckets 验证旧前缀维度只清理可重建聚合，不扫描或改写原始记录。
+// TestUsageAnalyticsModelDimensionResetInvalidatesOldBuckets 检查前缀维度重建时清空聚合表，原始记录保持原样。
 func TestUsageAnalyticsModelDimensionResetInvalidatesOldBuckets(t *testing.T) {
 	content, err := FS.ReadFile("232_reset_usage_analytics_model_dimension.sql")
 	require.NoError(t, err)

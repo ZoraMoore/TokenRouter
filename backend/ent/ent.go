@@ -12,8 +12,6 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/TokenFlux/TokenRouter/ent/account"
-	"github.com/TokenFlux/TokenRouter/ent/accountgroup"
 	"github.com/TokenFlux/TokenRouter/ent/announcement"
 	"github.com/TokenFlux/TokenRouter/ent/announcementread"
 	"github.com/TokenFlux/TokenRouter/ent/apikey"
@@ -23,7 +21,9 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/batchimageevent"
 	"github.com/TokenFlux/TokenRouter/ent/batchimageitem"
 	"github.com/TokenFlux/TokenRouter/ent/batchimagejob"
-	"github.com/TokenFlux/TokenRouter/ent/datasharesession"
+	"github.com/TokenFlux/TokenRouter/ent/creativerun"
+	"github.com/TokenFlux/TokenRouter/ent/creativerunoutbox"
+	"github.com/TokenFlux/TokenRouter/ent/creativerunoutput"
 	"github.com/TokenFlux/TokenRouter/ent/errorpassthroughrule"
 	"github.com/TokenFlux/TokenRouter/ent/group"
 	"github.com/TokenFlux/TokenRouter/ent/idempotencyrecord"
@@ -34,6 +34,8 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/pendingauthsession"
 	"github.com/TokenFlux/TokenRouter/ent/promocode"
 	"github.com/TokenFlux/TokenRouter/ent/promocodeusage"
+	"github.com/TokenFlux/TokenRouter/ent/provider"
+	"github.com/TokenFlux/TokenRouter/ent/providergroup"
 	"github.com/TokenFlux/TokenRouter/ent/proxy"
 	"github.com/TokenFlux/TokenRouter/ent/redeemcode"
 	"github.com/TokenFlux/TokenRouter/ent/redeemcodeusage"
@@ -53,7 +55,6 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/userattributedefinition"
 	"github.com/TokenFlux/TokenRouter/ent/userattributevalue"
 	"github.com/TokenFlux/TokenRouter/ent/userdisabledpublicgroup"
-	"github.com/TokenFlux/TokenRouter/ent/userplatformquota"
 	"github.com/TokenFlux/TokenRouter/ent/usersubscription"
 )
 
@@ -117,8 +118,6 @@ func checkColumn(t, c string) error {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			apikey.Table:                   apikey.ValidColumn,
 			apikeycompositegroup.Table:     apikeycompositegroup.ValidColumn,
-			account.Table:                  account.ValidColumn,
-			accountgroup.Table:             accountgroup.ValidColumn,
 			announcement.Table:             announcement.ValidColumn,
 			announcementread.Table:         announcementread.ValidColumn,
 			authidentity.Table:             authidentity.ValidColumn,
@@ -126,7 +125,9 @@ func checkColumn(t, c string) error {
 			batchimageevent.Table:          batchimageevent.ValidColumn,
 			batchimageitem.Table:           batchimageitem.ValidColumn,
 			batchimagejob.Table:            batchimagejob.ValidColumn,
-			datasharesession.Table:         datasharesession.ValidColumn,
+			creativerun.Table:              creativerun.ValidColumn,
+			creativerunoutbox.Table:        creativerunoutbox.ValidColumn,
+			creativerunoutput.Table:        creativerunoutput.ValidColumn,
 			errorpassthroughrule.Table:     errorpassthroughrule.ValidColumn,
 			group.Table:                    group.ValidColumn,
 			idempotencyrecord.Table:        idempotencyrecord.ValidColumn,
@@ -137,6 +138,8 @@ func checkColumn(t, c string) error {
 			pendingauthsession.Table:       pendingauthsession.ValidColumn,
 			promocode.Table:                promocode.ValidColumn,
 			promocodeusage.Table:           promocodeusage.ValidColumn,
+			provider.Table:                 provider.ValidColumn,
+			providergroup.Table:            providergroup.ValidColumn,
 			proxy.Table:                    proxy.ValidColumn,
 			redeemcode.Table:               redeemcode.ValidColumn,
 			redeemcodeusage.Table:          redeemcodeusage.ValidColumn,
@@ -156,7 +159,6 @@ func checkColumn(t, c string) error {
 			userattributedefinition.Table:  userattributedefinition.ValidColumn,
 			userattributevalue.Table:       userattributevalue.ValidColumn,
 			userdisabledpublicgroup.Table:  userdisabledpublicgroup.ValidColumn,
-			userplatformquota.Table:        userplatformquota.ValidColumn,
 			usersubscription.Table:         usersubscription.ValidColumn,
 		})
 	})

@@ -25,7 +25,7 @@ const createMockRouter = (): Router => {
 
   const routes: Partial<RouteRecordNormalized>[] = [
     { path: '/admin/dashboard', components: { default: mockImportFn } },
-    { path: '/admin/accounts', components: { default: mockImportFn } },
+    { path: '/admin/providers', components: { default: mockImportFn } },
     { path: '/admin/users', components: { default: mockImportFn } },
     { path: '/admin/groups', components: { default: mockImportFn } },
     { path: '/admin/subscriptions', components: { default: mockImportFn } },
@@ -74,7 +74,7 @@ describe('useRoutePrefetch', () => {
       const { _isAdminRoute } = useRoutePrefetch(mockRouter)
       expect(_isAdminRoute('/admin/dashboard')).toBe(true)
       expect(_isAdminRoute('/admin/users')).toBe(true)
-      expect(_isAdminRoute('/admin/accounts')).toBe(true)
+      expect(_isAdminRoute('/admin/providers')).toBe(true)
     })
 
     it('应该正确识别非管理员路由', () => {

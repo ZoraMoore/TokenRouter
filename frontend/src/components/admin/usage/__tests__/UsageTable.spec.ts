@@ -1,3 +1,4 @@
+import { nextMotionFrame } from '@/__tests__/helpers/motion'
 const ipGeoMocks = vi.hoisted(() => ({
   getEntry: vi.fn(() => ({ status: 'idle' as const })),
   fetchOne: vi.fn(),
@@ -40,13 +41,14 @@ const messages: Record<string, string> = {
   'usage.perMillionTokens': '/ 1M tokens',
   'usage.serviceTier': 'Service tier',
   'usage.serviceTierPriority': 'Fast',
+  'usage.serviceTierUltrafast': 'Ultrafast',
   'usage.serviceTierFlex': 'Flex',
   'usage.serviceTierStandard': 'Standard',
   'usage.rate': 'Rate',
-  'usage.accountMultiplier': 'Account rate',
+  'usage.providerMultiplier': 'Provider rate',
   'usage.original': 'Original',
   'usage.userBilled': 'User billed',
-  'usage.accountBilled': 'Account billed',
+  'usage.providerBilled': 'Provider billed',
   'usage.imageUnit': ' images',
   'usage.imageCount': 'Image count',
   'usage.imageBillingSize': 'Billing size',
@@ -67,7 +69,7 @@ const messages: Record<string, string> = {
   'admin.usage.billingModeToken': 'Token',
   'admin.usage.billingModePerRequest': 'Per request',
   'admin.usage.billingModeImage': 'Image',
-  'admin.usage.requestIdCopied': 'Request ID copied',
+  'admin.usage.upstreamRequestIdCopied': 'Upstream ID copied',
   'keys.copied': 'Copied',
   'keys.copyToClipboard': 'Copy to clipboard',
   'usage.detailedTiming': 'Detailed Timing',
@@ -84,6 +86,10 @@ const messages: Record<string, string> = {
   'usage.timingReused': 'Reused conn',
   'usage.timingWriteError': 'Write error',
   'usage.timingUnavailable': 'Not collected',
+  'common.copyFailed': 'Copy failed',
+  'common.copied': 'Copied',
+  'requests.copy': 'Copy request ID',
+  'requests.copied': 'Request ID copied',
 }
 
 vi.mock('vue-i18n', async () => {
@@ -106,7 +112,9 @@ const DataTableStub = {
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
         <slot name="cell-latency" :row="row" />
+        <div class="tps-cell"><slot name="cell-tps" :row="row" /></div>
         <slot name="cell-request_id" :row="row" />
+        <slot name="cell-upstream_request_id" :row="row" />
       </div>
     </div>
   `,
@@ -117,7 +125,7 @@ const baseImageRow = {
   model: 'gpt-image-2',
   actual_cost: 0.4,
   total_cost: 0.4,
-  account_rate_multiplier: 1,
+  provider_rate_multiplier: 1,
   rate_multiplier: 1,
   service_tier: null,
   input_cost: 0,
@@ -140,6 +148,33 @@ const baseImageRow = {
   image_size_breakdown: null,
 }
 
+it('用量分组徽章优先显示译文，缺少展示名称时使用业务名称', async () => {
+  const wrapper = mount(UsageTable, {
+    props: {
+      data: [
+        { ...baseImageRow, request_id: 'translated', group: { id: 1, name: 'business-name', display_name: 'English group' } },
+        { ...baseImageRow, request_id: 'original', group: { id: 2, name: 'Original group' } },
+      ],
+      loading: false,
+      columns: [{ key: 'group', label: 'Group' }],
+      showProviderBilling: false,
+    },
+    global: {
+      stubs: {
+        DataTable: { props: ['data'], template: '<div><slot v-for="row in data" name="cell-group" :row="row" /></div>' },
+        GroupBadge: { props: ['name'], template: '<span data-test="group-name">{{ name }}</span>' },
+        EmptyState: true,
+        Icon: true,
+        Teleport: true,
+      },
+    },
+  })
+  expect(wrapper.findAll('[data-test="group-name"]').map(item => item.text())).toEqual(['English group', 'Original group'])
+  await wrapper.setProps({ data: [{ ...baseImageRow, group: { id: 1, name: 'business-name', display_name: '中文分组' } }] })
+  expect(wrapper.get('[data-test="group-name"]').text()).toBe('中文分组')
+  wrapper.unmount()
+})
+
 describe('admin UsageTable request ID column', () => {
   beforeEach(() => {
     clipboardMocks.copyToClipboard.mockReset().mockResolvedValue(true)
@@ -158,10 +193,31 @@ describe('admin UsageTable request ID column', () => {
     })
 
     expect(wrapper.text()).toContain('req-admin-visible-id')
-    await wrapper.get('button[title="Copy to clipboard"]').trigger('click')
+    await wrapper.get('button[title="Copy request ID"]').trigger('click')
 
     expect(clipboardMocks.copyToClipboard).toHaveBeenCalledWith('req-admin-visible-id', 'Request ID copied')
     expect(wrapper.get('button').attributes('title')).toBe('Copied')
+  })
+})
+
+describe('使用记录 TPS 列', () => {
+  it('展示 TPS 和公式提示，历史记录缺少耗时时显示占位符', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [
+          { ...baseImageRow, request_id: 'valid', output_tokens: 100, duration_ms: 5000, first_token_ms: 1000 },
+          { ...baseImageRow, request_id: 'missing', output_tokens: 100, duration_ms: 5000, first_token_ms: null },
+          { ...baseImageRow, request_id: 'rounding', output_tokens: 23, duration_ms: 21000, first_token_ms: 1000 },
+        ],
+        columns: [{ key: 'tps', label: 'TPS' }],
+      },
+      global: {
+        stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true },
+      },
+    })
+    expect(wrapper.findAll('.tps-cell').map(cell => cell.text())).toEqual(['25.0 tok/s', '-', '1.1 tok/s'])
+    expect(wrapper.get('.tps-cell span').attributes('title')).toBe('usage.tpsHint')
+    wrapper.unmount()
   })
 })
 
@@ -173,7 +229,7 @@ describe('admin UsageTable detailed timing tooltip', () => {
           ...baseImageRow,
           detailed_timing: {
             request_content_length: 8360000,
-            account_slot_acquired_ms: 120,
+            provider_slot_acquired_ms: 120,
             upstream_got_conn_ms: 200,
             upstream_get_conn_ms: 180,
             upstream_wrote_request_ms: 420,
@@ -208,7 +264,7 @@ describe('admin UsageTable detailed timing tooltip', () => {
       props: {
         data: [{
           ...baseImageRow,
-          detailed_timing: { account_slot_acquired_ms: 120 },
+          detailed_timing: { provider_slot_acquired_ms: 120 },
         }],
         loading: false,
         columns: [{ key: 'latency', label: 'Latency' }],
@@ -228,6 +284,7 @@ describe('admin UsageTable detailed timing tooltip', () => {
 
     await timingButton.trigger('click')
     await nextTick()
+    await nextMotionFrame()
     expect(wrapper.find('[data-testid="timing-detail-tooltip"]').exists()).toBe(false)
   })
 })
@@ -284,7 +341,7 @@ describe('admin UsageTable tooltip', () => {
       request_id: 'req-admin-1',
       actual_cost: 0.092883,
       total_cost: 0.092883,
-      account_rate_multiplier: 1,
+      provider_rate_multiplier: 1,
       rate_multiplier: 1,
       service_tier: 'priority',
       input_cost: 0.020285,
@@ -320,9 +377,9 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('Fast')
     expect(text).toContain('Rate')
     expect(text).toContain('1.00x')
-    expect(text).toContain('Account rate')
+    expect(text).toContain('Provider rate')
     expect(text).toContain('User billed')
-    expect(text).toContain('Account billed')
+    expect(text).toContain('Provider billed')
     expect(text).toContain('$0.092883')
     expect(text).toContain('$5.0000 / 1M tokens')
     expect(text).toContain('$30.0000 / 1M tokens')
@@ -409,6 +466,37 @@ describe('admin UsageTable tooltip', () => {
     }
   })
 
+  // 后端确认上游模型与出站模型不同后展示声明，未知模型保持未知。
+  it.each([
+    { mismatch: true, response: 'runtime-model-' + 'v'.repeat(160), visible: true },
+    { mismatch: false, response: 'sent-model', visible: false },
+    { mismatch: null, response: null, visible: false },
+    { mismatch: undefined, response: undefined, visible: false },
+    { mismatch: true, response: '', visible: false },
+  ])('renders the response model only on a known mismatch: $mismatch/$visible', ({ mismatch, response, visible }) => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ ...baseImageRow, model: 'public-model', upstream_model: 'sent-model',
+          model_mapping_chain: 'public-model→sent-model',
+          upstream_response_model: response, upstream_model_mismatch: mismatch }],
+        loading: false,
+        columns: [],
+      },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+    })
+    const model = wrapper.find('[data-testid="upstream-response-model"]')
+    expect(model.exists()).toBe(visible)
+    expect(wrapper.text()).toContain('public-model')
+    expect(wrapper.text()).toContain('sent-model')
+    if (visible) {
+      expect(model.text()).toContain('↳')
+      expect(model.text()).toContain(response)
+      expect(model.attributes('title')).toContain(`sent-model → ${response}`)
+      expect(model.classes()).toEqual(expect.arrayContaining(['text-xs', 'break-all', 'text-orange-600', 'dark:text-orange-400']))
+    }
+    wrapper.unmount()
+  })
+
   it('shows requested and upstream models separately for admin rows', () => {
     const row = {
       request_id: 'req-admin-model-1',
@@ -416,7 +504,7 @@ describe('admin UsageTable tooltip', () => {
       upstream_model: 'claude-sonnet-4-20250514',
       actual_cost: 0,
       total_cost: 0,
-      account_rate_multiplier: 1,
+      provider_rate_multiplier: 1,
       rate_multiplier: 1,
       input_cost: 0,
       output_cost: 0,
@@ -570,6 +658,59 @@ describe('admin UsageTable tooltip', () => {
   })
 })
 
+describe('admin UsageTable request ID column', () => {
+  beforeEach(() => {
+    clipboardMocks.copyToClipboard.mockReset().mockResolvedValue(true)
+  })
+
+  it('renders and copies the request ID', async () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ ...baseImageRow, request_id: 'req-admin-visible-id' }],
+        loading: false,
+        columns: [{ key: 'request_id', label: 'Request ID' }],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('req-admin-visible-id')
+    await wrapper.get('button[title="Copy request ID"]').trigger('click')
+
+    expect(clipboardMocks.copyToClipboard).toHaveBeenCalledWith('req-admin-visible-id', 'Request ID copied')
+  })
+
+  it('renders and copies the upstream ID', async () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ ...baseImageRow, request_id: '', upstream_request_id: '20260903082826779695' }],
+        loading: false,
+        columns: [{ key: 'upstream_request_id', label: 'Upstream ID' }],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('20260903082826779695')
+    const copyButtons = wrapper.findAll('button[title="Copy to clipboard"]')
+    expect(copyButtons).toHaveLength(1)
+    await copyButtons[0].trigger('click')
+
+    expect(clipboardMocks.copyToClipboard).toHaveBeenCalledWith('20260903082826779695', 'Upstream ID copied')
+  })
+})
 describe('admin UsageTable IP geolocation batch toolbar', () => {
   const DataTableStubWithIp = {
     props: ['data'],
@@ -686,7 +827,7 @@ const DataTableStubWithUser = {
 
 describe('admin UsageTable deleted-user badge', () => {
   it('right-aligns compact members on mobile and constrains long emails on desktop', () => {
-    const email = 'member.with.a.very.long.address@sub2api.example.com'
+    const email = 'member.with.a.very.long.address@tokenrouter.example.com'
     const wrapper = mount(UsageTable, {
       props: {
         data: [{ request_id: 'req-long-email', user_id: 3559, user: { id: 3559, email } }],

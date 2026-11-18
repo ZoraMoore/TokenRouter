@@ -15,7 +15,7 @@ vi.mock('vue-i18n', async () => {
 })
 
 describe('PlatformTypeBadge', () => {
-  it('renders Qoder COSY accounts as Qoder instead of Gemini', () => {
+  it('renders Qoder COSY providers as Qoder instead of Gemini', () => {
     const wrapper = mount(PlatformTypeBadge, {
       props: {
         platform: 'qoder',
@@ -34,7 +34,7 @@ describe('PlatformTypeBadge', () => {
     expect(wrapper.text()).not.toContain('Gemini')
   })
 
-  it('distinguishes Agent Identity, PAT, and OAuth accounts', async () => {
+  it('distinguishes Agent Identity, PAT, and OAuth providers', async () => {
     const wrapper = mount(PlatformTypeBadge, {
       props: {
         platform: 'openai',

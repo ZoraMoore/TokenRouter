@@ -1,5 +1,3 @@
-// Package mixins 提供 Ent schema 的可复用混入组件。
-// 包括时间戳混入、软删除混入等通用功能。
 package mixins
 
 import (
@@ -8,13 +6,13 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/ent/intercept"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/mixin"
+
+	"github.com/TokenFlux/TokenRouter/ent/intercept"
 )
 
 // SoftDeleteMixin 实现基于 deleted_at 时间戳的软删除功能。
@@ -39,6 +37,10 @@ type SoftDeleteMixin struct {
 	mixin.Schema
 }
 
+// softDeleteKey 是用于在 context 中标记跳过软删除的键类型。
+// 使用空结构体作为键可以避免与其他包的键冲突。
+type softDeleteKey struct{}
+
 // Fields 定义软删除所需的字段。
 // deleted_at 字段：
 //   - 类型为 TIMESTAMPTZ，精确记录删除时间
@@ -54,10 +56,6 @@ func (SoftDeleteMixin) Fields() []ent.Field {
 			}),
 	}
 }
-
-// softDeleteKey 是用于在 context 中标记跳过软删除的键类型。
-// 使用空结构体作为键可以避免与其他包的键冲突。
-type softDeleteKey struct{}
 
 // SkipSoftDelete 返回一个新的 context，用于跳过软删除的拦截器和变更器。
 //
@@ -96,7 +94,7 @@ func (d SoftDeleteMixin) Interceptors() []ent.Interceptor {
 
 // Hooks 返回变更钩子列表。
 // 钩子会拦截 DELETE 操作，将其转换为 UPDATE SET deleted_at = NOW()。
-// 这样删除操作实际上只是标记记录为已删除，而不是真正删除。
+// 删除操作将记录标记为已删除，数据仍保存在表中。
 func (d SoftDeleteMixin) Hooks() []ent.Hook {
 	return []ent.Hook{
 		func(next ent.Mutator) ent.Mutator {

@@ -1,9 +1,6 @@
 package schema
 
 import (
-	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
-	"github.com/TokenFlux/TokenRouter/internal/domain"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
@@ -11,6 +8,9 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
+	"github.com/TokenFlux/TokenRouter/internal/apikey"
 )
 
 // APIKey holds the schema definition for the APIKey entity.
@@ -53,7 +53,7 @@ func (APIKey) Fields() []ent.Field {
 			Comment("是否通过模型前缀在多个分组之间路由"),
 		field.String("status").
 			MaxLen(20).
-			Default(domain.StatusActive),
+			Default(apikey.StatusActive),
 		// 单个 API Key 的 Fast 模式策略，默认保持下游请求的现有行为。
 		field.String("fast_mode_policy").
 			MaxLen(32).
@@ -68,7 +68,7 @@ func (APIKey) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("billing_mode 为 subscription 时锁定使用的用户订阅 ID"),
-		// 每个 API Key 可在进入渠道与账号映射前覆盖客户端模型名。
+		// 每个 API Key 可在进入分组与提供商映射前覆盖客户端模型名。
 		field.JSON("model_mapping", map[string]string{}).
 			Default(func() map[string]string { return map[string]string{} }).
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
@@ -84,7 +84,7 @@ func (APIKey) Fields() []ent.Field {
 			Optional().
 			Comment("Blocked IPs/CIDRs"),
 
-		// ========== Quota fields ==========
+		// Quota fields
 		// Quota limit in USD (0 = unlimited)
 		field.Float("quota").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
@@ -101,7 +101,11 @@ func (APIKey) Fields() []ent.Field {
 			Nillable().
 			Comment("Expiration time for this API key (null = never expires)"),
 
-		// ========== Rate limit fields ==========
+		// Key 请求上限默认关闭，由网关在准入时检查。
+		field.Int("concurrency_limit").NonNegative().Default(0),
+		field.Int("rpm_limit").NonNegative().Default(0),
+
+		// Rate limit fields
 		// Rate limit configuration (0 = unlimited)
 		field.Float("rate_limit_5h").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
@@ -142,22 +146,16 @@ func (APIKey) Fields() []ent.Field {
 			Nillable().
 			Comment("Start time of the current 7d rate limit window"),
 
-		// 用户确认过的数据共享须知版本，用于防止未读须知直接切换到数据共享分组。
-		field.Int("data_sharing_notice_version").
-			Default(0).
-			Comment("用户已确认的数据共享须知版本，0 表示未确认"),
-		field.Int64("data_sharing_confirmed_group_id").
-			Optional().
-			Nillable().
-			Comment("最近一次确认的数据共享目标分组 ID"),
-		field.Time("data_sharing_confirmed_at").
-			Optional().
-			Nillable().
-			Comment("最近一次确认数据共享须知的时间"),
 		// 绑定分组停用时是否允许请求级回退到同平台默认分组。
-		field.Bool("fallback_to_default_group_when_unavailable").
+		field.Bool("fallback_when_group_unavailable").
 			Default(true).
 			Comment("绑定分组不可用时自动回退到同平台默认分组"),
+		// managed_by 标记服务端托管的隐藏 Key（如创作台执行 Key），普通用户接口不得暴露或操作。
+		field.String("managed_by").
+			MaxLen(32).
+			Optional().
+			Nillable().
+			Comment("托管来源标识：creative_studio 表示创作台隐藏执行 Key，NULL 表示普通用户 Key"),
 	}
 }
 
@@ -194,6 +192,5 @@ func (APIKey) Indexes() []ent.Index {
 		// Index for quota queries
 		index.Fields("quota", "quota_used"),
 		index.Fields("expires_at"),
-		index.Fields("data_sharing_confirmed_group_id"),
 	}
 }

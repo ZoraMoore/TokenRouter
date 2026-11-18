@@ -7,9 +7,10 @@ import (
 	"os"
 	"strings"
 
-	infraerrors "github.com/TokenFlux/TokenRouter/internal/pkg/errors"
-	"github.com/TokenFlux/TokenRouter/internal/pkg/response"
 	"github.com/gin-gonic/gin"
+
+	"github.com/TokenFlux/TokenRouter/internal/pkg/apperror"
+	response "github.com/TokenFlux/TokenRouter/internal/server/httpx"
 )
 
 // Recovery converts panics into the project's standard JSON error envelope.
@@ -36,8 +37,8 @@ func Recovery() gin.HandlerFunc {
 		response.ErrorWithDetails(
 			c,
 			http.StatusInternalServerError,
-			infraerrors.UnknownMessage,
-			infraerrors.UnknownReason,
+			apperror.UnknownMessage,
+			apperror.UnknownReason,
 			nil,
 		)
 		c.Abort()

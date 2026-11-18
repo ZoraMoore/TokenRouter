@@ -7,19 +7,58 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
-
-	"github.com/TokenFlux/TokenRouter/internal/pkg/response"
-	"github.com/TokenFlux/TokenRouter/internal/pkg/sysutil"
 
 	"github.com/gin-gonic/gin"
+
+	response "github.com/TokenFlux/TokenRouter/internal/server/httpx"
 )
 
-// installMutex prevents concurrent installation attempts (TOCTOU protection)
+// installMutex prevents concurrent installation attempts (TOCTOU protection).
 var installMutex sync.Mutex
 
 // RegisterRoutes registers setup wizard routes
-func RegisterRoutes(r *gin.Engine) {
+// RestartRequester 由 CLI 入口注入，setup 不依赖完整应用图。
+type RestartRequester interface{ RequestRestart() error }
+
+// SetupStatus represents the current setup state.
+type SetupStatus struct {
+	NeedsSetup bool   `json:"needs_setup"`
+	Step       string `json:"step"`
+}
+
+// TestDatabaseRequest represents database test request.
+type TestDatabaseRequest struct {
+	Host     string `json:"host" binding:"required"`
+	Port     int    `json:"port" binding:"required"`
+	User     string `json:"user" binding:"required"`
+	Password string `json:"password"`
+	DBName   string `json:"dbname" binding:"required"`
+	SSLMode  string `json:"sslmode"`
+}
+
+// TestRedisRequest represents Redis test request.
+type TestRedisRequest struct {
+	Host      string `json:"host" binding:"required"`
+	Port      int    `json:"port" binding:"required"`
+	Username  string `json:"username"`
+	Password  string `json:"password"`
+	DB        int    `json:"db"`
+	EnableTLS bool   `json:"enable_tls"`
+}
+
+// InstallRequest represents installation request.
+type InstallRequest struct {
+	Database DatabaseConfig `json:"database" binding:"required"`
+	Redis    RedisConfig    `json:"redis" binding:"required"`
+	Admin    AdminConfig    `json:"admin" binding:"required"`
+	Server   ServerConfig   `json:"server"`
+}
+
+func RegisterRoutes(r *gin.Engine, restarters ...RestartRequester) {
+	var restarter RestartRequester
+	if len(restarters) > 0 {
+		restarter = restarters[0]
+	}
 	setup := r.Group("/setup")
 	{
 		// Status endpoint is always accessible (read-only)
@@ -31,18 +70,12 @@ func RegisterRoutes(r *gin.Engine) {
 		{
 			protected.POST("/test-db", testDatabase)
 			protected.POST("/test-redis", testRedis)
-			protected.POST("/install", install)
+			protected.POST("/install", func(c *gin.Context) { installWithRestart(c, restarter) })
 		}
 	}
 }
 
-// SetupStatus represents the current setup state
-type SetupStatus struct {
-	NeedsSetup bool   `json:"needs_setup"`
-	Step       string `json:"step"`
-}
-
-// getStatus returns the current setup status
+// getStatus returns the current setup status.
 func getStatus(c *gin.Context) {
 	response.Success(c, SetupStatus{
 		NeedsSetup: NeedsSetup(),
@@ -50,7 +83,7 @@ func getStatus(c *gin.Context) {
 	})
 }
 
-// setupGuard middleware ensures setup endpoints are only accessible during setup mode
+// setupGuard middleware ensures setup endpoints are only accessible during setup mode.
 func setupGuard() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !NeedsSetup() {
@@ -62,34 +95,34 @@ func setupGuard() gin.HandlerFunc {
 	}
 }
 
-// validateHostname checks if a hostname/IP is safe (no injection characters)
+// validateHostname checks if a hostname/IP is safe (no injection characters).
 func validateHostname(host string) bool {
 	// Allow only alphanumeric, dots, hyphens, and colons (for IPv6)
 	validHost := regexp.MustCompile(`^[a-zA-Z0-9.\-:]+$`)
 	return validHost.MatchString(host) && len(host) <= 253
 }
 
-// validateDBName checks if database name is safe
+// validateDBName checks if database name is safe.
 func validateDBName(name string) bool {
 	// Allow only alphanumeric and underscores, starting with letter
 	validName := regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
 	return validName.MatchString(name) && len(name) <= 63
 }
 
-// validateUsername checks if username is safe
+// validateUsername checks if username is safe.
 func validateUsername(name string) bool {
 	// Allow only alphanumeric and underscores
 	validName := regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 	return validName.MatchString(name) && len(name) <= 63
 }
 
-// validateEmail checks if email format is valid
+// validateEmail checks if email format is valid.
 func validateEmail(email string) bool {
 	_, err := mail.ParseAddress(email)
 	return err == nil && len(email) <= 254
 }
 
-// validatePassword checks password strength
+// validatePassword checks password strength.
 func validatePassword(password string) error {
 	if len(password) < 8 {
 		return fmt.Errorf("password must be at least 8 characters")
@@ -100,12 +133,12 @@ func validatePassword(password string) error {
 	return nil
 }
 
-// validatePort checks if port is in valid range
+// validatePort checks if port is in valid range.
 func validatePort(port int) bool {
 	return port > 0 && port <= 65535
 }
 
-// validateSSLMode checks if SSL mode is valid
+// validateSSLMode checks if SSL mode is valid.
 func validateSSLMode(mode string) bool {
 	validModes := map[string]bool{
 		"disable": true, "require": true, "verify-ca": true, "verify-full": true,
@@ -113,17 +146,7 @@ func validateSSLMode(mode string) bool {
 	return validModes[mode]
 }
 
-// TestDatabaseRequest represents database test request
-type TestDatabaseRequest struct {
-	Host     string `json:"host" binding:"required"`
-	Port     int    `json:"port" binding:"required"`
-	User     string `json:"user" binding:"required"`
-	Password string `json:"password"`
-	DBName   string `json:"dbname" binding:"required"`
-	SSLMode  string `json:"sslmode"`
-}
-
-// testDatabase tests database connection
+// testDatabase tests database connection.
 func testDatabase(c *gin.Context) {
 	var req TestDatabaseRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -174,17 +197,7 @@ func testDatabase(c *gin.Context) {
 	response.Success(c, gin.H{"message": "Connection successful"})
 }
 
-// TestRedisRequest represents Redis test request
-type TestRedisRequest struct {
-	Host      string `json:"host" binding:"required"`
-	Port      int    `json:"port" binding:"required"`
-	Username  string `json:"username"`
-	Password  string `json:"password"`
-	DB        int    `json:"db"`
-	EnableTLS bool   `json:"enable_tls"`
-}
-
-// testRedis tests Redis connection
+// testRedis tests Redis connection.
 func testRedis(c *gin.Context) {
 	var req TestRedisRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -228,16 +241,8 @@ func testRedis(c *gin.Context) {
 	response.Success(c, gin.H{"message": "Connection successful"})
 }
 
-// InstallRequest represents installation request
-type InstallRequest struct {
-	Database DatabaseConfig `json:"database" binding:"required"`
-	Redis    RedisConfig    `json:"redis" binding:"required"`
-	Admin    AdminConfig    `json:"admin" binding:"required"`
-	Server   ServerConfig   `json:"server"`
-}
-
-// install performs the installation
-func install(c *gin.Context) {
+// installWithRestart 执行首次安装，并在成功后请求重启。
+func installWithRestart(c *gin.Context, restarter RestartRequester) {
 	// TOCTOU Protection: Acquire mutex to prevent concurrent installation
 	installMutex.Lock()
 	defer installMutex.Unlock()
@@ -261,7 +266,7 @@ func install(c *gin.Context) {
 	req.Redis.Host = strings.TrimSpace(req.Redis.Host)
 	req.Redis.Username = strings.TrimSpace(req.Redis.Username)
 
-	// ========== COMPREHENSIVE INPUT VALIDATION ==========
+	// COMPREHENSIVE INPUT VALIDATION
 	// Database validation
 	if !validateHostname(req.Database.Host) {
 		response.Error(c, http.StatusBadRequest, "Invalid database hostname")
@@ -314,7 +319,7 @@ func install(c *gin.Context) {
 		return
 	}
 
-	// ========== SET DEFAULTS ==========
+	// SET DEFAULTS
 	if req.Database.SSLMode == "" {
 		req.Database.SSLMode = "disable"
 	}
@@ -352,13 +357,9 @@ func install(c *gin.Context) {
 		return
 	}
 
-	// Schedule service restart in background after sending response
-	// This ensures the client receives the success response before the service restarts
-	go func() {
-		// Wait a moment to ensure the response is sent
-		time.Sleep(500 * time.Millisecond)
-		sysutil.RestartServiceAsync()
-	}()
+	if restarter != nil {
+		_ = restarter.RequestRestart()
+	}
 
 	response.Success(c, gin.H{
 		"message": "Installation completed successfully. Service will restart automatically.",

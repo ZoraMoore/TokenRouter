@@ -2,9 +2,9 @@
   <AppLayout>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-start lg:justify-between">
+        <div class="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-start lg:justify-between">
           <!-- 左侧：搜索和筛选 -->
-          <div class="flex min-w-0 flex-1 flex-nowrap items-center gap-3">
+          <div class="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
             <input
               v-model="searchQuery"
               type="text"
@@ -12,33 +12,14 @@
               class="input min-w-0 flex-1 sm:flex-none sm:w-56 lg:w-40 xl:w-64"
               @input="handleSearch"
             />
-            <div ref="filterDropdownRef" class="relative shrink-0">
-              <button
-                type="button"
-                class="btn btn-secondary relative h-11 w-11 p-0"
-                :aria-expanded="showFilterDropdown"
-                :aria-label="t('common.filter')"
-                :title="t('common.filter')"
-                @click="showFilterDropdown = !showFilterDropdown"
-              >
-                <Icon name="filter" size="sm" />
-                <span v-if="activeFilterCount > 0" class="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-100 px-1.5 text-xs font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">{{ activeFilterCount }}</span>
-              </button>
-              <div
-                v-if="showFilterDropdown"
-                class="absolute left-auto right-0 top-full z-[60] mt-2 w-72 rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-dark-600 dark:bg-dark-900 sm:left-0 sm:right-auto"
-                @click.stop
-              >
-                <div class="mb-3 flex items-center justify-between">
-                  <div class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('common.filter') }}</div>
-                  <button v-if="activeFilterCount > 0" type="button" class="text-xs font-medium text-primary-600 dark:text-primary-400" @click="resetRedeemFilters">{{ t('common.reset') }}</button>
-                </div>
-                <div class="space-y-3">
-                  <Select v-model="filters.type" :options="filterTypeOptions" @change="loadCodes" />
-                  <Select v-model="filters.status" :options="filterStatusOptions" @change="loadCodes" />
-                </div>
-              </div>
-            </div>
+            <FilterDropdown :active-count="activeFilterCount" @reset="resetRedeemFilters">
+              <FilterField :label="t('admin.redeem.columns.type')">
+                <Select v-model="filters.type" :options="filterTypeOptions" @change="loadCodes" />
+              </FilterField>
+              <FilterField :label="t('admin.redeem.columns.status')">
+                <Select v-model="filters.status" :options="filterStatusOptions" @change="loadCodes" />
+              </FilterField>
+            </FilterDropdown>
           </div>
 
           <!-- 右侧：操作按钮 -->
@@ -46,10 +27,10 @@
             <button
               @click="loadCodes"
               :disabled="loading"
-              class="btn btn-secondary h-11 w-11 shrink-0 p-0"
+              class="btn btn-secondary shrink-0 btn-icon"
               :title="t('common.refresh')"
             >
-              <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
+              <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
             </button>
             <button @click="handleExportCodes" class="btn btn-secondary shrink-0 whitespace-nowrap">
               {{ t('admin.redeem.exportCsv') }}
@@ -60,7 +41,7 @@
               :disabled="selectedCount === 0 || batchUpdating"
               class="btn btn-secondary shrink-0 whitespace-nowrap"
             >
-              <Icon name="edit" size="md" class="mr-2" />
+              <Icon name="edit" size="sm" class="mr-2" />
               {{ t('admin.redeem.batchUpdate') }}
             </button>
             <button data-testid="generate-open" @click="showGenerateDialog = true" class="btn btn-primary shrink-0 whitespace-nowrap">
@@ -72,6 +53,7 @@
 
       <template #table>
         <DataTable
+          column-order-storage-key="admin-redeem-column-order"
           :columns="columns"
           :data="codes"
           :loading="loading"
@@ -84,7 +66,7 @@
             <input
               data-testid="select-all-codes"
               type="checkbox"
-              class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="h-4 w-4 cursor-pointer rounded-compact border-gray-300 text-primary-600 focus:ring-primary-500"
               :checked="allVisibleSelected"
               @click.stop
               @change="toggleSelectAllVisible($event)"
@@ -95,16 +77,19 @@
             <input
               data-testid="select-code"
               type="checkbox"
-              class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="h-4 w-4 cursor-pointer rounded-compact border-gray-300 text-primary-600 focus:ring-primary-500"
               :checked="selectedCodeIds.has(row.id)"
               @click.stop
               @change="toggleSelectRow(row.id, $event)"
             />
           </template>
 
-          <template #cell-code="{ value }">
+          <template #cell-code="{ value, row }">
             <div class="flex items-center space-x-2">
               <code class="font-mono text-sm text-gray-900 dark:text-gray-100">{{ value }}</code>
+              <span v-if="row.requires_payment" class="badge badge-warning">
+                {{ t('admin.redeem.requiresPayment') }}
+              </span>
               <button
                 @click="copyToClipboard(value)"
                 :class="[
@@ -116,14 +101,7 @@
                 :title="copiedCode === value ? t('admin.redeem.copied') : t('keys.copyToClipboard')"
               >
                 <Icon v-if="copiedCode !== value" name="copy" size="sm" :stroke-width="2" />
-                <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
+                <Icon name="check" size="sm" :animate-on-hover="false" v-else class="h-4 w-4" />
               </button>
             </div>
           </template>
@@ -195,7 +173,7 @@
               <button
                 v-if="canEditCode(row)"
                 @click="handleEdit(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-900/20 dark:hover:text-primary-400"
+                class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-900/20 dark:hover:text-primary-400"
                 :title="t('admin.redeem.editCode')"
               >
                 <Icon name="edit" size="sm" :stroke-width="2" />
@@ -204,16 +182,9 @@
               <button
                 v-if="row.status === 'unused'"
                 @click="handleDelete(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               >
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
+                <Icon name="trash" size="sm" class="h-4 w-4" />
                 <span class="text-xs">{{ t('common.delete') }}</span>
               </button>
               <span v-if="!canEditCode(row) && row.status !== 'unused'" class="text-gray-400 dark:text-dark-500">-</span>
@@ -235,7 +206,7 @@
         <!-- 批量操作 -->
         <div
           v-if="selectedCount > 0"
-          class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-primary-50 p-3 dark:bg-primary-900/20"
+          class="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-control bg-primary-50 p-3 dark:bg-primary-900/20"
         >
           <span class="text-sm font-medium text-primary-900 dark:text-primary-100">
             {{ t('admin.redeem.selectedCount', { count: selectedCount }) }}
@@ -287,125 +258,129 @@
     />
 
     <!-- 生成兑换码弹窗 -->
-    <Teleport to="body">
-      <div v-if="showGenerateDialog" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="fixed inset-0 bg-black/50" @click="showGenerateDialog = false"></div>
-        <div
-          class="relative z-10 w-full max-w-md rounded-surface bg-white p-6 shadow-xl dark:bg-dark-800 sm:rounded-dialog"
-        >
-          <h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
-            {{ t('admin.redeem.generateCodesTitle') }}
-          </h2>
-          <form data-testid="generate-form" @submit.prevent="handleGenerateCodes" class="space-y-4">
-            <div>
-              <label class="input-label">
-                {{ t('admin.redeem.customCode') }}
-                <span class="ml-1 text-xs font-normal text-gray-400">
-                  ({{ t('common.optional') }})
-                </span>
-              </label>
-              <input
-                v-model="generateForm.code"
-                type="text"
-                maxlength="32"
-                class="input"
-                :placeholder="t('admin.redeem.customCodePlaceholder')"
-              />
-              <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
-                {{ t('admin.redeem.customCodeHint') }}
-              </p>
-            </div>
-            <div>
-              <label class="input-label">{{ t('admin.redeem.codeType') }}</label>
-              <Select v-model="generateForm.type" :options="typeOptions" />
-            </div>
-
-            <!-- 余额/并发类型：显示数值输入 -->
-            <div v-if="generateForm.type !== 'subscription' && generateForm.type !== 'invitation'">
-              <label class="input-label">
-                {{
-                  generateForm.type === 'balance'
-                    ? t('admin.redeem.amount')
-                    : t('admin.redeem.columns.value')
-                }}
-              </label>
-              <input
-                v-model.number="generateForm.value"
-                type="number"
-                :step="generateForm.type === 'balance' ? '0.01' : '1'"
-                :min="generateForm.type === 'balance' ? '0.01' : '1'"
-                required
-                class="input"
-              />
-            </div>
-            <!-- 邀请码类型：显示提示信息 -->
-            <div v-if="generateForm.type === 'invitation'" class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
-              <p class="text-sm text-blue-700 dark:text-blue-300">
-                {{ t('admin.redeem.invitationHint') }}
-              </p>
-            </div>
-            <!-- 订阅类型：显示套餐选择 -->
-            <template v-if="generateForm.type === 'subscription'">
-              <div>
-                <label class="input-label">{{ t('payment.admin.planName') }}</label>
-                <Select
-                  v-model="generateForm.plan_id"
-                  :options="subscriptionPlanOptions"
-                  :placeholder="t('admin.announcements.form.selectPackages')"
-                />
-              </div>
-            </template>
-            <div>
-              <label class="input-label">{{ t('admin.redeem.maxUses') }}</label>
-              <input
-                data-testid="generate-max-uses"
-                v-model.number="generateForm.max_uses"
-                type="number"
-                min="0"
-                required
-                class="input"
-                :disabled="generateForm.type === 'invitation'"
-              />
-              <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
-                {{ t('admin.redeem.maxUsesHint') }}
-              </p>
-            </div>
-            <div>
-              <label class="input-label">
-                {{ t('admin.redeem.expiresAt') }}
-                <span class="ml-1 text-xs font-normal text-gray-400">
-                  ({{ t('common.optional') }})
-                </span>
-              </label>
-              <input v-model="generateForm.expires_at_str" type="datetime-local" class="input" />
-            </div>
-            <div>
-              <label class="input-label">{{ t('admin.redeem.count') }}</label>
-              <input
-                v-model.number="generateForm.count"
-                type="number"
-                min="1"
-                max="100"
-                required
-                class="input"
-                :disabled="hasCustomCode"
-              />
-              <p v-if="hasCustomCode" class="mt-1 text-xs text-gray-500 dark:text-dark-400">
-                {{ t('admin.redeem.customCodeCountHint') }}
-              </p>
-            </div>
-            <div class="flex justify-end gap-3 pt-2">
-              <button type="button" @click="showGenerateDialog = false" class="btn btn-secondary">
-                {{ t('common.cancel') }}
-              </button>
-              <button type="submit" :disabled="generating" class="btn btn-primary">
-                {{ generating ? t('admin.redeem.generating') : t('admin.redeem.generate') }}
-              </button>
-            </div>
-          </form>
+    <BaseDialog
+      :show="showGenerateDialog"
+      :title="t('admin.redeem.generateCodesTitle')"
+      width="narrow"
+      close-on-click-outside
+      @close="showGenerateDialog = false"
+    >
+      <form data-testid="generate-form" @submit.prevent="handleGenerateCodes" class="space-y-4">
+        <div>
+          <label class="input-label">
+            {{ t('admin.redeem.customCode') }}
+            <span class="ml-1 text-xs font-normal text-gray-400">
+              ({{ t('common.optional') }})
+            </span>
+          </label>
+          <input
+            v-model="generateForm.code"
+            type="text"
+            class="input"
+            :placeholder="t('admin.redeem.customCodePlaceholder')"
+          />
+          <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
+            {{ t('admin.redeem.customCodeHint') }}
+          </p>
         </div>
-      </div>
-    </Teleport>
+        <div>
+          <label class="input-label">{{ t('admin.redeem.codeType') }}</label>
+          <Select v-model="generateForm.type" :options="typeOptions" />
+        </div>
+
+        <!-- 余额/并发类型：显示数值输入 -->
+        <div v-if="generateForm.type !== 'subscription' && generateForm.type !== 'invitation'">
+          <label class="input-label">
+            {{
+              generateForm.type === 'balance'
+                ? t('admin.redeem.amount')
+                : t('admin.redeem.columns.value')
+            }}
+          </label>
+          <input
+            v-model.number="generateForm.value"
+            type="number"
+            :step="generateForm.type === 'balance' ? '0.01' : '1'"
+            :min="generateForm.type === 'balance' ? '0.01' : '1'"
+            required
+            class="input"
+          />
+        </div>
+        <!-- 邀请码类型：显示提示信息 -->
+        <div v-if="generateForm.type === 'invitation'" class="rounded-control bg-blue-50 p-3 dark:bg-blue-900/20">
+          <p class="text-sm text-blue-700 dark:text-blue-300">
+            {{ t('admin.redeem.invitationHint') }}
+          </p>
+        </div>
+        <!-- 订阅类型：显示套餐选择 -->
+        <template v-if="generateForm.type === 'subscription'">
+          <div>
+            <label class="input-label">{{ t('payment.admin.planName') }}</label>
+            <Select
+              v-model="generateForm.plan_id"
+              :options="subscriptionPlanOptions"
+              :placeholder="t('admin.announcements.form.selectPackages')"
+            />
+          </div>
+        </template>
+        <!-- 付款条件与兑换码一起保存，领取时由服务端检查。 -->
+        <SettingToggleRow
+          v-if="generateForm.type !== 'invitation'"
+          id="generateForm-requires-payment"
+          v-model="generateForm.requires_payment"
+          :label="t('admin.redeem.requiresPayment')"
+          :hint="t('admin.redeem.requiresPaymentHint')"
+        />
+
+        <div>
+          <label class="input-label">{{ t('admin.redeem.maxUses') }}</label>
+          <input
+            data-testid="generate-max-uses"
+            v-model.number="generateForm.max_uses"
+            type="number"
+            min="0"
+            required
+            class="input"
+            :disabled="generateForm.type === 'invitation'"
+          />
+          <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
+            {{ t('admin.redeem.maxUsesHint') }}
+          </p>
+        </div>
+        <div>
+          <label class="input-label">
+            {{ t('admin.redeem.expiresAt') }}
+            <span class="ml-1 text-xs font-normal text-gray-400">
+              ({{ t('common.optional') }})
+            </span>
+          </label>
+          <input v-model="generateForm.expires_at_str" type="datetime-local" class="input" />
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.redeem.count') }}</label>
+          <input
+            v-model.number="generateForm.count"
+            type="number"
+            min="1"
+            max="100"
+            required
+            class="input"
+            :disabled="hasCustomCode"
+          />
+          <p v-if="hasCustomCode" class="mt-1 text-xs text-gray-500 dark:text-dark-400">
+            {{ t('admin.redeem.customCodeCountHint') }}
+          </p>
+        </div>
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" @click="showGenerateDialog = false" class="btn btn-secondary">
+            {{ t('common.cancel') }}
+          </button>
+          <button type="submit" :disabled="generating" class="btn btn-primary">
+            {{ generating ? t('admin.redeem.generating') : t('admin.redeem.generate') }}
+          </button>
+        </div>
+      </form>
+    </BaseDialog>
 
     <!-- 编辑兑换码弹窗 -->
     <BaseDialog
@@ -459,11 +434,20 @@
           />
         </div>
 
-        <div v-if="editingCode && editingCode.used_count > 0" class="rounded-lg bg-yellow-50 p-3 dark:bg-yellow-900/20">
+        <div v-if="editingCode && editingCode.used_count > 0" class="rounded-control bg-yellow-50 p-3 dark:bg-yellow-900/20">
           <p class="text-sm text-yellow-700 dark:text-yellow-300">
             {{ t('admin.redeem.valueLockedHint') }}
           </p>
         </div>
+
+        <!-- 编辑时显示已保存的领取条件。 -->
+        <SettingToggleRow
+          v-if="editingCode?.type !== 'invitation'"
+          id="editForm-requires-payment"
+          v-model="editForm.requires_payment"
+          :label="t('admin.redeem.requiresPayment')"
+          :hint="t('admin.redeem.requiresPaymentHint')"
+        />
 
         <div>
           <label class="input-label">{{ t('admin.redeem.maxUses') }}</label>
@@ -520,7 +504,7 @@
               data-testid="batch-field-status"
               v-model="batchUpdateForm.update_status"
               type="checkbox"
-              class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="h-4 w-4 rounded-compact border-gray-300 text-primary-600 focus:ring-primary-500"
             />
             {{ t('admin.redeem.batchFields.status') }}
           </label>
@@ -537,7 +521,7 @@
             <input
               v-model="batchUpdateForm.update_expires_at"
               type="checkbox"
-              class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="h-4 w-4 rounded-compact border-gray-300 text-primary-600 focus:ring-primary-500"
             />
             {{ t('admin.redeem.batchFields.expiresAt') }}
           </label>
@@ -558,7 +542,7 @@
               data-testid="batch-field-notes"
               v-model="batchUpdateForm.update_notes"
               type="checkbox"
-              class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              class="h-4 w-4 rounded-compact border-gray-300 text-primary-600 focus:ring-primary-500"
             />
             {{ t('admin.redeem.batchFields.notes') }}
           </label>
@@ -592,89 +576,48 @@
     </BaseDialog>
 
     <!-- 生成结果弹窗 -->
-    <Teleport to="body">
-      <div v-if="showResultDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="fixed inset-0 bg-black/50" @click="closeResultDialog"></div>
-        <div class="relative z-10 w-full max-w-lg rounded-surface bg-white shadow-xl dark:bg-dark-800 sm:rounded-dialog">
-          <!-- 头部 -->
-          <div
-            class="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-dark-600"
+    <BaseDialog
+      :show="showResultDialog"
+      :title="t('admin.redeem.generatedSuccessfully')"
+      :subtitle="t('admin.redeem.codesCreated', { count: generatedCodes.length })"
+      @close="closeResultDialog"
+    >
+      <template #header-icon>
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+          <Icon
+            name="check"
+            size="md"
+            :animate-on-hover="false"
+            class="h-5 w-5 text-green-600 dark:text-green-400"
+          />
+        </span>
+      </template>
+      <textarea
+        readonly
+        :value="generatedCodesText"
+        :style="{ height: textareaHeight }"
+        class="input resize-none p-3 font-mono"
+      ></textarea>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <button
+            @click="copyGeneratedCodes"
+            :class="[
+              'btn flex items-center gap-2 transition',
+              copiedAll ? 'btn-success' : 'btn-secondary'
+            ]"
           >
-            <div class="flex items-center gap-3">
-              <div
-                class="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30"
-              >
-                <svg
-                  class="h-5 w-5 text-green-600 dark:text-green-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-              <div>
-                <h2 class="text-base font-semibold text-gray-900 dark:text-white">
-                  {{ t('admin.redeem.generatedSuccessfully') }}
-                </h2>
-                <p class="text-sm text-gray-500 dark:text-gray-400">
-                  {{ t('admin.redeem.codesCreated', { count: generatedCodes.length }) }}
-                </p>
-              </div>
-            </div>
-            <button
-              @click="closeResultDialog"
-              class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700 dark:hover:text-gray-300"
-            >
-              <Icon name="x" size="md" :stroke-width="2" />
-            </button>
-          </div>
-          <!-- 内容 -->
-          <div class="p-5">
-            <div class="relative">
-              <textarea
-                readonly
-                :value="generatedCodesText"
-                :style="{ height: textareaHeight }"
-                class="w-full resize-none rounded-lg border border-gray-200 bg-gray-50 p-3 font-mono text-sm text-gray-800 focus:outline-none dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200"
-              ></textarea>
-            </div>
-          </div>
-          <!-- 底部 -->
-          <div
-            class="flex justify-end gap-2 rounded-b-xl border-t border-gray-200 bg-gray-50 px-5 py-4 dark:border-dark-600 dark:bg-dark-700/50"
-          >
-            <button
-              @click="copyGeneratedCodes"
-              :class="[
-                'btn flex items-center gap-2 transition-all',
-                copiedAll ? 'btn-success' : 'btn-secondary'
-              ]"
-            >
-              <Icon v-if="!copiedAll" name="copy" size="sm" :stroke-width="2" />
-              <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-              {{ copiedAll ? t('admin.redeem.copied') : t('admin.redeem.copyAll') }}
-            </button>
-            <button @click="downloadGeneratedCodes" class="btn btn-primary flex items-center gap-2">
-              <Icon name="download" size="sm" :stroke-width="2" />
-              {{ t('admin.redeem.download') }}
-            </button>
-          </div>
+            <Icon v-if="!copiedAll" name="copy" size="sm" :stroke-width="2" />
+            <Icon name="check" size="sm" :animate-on-hover="false" v-else class="h-4 w-4" />
+            {{ copiedAll ? t('admin.redeem.copied') : t('admin.redeem.copyAll') }}
+          </button>
+          <button @click="downloadGeneratedCodes" class="btn btn-primary flex items-center gap-2">
+            <Icon name="download" size="sm" :stroke-width="2" />
+            {{ t('admin.redeem.download') }}
+          </button>
         </div>
-      </div>
-    </Teleport>
+      </template>
+    </BaseDialog>
   </AppLayout>
 </template>
 
@@ -683,6 +626,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useClipboard } from '@/composables/useClipboard'
+import { COPY_FEEDBACK_MS } from '@/constants/ui'
 import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
 import { useTableSelection } from '@/composables/useTableSelection'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
@@ -697,8 +641,11 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
+import FilterDropdown from '@/components/common/FilterDropdown.vue'
+import FilterField from '@/components/common/FilterField.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
+import SettingToggleRow from '@/components/common/settings/SettingToggleRow.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -756,7 +703,7 @@ const copyGeneratedCodes = async () => {
     copiedAll.value = true
     setTimeout(() => {
       copiedAll.value = false
-    }, 2000)
+    }, COPY_FEEDBACK_MS)
   }
 }
 
@@ -830,8 +777,6 @@ const filters = reactive({
   type: '',
   status: ''
 })
-const showFilterDropdown = ref(false)
-const filterDropdownRef = ref<HTMLElement | null>(null)
 const pagination = reactive({
   page: 1,
   page_size: getPersistedPageSize(),
@@ -850,12 +795,6 @@ const resetRedeemFilters = () => {
   filters.status = ''
   pagination.page = 1
   loadCodes()
-}
-
-const handleFilterClickOutside = (event: MouseEvent) => {
-  const target = event.target
-  if (target instanceof Node && filterDropdownRef.value?.contains(target)) return
-  showFilterDropdown.value = false
 }
 
 let abortController: AbortController | null = null
@@ -888,6 +827,7 @@ const generateForm = reactive({
   count: 1,
   plan_id: null as number | null,
   max_uses: 1,
+  requires_payment: false,
   expires_at_str: ''
 })
 const hasCustomCode = computed(() => generateForm.code.trim().length > 0)
@@ -896,6 +836,7 @@ const editForm = reactive({
   value: 0,
   plan_id: null as number | null,
   max_uses: 1,
+  requires_payment: false,
   expires_at_str: ''
 })
 
@@ -916,6 +857,7 @@ watch(
     if (newType === 'invitation') {
       generateForm.value = 0
       generateForm.max_uses = 1
+      generateForm.requires_payment = false
     } else if (newType === 'subscription') {
       generateForm.value = 0
     } else if (generateForm.value === 0) {
@@ -971,6 +913,7 @@ const resetGenerateForm = () => {
   generateForm.count = 1
   generateForm.plan_id = null
   generateForm.max_uses = 1
+  generateForm.requires_payment = false
   generateForm.expires_at_str = ''
 }
 
@@ -1116,6 +1059,11 @@ const handleGenerateCodes = async () => {
   }
 
   const customCode = generateForm.code.trim()
+  // 按 Unicode 码点计数，与后端的 rune 长度校验一致。
+  if ([...customCode].length > 32) {
+    appStore.showError(t('admin.redeem.customCodeTooLong'))
+    return
+  }
   const expiresAt = parseDateTimeLocalInput(generateForm.expires_at_str)
 
   generating.value = true
@@ -1127,7 +1075,9 @@ const handleGenerateCodes = async () => {
       generateForm.type === 'subscription' ? generateForm.plan_id : undefined,
       generateForm.max_uses,
       expiresAt,
-      customCode || undefined
+      customCode || undefined,
+      undefined,
+      generateForm.requires_payment
     )
     showGenerateDialog.value = false
     generatedCodes.value = result
@@ -1148,7 +1098,7 @@ const copyToClipboard = async (text: string) => {
     copiedCode.value = text
     setTimeout(() => {
       copiedCode.value = null
-    }, 2000)
+    }, COPY_FEEDBACK_MS)
   }
 }
 
@@ -1178,6 +1128,7 @@ const handleEdit = (code: RedeemCode) => {
   editForm.value = code.value
   editForm.plan_id = code.plan_id ?? null
   editForm.max_uses = code.max_uses
+  editForm.requires_payment = code.requires_payment ?? false
   editForm.expires_at_str = toDateTimeLocalString(code.expires_at)
   showEditDialog.value = true
 }
@@ -1206,9 +1157,11 @@ const handleUpdateCode = async () => {
   const payload: {
     value?: number
     plan_id?: number | null
+    requires_payment?: boolean
     max_uses?: number
     expires_at?: number | null
   } = {
+    requires_payment: code.type === 'invitation' ? false : editForm.requires_payment,
     max_uses: code.type === 'invitation' ? 1 : editForm.max_uses
   }
 
@@ -1325,12 +1278,10 @@ const loadSubscriptionPlans = async () => {
 onMounted(() => {
   loadCodes()
   loadSubscriptionPlans()
-  document.addEventListener('click', handleFilterClickOutside)
 })
 
 onUnmounted(() => {
   clearTimeout(searchTimeout)
   abortController?.abort()
-  document.removeEventListener('click', handleFilterClickOutside)
 })
 </script>

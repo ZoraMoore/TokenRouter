@@ -266,7 +266,7 @@ describe('TencentCaptchaGate', () => {
   })
 
   // 页面上已有的全局构造函数可能来自另一个站点（例如开发期 HMR 重置了模块状态）。
-  // 两个站点签名不兼容，错配会抛错，因此站点不一致时必须重新加载对应脚本而不是复用。
+  // 两个站点签名不兼容，错配会抛错，站点变化时需要重新加载对应脚本。
   it('does not reuse a mainland global for the international site', async () => {
     window.TencentCaptcha = class {
       constructor() {}

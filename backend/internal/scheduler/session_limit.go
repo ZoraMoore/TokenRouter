@@ -1,0 +1,53 @@
+package scheduler
+
+import (
+	"context"
+	"time"
+)
+
+// SessionLimitCache 管理提供商级别的活跃会话跟踪
+// 用于 Anthropic OAuth/SetupToken 提供商的会话数量限制
+//
+// Key 格式: session_limit:provider:{providerID}
+// 数据结构: Sorted Set (member=sessionUUID, score=timestamp)
+//
+// 会话在空闲超时后自动过期，无需手动清理。
+type SessionLimitCache interface {
+	// RegisterSession 注册会话活动
+	// - 如果会话已存在，刷新其时间戳并返回 true
+	// - 如果会话不存在且活跃会话数 < maxSessions，添加新会话并返回 true
+	// - 如果会话不存在且活跃会话数 >= maxSessions，返回 false（拒绝）
+	//
+	// 参数:
+	//   providerID: 提供商 ID
+	//   sessionUUID: 从 metadata.user_id 中提取的会话 UUID
+	//   maxSessions: 最大并发会话数限制
+	//   idleTimeout: 会话空闲超时时间
+	//
+	// 返回:
+	//   allowed: true 表示允许（在限制内或会话已存在），false 表示拒绝（超出限制且是新会话）
+	//   error: 操作错误
+	RegisterSession(ctx context.Context, providerID int64, sessionUUID string, maxSessions int, idleTimeout time.Duration) (allowed bool, err error)
+
+	// RefreshSession 刷新现有会话的时间戳
+	// 用于活跃会话保持活动状态
+	RefreshSession(ctx context.Context, providerID int64, sessionUUID string, idleTimeout time.Duration) error
+
+	// UnregisterSession 立即移除会话注册（不等待空闲超时）
+	// 用于请求最终失败的场景：上游从未真正服务该会话，不应继续占用会话槽，
+	// 否则 max_sessions 受限的提供商会被失败请求的 session hash 卡满整个空闲窗口，
+	// 导致后续新会话在超时窗口内全部被拒
+	UnregisterSession(ctx context.Context, providerID int64, sessionUUID string) error
+
+	// GetActiveSessionCount 获取当前活跃会话数
+	// 返回未过期的会话数量
+	GetActiveSessionCount(ctx context.Context, providerID int64) (int, error)
+
+	// GetActiveSessionCountBatch 批量获取多个提供商的活跃会话数
+	// idleTimeouts: 每个提供商的空闲超时时间配置，key 为 providerID；若为 nil 或某提供商不在其中，则使用默认超时
+	// 返回 map[providerID]count，查询失败的提供商不在 map 中
+	GetActiveSessionCountBatch(ctx context.Context, providerIDs []int64, idleTimeouts map[int64]time.Duration) (map[int64]int, error)
+
+	// IsSessionActive 检查特定会话是否活跃（未过期）
+	IsSessionActive(ctx context.Context, providerID int64, sessionUUID string) (bool, error)
+}

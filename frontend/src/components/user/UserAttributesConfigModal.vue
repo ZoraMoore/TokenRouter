@@ -13,19 +13,11 @@
       </div>
 
       <!-- Loading State -->
-      <div v-if="loading" class="flex justify-center py-12">
-        <svg class="h-8 w-8 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-        </svg>
-      </div>
+      <ContentSkeleton v-if="loading" variant="list" :rows="3" class="py-4" />
 
       <!-- Empty State -->
       <div v-else-if="attributes.length === 0" class="py-12 text-center">
-        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z" />
-        </svg>
+        <Icon name="tag" size="md" class="mx-auto h-12 w-12 text-gray-400" />
         <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
           {{ t('admin.users.attributes.noAttributes') }}
         </p>
@@ -39,7 +31,7 @@
         <div
           v-for="attr in attributes"
           :key="attr.id"
-          class="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-800"
+          class="flex items-center gap-3 rounded-surface border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-800"
         >
           <!-- Drag Handle -->
           <div class="cursor-move text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" :title="t('admin.users.attributes.dragToReorder')">
@@ -50,7 +42,7 @@
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
               <span class="font-medium text-gray-900 dark:text-white">{{ attr.name }}</span>
-              <span class="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-500 dark:bg-dark-700 dark:text-dark-400">
+              <span class="rounded-compact bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-500 dark:bg-dark-700 dark:text-dark-400">
                 {{ attr.key }}
               </span>
               <span v-if="attr.required" class="badge badge-danger text-xs">
@@ -70,14 +62,14 @@
           <div class="flex items-center gap-1">
             <button
               @click="openEditModal(attr)"
-              class="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+              class="rounded-control p-1.5 text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
               :title="t('common.edit')"
             >
               <Icon name="edit" size="sm" />
             </button>
             <button
               @click="confirmDelete(attr)"
-              class="rounded-lg p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+              class="rounded-control p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               :title="t('common.delete')"
             >
               <Icon name="trash" size="sm" />
@@ -141,36 +133,34 @@
       </div>
 
       <!-- Options (for select/multi_select) -->
-      <div v-if="form.type === 'select' || form.type === 'multi_select'" class="space-y-2">
-        <label class="input-label">{{ t('admin.users.attributes.options') }}</label>
-        <div v-for="(option, index) in form.options" :key="getOptionKey(option)" class="flex items-center gap-2">
-          <input
-            v-model="option.value"
-            type="text"
-            class="input flex-1 font-mono text-sm"
-            :placeholder="t('admin.users.attributes.optionValue')"
-            required
-          />
-          <input
-            v-model="option.label"
-            type="text"
-            class="input flex-1 text-sm"
-            :placeholder="t('admin.users.attributes.optionLabel')"
-            required
-          />
-          <button
-            type="button"
-            @click="removeOption(index)"
-            class="rounded-lg p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600"
-          >
-            <Icon name="x" size="sm" :stroke-width="2" />
-          </button>
-        </div>
-        <button type="button" @click="addOption" class="btn btn-secondary btn-sm">
-          <Icon name="plus" size="sm" class="mr-1" :stroke-width="2" />
-          {{ t('admin.users.attributes.addOption') }}
-        </button>
-      </div>
+      <RuleListEditor
+        v-if="form.type === 'select' || form.type === 'multi_select'"
+        :items="form.options"
+        :title="t('admin.users.attributes.options')"
+        :add-label="t('admin.users.attributes.addOption')"
+        test-id="user-attribute-options"
+        @add="addOption"
+        @remove="removeOption"
+      >
+        <template #row="{ item: option }">
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <input
+              v-model="option.value"
+              type="text"
+              class="input min-w-0 font-mono text-sm"
+              :placeholder="t('admin.users.attributes.optionValue')"
+              required
+            />
+            <input
+              v-model="option.label"
+              type="text"
+              class="input min-w-0 text-sm"
+              :placeholder="t('admin.users.attributes.optionLabel')"
+              required
+            />
+          </div>
+        </template>
+      </RuleListEditor>
 
       <!-- Description -->
       <div>
@@ -197,11 +187,11 @@
       <!-- Required & Enabled -->
       <div class="flex items-center gap-6">
         <label class="flex items-center gap-2">
-          <input v-model="form.required" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600" />
+          <input v-model="form.required" type="checkbox" class="h-4 w-4 rounded-compact border-gray-300 text-primary-600" />
           <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.users.attributes.required') }}</span>
         </label>
         <label class="flex items-center gap-2">
-          <input v-model="form.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600" />
+          <input v-model="form.enabled" type="checkbox" class="h-4 w-4 rounded-compact border-gray-300 text-primary-600" />
           <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.users.attributes.enabled') }}</span>
         </label>
       </div>
@@ -213,10 +203,13 @@
           {{ t('common.cancel') }}
         </button>
         <button type="submit" form="attribute-form" :disabled="saving" class="btn btn-primary">
-          <svg v-if="saving" class="-ml-1 mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
+          <Icon
+            name="loader"
+            size="sm"
+            :animate-on-hover="false"
+            v-if="saving"
+            class="-ml-1 mr-2 h-4 w-4 animate-spin"
+          />
           {{ saving ? t('common.saving') : (editingAttribute ? t('common.update') : t('common.create')) }}
         </button>
       </div>
@@ -237,6 +230,7 @@
 </template>
 
 <script setup lang="ts">
+import ContentSkeleton from '@/components/common/ContentSkeleton.vue'
 import { ref, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -246,7 +240,7 @@ import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import Select from '@/components/common/Select.vue'
-import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
+import RuleListEditor from '@/components/common/RuleListEditor.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -271,7 +265,6 @@ const showEditModal = ref(false)
 const showDeleteDialog = ref(false)
 const editingAttribute = ref<UserAttributeDefinition | null>(null)
 const deletingAttribute = ref<UserAttributeDefinition | null>(null)
-const getOptionKey = createStableObjectKeyResolver<UserAttributeOption>('user-attr-option')
 
 const form = reactive({
   key: '',

@@ -890,21 +890,21 @@ func ExpiryWarnDaysLTE(v int) predicate.Proxy {
 	return predicate.Proxy(sql.FieldLTE(FieldExpiryWarnDays, v))
 }
 
-// HasAccounts applies the HasEdge predicate on the "accounts" edge.
-func HasAccounts() predicate.Proxy {
+// HasProviders applies the HasEdge predicate on the "providers" edge.
+func HasProviders() predicate.Proxy {
 	return predicate.Proxy(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, true, AccountsTable, AccountsColumn),
+			sqlgraph.Edge(sqlgraph.O2M, true, ProvidersTable, ProvidersColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasAccountsWith applies the HasEdge predicate on the "accounts" edge with a given conditions (other predicates).
-func HasAccountsWith(preds ...predicate.Account) predicate.Proxy {
+// HasProvidersWith applies the HasEdge predicate on the "providers" edge with a given conditions (other predicates).
+func HasProvidersWith(preds ...predicate.Provider) predicate.Proxy {
 	return predicate.Proxy(func(s *sql.Selector) {
-		step := newAccountsStep()
+		step := newProvidersStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

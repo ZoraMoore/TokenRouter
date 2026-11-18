@@ -1,0 +1,74 @@
+package egress
+
+import (
+	"slices"
+)
+
+// CloneTLSFingerprintProfile 隔离配置来源、缓存和请求所持有的可变字段。
+func CloneTLSFingerprintProfile(p *TLSFingerprintProfile) *TLSFingerprintProfile {
+	if p == nil {
+		return nil
+	}
+	copied := *p
+	copied.SignatureAlgorithmsCert = append([]uint16(nil), p.SignatureAlgorithmsCert...)
+	copied.Verification.ValidatedTargets = append([]TLSFingerprintTargetValidation(nil), p.Verification.ValidatedTargets...)
+	copied.Verification.ClassifierEvidence = append([]string(nil), p.Verification.ClassifierEvidence...)
+	copied.Verification.Issues = append([]string(nil), p.Verification.Issues...)
+	copied.Verification.Warnings = append([]string(nil), p.Verification.Warnings...)
+	copied.Description = clonePointer(p.Description)
+	copied.CipherSuites = slices.Clone(p.CipherSuites)
+	copied.Curves = slices.Clone(p.Curves)
+	copied.PointFormats = slices.Clone(p.PointFormats)
+	copied.SignatureAlgorithms = slices.Clone(p.SignatureAlgorithms)
+	copied.ALPNProtocols = slices.Clone(p.ALPNProtocols)
+	copied.SupportedVersions = slices.Clone(p.SupportedVersions)
+	copied.KeyShareGroups = slices.Clone(p.KeyShareGroups)
+	copied.PSKModes = slices.Clone(p.PSKModes)
+	copied.Extensions = slices.Clone(p.Extensions)
+	return &copied
+}
+
+// CloneTLSFingerprintRouter 保持 nil/空集合差异，并隔离可空配置和规则数组。
+func CloneTLSFingerprintRouter(p *TLSFingerprintRouter) *TLSFingerprintRouter {
+	if p == nil {
+		return nil
+	}
+	copied := *p
+	copied.Description = clonePointer(p.Description)
+	copied.ChatGPTOAuthTokenTLSFingerprintProfileID = clonePointer(p.ChatGPTOAuthTokenTLSFingerprintProfileID)
+	copied.CodexInviteResetTLSFingerprintProfileID = clonePointer(p.CodexInviteResetTLSFingerprintProfileID)
+	copied.Rules = slices.Clone(p.Rules)
+	return &copied
+}
+
+func clonePointer[T any](p *T) *T {
+	if p == nil {
+		return nil
+	}
+	copied := *p
+	return &copied
+}
+
+// CloneTLSProfiles 为缓存序列化复制 TLS 配置数组，区分 nil 和空数组。
+func CloneTLSProfiles(values []*TLSFingerprintProfile) []*TLSFingerprintProfile {
+	if values == nil {
+		return nil
+	}
+	out := make([]*TLSFingerprintProfile, len(values))
+	for i, p := range values {
+		out[i] = CloneTLSFingerprintProfile(p)
+	}
+	return out
+}
+
+// CloneTLSRouters 为缓存序列化复制 TLS 路由数组，区分 nil 和空数组。
+func CloneTLSRouters(values []*TLSFingerprintRouter) []*TLSFingerprintRouter {
+	if values == nil {
+		return nil
+	}
+	out := make([]*TLSFingerprintRouter, len(values))
+	for i, p := range values {
+		out[i] = CloneTLSFingerprintRouter(p)
+	}
+	return out
+}

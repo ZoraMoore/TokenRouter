@@ -1,0 +1,167 @@
+//go:build integration
+
+package provider_test
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/TokenFlux/TokenRouter/internal/provider"
+)
+
+// TestRefreshFailureVersionCAS 验证真实 PostgreSQL 检验旧交换版本的写权限，普通改名不干扰失败处理，其它身份更改必须拒绝。
+func TestRefreshFailureVersionCAS(t *testing.T) {
+	for _, kind := range []provider.RefreshFailureKind{provider.RefreshFailurePermanent, provider.RefreshFailureCooldown} {
+		for _, change := range []string{"none", "name", "credentials", "platform", "type", "status", "schedulable", "proxy"} {
+			t.Run(string(rune('0'+kind))+"/"+change, func(t *testing.T) {
+				ctx := context.Background()
+				client := testEntClient(t)
+				row, err := client.Provider.Create().SetName("refresh-failure-fixture").SetPlatform(provider.PlatformOpenAI).SetType(provider.ProviderTypeOAuth).SetStatus(provider.StatusActive).SetSchedulable(true).SetCredentials(map[string]any{"access_token": "old-fixture", "refresh_token": "old-refresh"}).Save(ctx)
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, client.Provider.DeleteOneID(row.ID).Exec(context.Background())) })
+				repo := newProviderStoreContract(client, integrationDB, nil)
+				store := repo
+				snapshot, err := store.GetByID(ctx, row.ID)
+				require.NoError(t, err)
+				version := provider.FailureVersion(snapshot)
+				switch change {
+				case "name":
+					_, err = client.Provider.UpdateOneID(row.ID).SetName("current-name").Save(ctx)
+				case "credentials":
+					_, err = client.Provider.UpdateOneID(row.ID).SetCredentials(map[string]any{"access_token": "admin-new-fixture"}).Save(ctx)
+				case "platform":
+					_, err = client.Provider.UpdateOneID(row.ID).SetPlatform(provider.PlatformGemini).Save(ctx)
+				case "type":
+					_, err = client.Provider.UpdateOneID(row.ID).SetType(provider.ProviderTypeAPIKey).Save(ctx)
+				case "status":
+					_, err = client.Provider.UpdateOneID(row.ID).SetStatus("inactive").Save(ctx)
+				case "schedulable":
+					_, err = client.Provider.UpdateOneID(row.ID).SetSchedulable(false).Save(ctx)
+				case "proxy":
+					proxy, createErr := client.Proxy.Create().SetName("refresh-failure-proxy").SetProtocol("http").SetHost("127.0.0.1").SetPort(8181).Save(ctx)
+					require.NoError(t, createErr)
+					t.Cleanup(func() {
+						_, clearErr := integrationDB.ExecContext(context.Background(), "UPDATE providers SET proxy_id=NULL WHERE id=$1", row.ID)
+						require.NoError(t, clearErr)
+						require.NoError(t, client.Proxy.DeleteOneID(proxy.ID).Exec(context.Background()))
+					})
+					_, err = client.Provider.UpdateOneID(row.ID).SetProxyID(proxy.ID).Save(ctx)
+				}
+				require.NoError(t, err)
+				count := func() int {
+					t.Helper()
+					var n int
+					require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM scheduler_outbox WHERE provider_id=$1", row.ID).Scan(&n))
+					return n
+				}
+				before := count()
+				failure := provider.RefreshFailure{Kind: kind, Message: "fixture rejected", Until: time.Now().Add(10 * time.Minute).Truncate(time.Microsecond)}
+				matched, err := store.ApplyOAuthRefreshFailure(ctx, version, failure)
+				require.NoError(t, err)
+				current, err := client.Provider.Get(ctx, row.ID)
+				require.NoError(t, err)
+				if change != "none" && change != "name" {
+					require.False(t, matched)
+					require.Empty(t, current.ErrorMessage)
+					require.Nil(t, current.TempUnschedulableUntil)
+					require.Equal(t, before, count())
+					return
+				}
+				require.True(t, matched)
+				require.Equal(t, before+1, count())
+				if kind == provider.RefreshFailurePermanent {
+					require.Equal(t, provider.StatusError, current.Status)
+					require.False(t, current.Schedulable)
+					require.NotNil(t, current.ErrorMessage)
+					require.Equal(t, failure.Message, *current.ErrorMessage)
+				} else {
+					require.True(t, failure.Until.Equal(*current.TempUnschedulableUntil))
+					require.NotNil(t, current.TempUnschedulableReason)
+					require.Equal(t, failure.Message, *current.TempUnschedulableReason)
+					require.Equal(t, provider.StatusActive, current.Status)
+				}
+				if change == "name" {
+					require.Equal(t, "current-name", current.Name)
+				}
+			})
+		}
+	}
+}
+
+// TestRefreshFailureLongerCooldownAndOutboxFailure 验证更长 cooldown 是同身份的原有无变更结果；outbox 失败仍不回滚已经生效的健康写入。
+func TestRefreshFailureLongerCooldownAndOutboxFailure(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	until := time.Now().Add(time.Hour).Truncate(time.Microsecond)
+	// 输入带纳秒的时间，比较 PostgreSQL 持久化后的微秒值。
+	updatedAt := until.Add(-time.Hour).Add(123 * time.Nanosecond)
+	row, err := client.Provider.Create().SetName("refresh-failure-semantics").SetPlatform(provider.PlatformOpenAI).SetType(provider.ProviderTypeOAuth).SetStatus(provider.StatusActive).SetSchedulable(true).SetCredentials(map[string]any{}).SetTempUnschedulableUntil(until).SetTempUnschedulableReason("existing-longer").SetUpdatedAt(updatedAt).Save(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, client.Provider.DeleteOneID(row.ID).Exec(context.Background())) })
+	before, err := client.Provider.Get(ctx, row.ID)
+	require.NoError(t, err)
+	store := newProviderStoreContract(client, integrationDB, nil)
+	snapshot, err := store.GetByID(ctx, row.ID)
+	require.NoError(t, err)
+	version := provider.FailureVersion(snapshot)
+	matched, err := store.ApplyOAuthRefreshFailure(ctx, version, provider.RefreshFailure{Kind: provider.RefreshFailureCooldown, Message: "shorter", Until: until.Add(-time.Minute)})
+	require.NoError(t, err)
+	require.True(t, matched)
+	current, err := client.Provider.Get(ctx, row.ID)
+	require.NoError(t, err)
+	require.NotNil(t, current.TempUnschedulableReason)
+	require.Equal(t, "existing-longer", *current.TempUnschedulableReason)
+	require.True(t, until.Equal(*current.TempUnschedulableUntil))
+	require.Equal(t, before.UpdatedAt, current.UpdatedAt)
+	store.SetEvents(failConfigurationOutbox{})
+	matched, err = store.ApplyOAuthRefreshFailure(ctx, version, provider.RefreshFailure{Kind: provider.RefreshFailurePermanent, Message: "fixture auth rejected"})
+	require.NoError(t, err)
+	require.True(t, matched)
+	current, err = client.Provider.Get(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, provider.StatusError, current.Status)
+	require.False(t, current.Schedulable)
+}
+
+// TestAntigravityRefreshRequestClearCAS 验证强制刷新请求仍使用原 Extra/outbox 原子范围，并在后置清理时再次检查交换身份。
+func TestAntigravityRefreshRequestClearCAS(t *testing.T) {
+	for _, mode := range []string{"success", "reauthorized", "outbox_failure"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx := context.Background()
+			client := testEntClient(t)
+			row, err := client.Provider.Create().SetName("refresh-request-fixture").SetPlatform(provider.PlatformAntigravity).SetType(provider.ProviderTypeOAuth).SetStatus(provider.StatusActive).SetSchedulable(true).SetCredentials(map[string]any{"access_token": "fixture"}).SetExtra(map[string]any{provider.AntigravityForceTokenRefreshExtraKey: true, provider.AntigravityForceTokenRefreshReasonExtraKey: "fixture 401", provider.AntigravityForceTokenRefreshAtExtraKey: "fixture time", "quota_used": 17.0}).Save(ctx)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, client.Provider.DeleteOneID(row.ID).Exec(context.Background())) })
+			store := newProviderStoreContract(client, integrationDB, nil)
+			snapshot, err := store.GetByID(ctx, row.ID)
+			require.NoError(t, err)
+			version := provider.FailureVersion(snapshot).CredentialVersion
+			if mode == "reauthorized" {
+				_, err = client.Provider.UpdateOneID(row.ID).SetCredentials(map[string]any{"access_token": "new-admin-fixture"}).Save(ctx)
+				require.NoError(t, err)
+			}
+			if mode == "outbox_failure" {
+				store.SetEvents(failConfigurationOutbox{})
+			}
+			matched, err := store.ClearAntigravityRefreshRequest(ctx, version)
+			if mode == "outbox_failure" {
+				require.Error(t, err)
+				require.False(t, matched)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, mode == "success", matched)
+			}
+			current, err := client.Provider.Get(ctx, row.ID)
+			require.NoError(t, err)
+			require.Equal(t, 17.0, current.Extra["quota_used"])
+			require.Equal(t, mode != "success", current.Extra[provider.AntigravityForceTokenRefreshExtraKey])
+			if mode == "success" {
+				require.Equal(t, "", current.Extra[provider.AntigravityForceTokenRefreshReasonExtraKey])
+				require.Equal(t, "", current.Extra[provider.AntigravityForceTokenRefreshAtExtraKey])
+			}
+		})
+	}
+}

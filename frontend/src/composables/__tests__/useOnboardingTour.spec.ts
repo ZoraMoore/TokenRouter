@@ -20,7 +20,7 @@ const { driverFactory, routerPush, currentRoute, onboardingStore } = vi.hoisted(
 vi.mock('driver.js', () => ({ driver: driverFactory }))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ user: { id: 7, role: 'user' }, isSimpleMode: false }),
+  useAuthStore: () => ({ user: { id: 7, role: 'user' } }),
 }))
 vi.mock('@/stores/onboarding', () => ({ useOnboardingStore: () => onboardingStore }))
 vi.mock('vue-router', () => ({
@@ -56,6 +56,7 @@ describe('useOnboardingTour team flow', () => {
       movePrevious: vi.fn(() => { activeIndex -= 1 }),
       getActiveIndex: vi.fn(() => activeIndex),
       getActiveElement: vi.fn(() => null),
+      refresh: vi.fn(),
       isActive: vi.fn(() => active),
       destroy: vi.fn(() => {
         active = false
@@ -87,6 +88,12 @@ describe('useOnboardingTour team flow', () => {
 
     // 页码保留给用户确认导览进度，键盘提示由自定义 Footer 清理逻辑移除。
     expect(config.showProgress).toBe(true)
+
+    const reveal = vi.fn()
+    target.addEventListener('onboarding-reveal', reveal)
+    await config.onHighlightStarted(target, { element: '[data-tour="group-form-multiplier"]' })
+    expect(reveal).toHaveBeenCalledOnce()
+    expect(driverInstance.refresh).toHaveBeenCalledOnce()
 
     for (let index = 0; index < 5; index += 1) {
       await config.onNextClick(null, config.steps[index], {

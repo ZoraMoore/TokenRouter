@@ -1,0 +1,43 @@
+import { describe, expect, it, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
+
+import ModelAttributesSummary from '../ModelAttributesSummary.vue'
+
+vi.mock('vue-i18n', async () => {
+  const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
+  return {
+    ...actual,
+    useI18n: () => ({
+      t: (key: string) => key
+    })
+  }
+})
+
+describe('ModelAttributesSummary', () => {
+  it('模态用图标展示，PDF 与文字使用不同图形，未识别的模态不渲染', () => {
+    const wrapper = mount(ModelAttributesSummary, {
+      props: {
+        attributes: { input_modalities: ['text', 'pdf', 'unknown-kind'], output_modalities: ['text'] }
+      }
+    })
+
+    const icons = wrapper.get('[data-testid="model-attributes-modalities"]').findAll('[data-animated-icon]')
+    expect(icons.map((icon) => icon.attributes('data-animated-icon'))).toEqual(['type', 'file-text', 'move-right', 'type'])
+  })
+
+  it('能力项用对勾、叉号和横线区分支持、不支持与未知', () => {
+    const wrapper = mount(ModelAttributesSummary, {
+      props: {
+        attributes: { reasoning: true, temperature: false }
+      }
+    })
+
+    const state = (field: string) => {
+      const item = wrapper.get(`[data-capability="${field}"]`)
+      return [item.attributes('data-state'), item.findAll('[data-animated-icon]').at(-1)?.attributes('data-animated-icon')]
+    }
+    expect(state('reasoning')).toEqual(['supported', 'check'])
+    expect(state('temperature')).toEqual(['unsupported', 'x'])
+    expect(state('tool_call')).toEqual(['unknown', 'minus'])
+  })
+})

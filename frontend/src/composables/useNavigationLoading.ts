@@ -1,121 +1,56 @@
-/**
- * 导航加载状态组合式函数
- * 管理路由切换时的加载状态，支持防闪烁逻辑
- */
-import { ref, readonly, computed } from 'vue'
+import { computed, readonly, ref } from 'vue'
 
-/**
- * 导航加载状态管理
- *
- * 功能：
- * 1. 在路由切换时显示加载状态
- * 2. 快速导航（< 100ms）不显示加载指示器（防闪烁）
- * 3. 导航取消时正确重置状态
- */
+/** 管理导航指示器，完成动画结束后才移除，快速切页也能得到反馈。 */
 export function useNavigationLoading() {
-  // 内部加载状态
-  const _isLoading = ref(false)
-
-  // 导航开始时间（用于防闪烁计算）
+  const phase = ref<'idle' | 'loading' | 'complete'>('idle')
+  const navigationId = ref(0)
   let navigationStartTime: number | null = null
 
-  // 防闪烁延迟计时器
-  let showLoadingTimer: ReturnType<typeof setTimeout> | null = null
-
-  // 是否应该显示加载指示器（考虑防闪烁逻辑）
-  const shouldShowLoading = ref(false)
-
-  // 防闪烁延迟时间（毫秒）
-  const ANTI_FLICKER_DELAY = 100
-
-  /**
-   * 清理计时器
-   */
-  const clearTimer = (): void => {
-    if (showLoadingTimer !== null) {
-      clearTimeout(showLoadingTimer)
-      showLoadingTimer = null
-    }
-  }
-
-  /**
-   * 导航开始时调用
-   */
-  const startNavigation = (): void => {
+  // 每次导航分配独立编号，旧请求和旧动画不能结束后续导航。
+  const startNavigation = (): number => {
+    navigationId.value += 1
     navigationStartTime = Date.now()
-    _isLoading.value = true
-
-    // 延迟显示加载指示器，实现防闪烁
-    clearTimer()
-    showLoadingTimer = setTimeout(() => {
-      if (_isLoading.value) {
-        shouldShowLoading.value = true
-      }
-    }, ANTI_FLICKER_DELAY)
+    phase.value = 'loading'
+    return navigationId.value
   }
 
-  /**
-   * 导航结束时调用
-   */
-  const endNavigation = (): void => {
-    clearTimer()
-    _isLoading.value = false
-    shouldShowLoading.value = false
+  const endNavigation = (id = navigationId.value): void => {
+    if (id !== navigationId.value || phase.value === 'idle') return
+    phase.value = 'complete'
     navigationStartTime = null
   }
 
-  /**
-   * 导航取消时调用（比如快速连续点击不同链接）
-   */
-  const cancelNavigation = (): void => {
-    clearTimer()
-    // 保持加载状态，因为新的导航会立即开始
-    // 但重置导航开始时间
-    navigationStartTime = null
+  const finishNavigation = (id: number): void => {
+    if (id !== navigationId.value || phase.value !== 'complete') return
+    phase.value = 'idle'
   }
 
-  /**
-   * 重置所有状态（用于测试）
-   */
   const resetState = (): void => {
-    clearTimer()
-    _isLoading.value = false
-    shouldShowLoading.value = false
+    navigationId.value += 1
+    phase.value = 'idle'
     navigationStartTime = null
   }
 
-  /**
-   * 获取导航持续时间（毫秒）
-   */
-  const getNavigationDuration = (): number | null => {
-    if (navigationStartTime === null) {
-      return null
-    }
-    return Date.now() - navigationStartTime
-  }
-
-  // 公开的加载状态（只读）
-  const isLoading = computed(() => shouldShowLoading.value)
-
-  // 内部加载状态（用于测试，不考虑防闪烁）
-  const isNavigating = readonly(_isLoading)
+  const getNavigationDuration = (): number | null => (
+    navigationStartTime === null ? null : Date.now() - navigationStartTime
+  )
 
   return {
-    isLoading,
-    isNavigating,
+    isLoading: computed(() => phase.value !== 'idle'),
+    isNavigating: computed(() => phase.value === 'loading'),
+    navigationId: readonly(navigationId),
     startNavigation,
     endNavigation,
-    cancelNavigation,
+    finishNavigation,
+    cancelNavigation: endNavigation,
     resetState,
-    getNavigationDuration,
-    // 导出常量用于测试
-    ANTI_FLICKER_DELAY
+    getNavigationDuration
   }
 }
 
-// 创建单例实例，供全局使用
 let navigationLoadingInstance: ReturnType<typeof useNavigationLoading> | null = null
 
+/** 全局导航共用一个指示器实例。 */
 export function useNavigationLoadingState() {
   if (!navigationLoadingInstance) {
     navigationLoadingInstance = useNavigationLoading()
@@ -123,10 +58,8 @@ export function useNavigationLoadingState() {
   return navigationLoadingInstance
 }
 
-// 导出重置函数（用于测试）
+/** 清理单例，让各测试独立初始化导航状态。 */
 export function _resetNavigationLoadingInstance(): void {
-  if (navigationLoadingInstance) {
-    navigationLoadingInstance.resetState()
-  }
+  navigationLoadingInstance?.resetState()
   navigationLoadingInstance = null
 }

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import KeyActionMenu from '../KeyActionMenu.vue'
 import type { ApiKey } from '@/types'
+import { finishMotion, mockMotionEnvironment } from '@/__tests__/helpers/motion'
 
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
@@ -45,9 +46,31 @@ const apiKey: ApiKey = {
 describe('KeyActionMenu', () => {
   afterEach(() => {
     document.body.innerHTML = ''
+    vi.restoreAllMocks()
   })
 
-  it('将使用、导入和删除收纳到更多菜单', async () => {
+  it('关闭时立即移除捕获层，清空选中 Key 后仍能完成面板退出', async () => {
+    mockMotionEnvironment()
+    const wrapper = mount(KeyActionMenu, {
+      attachTo: document.body,
+      props: { show: true, apiKey, position: { top: 80, left: 100 }, allowImport: true },
+      global: { stubs: { transition: false, Icon: true } },
+    })
+    try {
+      const menu = document.body.querySelector('[role="menu"]')!
+      await wrapper.setProps({ show: false, apiKey: null, position: null })
+      expect(document.body.querySelector('.z-menu-overlay')).toBeNull()
+      expect(menu.id).toBe('key-action-menu-7')
+      expect(menu.hasAttribute('inert')).toBe(true)
+      expect(menu.textContent).toContain('keys.useKey')
+      await finishMotion(menu)
+      expect(document.body.querySelector('[role="menu"]')).toBeNull()
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('将使用、tf/CCS 导入、轮换和删除收纳到更多菜单', async () => {
     const wrapper = mount(KeyActionMenu, {
       props: {
         show: true,
@@ -58,17 +81,44 @@ describe('KeyActionMenu', () => {
       attachTo: document.body,
     })
 
+    const menu = document.body.querySelector('[role="menu"]')
+    expect(menu?.id).toBe('key-action-menu-7')
+    expect(menu?.querySelectorAll('[role="menuitem"]')).toHaveLength(5)
     expect(document.body.textContent).toContain('keys.useKey')
+    expect(document.body.textContent).toContain('keys.importToTf')
     expect(document.body.textContent).toContain('keys.importToCcSwitch')
     expect(document.body.textContent).toContain('common.delete')
+    expect(document.body.textContent).toContain('keys.rotateKey')
 
+    const tfButton = Array.from(document.body.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('keys.importToTf'))
+    const ccsButton = Array.from(document.body.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('keys.importToCcSwitch'))
+    expect(tfButton?.querySelector('path')?.getAttribute('d'))
+      .toBe(ccsButton?.querySelector('path')?.getAttribute('d'))
+    expect(tfButton?.querySelector('svg')?.classList.contains('text-blue-500')).toBe(true)
+    expect(ccsButton?.querySelector('svg')?.classList.contains('text-violet-500')).toBe(true)
+    tfButton?.click()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.emitted('import-tf')?.[0]).toEqual([apiKey])
+    expect(wrapper.emitted('close')).toHaveLength(1)
+
+    await wrapper.setProps({ show: true })
     const deleteButton = Array.from(document.body.querySelectorAll('button'))
       .find((button) => button.textContent?.includes('common.delete'))
     deleteButton?.click()
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('delete')?.[0]).toEqual([apiKey])
-    expect(wrapper.emitted('close')).toHaveLength(1)
+    expect(wrapper.emitted('close')).toHaveLength(2)
+
+    const rotateButton = Array.from(document.body.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('keys.rotateKey'))
+    rotateButton?.click()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('rotate')?.[0]).toEqual([apiKey])
+    expect(wrapper.emitted('close')).toHaveLength(3)
     wrapper.unmount()
   })
 
@@ -84,6 +134,7 @@ describe('KeyActionMenu', () => {
     })
 
     expect(document.body.textContent).not.toContain('keys.importToCcSwitch')
+    expect(document.body.textContent).toContain('keys.importToTf')
     wrapper.unmount()
   })
 })

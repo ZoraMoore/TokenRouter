@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/TokenFlux/TokenRouter/internal/payment"
-	infraerrors "github.com/TokenFlux/TokenRouter/internal/pkg/errors"
 	"github.com/wechatpay-apiv3/wechatpay-go/core"
 	"github.com/wechatpay-apiv3/wechatpay-go/core/auth/verifiers"
 	"github.com/wechatpay-apiv3/wechatpay-go/core/notify"
@@ -23,40 +21,37 @@ import (
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments/native"
 	"github.com/wechatpay-apiv3/wechatpay-go/services/refunddomestic"
 	"github.com/wechatpay-apiv3/wechatpay-go/utils"
+
+	"github.com/TokenFlux/TokenRouter/internal/payment"
+	"github.com/TokenFlux/TokenRouter/internal/pkg/apperror"
 )
 
-// WeChat Pay constants.
 const (
+	// WeChat Pay constants.
 	wxpayCurrency   = "CNY"
 	wxpayH5Type     = "Wap"
 	wxpayResultPath = "/payment/result"
-)
 
-const (
 	wxpayMetadataAppID      = "appid"
 	wxpayMetadataMerchantID = "mchid"
 	wxpayMetadataCurrency   = "currency"
 	wxpayMetadataTradeState = "trade_state"
-)
 
-// WeChat Pay create-payment modes.
-const (
+	// WeChat Pay create-payment modes.
 	wxpayModeNative = "native"
 	wxpayModeH5     = "h5"
 	wxpayModeJSAPI  = "jsapi"
-)
 
-// WeChat Pay trade states.
-const (
+	// WeChat Pay trade states.
 	wxpayTradeStateSuccess  = "SUCCESS"
 	wxpayTradeStateRefund   = "REFUND"
 	wxpayTradeStateClosed   = "CLOSED"
 	wxpayTradeStatePayError = "PAYERROR"
-)
 
-// WeChat Pay notification event types.
-const (
+	// WeChat Pay notification event types.
 	wxpayEventTransactionSuccess = "TRANSACTION.SUCCESS"
+
+	wxpayAPIv3KeyLength = 32
 )
 
 var (
@@ -69,6 +64,9 @@ var (
 	wxpayJSAPIPrepayWithRequestPayment = func(ctx context.Context, svc jsapi.JsapiApiService, req jsapi.PrepayRequest) (*jsapi.PrepayWithRequestPaymentResponse, *core.APIResult, error) {
 		return svc.PrepayWithRequestPayment(ctx, req)
 	}
+
+	_ payment.Provider           = (*Wxpay)(nil)
+	_ payment.CancelableProvider = (*Wxpay)(nil)
 )
 
 type Wxpay struct {
@@ -79,8 +77,6 @@ type Wxpay struct {
 	notifyHandler *notify.Handler
 }
 
-const wxpayAPIv3KeyLength = 32
-
 func NewWxpay(instanceID string, config map[string]string) (*Wxpay, error) {
 	// All fields are required. Platform-certificate mode is intentionally unsupported —
 	// WeChat has been migrating all merchants to the pubkey verifier since 2024-10,
@@ -88,12 +84,12 @@ func NewWxpay(instanceID string, config map[string]string) (*Wxpay, error) {
 	required := []string{"appId", "mchId", "privateKey", "apiV3Key", "certSerial", "publicKey", "publicKeyId"}
 	for _, k := range required {
 		if config[k] == "" {
-			return nil, infraerrors.BadRequest("WXPAY_CONFIG_MISSING_KEY", "missing_required_key").
+			return nil, apperror.BadRequest("WXPAY_CONFIG_MISSING_KEY", "missing_required_key").
 				WithMetadata(map[string]string{"key": k})
 		}
 	}
 	if len(config["apiV3Key"]) != wxpayAPIv3KeyLength {
-		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY_LENGTH", "invalid_key_length").
+		return nil, apperror.BadRequest("WXPAY_CONFIG_INVALID_KEY_LENGTH", "invalid_key_length").
 			WithMetadata(map[string]string{
 				"key":      "apiV3Key",
 				"expected": strconv.Itoa(wxpayAPIv3KeyLength),
@@ -102,11 +98,11 @@ func NewWxpay(instanceID string, config map[string]string) (*Wxpay, error) {
 	}
 	// Parse PEMs eagerly so malformed keys surface at save time, not at order creation.
 	if _, err := utils.LoadPrivateKey(formatPEM(config["privateKey"], "PRIVATE KEY")); err != nil {
-		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
+		return nil, apperror.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
 			WithMetadata(map[string]string{"key": "privateKey"})
 	}
 	if _, err := utils.LoadPublicKey(formatPEM(config["publicKey"], "PUBLIC KEY")); err != nil {
-		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
+		return nil, apperror.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
 			WithMetadata(map[string]string{"key": "publicKey"})
 	}
 	return &Wxpay{instanceID: instanceID, config: config}, nil
@@ -118,14 +114,8 @@ func (w *Wxpay) SupportedTypes() []payment.PaymentType {
 	return []payment.PaymentType{payment.TypeWxpay}
 }
 
-// ResolveWxpayJSAPIAppID returns the AppID that JSAPI prepay will use for a
-// given provider config. A dedicated MP AppID takes precedence over the base
-// merchant AppID.
 func ResolveWxpayJSAPIAppID(config map[string]string) string {
-	if appID := strings.TrimSpace(config["mpAppId"]); appID != "" {
-		return appID
-	}
-	return strings.TrimSpace(config["appId"])
+	return payment.ResolveWxpayJSAPIAppID(config)
 }
 
 func formatPEM(key, keyType string) string {
@@ -144,12 +134,12 @@ func (w *Wxpay) ensureClient() (*core.Client, error) {
 	}
 	privateKey, err := utils.LoadPrivateKey(formatPEM(w.config["privateKey"], "PRIVATE KEY"))
 	if err != nil {
-		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
+		return nil, apperror.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
 			WithMetadata(map[string]string{"key": "privateKey"})
 	}
 	publicKey, err := utils.LoadPublicKey(formatPEM(w.config["publicKey"], "PUBLIC KEY"))
 	if err != nil {
-		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
+		return nil, apperror.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
 			WithMetadata(map[string]string{"key": "publicKey"})
 	}
 	verifier := verifiers.NewSHA256WithRSAPubkeyVerifier(w.config["publicKeyId"], *publicKey)
@@ -562,8 +552,3 @@ func (w *Wxpay) CancelPayment(ctx context.Context, tradeNo string) error {
 	}
 	return nil
 }
-
-var (
-	_ payment.Provider           = (*Wxpay)(nil)
-	_ payment.CancelableProvider = (*Wxpay)(nil)
-)

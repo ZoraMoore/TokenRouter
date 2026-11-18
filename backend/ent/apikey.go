@@ -63,6 +63,10 @@ type APIKey struct {
 	QuotaUsed float64 `json:"quota_used,omitempty"`
 	// Expiration time for this API key (null = never expires)
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// ConcurrencyLimit holds the value of the "concurrency_limit" field.
+	ConcurrencyLimit int `json:"concurrency_limit,omitempty"`
+	// RpmLimit holds the value of the "rpm_limit" field.
+	RpmLimit int `json:"rpm_limit,omitempty"`
 	// Rate limit in USD per 5 hours (0 = unlimited)
 	RateLimit5h float64 `json:"rate_limit_5h,omitempty"`
 	// Rate limit in USD per day (0 = unlimited)
@@ -81,14 +85,10 @@ type APIKey struct {
 	Window1dStart *time.Time `json:"window_1d_start,omitempty"`
 	// Start time of the current 7d rate limit window
 	Window7dStart *time.Time `json:"window_7d_start,omitempty"`
-	// 用户已确认的数据共享须知版本，0 表示未确认
-	DataSharingNoticeVersion int `json:"data_sharing_notice_version,omitempty"`
-	// 最近一次确认的数据共享目标分组 ID
-	DataSharingConfirmedGroupID *int64 `json:"data_sharing_confirmed_group_id,omitempty"`
-	// 最近一次确认数据共享须知的时间
-	DataSharingConfirmedAt *time.Time `json:"data_sharing_confirmed_at,omitempty"`
 	// 绑定分组不可用时自动回退到同平台默认分组
-	FallbackToDefaultGroupWhenUnavailable bool `json:"fallback_to_default_group_when_unavailable,omitempty"`
+	FallbackWhenGroupUnavailable bool `json:"fallback_when_group_unavailable,omitempty"`
+	// 托管来源标识：creative_studio 表示创作台隐藏执行 Key，NULL 表示普通用户 Key
+	ManagedBy *string `json:"managed_by,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the APIKeyQuery when eager-loading is set.
 	Edges        APIKeyEdges `json:"edges"`
@@ -170,15 +170,15 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case apikey.FieldModelMapping, apikey.FieldIPWhitelist, apikey.FieldIPBlacklist:
 			values[i] = new([]byte)
-		case apikey.FieldTeamOwnerDisabled, apikey.FieldIsComposite, apikey.FieldFallbackToDefaultGroupWhenUnavailable:
+		case apikey.FieldTeamOwnerDisabled, apikey.FieldIsComposite, apikey.FieldFallbackWhenGroupUnavailable:
 			values[i] = new(sql.NullBool)
 		case apikey.FieldQuota, apikey.FieldQuotaUsed, apikey.FieldRateLimit5h, apikey.FieldRateLimit1d, apikey.FieldRateLimit7d, apikey.FieldUsage5h, apikey.FieldUsage1d, apikey.FieldUsage7d:
 			values[i] = new(sql.NullFloat64)
-		case apikey.FieldID, apikey.FieldUserID, apikey.FieldTeamID, apikey.FieldGroupID, apikey.FieldPreferredSubscriptionID, apikey.FieldDataSharingNoticeVersion, apikey.FieldDataSharingConfirmedGroupID:
+		case apikey.FieldID, apikey.FieldUserID, apikey.FieldTeamID, apikey.FieldGroupID, apikey.FieldPreferredSubscriptionID, apikey.FieldConcurrencyLimit, apikey.FieldRpmLimit:
 			values[i] = new(sql.NullInt64)
-		case apikey.FieldKey, apikey.FieldName, apikey.FieldStatus, apikey.FieldFastModePolicy, apikey.FieldBillingMode:
+		case apikey.FieldKey, apikey.FieldName, apikey.FieldStatus, apikey.FieldFastModePolicy, apikey.FieldBillingMode, apikey.FieldManagedBy:
 			values[i] = new(sql.NullString)
-		case apikey.FieldCreatedAt, apikey.FieldUpdatedAt, apikey.FieldDeletedAt, apikey.FieldLastUsedAt, apikey.FieldExpiresAt, apikey.FieldWindow5hStart, apikey.FieldWindow1dStart, apikey.FieldWindow7dStart, apikey.FieldDataSharingConfirmedAt:
+		case apikey.FieldCreatedAt, apikey.FieldUpdatedAt, apikey.FieldDeletedAt, apikey.FieldLastUsedAt, apikey.FieldExpiresAt, apikey.FieldWindow5hStart, apikey.FieldWindow1dStart, apikey.FieldWindow7dStart:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -339,6 +339,18 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 				_m.ExpiresAt = new(time.Time)
 				*_m.ExpiresAt = value.Time
 			}
+		case apikey.FieldConcurrencyLimit:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field concurrency_limit", values[i])
+			} else if value.Valid {
+				_m.ConcurrencyLimit = int(value.Int64)
+			}
+		case apikey.FieldRpmLimit:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field rpm_limit", values[i])
+			} else if value.Valid {
+				_m.RpmLimit = int(value.Int64)
+			}
 		case apikey.FieldRateLimit5h:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
 				return fmt.Errorf("unexpected type %T for field rate_limit_5h", values[i])
@@ -396,31 +408,18 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 				_m.Window7dStart = new(time.Time)
 				*_m.Window7dStart = value.Time
 			}
-		case apikey.FieldDataSharingNoticeVersion:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field data_sharing_notice_version", values[i])
-			} else if value.Valid {
-				_m.DataSharingNoticeVersion = int(value.Int64)
-			}
-		case apikey.FieldDataSharingConfirmedGroupID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field data_sharing_confirmed_group_id", values[i])
-			} else if value.Valid {
-				_m.DataSharingConfirmedGroupID = new(int64)
-				*_m.DataSharingConfirmedGroupID = value.Int64
-			}
-		case apikey.FieldDataSharingConfirmedAt:
-			if value, ok := values[i].(*sql.NullTime); !ok {
-				return fmt.Errorf("unexpected type %T for field data_sharing_confirmed_at", values[i])
-			} else if value.Valid {
-				_m.DataSharingConfirmedAt = new(time.Time)
-				*_m.DataSharingConfirmedAt = value.Time
-			}
-		case apikey.FieldFallbackToDefaultGroupWhenUnavailable:
+		case apikey.FieldFallbackWhenGroupUnavailable:
 			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field fallback_to_default_group_when_unavailable", values[i])
+				return fmt.Errorf("unexpected type %T for field fallback_when_group_unavailable", values[i])
 			} else if value.Valid {
-				_m.FallbackToDefaultGroupWhenUnavailable = value.Bool
+				_m.FallbackWhenGroupUnavailable = value.Bool
+			}
+		case apikey.FieldManagedBy:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field managed_by", values[i])
+			} else if value.Valid {
+				_m.ManagedBy = new(string)
+				*_m.ManagedBy = value.String
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -558,6 +557,12 @@ func (_m *APIKey) String() string {
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
+	builder.WriteString("concurrency_limit=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ConcurrencyLimit))
+	builder.WriteString(", ")
+	builder.WriteString("rpm_limit=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RpmLimit))
+	builder.WriteString(", ")
 	builder.WriteString("rate_limit_5h=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RateLimit5h))
 	builder.WriteString(", ")
@@ -591,21 +596,13 @@ func (_m *APIKey) String() string {
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
-	builder.WriteString("data_sharing_notice_version=")
-	builder.WriteString(fmt.Sprintf("%v", _m.DataSharingNoticeVersion))
+	builder.WriteString("fallback_when_group_unavailable=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FallbackWhenGroupUnavailable))
 	builder.WriteString(", ")
-	if v := _m.DataSharingConfirmedGroupID; v != nil {
-		builder.WriteString("data_sharing_confirmed_group_id=")
-		builder.WriteString(fmt.Sprintf("%v", *v))
+	if v := _m.ManagedBy; v != nil {
+		builder.WriteString("managed_by=")
+		builder.WriteString(*v)
 	}
-	builder.WriteString(", ")
-	if v := _m.DataSharingConfirmedAt; v != nil {
-		builder.WriteString("data_sharing_confirmed_at=")
-		builder.WriteString(v.Format(time.ANSIC))
-	}
-	builder.WriteString(", ")
-	builder.WriteString("fallback_to_default_group_when_unavailable=")
-	builder.WriteString(fmt.Sprintf("%v", _m.FallbackToDefaultGroupWhenUnavailable))
 	builder.WriteByte(')')
 	return builder.String()
 }

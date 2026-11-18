@@ -27,7 +27,7 @@ describe('useTheme', () => {
   it('temporarily disables transitions while switching themes', () => {
     setTheme(true)
 
-    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(document.documentElement.classList.contains('dark')).toBe(true) // check-ui-allow: 主题原语测试,断言对象就是 classList
     expect(document.documentElement.classList.contains('theme-switching')).toBe(true)
 
     frameCallbacks[0]?.(0)
@@ -35,5 +35,31 @@ describe('useTheme', () => {
 
     frameCallbacks[1]?.(16)
     expect(document.documentElement.classList.contains('theme-switching')).toBe(false)
+  })
+
+  it('follows the system color scheme and clears the saved choice', async () => {
+    const listeners: Array<(event: MediaQueryListEvent) => void> = []
+    let systemDark = true
+    vi.spyOn(window, 'matchMedia').mockImplementation(() => ({
+      get matches() {
+        return systemDark
+      },
+      addEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => listeners.push(listener)
+    }) as unknown as MediaQueryList)
+
+    // 系统配色监听是模块级单例，重新加载模块才能挂到本用例的 matchMedia 桩上。
+    vi.resetModules()
+    const theme = await import('../useTheme')
+    theme.initTheme()
+    theme.setThemeMode('system')
+
+    expect(theme.useTheme().themeMode.value).toBe('system')
+    expect(localStorage.getItem('theme')).toBeNull()
+    expect(document.documentElement.classList.contains('dark')).toBe(true) // check-ui-allow: 主题原语测试,断言对象就是 classList
+
+    // 系统切回浅色时页面同步切换。
+    systemDark = false
+    listeners.forEach((listener) => listener({ matches: false } as MediaQueryListEvent))
+    expect(document.documentElement.classList.contains('dark')).toBe(false) // check-ui-allow: 主题原语测试,断言对象就是 classList
   })
 })

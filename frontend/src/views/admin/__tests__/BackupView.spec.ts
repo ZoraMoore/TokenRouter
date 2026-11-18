@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import BackupView from '../BackupView.vue'
+import { createSettingsSaveRegistry, settingsSaveRegistryKey } from '@/composables/useSettingsSaveRegistry'
 
 const {
   getStorageConfig,
@@ -11,6 +12,9 @@ const {
   getDownloadURL,
   downloadBackupFile,
   showError,
+  updateSchedule,
+  updateStorageConfig,
+  updateContentConfig,
 } = vi.hoisted(() => ({
   getStorageConfig: vi.fn(),
   getContentConfig: vi.fn(),
@@ -19,18 +23,21 @@ const {
   getDownloadURL: vi.fn(),
   downloadBackupFile: vi.fn(),
   showError: vi.fn(),
+  updateSchedule: vi.fn(),
+  updateStorageConfig: vi.fn(),
+  updateContentConfig: vi.fn(),
 }))
 
 vi.mock('@/api', () => ({
   adminAPI: {
     backup: {
       getStorageConfig,
-      updateStorageConfig: vi.fn(),
+      updateStorageConfig,
       testStorageConnection: vi.fn(),
       getContentConfig,
-      updateContentConfig: vi.fn(),
+      updateContentConfig,
       getSchedule,
-      updateSchedule: vi.fn(),
+      updateSchedule,
       createBackup: vi.fn(),
       listBackups,
       getBackup: vi.fn(),
@@ -95,7 +102,7 @@ function findDownloadButton(wrapper: ReturnType<typeof mountBackupView>) {
   )
 }
 
-// 分卷记录即使缺少 fork 的 storage_type，也必须走远程分卷下载契约。
+// 分卷记录缺少 storage_type 时仍使用远程分卷下载。
 describe('admin BackupView 分卷备份', () => {
   beforeEach(() => {
     getStorageConfig.mockResolvedValue({
@@ -188,5 +195,40 @@ describe('admin BackupView 分卷备份', () => {
     await flushPromises()
 
     expect(showError).toHaveBeenCalledWith('admin.backup.actions.downloadFailed')
+  })
+})
+
+// 备份的三块配置登记到系统设置页的吸底保存条，只保存有修改的那块。
+describe('admin BackupView 保存', () => {
+  beforeEach(() => {
+    getStorageConfig.mockResolvedValue({ type: 'local', local_path: '/data/backups', s3: {} })
+    getContentConfig.mockResolvedValue({})
+    getSchedule.mockResolvedValue({ enabled: true, cron_expr: '0 2 * * *', retain_days: 14, retain_count: 10 })
+    listBackups.mockResolvedValue({ items: [] })
+    updateSchedule.mockReset().mockResolvedValue(undefined)
+    updateStorageConfig.mockReset()
+    updateContentConfig.mockReset()
+  })
+
+  it('只修改定时备份时只提交定时备份配置', async () => {
+    const saveRegistry = createSettingsSaveRegistry()
+    const wrapper = mount(BackupView, {
+      global: {
+        stubs: { TotpStepUpDialog: true, transition: false },
+        provide: { [settingsSaveRegistryKey as symbol]: saveRegistry.registry },
+      },
+    })
+    await flushPromises()
+    expect(saveRegistry.dirty.value).toBe(false)
+
+    await wrapper.get('#backup-schedule-retain-days').setValue('30')
+    expect(saveRegistry.dirty.value).toBe(true)
+
+    await expect(saveRegistry.saveDirty()).resolves.toBe(true)
+
+    expect(updateSchedule).toHaveBeenCalledWith(expect.objectContaining({ retain_days: 30 }))
+    expect(updateStorageConfig).not.toHaveBeenCalled()
+    expect(updateContentConfig).not.toHaveBeenCalled()
+    expect(saveRegistry.dirty.value).toBe(false)
   })
 })

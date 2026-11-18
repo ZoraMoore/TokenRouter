@@ -17,12 +17,14 @@ const {
   copyToClipboard,
   isCurrentStep,
   nextStep,
-  getDataSharingNotice,
-  confirmDataSharingNotice,
   createKey,
   updateKey,
+  rotateKey,
   toggleStatus,
   replaceRoute,
+  authState,
+  routeQuery,
+  getCurrentTeam,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
   getPublicSettings: vi.fn(),
@@ -35,12 +37,14 @@ const {
   copyToClipboard: vi.fn(),
   isCurrentStep: vi.fn(),
   nextStep: vi.fn(),
-  getDataSharingNotice: vi.fn(),
-  confirmDataSharingNotice: vi.fn(),
   createKey: vi.fn(),
   updateKey: vi.fn(),
+  rotateKey: vi.fn(),
   toggleStatus: vi.fn(),
   replaceRoute: vi.fn(),
+  authState: { user: { id: 1 } },
+  routeQuery: { scope: 'personal' },
+  getCurrentTeam: vi.fn(),
 }))
 
 const messages: Record<string, string> = {
@@ -57,6 +61,7 @@ const messages: Record<string, string> = {
   'keys.createKey': 'Create API Key',
   'keys.disable': 'Disable',
   'keys.enable': 'Enable',
+  'keys.importToTf': 'Import to TF CLI',
   'keys.apiKeyLimitReached': 'API key limit reached',
   'keys.created': 'Created',
   'keys.expiresAt': 'Expires',
@@ -92,7 +97,6 @@ const messages: Record<string, string> = {
   'keys.modelRedirect.duplicateSource': 'Duplicate source model',
   'keys.modelRedirect.tooManyRules': 'Too many redirect rules',
   'keys.id': 'ID',
-  'keys.currentConcurrency': 'Current Concurrency',
   'keys.lastUsedAt': 'Last Used',
   'keys.lastUsedIP': 'Last Used IP',
   'keys.rateLimitColumn': 'Rate Limit',
@@ -104,6 +108,8 @@ const messages: Record<string, string> = {
   'keys.status.inactive': 'Inactive',
   'keys.status.quota_exhausted': 'Quota exhausted',
   'keys.usage': 'Usage',
+  'keys.today': 'Today',
+  'keys.total': 'Last 30d',
   'keys.teamOwnerLocked': 'Admin locked',
   'keys.teamOwnerDisabledHint': 'Only the team administrator can enable this key again.',
   'team.personalKeys': 'Personal keys',
@@ -117,6 +123,7 @@ vi.mock('@/api', () => ({
     create: vi.fn(),
     createWithPayload: createKey,
     update: updateKey,
+    rotate: rotateKey,
     delete: vi.fn(),
     toggleStatus,
     getBillingOptions,
@@ -131,10 +138,6 @@ vi.mock('@/api', () => ({
     getAvailable: getAvailableGroups,
     getUserGroupRates,
   },
-  dataSharingAPI: {
-    getNotice: getDataSharingNotice,
-    confirmNotice: confirmDataSharingNotice,
-  },
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -142,6 +145,14 @@ vi.mock('@/stores/app', () => ({
     showError,
     showSuccess,
   }),
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authState,
+}))
+
+vi.mock('@/api/team', () => ({
+  teamAPI: { current: getCurrentTeam },
 }))
 
 vi.mock('@/stores/onboarding', () => ({
@@ -167,7 +178,7 @@ vi.mock('@/composables/useBalanceDisplay', () => ({
 }))
 
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ query: { scope: 'personal' } }),
+  useRoute: () => ({ query: routeQuery }),
   useRouter: () => ({ replace: replaceRoute }),
 }))
 
@@ -242,8 +253,8 @@ const DataTableStub = {
     <div>
       <div data-test="columns">{{ columns.map((col) => col.key).join(',') }}</div>
       <div data-test="columns-meta">{{ JSON.stringify(columns.map((col) => ({ key: col.key, sortable: !!col.sortable }))) }}</div>
-      <button data-test="sort-current-concurrency" @click="$emit('sort', 'current_concurrency', 'asc')">
-        Sort Current Concurrency
+      <button data-test="sort-expires-at" @click="$emit('sort', 'expires_at', 'asc')">
+        Sort Expires At
       </button>
       <div v-if="loading" data-test="table-loading">Loading</div>
       <div v-for="row in data" :key="row.id">
@@ -255,9 +266,7 @@ const DataTableStub = {
         </div>
         <slot name="cell-name" :value="row.name" :row="row" />
         <div data-test="group"><slot name="cell-group" :value="row.group" :row="row" /></div>
-        <div data-test="current-concurrency">
-          <slot name="cell-current_concurrency" :value="row.current_concurrency" :row="row" />
-        </div>
+        <div data-test="usage"><slot name="cell-usage" :row="row" /></div>
         <div data-test="status">
           <slot name="cell-status" :value="row.status" :row="row" />
         </div>
@@ -316,8 +325,21 @@ const IconStub = {
 const GroupOptionItemStub = {
   name: 'GroupOptionItem',
   inheritAttrs: false,
-  props: ['name', 'capacity'],
+  props: ['name', 'capacity', 'rateMultiplier', 'userRateMultiplier'],
   template: '<span data-test="group-option-item" :data-has-capacity="capacity ? \'true\' : \'false\'">{{ name }}</span>',
+}
+
+const TfCliImportDialogStub = {
+  name: 'TfCliImportDialog',
+  props: ['show', 'apiKey'],
+  emits: ['close'],
+  template: `
+    <div
+      v-if="show"
+      data-test="tf-cli-dialog-stub"
+      :data-key-name="apiKey?.name"
+    />
+  `,
 }
 
 const mountView = async (settle = true) => {
@@ -336,6 +358,7 @@ const mountView = async (settle = true) => {
         SearchInput: SearchInputStub,
         Icon: IconStub,
         UseKeyModal: true,
+        TfCliImportDialog: TfCliImportDialogStub,
         EndpointPopover: true,
         GroupBadge: true,
         GroupOptionItem: GroupOptionItemStub,
@@ -367,22 +390,24 @@ const getButtonByText = (wrapper: VueWrapper, text: string) => {
 describe('user KeysView column settings', () => {
   beforeEach(() => {
     localStorage.clear()
+    authState.user.id = 1
+    routeQuery.scope = 'personal'
 
     listKeys.mockReset()
     getPublicSettings.mockReset()
     getDashboardApiKeysUsage.mockReset()
     getAvailableGroups.mockReset()
     getUserGroupRates.mockReset()
+    getCurrentTeam.mockReset()
     getBillingOptions.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
     copyToClipboard.mockReset()
     isCurrentStep.mockReset()
     nextStep.mockReset()
-    getDataSharingNotice.mockReset()
-    confirmDataSharingNotice.mockReset()
     createKey.mockReset()
     updateKey.mockReset()
+    rotateKey.mockReset()
     toggleStatus.mockReset()
     replaceRoute.mockReset()
 
@@ -397,10 +422,158 @@ describe('user KeysView column settings', () => {
     getDashboardApiKeysUsage.mockResolvedValue({ stats: {} })
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
+    getCurrentTeam.mockResolvedValue({ owner: { user_id: 234 } })
     getBillingOptions.mockResolvedValue([])
     isCurrentStep.mockReturnValue(false)
     createKey.mockResolvedValue(createApiKey())
     updateKey.mockResolvedValue(createApiKey())
+  })
+
+  it.each([
+    { userID: 233, scope: 'personal', ownerID: 233, expectedRate: 0.14 },
+    { userID: 234, scope: 'personal', ownerID: 233, expectedRate: 0.2 },
+    { userID: 233, scope: 'team', ownerID: 233, expectedRate: 0.14 },
+    { userID: 233, scope: 'team', ownerID: 234, expectedRate: 0.2 },
+    { userID: 233, scope: 'team', ownerID: null, expectedRate: 0.2 },
+    { userID: 234, scope: 'team', ownerID: 233, expectedRate: 0.2 },
+  ])('用户 $userID 的 $scope 密钥在 owner $ownerID 时展示 $expectedRate 倍率', async ({ userID, scope, ownerID, expectedRate }) => {
+    authState.user.id = userID
+    routeQuery.scope = scope
+    const rawRates = { 8: 0.2 }
+    const group = { id: 8, name: 'OpenAI', platform: 'openai', rate_multiplier: 0.14 }
+    const key = { ...createApiKey(), user_id: userID, group_id: 8, group }
+    getUserGroupRates.mockResolvedValue(rawRates)
+    getCurrentTeam.mockResolvedValue({ owner: { user_id: ownerID } })
+    getAvailableGroups.mockResolvedValue([group])
+    listKeys.mockResolvedValue({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
+    const wrapper = await mountView()
+
+    // 表格与修改分组菜单都读取当前作用域的展示倍率。
+    expect(wrapper.get('[data-test="group"]').findComponent({ name: 'GroupBadge' }).props('userRateMultiplier')).toBe(expectedRate)
+    await wrapper.get('[title="keys.clickToChangeGroup"]').trigger('click')
+    await nextTick()
+    expect(wrapper.findComponent(GroupOptionItemStub).props('userRateMultiplier')).toBe(expectedRate)
+
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    await flushPromises()
+    const createGroupSelect = wrapper.findAllComponents({ name: 'Select' }).find(
+      (select) => select.attributes('data-tour') === 'key-form-group'
+    )!
+    expect(createGroupSelect.props('options')[0].userRate).toBe(expectedRate)
+
+    await wrapper.get('[data-test="composite-key-toggle"]').trigger('click')
+    await nextTick()
+    const compositeGroupSelect = wrapper.get('[data-test="composite-group-editor"]').findComponent({ name: 'Select' })
+    expect(compositeGroupSelect.props('options')[0].userRate).toBe(expectedRate)
+
+    await getButtonByText(wrapper, 'common.cancel').trigger('click')
+    await getButtonByText(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    const editGroupSelect = wrapper.findAllComponents({ name: 'Select' }).find(
+      (select) => select.attributes('data-tour') === 'key-form-group'
+    )!
+    expect(editGroupSelect.props('options')[0].userRate).toBe(expectedRate)
+    expect(rawRates).toEqual({ 8: 0.2 })
+    expect(group.rate_multiplier).toBe(0.14)
+    if (userID === 233 && scope === 'team') {
+      expect(getCurrentTeam).toHaveBeenCalledOnce()
+    } else {
+      expect(getCurrentTeam).not.toHaveBeenCalled()
+    }
+    wrapper.unmount()
+  })
+
+  it('团队 owner 请求失败时展示接口返回的倍率', async () => {
+    authState.user.id = 233
+    routeQuery.scope = 'team'
+    const rawRates = { 8: 0.2 }
+    const group = { id: 8, name: 'OpenAI', platform: 'openai', rate_multiplier: 0.14 }
+    getUserGroupRates.mockResolvedValue(rawRates)
+    getCurrentTeam.mockRejectedValue(new Error('Team unavailable'))
+    listKeys.mockResolvedValue({
+      items: [{ ...createApiKey(), user_id: 233, group_id: 8, group }],
+      total: 1, page: 1, page_size: 20, pages: 1,
+    })
+    const wrapper = await mountView()
+
+    expect(wrapper.get('[data-test="group"]').findComponent({ name: 'GroupBadge' }).props('userRateMultiplier')).toBe(0.2)
+    expect(getCurrentTeam).toHaveBeenCalledOnce()
+    expect(rawRates).toEqual({ 8: 0.2 })
+    wrapper.unmount()
+  })
+
+  it('切回个人密钥后忽略延迟返回的团队倍率', async () => {
+    authState.user.id = 233
+    routeQuery.scope = 'team'
+    let resolveTeam!: (context: { owner: { user_id: number } }) => void
+    getCurrentTeam.mockReturnValue(new Promise((resolve) => {
+      resolveTeam = resolve
+    }))
+    getUserGroupRates.mockImplementation((scope: string) => Promise.resolve({ 8: scope === 'team' ? 0.2 : 0.3 }))
+    const group = { id: 8, name: 'OpenAI', platform: 'openai', rate_multiplier: 0.14 }
+    listKeys.mockResolvedValue({
+      items: [{ ...createApiKey(), user_id: 233, group_id: 8, group }],
+      total: 1, page: 1, page_size: 20, pages: 1,
+    })
+    const wrapper = await mountView()
+
+    expect(getCurrentTeam).toHaveBeenCalledOnce()
+    await wrapper.get('[data-test="scope-dropdown-trigger"]').trigger('click')
+    await wrapper.get('[data-test="scope-option-personal"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-test="group"]').findComponent({ name: 'GroupBadge' }).props('userRateMultiplier')).toBe(0.3)
+
+    resolveTeam({ owner: { user_id: 233 } })
+    await flushPromises()
+    expect(wrapper.get('[data-test="group"]').findComponent({ name: 'GroupBadge' }).props('userRateMultiplier')).toBe(0.3)
+    wrapper.unmount()
+  })
+
+  it('本人倍率预览使用分组 ID 提交创建与编辑请求', async () => {
+    authState.user.id = 233
+    const rawRates = { 8: 0.2 }
+    const group = { id: 8, name: 'OpenAI', platform: 'openai', rate_multiplier: 0.14 }
+    const key = { ...createApiKey(), user_id: 233, group_id: 8, group }
+    getUserGroupRates.mockResolvedValue(rawRates)
+    getAvailableGroups.mockResolvedValue([group])
+    listKeys.mockResolvedValue({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
+    const wrapper = await mountView()
+
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-tour="key-form-name"]').setValue('preview-key')
+    const groupSelect = wrapper.findAllComponents({ name: 'Select' }).find(
+      (select) => select.attributes('data-tour') === 'key-form-group'
+    )!
+    expect(groupSelect.props('options')[0].userRate).toBe(0.14)
+    await groupSelect.vm.$emit('update:modelValue', 8)
+    await wrapper.get('form#key-form').trigger('submit')
+    await flushPromises()
+    expect(createKey).toHaveBeenCalledWith(expect.objectContaining({ name: 'preview-key', group_id: 8, scope: 'personal' }))
+    expect(createKey.mock.calls[0]![0]).not.toHaveProperty('rate_multiplier')
+    expect(createKey.mock.calls[0]![0]).not.toHaveProperty('userRate')
+
+    await getButtonByText(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    await wrapper.get('form#key-form').trigger('submit')
+    await flushPromises()
+    expect(updateKey).toHaveBeenCalledWith(1, expect.objectContaining({ group_id: 8 }))
+    expect(updateKey.mock.calls[0]![1]).not.toHaveProperty('rate_multiplier')
+    expect(updateKey.mock.calls[0]![1]).not.toHaveProperty('userRate')
+    expect(rawRates).toEqual({ 8: 0.2 })
+    wrapper.unmount()
+  })
+
+  it('显示今日和近 30 天的实际用量，保留四位小数', async () => {
+    getDashboardApiKeysUsage.mockResolvedValueOnce({
+      stats: { 1: { api_key_id: 1, today_actual_cost: 1.2345, total_actual_cost: 67.8912 } },
+    })
+    const wrapper = await mountView()
+
+    const usage = wrapper.get('[data-test="usage"]').text()
+    expect(usage).toContain('Today:$1.2345')
+    expect(usage).toContain('Last 30d:$67.8912')
+    wrapper.unmount()
   })
 
   it('keeps the table loading until the first API key request completes', async () => {
@@ -432,7 +605,6 @@ describe('user KeysView column settings', () => {
       'name',
       'key',
       'group',
-      'current_concurrency',
       'usage',
       'expires_at',
       'status',
@@ -471,6 +643,90 @@ describe('user KeysView column settings', () => {
     expect(actionButtons.some((button) => button.text().includes('Edit'))).toBe(true)
     expect(actionButtons.some((button) => button.text().includes('Disable'))).toBe(true)
     expect(actionButtons.some((button) => button.text().includes('More'))).toBe(true)
+  })
+
+  it('opens tf import from the More menu without a fragment session', async () => {
+    const wrapper = await mountView()
+
+    const moreButton = getButtonByText(wrapper, 'More')
+    expect(moreButton.attributes('aria-expanded')).toBe('false')
+    await moreButton.trigger('click')
+    await nextTick()
+    expect(moreButton.attributes('aria-expanded')).toBe('true')
+    expect(moreButton.attributes('aria-controls')).toBe('key-action-menu-1')
+    await getButtonByText(wrapper, 'Import to TF CLI').trigger('click')
+    await nextTick()
+
+    expect(wrapper.get('[data-test="tf-cli-dialog-stub"]').attributes('data-key-name')).toBe('test-key')
+  })
+
+  it('轮换先确认，取消时不发送请求', async () => {
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'More').trigger('click')
+    await getButtonByText(wrapper, 'keys.rotateKey').trigger('click')
+    const dialog = wrapper.findAllComponents({ name: 'ConfirmDialog' })
+      .find(component => component.props('title') === 'keys.rotateKey')!
+
+    expect(dialog.props('show')).toBe(true)
+    expect(rotateKey).not.toHaveBeenCalled()
+    dialog.vm.$emit('cancel')
+    await nextTick()
+    expect(dialog.props('show')).toBe(false)
+    expect(rotateKey).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('确认后只提交一次，成功展示并复制新凭据', async () => {
+    const updated = { ...createApiKey(), key: 'sk-rotated-key' }
+    let resolveRotation!: (key: ApiKey) => void
+    rotateKey.mockReturnValue(new Promise<ApiKey>(resolve => { resolveRotation = resolve }))
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'More').trigger('click')
+    await getButtonByText(wrapper, 'keys.rotateKey').trigger('click')
+    const dialog = wrapper.findAllComponents({ name: 'ConfirmDialog' })
+      .find(component => component.props('title') === 'keys.rotateKey')!
+
+    dialog.vm.$emit('confirm')
+    dialog.vm.$emit('confirm')
+    dialog.vm.$emit('cancel')
+    await nextTick()
+    expect(rotateKey).toHaveBeenCalledTimes(1)
+    expect(rotateKey).toHaveBeenCalledWith(1)
+    expect(dialog.props('loading')).toBe(true)
+    expect(dialog.props('show')).toBe(true)
+
+    listKeys.mockRejectedValueOnce(new Error('refresh failed'))
+    resolveRotation(updated)
+    await flushPromises()
+    expect(dialog.props('show')).toBe(false)
+    expect(wrapper.get('code').text()).toBe(updated.key)
+    const table = wrapper.findComponent({ name: 'DataTable' })
+    expect(table.props('data')[0].key).toBe(updated.key)
+    await getButtonByText(wrapper, 'common.copy').trigger('click')
+    expect(copyToClipboard).toHaveBeenCalledWith(updated.key, expect.any(String))
+    wrapper.unmount()
+  })
+
+  it('轮换失败保留确认窗和原凭据，允许重试', async () => {
+    rotateKey.mockRejectedValueOnce(new Error('rotation failed'))
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'More').trigger('click')
+    await getButtonByText(wrapper, 'keys.rotateKey').trigger('click')
+    const dialog = wrapper.findAllComponents({ name: 'ConfirmDialog' })
+      .find(component => component.props('title') === 'keys.rotateKey')!
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+
+    expect(showError).toHaveBeenCalledWith('rotation failed')
+    expect(dialog.props('show')).toBe(true)
+    expect(dialog.props('loading')).toBe(false)
+    expect(wrapper.findComponent({ name: 'DataTable' }).props('data')[0].key).toBe('sk-test-key')
+    rotateKey.mockResolvedValueOnce({ ...createApiKey(), key: 'sk-retry-key' })
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(rotateKey).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('code').text()).toBe('sk-retry-key')
+    wrapper.unmount()
   })
 
   it('shows a hidden column when toggled and persists the preference', async () => {
@@ -526,7 +782,6 @@ describe('user KeysView column settings', () => {
     expect(visibleColumnKeys(wrapper)).toEqual([
       'name',
       'key',
-      'current_concurrency',
       'usage',
       'rate_limit',
       'expires_at',
@@ -563,17 +818,10 @@ describe('user KeysView column settings', () => {
     const columnMenuText = wrapper.text()
     expect(columnMenuText).toContain('API Key')
     expect(columnMenuText).toContain('ID')
-    expect(columnMenuText).toContain('Current Concurrency')
     expect(columnMenuText).toContain('Rate Limit')
     expect(columnMenuText).toContain('Last Used IP')
     expect(columnMenuText).not.toContain('Name')
     expect(columnMenuText).not.toContain('Actions')
-  })
-
-  it('renders the current concurrency value', async () => {
-    const wrapper = await mountView()
-
-    expect(wrapper.get('[data-test="current-concurrency"]').text()).toBe('3')
   })
 
   it('renders a localized disabled status for team keys', async () => {
@@ -648,13 +896,42 @@ describe('user KeysView column settings', () => {
     expect(updateKey).toHaveBeenCalledWith(1, expect.objectContaining({ status: 'inactive' }))
   })
 
-  it('marks current concurrency as sortable', async () => {
+  it('shows in-flight concurrency next to the key name', async () => {
     const wrapper = await mountView()
 
-    const currentConcurrencyColumn = visibleColumnMeta(wrapper).find(
-      (column) => column.key === 'current_concurrency'
-    )
-    expect(currentConcurrencyColumn?.sortable).toBe(true)
+    const indicator = wrapper.get('[data-test="key-concurrency"]')
+    expect(indicator.text()).toBe('3')
+    expect(indicator.attributes('title')).toBe('keys.concurrencyInUseUnlimited')
+    expect(visibleColumnKeys(wrapper)).not.toContain('current_concurrency')
+  })
+
+  it('shows the concurrency limit and warns when the key is nearly full', async () => {
+    listKeys.mockResolvedValueOnce({
+      items: [{ ...createApiKey(), current_concurrency: 4, concurrency_limit: 5 }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+    const wrapper = await mountView()
+
+    const indicator = wrapper.get('[data-test="key-concurrency"]')
+    expect(indicator.text().replace(/\s+/g, '')).toBe('4/5')
+    expect(indicator.attributes('title')).toBe('keys.concurrencyInUse')
+    expect(indicator.classes()).toContain('text-amber-600')
+  })
+
+  it('hides the concurrency indicator for idle keys', async () => {
+    listKeys.mockResolvedValueOnce({
+      items: [{ ...createApiKey(), current_concurrency: 0, concurrency_limit: 5 }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+    const wrapper = await mountView()
+
+    expect(wrapper.find('[data-test="key-concurrency"]').exists()).toBe(false)
   })
 
   it('keeps the create key form shrinkable on narrow screens', async () => {
@@ -670,6 +947,17 @@ describe('user KeysView column settings', () => {
     expect(form.classes()).toEqual(expect.arrayContaining(['min-w-0', 'max-w-full']))
   })
 
+  it('分组选择器优先显示当前语言的展示名称', async () => {
+    getAvailableGroups.mockResolvedValue([{ id: 42, name: 'business-group', display_name: 'English group', rate_multiplier: 1 }])
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    await nextTick()
+    const select = wrapper.findAllComponents({ name: 'Select' }).find(
+      item => item.attributes('data-tour') === 'key-form-group'
+    )
+    expect(select?.props('options')[0].label).toBe('English group')
+  })
+
   it('用户侧分组选择器不展示或投影容量数据', async () => {
     getAvailableGroups.mockResolvedValueOnce([{
       id: 42,
@@ -682,7 +970,6 @@ describe('user KeysView column settings', () => {
       peak_end: '',
       peak_rate_multiplier: 1,
       platform: 'openai',
-      data_sharing_enabled: false,
       capacity: {
         concurrency_used: 25,
         concurrency_max: 144,
@@ -716,10 +1003,10 @@ describe('user KeysView column settings', () => {
     })
     getAvailableGroups.mockImplementation((_scope, subscriptionID?: number) => Promise.resolve(
       subscriptionID === 71
-        ? [{ id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1, data_sharing_enabled: false }]
+        ? [{ id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1 }]
         : [
-            { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1, data_sharing_enabled: false },
-            { id: 43, name: 'Claude', platform: 'anthropic', rate_multiplier: 1, data_sharing_enabled: false },
+            { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1 },
+            { id: 43, name: 'Claude', platform: 'anthropic', rate_multiplier: 1 },
           ]
     ))
     getBillingOptions.mockResolvedValue([{
@@ -760,7 +1047,7 @@ describe('user KeysView column settings', () => {
     expect(getAvailableGroups).toHaveBeenCalledWith('personal', 71)
   })
 
-  it('keeps filters and selected page size when sorting by current concurrency', async () => {
+  it('keeps filters and selected page size when sorting', async () => {
     getAvailableGroups.mockResolvedValue([{ id: 42, name: 'OpenAI' }])
     const wrapper = await mountView()
 
@@ -779,7 +1066,7 @@ describe('user KeysView column settings', () => {
 
     listKeys.mockClear()
 
-    await wrapper.get('[data-test="sort-current-concurrency"]').trigger('click')
+    await wrapper.get('[data-test="sort-expires-at"]').trigger('click')
     await flushPromises()
 
     expect(listKeys).toHaveBeenLastCalledWith(
@@ -790,7 +1077,7 @@ describe('user KeysView column settings', () => {
         status: 'active',
         group_id: 42,
         scope: 'personal',
-        sort_by: 'current_concurrency',
+        sort_by: 'expires_at',
         sort_order: 'asc',
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) })
@@ -809,7 +1096,6 @@ describe('user KeysView column settings', () => {
       peak_end: '',
       peak_rate_multiplier: 1,
       platform: 'openai',
-      data_sharing_enabled: false,
     }])
     const wrapper = await mountView()
 
@@ -824,6 +1110,8 @@ describe('user KeysView column settings', () => {
     expect(fastSelect).toBeDefined()
     await groupSelect!.vm.$emit('update:modelValue', 42)
     await fastSelect!.vm.$emit('update:modelValue', 'force_on')
+    await wrapper.get('#key-concurrency-limit').setValue('2')
+    await wrapper.get('#key-rpm-limit').setValue('30')
     await wrapper.get('form#key-form').trigger('submit')
     await flushPromises()
 
@@ -831,6 +1119,8 @@ describe('user KeysView column settings', () => {
       name: 'fast-key',
       group_id: 42,
       fast_mode_policy: 'force_on',
+      concurrency_limit: 2,
+      rpm_limit: 30,
     }))
   })
 
@@ -846,7 +1136,6 @@ describe('user KeysView column settings', () => {
       peak_end: '',
       peak_rate_multiplier: 1,
       platform: 'openai',
-      data_sharing_enabled: false,
     }])
     createKey.mockRejectedValueOnce({
       reason: 'API_KEY_LIMIT_REACHED',
@@ -869,8 +1158,8 @@ describe('user KeysView column settings', () => {
 
   it('creates a composite key with ordered group prefix mappings', async () => {
     getAvailableGroups.mockResolvedValueOnce([
-      { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1, data_sharing_enabled: false },
-      { id: 43, name: 'Claude', platform: 'anthropic', rate_multiplier: 1, data_sharing_enabled: false },
+      { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1 },
+      { id: 43, name: 'Claude', platform: 'anthropic', rate_multiplier: 1 },
     ])
     const wrapper = await mountView()
 
@@ -930,8 +1219,8 @@ describe('user KeysView column settings', () => {
 
   it('blocks case-insensitive duplicate composite prefixes', async () => {
     getAvailableGroups.mockResolvedValueOnce([
-      { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1, data_sharing_enabled: false },
-      { id: 43, name: 'Claude', platform: 'anthropic', rate_multiplier: 1, data_sharing_enabled: false },
+      { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1 },
+      { id: 43, name: 'Claude', platform: 'anthropic', rate_multiplier: 1 },
     ])
     const wrapper = await mountView()
 
@@ -955,7 +1244,7 @@ describe('user KeysView column settings', () => {
 
   it('blocks duplicate groups in composite mappings', async () => {
     getAvailableGroups.mockResolvedValueOnce([
-      { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1, data_sharing_enabled: false },
+      { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1 },
     ])
     const wrapper = await mountView()
 
@@ -977,60 +1266,9 @@ describe('user KeysView column settings', () => {
     expect(createKey).not.toHaveBeenCalled()
   })
 
-  it('uses one data sharing confirmation for every new composite mapping', async () => {
-    vi.useFakeTimers()
-    getAvailableGroups.mockResolvedValueOnce([
-      { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1, data_sharing_enabled: true },
-      { id: 43, name: 'Claude', platform: 'anthropic', rate_multiplier: 1, data_sharing_enabled: true },
-    ])
-    getDataSharingNotice.mockResolvedValue({ version: 7, content: 'notice' })
-    confirmDataSharingNotice.mockResolvedValue(undefined)
-    const wrapper = await mountView()
-
-    try {
-      await getButtonByText(wrapper, 'Create API Key').trigger('click')
-      await wrapper.get('[data-tour="key-form-name"]').setValue('sharing-composite')
-      await wrapper.get('[data-test="composite-key-toggle"]').trigger('click')
-      let editor = wrapper.get('[data-test="composite-group-editor"]')
-      await editor.findAllComponents({ name: 'Select' })[0]!.vm.$emit('update:modelValue', 42)
-      await editor.findAll('input')[0]!.setValue('GPT')
-      await getButtonByText(wrapper, 'Add group mapping').trigger('click')
-      await nextTick()
-
-      editor = wrapper.get('[data-test="composite-group-editor"]')
-      await editor.findAllComponents({ name: 'Select' })[1]!.vm.$emit('update:modelValue', 43)
-      await editor.findAll('input')[1]!.setValue('Claude')
-      await wrapper.get('form#key-form').trigger('submit')
-      await flushPromises()
-
-      expect(getDataSharingNotice).toHaveBeenCalledTimes(1)
-      expect(getDataSharingNotice).toHaveBeenCalledWith(42)
-      expect(createKey).not.toHaveBeenCalled()
-
-      vi.advanceTimersByTime(10_000)
-      await nextTick()
-      await getButtonByText(wrapper, '我已阅读并确认').trigger('click')
-      await flushPromises()
-
-      expect(confirmDataSharingNotice).toHaveBeenCalledWith(42, 7)
-      expect(createKey).toHaveBeenCalledWith(expect.objectContaining({
-        is_composite: true,
-        composite_groups: [
-          { group_id: 42, prefix: 'GPT' },
-          { group_id: 43, prefix: 'Claude' },
-        ],
-        data_sharing_confirmed: true,
-        data_sharing_notice_version: 7,
-      }))
-    } finally {
-      wrapper.unmount()
-      vi.useRealTimers()
-    }
-  })
-
   it('requires an explicit target group when converting composite to ordinary', async () => {
     getAvailableGroups.mockResolvedValueOnce([
-      { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1, data_sharing_enabled: false },
+      { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1 },
     ])
     listKeys.mockResolvedValueOnce({
       items: [{
@@ -1072,7 +1310,7 @@ describe('user KeysView column settings', () => {
 
   it('creates a key with a trimmed model redirect rule', async () => {
     getAvailableGroups.mockResolvedValueOnce([
-      { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1, data_sharing_enabled: false },
+      { id: 42, name: 'OpenAI', platform: 'openai', rate_multiplier: 1 },
     ])
     const wrapper = await mountView()
 
@@ -1082,9 +1320,9 @@ describe('user KeysView column settings', () => {
       (select) => select.attributes('data-tour') === 'key-form-group'
     )
     await groupSelect!.vm.$emit('update:modelValue', 42)
-    await wrapper.get('[data-test="model-mapping-add"]').trigger('click')
-    await wrapper.get('[data-test="model-mapping-source-0"]').setValue(' codex-auto-review ')
-    await wrapper.get('[data-test="model-mapping-target-0"]').setValue(' gpt-5.6-luna ')
+    await wrapper.get('[data-testid="model-mapping-add"]').trigger('click')
+    await wrapper.get('[data-testid="model-mapping-source-0"]').setValue(' codex-auto-review ')
+    await wrapper.get('[data-testid="model-mapping-target-0"]').setValue(' gpt-5.6-luna ')
     await wrapper.get('form#key-form').trigger('submit')
     await flushPromises()
 
@@ -1108,28 +1346,53 @@ describe('user KeysView column settings', () => {
     const wrapper = await mountView()
 
     await getButtonByText(wrapper, 'Edit').trigger('click')
-    expect((wrapper.get('[data-test="model-mapping-source-0"]').element as HTMLInputElement).value)
+    expect((wrapper.get('[data-testid="model-mapping-source-0"]').element as HTMLInputElement).value)
       .toBe('codex-auto-review')
-    await wrapper.get('[data-test="model-mapping-remove-0"]').trigger('click')
+    await wrapper.get('[data-testid="model-mapping-remove-0"]').trigger('click')
     await wrapper.get('form#key-form').trigger('submit')
     await flushPromises()
 
     expect(updateKey).toHaveBeenCalledWith(1, expect.objectContaining({ model_mapping: {} }))
   })
 
+  it('loads request limits and submits zero to remove them', async () => {
+    listKeys.mockResolvedValueOnce({
+      items: [{ ...createApiKey(), group_id: 42, concurrency_limit: 3, rpm_limit: 60 }],
+      total: 1, page: 1, page_size: 20, pages: 1,
+    })
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'Edit').trigger('click')
+    expect((wrapper.get('#key-concurrency-limit').element as HTMLInputElement).value).toBe('3')
+    expect((wrapper.get('#key-rpm-limit').element as HTMLInputElement).value).toBe('60')
+    await wrapper.get('#key-concurrency-limit').setValue('0')
+    await wrapper.get('#key-rpm-limit').setValue('0')
+    await wrapper.get('form#key-form').trigger('submit')
+    await flushPromises()
+    expect(updateKey).toHaveBeenCalledWith(1, expect.objectContaining({ concurrency_limit: 0, rpm_limit: 0 }))
+  })
+
+  it.each(['-1', '1.5', '2147483648'])('rejects invalid request limit %s', async (value) => {
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    await wrapper.get('#key-rpm-limit').setValue(value)
+    await wrapper.get('form#key-form').trigger('submit')
+    expect(createKey).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith('keys.requestLimitsInvalid')
+  })
+
   it('validates duplicate and wildcard model redirect sources in real time', async () => {
     const wrapper = await mountView()
 
     await getButtonByText(wrapper, 'Create API Key').trigger('click')
-    await wrapper.get('[data-test="model-mapping-add"]').trigger('click')
-    await wrapper.get('[data-test="model-mapping-source-0"]').setValue('bad*source')
-    await wrapper.get('[data-test="model-mapping-target-0"]').setValue('target')
+    await wrapper.get('[data-testid="model-mapping-add"]').trigger('click')
+    await wrapper.get('[data-testid="model-mapping-source-0"]').setValue('bad*source')
+    await wrapper.get('[data-testid="model-mapping-target-0"]').setValue('target')
     expect(wrapper.get('[role="alert"]').text()).toBe('Invalid source wildcard')
 
-    await wrapper.get('[data-test="model-mapping-source-0"]').setValue('alias')
-    await wrapper.get('[data-test="model-mapping-add"]').trigger('click')
-    await wrapper.get('[data-test="model-mapping-source-1"]').setValue(' alias ')
-    await wrapper.get('[data-test="model-mapping-target-1"]').setValue('target-2')
+    await wrapper.get('[data-testid="model-mapping-source-0"]').setValue('alias')
+    await wrapper.get('[data-testid="model-mapping-add"]').trigger('click')
+    await wrapper.get('[data-testid="model-mapping-source-1"]').setValue(' alias ')
+    await wrapper.get('[data-testid="model-mapping-target-1"]').setValue('target-2')
     expect(wrapper.findAll('[role="alert"]').some((error) => error.text() === 'Duplicate source model')).toBe(true)
 
     await wrapper.get('form#key-form').trigger('submit')

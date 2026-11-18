@@ -1,15 +1,9 @@
 <template>
-  <div class="fixed inset-0 z-50 overflow-y-auto">
-    <div class="flex min-h-full items-center justify-center p-4">
-      <div class="fixed inset-0 bg-black/50 transition-opacity"></div>
-
-      <div class="relative w-full max-w-md transform rounded-surface bg-white p-6 shadow-xl transition-all dark:bg-dark-800 sm:rounded-dialog">
+  <AuthCardDialog :show="show" @after-leave="$emit('after-leave')" :close-on-overlay="false" @close="$emit('cancel')">
         <!-- Header -->
         <div class="mb-6 text-center">
           <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30">
-            <svg class="h-6 w-6 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-            </svg>
+            <Icon name="shield" size="lg" class="h-6 w-6 text-primary-600 dark:text-primary-400" />
           </div>
           <h3 class="mt-4 text-xl font-semibold text-gray-900 dark:text-white">
             {{ t('profile.totp.loginTitle') }}
@@ -50,7 +44,7 @@
               :pattern="index === 0 ? '[0-9]{1,6}' : '[0-9]'"
               :autocomplete="index === 0 ? 'one-time-code' : 'off'"
               :name="index === 0 ? 'totp_login_code' : undefined"
-              class="h-12 w-10 rounded-lg border border-gray-300 text-center text-lg font-semibold focus:border-primary-500 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-700"
+              class="h-12 w-10 rounded-control border border-gray-300 text-center text-lg font-semibold focus:border-primary-500 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-700"
               :disabled="verifying"
               @input="handleCodeInput($event, index)"
               @change="handleCodeInput($event, index)"
@@ -60,7 +54,7 @@
           </div>
           <!-- 验证中提示 -->
           <div v-if="verifying" class="mt-3 flex items-center justify-center gap-2 text-sm text-gray-500">
-            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-500"></div>
+            <div class="spinner h-4 w-4 text-primary-500"></div>
             {{ t('common.verifying') }}
           </div>
         </div>
@@ -74,22 +68,24 @@
         >
           {{ t('common.cancel') }}
         </button>
-      </div>
-    </div>
-  </div>
+  </AuthCardDialog>
 </template>
 
 <script setup lang="ts">
+import Icon from '@/components/icons/Icon.vue'
+import AuthCardDialog from '@/components/common/AuthCardDialog.vue'
 import { ref, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores'
 
-defineProps<{
+withDefaults(defineProps<{
+  show?: boolean
   tempToken: string
   userEmailMasked?: string
-}>()
+}>(), { show: true })
 
 const emit = defineEmits<{
+  'after-leave': []
   verify: [code: string]
   cancel: []
 }>()
@@ -130,7 +126,7 @@ defineExpose({
     inputRefs.value.forEach(input => {
       if (input) input.value = ''
     })
-    // 清空隐藏的自动填充输入框，避免下一次打开时残留旧验证码。
+    // 清空隐藏的自动填充输入框，下次打开时重新输入验证码。
     if (hiddenOtpInputRef.value) {
       hiddenOtpInputRef.value.value = ''
     }

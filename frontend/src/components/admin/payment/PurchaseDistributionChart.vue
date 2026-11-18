@@ -9,7 +9,7 @@
     >
       {{ t('payment.admin.noData') }}
     </div>
-    <div v-else class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(260px,0.9fr)]">
+    <div v-else class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(260px,0.9fr)]">
       <div class="min-w-0">
         <p class="mb-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
           {{ t('payment.admin.amountShare') }}
@@ -39,7 +39,7 @@
             <tr
               v-for="(item, index) in sortedItems"
               :key="distributionKey(item, index)"
-              class="border-t border-gray-100 dark:border-gray-700"
+              class="border-t border-gray-100 dark:border-dark-600"
             >
               <td class="py-2">
                 <div class="flex min-w-0 items-center gap-2">
@@ -67,13 +67,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, type TooltipItem } from 'chart.js'
 import { Doughnut } from 'vue-chartjs'
+import { externalTooltipHandler, hideExternalTooltip } from '@/utils/chartExternalTooltip'
+import { CHART_PALETTE } from '@/composables/useChartTheme'
 import type { DashboardStats } from '@/types/payment'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
+
+onBeforeUnmount(hideExternalTooltip)
 
 const { t } = useI18n()
 
@@ -83,20 +87,7 @@ const props = defineProps<{
   items: PurchaseDistributionItem[]
 }>()
 
-const chartColors = [
-  '#3b82f6',
-  '#10b981',
-  '#f59e0b',
-  '#ef4444',
-  '#8b5cf6',
-  '#ec4899',
-  '#00D2FF',
-  '#f97316',
-  '#6366f1',
-  '#84cc16',
-  '#06b6d4',
-  '#a855f7'
-]
+const chartColors = CHART_PALETTE
 
 const sortedItems = computed(() => {
   return [...(props.items || [])].sort((a, b) => {
@@ -139,6 +130,8 @@ function makeChartOptions(formatValue: (value: number) => string) {
         display: false
       },
       tooltip: {
+        enabled: false,
+        external: externalTooltipHandler,
         callbacks: {
           label: (context: TooltipItem<'doughnut'>) => {
             const value = Number(context.raw || 0)

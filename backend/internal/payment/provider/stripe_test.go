@@ -1,5 +1,3 @@
-//go:build unit
-
 package provider
 
 import (
@@ -10,9 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/payment"
 	"github.com/stretchr/testify/require"
 	stripe "github.com/stripe/stripe-go/v85"
+
+	"github.com/TokenFlux/TokenRouter/internal/payment"
+	testassert "github.com/TokenFlux/TokenRouter/internal/testutil/assertion"
 )
 
 // stripeRefundBackend 捕获 Stripe SDK 的退款参数，避免测试访问外部网络。
@@ -21,8 +21,8 @@ type stripeRefundBackend struct {
 }
 
 func (b *stripeRefundBackend) Call(_ string, _ string, _ string, params stripe.ParamsContainer, v stripe.LastResponseSetter) error {
-	b.params = append(b.params, params.(*stripe.RefundCreateParams))
-	refund := v.(*stripe.Refund)
+	b.params = append(b.params, testassert.MustType[*stripe.RefundCreateParams](params))
+	refund := testassert.MustType[*stripe.Refund](v)
 	refund.ID = "re_123"
 	refund.Status = stripe.RefundStatusSucceeded
 	return nil

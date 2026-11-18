@@ -255,8 +255,8 @@ export interface ContentModerationCyberWarning {
   api_key_name: string
   group_id: number | null
   group_name: string
-  account_id: number | null
-  account_name: string
+  provider_id: number | null
+  provider_name: string
   endpoint: string
   model: string
   upstream_status: number
@@ -321,7 +321,7 @@ export interface ListCyberWarningsParams {
   page?: number
   page_size?: number
   user_id?: number
-  account_id?: number
+  provider_id?: number
   search?: string
   from?: string
   to?: string
@@ -351,10 +351,10 @@ export interface CyberSummaryUser {
   last_seen: string
 }
 
-export interface CyberSummaryAccount {
+export interface CyberSummaryProvider {
   count: number
-  account_id?: number
-  account_name: string
+  provider_id?: number
+  provider_name: string
   users: number
   last_seen: string
 }
@@ -363,9 +363,9 @@ export interface CyberSummary {
   events: number
   requests: number
   users: number
-  accounts: number
+  providers: number
   by_user: CyberSummaryUser[]
-  by_account: CyberSummaryAccount[]
+  by_provider: CyberSummaryProvider[]
 }
 
 export interface ContentModerationUnbanUserResponse {

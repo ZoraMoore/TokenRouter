@@ -14,8 +14,8 @@ const messages: Record<string, string> = {
   'admin.usage.searchApiKeyPlaceholder': 'Search API key...',
   'usage.model': 'Model',
   'admin.usage.allModels': 'All Models',
-  'admin.usage.account': 'Account',
-  'admin.usage.searchAccountPlaceholder': 'Search account...',
+  'admin.usage.provider': 'Provider',
+  'admin.usage.searchProviderPlaceholder': 'Search provider...',
   'usage.type': 'Type',
   'admin.usage.allTypes': 'All Types',
   'usage.ws': 'WS',
@@ -56,7 +56,7 @@ const mockSearchApiKeys = vi.fn().mockResolvedValue([])
 const mockGroupsList = vi.fn().mockResolvedValue({ items: [] })
 const mockTeamsList = vi.fn().mockResolvedValue([])
 const mockGetModelStats = vi.fn().mockResolvedValue({ models: [] })
-const mockAccountsList = vi.fn().mockResolvedValue({ items: [] })
+const mockProvidersList = vi.fn().mockResolvedValue({ items: [] })
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
@@ -67,15 +67,15 @@ vi.mock('@/api/admin', () => ({
     groups: { list: (...args: any[]) => mockGroupsList(...args) },
     teams: { list: (...args: any[]) => mockTeamsList(...args) },
     dashboard: { getModelStats: (...args: any[]) => mockGetModelStats(...args) },
-    accounts: { list: (...args: any[]) => mockAccountsList(...args) },
+    providers: { list: (...args: any[]) => mockProvidersList(...args) },
   },
 }))
 
-// 生成默认筛选参数，避免用例之间共享可变对象。
+// 每个用例使用独立的默认筛选参数。
 const defaultFilters = () => ({
   user_id: undefined,
   api_key_id: undefined,
-  account_id: undefined,
+  provider_id: undefined,
   model: null,
   request_type: null,
   billing_type: null,
@@ -124,7 +124,7 @@ describe('UsageFilters — user search dropdown', () => {
     mockGetModelStats.mockClear()
     mockGroupsList.mockClear()
     mockTeamsList.mockClear()
-    mockAccountsList.mockClear()
+    mockProvidersList.mockClear()
   })
 
   afterEach(() => {
@@ -141,7 +141,7 @@ describe('UsageFilters — user search dropdown', () => {
     const wrapper = mountFilters()
 
     // 聚焦并输入关键词以触发防抖搜索。
-    const input = wrapper.find('input[type="text"]')
+    const input = wrapper.find('input[placeholder="Search user..."]')
     await input.trigger('focus')
     await input.setValue('test')
     await input.trigger('input')
@@ -185,7 +185,7 @@ describe('UsageFilters — user search dropdown', () => {
       .mockImplementationOnce(() => secondSearch.promise)
 
     const wrapper = mountFilters()
-    const input = wrapper.find('input[type="text"]')
+    const input = wrapper.find('input[placeholder="Search user..."]')
     await input.trigger('focus')
 
     await input.setValue('a')
@@ -211,7 +211,7 @@ describe('UsageFilters — user search dropdown', () => {
     mockSearchUsers.mockImplementationOnce(() => pendingSearch.promise)
 
     const wrapper = mountFilters()
-    const input = wrapper.find('input[type="text"]')
+    const input = wrapper.find('input[placeholder="Search user..."]')
     await input.trigger('focus')
 
     await input.setValue('stale')
@@ -280,5 +280,23 @@ describe('UsageFilters — team options', () => {
       { value: null, label: 'All Teams' },
       { value: 9, label: 'Platform Team' },
     ])
+  })
+})
+
+describe('UsageFilters — 未设置的条件', () => {
+  it('undefined 条件按 null 传给下拉框，显示“全部”选项；选择后写回筛选对象', async () => {
+    const filters: Record<string, any> = { start_date: '', end_date: '' }
+    const wrapper = mountFilters(filters as ReturnType<typeof defaultFilters>)
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'Select' })
+    expect(selects.length).toBeGreaterThan(0)
+    for (const select of selects) {
+      expect(select.props('modelValue')).toBeNull()
+    }
+
+    const typeSelect = selects.find((select) => select.props('options')?.[0]?.label === 'All Types')
+    typeSelect!.vm.$emit('update:modelValue', 'sync')
+    expect(filters.request_type).toBe('sync')
   })
 })

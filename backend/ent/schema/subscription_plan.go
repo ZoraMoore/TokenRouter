@@ -10,12 +10,14 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 // SubscriptionPlan holds the schema definition for the SubscriptionPlan entity.
 //
 // 删除策略：硬删除
-// SubscriptionPlan 使用硬删除而非软删除，原因如下：
+// SubscriptionPlan 使用硬删除：
 //   - 套餐为管理员维护的商品配置，删除即表示下架移除
 //   - 通过 for_sale 字段控制是否在售，删除仅用于彻底移除
 //   - 已购买的订阅记录保存在 UserSubscription 中，不受套餐删除影响
@@ -31,6 +33,7 @@ func (SubscriptionPlan) Annotations() []schema.Annotation {
 
 func (SubscriptionPlan) Fields() []ent.Field {
 	return []ent.Field{
+		field.JSON("localization", billing.PlanLocalization{}).Optional().SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 		field.String("name").
 			MaxLen(100).
 			NotEmpty(),

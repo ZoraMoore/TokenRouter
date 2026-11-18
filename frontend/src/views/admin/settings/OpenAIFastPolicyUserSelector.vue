@@ -4,7 +4,7 @@
       <span
         v-for="userId in selectedUserIds"
         :key="userId"
-        class="inline-flex max-w-full items-center gap-1.5 rounded-md bg-gray-100 px-2.5 py-1.5 text-xs text-gray-700 dark:bg-dark-600 dark:text-gray-200"
+        class="inline-flex max-w-full items-center gap-1.5 rounded-compact bg-gray-100 px-2.5 py-1.5 text-xs text-gray-700 dark:bg-dark-600 dark:text-gray-200"
       >
         <span class="max-w-64 truncate font-medium" :title="selectedUserLabel(userId)">
           {{ selectedUserLabel(userId) }}
@@ -18,7 +18,7 @@
         </span>
         <button
           type="button"
-          class="shrink-0 rounded text-gray-400 hover:text-red-600 dark:hover:text-red-400"
+          class="shrink-0 rounded-compact text-gray-400 hover:text-red-600 dark:hover:text-red-400"
           :aria-label="t('admin.settings.openaiFastPolicy.removeUser')"
           :title="t('admin.settings.openaiFastPolicy.removeUser')"
           @click="removeUser(userId)"
@@ -32,54 +32,57 @@
       <Icon
         name="search"
         size="sm"
-        class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+        class="input-icon text-gray-400"
       />
       <input
         v-model="searchQuery"
         type="text"
         autocomplete="off"
-        class="input input-sm w-full pl-9"
+        class="input w-full input-has-icon [--input-icon-slot:1.5rem]"
         :placeholder="t('admin.settings.openaiFastPolicy.userSearchPlaceholder')"
         @input="debounceSearch"
         @focus="showDropdown = true"
       />
     </div>
 
-    <div
-      v-if="showDropdown && searchQuery.trim()"
-      class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-600 dark:bg-dark-700"
-    >
-      <div v-if="searchLoading" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-        {{ t("common.loading") }}
-      </div>
+    <MotionTransition name="dropdown-fade">
       <div
-        v-else-if="availableResults.length === 0"
-        class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
+        v-if="showDropdown && searchQuery.trim()" :inert="!(showDropdown && searchQuery.trim()) || undefined"
+        class="dropdown z-50 mt-1 max-h-menu-sm w-full overflow-auto py-0"
       >
-        {{ t("admin.settings.openaiFastPolicy.userSearchEmpty") }}
-      </div>
-      <template v-else>
-        <button
-          v-for="user in availableResults"
-          :key="user.id"
-          type="button"
-          class="flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-600"
-          @click="selectUser(user)"
+        <div v-if="searchLoading" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+          {{ t("common.loading") }}
+        </div>
+        <div
+          v-else-if="availableResults.length === 0"
+          class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
         >
-          <span class="min-w-0 truncate font-medium text-gray-900 dark:text-white">
-            {{ user.email }}
-            <span v-if="user.deleted" class="ml-1 text-xs font-normal text-gray-400">
-              {{ t("admin.settings.openaiFastPolicy.userDeleted") }}
+          {{ t("admin.settings.openaiFastPolicy.userSearchEmpty") }}
+        </div>
+        <template v-else>
+          <button
+            v-for="user in availableResults"
+            :key="user.id"
+            type="button"
+            class="dropdown-item justify-between gap-3"
+            @click="selectUser(user)"
+          >
+            <span class="min-w-0 truncate font-medium text-gray-900 dark:text-white">
+              {{ user.email }}
+              <span v-if="user.deleted" class="ml-1 text-xs font-normal text-gray-400">
+                {{ t("admin.settings.openaiFastPolicy.userDeleted") }}
+              </span>
             </span>
-          </span>
-          <span class="shrink-0 text-xs text-gray-400">#{{ user.id }}</span>
-        </button>
-      </template>
-    </div>
+            <span class="shrink-0 text-xs text-gray-400">#{{ user.id }}</span>
+          </button>
+        </template>
+      </div>
+    </MotionTransition>
   </div>
 </template>
 
 <script setup lang="ts">
+import MotionTransition from '@/components/common/MotionTransition.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { adminAPI } from "@/api/admin";

@@ -1,3 +1,4 @@
+import { getLocale } from '@/i18n'
 import { buildGatewayUrl } from './client'
 
 export type BatchImageStatus =
@@ -31,7 +32,7 @@ export interface BatchImageSubmitRequest {
   model: string
   task_name?: string
   parent_batch_id?: string
-  provider?: '' | 'gemini_api' | 'vertex' | string
+  platform?: '' | 'gemini_api' | 'vertex' | string
   image_size?: '1K' | '2K' | '4K' | string
   response_mime_type?: string
   aspect_ratio?: string
@@ -46,7 +47,7 @@ export interface BatchImageJob {
   parent_batch_id?: string | null
   status: BatchImageStatus
   model: string
-  provider: string
+  platform: string
   item_count: number
   success_count: number
   fail_count: number
@@ -91,7 +92,7 @@ export interface BatchImageJobsResponse {
 export interface BatchImageModel {
   id: string
   object: string
-  provider: string
+  platform: string
 }
 
 export interface BatchImageModelsResponse {
@@ -130,6 +131,7 @@ async function parseBatchImageError(response: Response): Promise<Error> {
 function authHeaders(apiKey: string, extra?: HeadersInit): HeadersInit {
   return {
     Authorization: `Bearer ${apiKey}`,
+    'Accept-Language': getLocale(),
     ...extra,
   }
 }

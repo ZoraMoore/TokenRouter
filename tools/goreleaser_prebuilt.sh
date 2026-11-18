@@ -29,7 +29,7 @@ done
 : "${GOOS:?goreleaser prebuilt adapter: GOOS is required}"
 : "${GOARCH:?goreleaser prebuilt adapter: GOARCH is required}"
 
-source_path="${GORELEASER_PREBUILT_DIR}/sub2api_${GOOS}_${GOARCH}"
+source_path="${GORELEASER_PREBUILT_DIR}/tokenrouter_${GOOS}_${GOARCH}"
 [ -f "$source_path" ] || {
   printf 'goreleaser prebuilt adapter: binary not found: %s\n' "$source_path" >&2
   exit 1

@@ -1,0 +1,97 @@
+package ws
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/TokenFlux/TokenRouter/internal/billing/pricing"
+	"github.com/TokenFlux/TokenRouter/internal/gateway/admission"
+	"github.com/TokenFlux/TokenRouter/internal/routing"
+	"github.com/TokenFlux/TokenRouter/internal/scheduler"
+)
+
+// ErrEntryLocalRoutingRejected 标记本地提供商资格检查拒绝，上游健康状态保持原值。
+var ErrEntryLocalRoutingRejected = errors.New("local websocket routing rejected")
+
+// EntryFallbackSeed 为缺少指定会话标识的请求生成隔离键。
+func EntryFallbackSeed(userID, keyID int64, groupID *int64) string {
+	var group int64
+	if groupID != nil {
+		group = *groupID
+	}
+	return fmt.Sprintf("openai_ws_ingress:%d:%d:%d", group, userID, keyID)
+}
+
+func entrySeedHash(seed string) string {
+	value, _ := scheduler.DeriveSessionHashes(seed)
+	return value
+}
+
+// EntryNextAttemptMessage 在当前 turn 可完整重放时返回供下一个提供商使用的消息。
+func EntryNextAttemptMessage(current, retry []byte, currentTurn bool) ([]byte, bool) {
+	if !currentTurn {
+		return append([]byte(nil), current...), true
+	}
+	if len(retry) == 0 {
+		return nil, false
+	}
+	return append([]byte(nil), retry...), true
+}
+
+// EntryBillingModel 优先使用共享价卡指定的计费模型。
+func EntryBillingModel(result *ForwardResult, mapping routing.GroupMappingResult, requested, upstream string) string {
+	model := ""
+	if result != nil {
+		model = strings.TrimSpace(result.BillingModel)
+	}
+	if model == "" {
+		model = strings.TrimSpace(upstream)
+	}
+	if model == "" {
+		model = strings.TrimSpace(requested)
+	}
+	requested = strings.TrimSpace(requested)
+	switch mapping.BillingModelSource {
+	case routing.BillingModelSourceRequested:
+		if requested != "" {
+			model = requested
+		}
+	case routing.BillingModelSourceGroupMapped:
+		if mapped := strings.TrimSpace(mapping.MappedModel); mapped != "" && mapped != requested {
+			model = mapped
+		}
+	}
+	return model
+}
+
+func entrySucceeded(r *ForwardResult) bool {
+	if r == nil || !r.OpenAIWSMode || r.UpstreamTerminalEvent == "" {
+		return true
+	}
+	return r.UpstreamTerminalEvent == "response.completed" || r.UpstreamTerminalEvent == "response.done"
+}
+
+func EntryLocalRoutingReason(model string) string {
+	return fmt.Sprintf("model %s is not available for this websocket group or provider", strings.TrimSpace(model))
+}
+
+// EntryLocalRoutingErrorReason 为缺价拒绝提供可操作的提示。
+func EntryLocalRoutingErrorReason(model string, err error) string {
+	if errors.Is(err, pricing.ErrModelPricingUnavailable) {
+		return admission.ModelPricingUnavailableMessage
+	}
+	return EntryLocalRoutingReason(model)
+}
+
+func EntryLocalRoutingCause(err error) error {
+	return fmt.Errorf("%w: %w", ErrEntryLocalRoutingRejected, err)
+}
+
+func EntryShouldReportFailure(err error) bool {
+	if err == nil || errors.Is(err, ErrEntryLocalRoutingRejected) || IsSessionPreemptedError(err) {
+		return false
+	}
+	var policy *routing.ReasoningEffortOverLimitError
+	return !errors.As(err, &policy)
+}

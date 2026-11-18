@@ -1,0 +1,4 @@
+interface:
+  display_name: "TokenRouter Custom Upgrade"
+  short_description: "Safely sync, test, and deploy a customized TokenRouter"
+  default_prompt: "Use $tokenrouter-custom-upgrade to sync my customized TokenRouter fork to a selected upstream release and safely deploy it."

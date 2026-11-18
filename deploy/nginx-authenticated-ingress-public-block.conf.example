@@ -1,0 +1,5 @@
+# 本片段放入 api.scienceedu.me 的 HTTPS `server` 块，并位于通用 `location /` 之外。
+# observer 直接通过宿主机 loopback 访问 TokenRouter，公网不需要也不允许访问内部入口。
+location ^~ /internal/ {
+    return 404;
+}

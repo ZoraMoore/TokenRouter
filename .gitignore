@@ -11,6 +11,8 @@ docs/claude-relay-service/
 *.dylib
 backend/bin/
 backend/server
+backend/tokenrouter
+# 旧版本本地构建产物继续忽略。
 backend/sub2api
 backend/main
 
@@ -119,6 +121,9 @@ backend/.installed
 SYNC.md
 PLAN.md
 tests
+# 后端与部署脚本的测试源码需要纳入版本控制。
+!backend/tests/
+!backend/tests/**
 !deploy/tests/
 !deploy/tests/**
 CLAUDE.md
@@ -126,6 +131,7 @@ CLAUDE.md
 scripts
 !backend/scripts/
 !backend/scripts/resolve-version.sh
+!frontend/scripts/
 .code-review-state
 #openspec/
 code-reviews/
@@ -142,3 +148,12 @@ output/
 
 # 仓库根目录的 Vitest 与 Vite 缓存
 .vite/
+
+# 本地重构计划和验证资料，不纳入版本控制。
+/refactor/
+
+# Vitest 的测试报告和失败附件。
+.vitest/
+
+# Python 字节码缓存。
+__pycache__/

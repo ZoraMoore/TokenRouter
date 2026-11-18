@@ -37,6 +37,11 @@ export const useAnnouncementStore = defineStore('announcements', () => {
       const all = await announcementsAPI.list(false, force)
       // 保留完整可见列表，确保不同界面可以按各自规则排序和统计。
       announcements.value = all
+      if (currentPopup.value) currentPopup.value = all.find(item => item.id === currentPopup.value?.id) || null
+      popupQueue.value = popupQueue.value.flatMap(item => {
+        const updated = all.find(candidate => candidate.id === item.id)
+        return updated ? [updated] : []
+      })
       enqueueNewPopups()
     } catch (err: any) {
       // Revert throttle timestamp on failure so retry is allowed
@@ -48,7 +53,7 @@ export const useAnnouncementStore = defineStore('announcements', () => {
   }
 
   function enqueueNewPopups() {
-    // 弹窗候选仍限制为服务端优先级最高的前 20 条，避免一次会话堆积过多弹窗。
+    // 从服务端优先级最高的前 20 条公告中选取弹窗。
     const newPopups = announcements.value
       .slice(0, MAX_POPUP_CANDIDATES)
       .filter((a) => a.notify_mode === 'popup' && !a.read_at && !shownPopupIds.has(a.id))
@@ -82,9 +87,13 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     // Mark as read (fire-and-forget, UI already updated)
     markAsRead(id)
 
-    // Show next popup after a short delay
+    // AnnouncementPopup 离场结束时触发 onPopupClosed，推进到下一条公告。
+  }
+
+  // AnnouncementPopup 离场动画结束（或动画途中被卸载）时回调，推进连播队列。
+  function onPopupClosed() {
     if (popupQueue.value.length > 0) {
-      setTimeout(() => showNextPopup(), 300)
+      showNextPopup()
     }
   }
 
@@ -139,6 +148,7 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     // Actions
     fetchAnnouncements,
     dismissPopup,
+    onPopupClosed,
     markAsRead,
     markAllAsRead,
     reset,

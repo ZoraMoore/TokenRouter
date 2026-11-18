@@ -6,7 +6,7 @@
     <header class="relative z-20 px-6 py-4">
       <nav class="mx-auto flex max-w-6xl items-center justify-between">
         <router-link to="/home" class="flex items-center gap-3">
-          <div class="h-10 w-10 overflow-hidden rounded-xl shadow-md">
+          <div class="h-10 w-10 overflow-hidden rounded-surface shadow-md">
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </div>
           <span class="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">{{ siteName }}</span>
@@ -18,14 +18,14 @@
             :href="docUrl"
             target="_blank"
             rel="noopener noreferrer"
-            class="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
+            class="rounded-control p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
             :title="t('home.viewDocs')"
           >
-            <Icon name="book" size="md" />
+            <Icon name="book" size="sm" />
           </a>
           <button
             @click="toggleTheme"
-            class="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
+            class="rounded-control p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
             :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
           >
             <Icon v-if="isDark" name="sun" size="md" />
@@ -36,7 +36,7 @@
     </header>
 
     <!-- Main Content -->
-    <main class="relative z-10 flex-1 w-full max-w-5xl mx-auto px-6 py-12">
+    <main v-content-reveal="motionRoute?.path" class="relative z-10 flex-1 w-full max-w-5xl mx-auto px-6 py-12">
       <!-- Hero -->
       <div class="text-center mb-12">
         <h1 class="text-3xl sm:text-4xl font-bold tracking-tight mb-3 text-gray-900 dark:text-white">
@@ -49,45 +49,39 @@
 
       <!-- Input Section -->
       <div class="max-w-xl mx-auto mb-14">
-        <div class="flex gap-3">
+        <div class="flex gap-2">
           <div class="flex-1 relative">
             <div class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-dark-500">
-              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
+              <Icon name="lock" size="md" class="w-5 h-5" />
             </div>
             <input
               v-model="apiKey"
               :type="keyVisible ? 'text' : 'password'"
               :placeholder="t('keyUsage.placeholder')"
-              class="input-ring w-full h-12 pl-12 pr-12 rounded-control border border-gray-200 bg-white text-sm text-gray-900 placeholder:text-gray-400 transition-all dark:border-dark-700 dark:bg-dark-900 dark:text-white dark:placeholder:text-dark-500"
+              class="input pl-12 pr-12"
               @keydown.enter="queryKey"
             />
             <button
               @click="keyVisible = !keyVisible"
               class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 dark:text-dark-500 dark:hover:text-white transition-colors"
             >
-              <svg v-if="!keyVisible" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                <line x1="1" y1="1" x2="23" y2="23"/>
-              </svg>
-              <svg v-else class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-              </svg>
+              <Icon name="eyeOff" size="sm" v-if="!keyVisible" />
+              <Icon name="eye" size="sm" v-else />
             </button>
           </div>
           <button
             @click="queryKey"
             :disabled="isQuerying"
-            class="h-12 px-7 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium text-sm transition-all active:scale-[0.97] flex items-center gap-2 whitespace-nowrap disabled:opacity-60"
+            class="btn btn-primary whitespace-nowrap px-7"
           >
-            <svg v-if="isQuerying" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
-              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-            </svg>
-            <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
+            <Icon
+              name="loader"
+              size="sm"
+              :animate-on-hover="false"
+              v-if="isQuerying"
+              class="animate-spin"
+            />
+            <Icon name="search" size="sm" v-else />
             {{ isQuerying ? t('keyUsage.querying') : t('keyUsage.query') }}
           </button>
         </div>
@@ -103,26 +97,26 @@
               v-for="range in dateRanges"
               :key="range.key"
               @click="setDateRange(range.key)"
-              class="text-xs px-3 py-1.5 rounded-lg border transition-all"
+              class="text-xs px-3 py-1.5 rounded-control border transition"
               :class="currentRange === range.key
-                ? 'bg-primary-500 text-white border-primary-500'
+                ? 'border-primary-500/60 bg-primary-50 text-primary-700 dark:border-primary-500/15 dark:bg-primary-500/8 dark:text-primary-500'
                 : 'border-gray-200 bg-white text-gray-700 dark:border-dark-700 dark:bg-dark-900 dark:text-dark-200 hover:border-black/20 dark:hover:border-dark-600'"
             >{{ range.label }}</button>
             <div v-if="currentRange === 'custom'" class="flex items-center gap-2 ml-1">
               <input
                 v-model="customStartDate"
                 type="date"
-                class="input-ring text-xs px-2 py-1.5 rounded-lg border border-primary-900/10 bg-white text-gray-900 dark:border-dark-700 dark:bg-dark-900 dark:text-white"
+                class="input w-auto px-2 text-xs"
               />
               <span class="text-xs text-gray-400">-</span>
               <input
                 v-model="customEndDate"
                 type="date"
-                class="input-ring text-xs px-2 py-1.5 rounded-lg border border-primary-900/10 bg-white text-gray-900 dark:border-dark-700 dark:bg-dark-900 dark:text-white"
+                class="input w-auto px-2 text-xs"
               />
               <button
                 @click="queryKey"
-                class="text-xs px-3 py-1.5 rounded-lg bg-primary-500 text-white hover:bg-primary-600"
+                class="btn btn-primary btn-sm h-9"
               >{{ t('keyUsage.apply') }}</button>
             </div>
           </div>
@@ -132,18 +126,18 @@
       <!-- Results Container -->
       <div v-if="showResults">
         <!-- Loading Skeleton -->
-        <div v-if="showLoading" class="space-y-6">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="rounded-2xl border border-gray-200 bg-white p-8 dark:border-dark-700 dark:bg-dark-900">
+        <div v-if="showLoading" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="rounded-surface border border-gray-200 bg-white p-8 dark:border-dark-700 dark:bg-dark-900">
               <div class="skeleton h-5 w-24 mb-6"></div>
               <div class="flex justify-center"><div class="skeleton w-44 h-44 rounded-full"></div></div>
             </div>
-            <div class="rounded-2xl border border-gray-200 bg-white p-8 dark:border-dark-700 dark:bg-dark-900">
+            <div class="rounded-surface border border-gray-200 bg-white p-8 dark:border-dark-700 dark:bg-dark-900">
               <div class="skeleton h-5 w-24 mb-6"></div>
               <div class="flex justify-center"><div class="skeleton w-44 h-44 rounded-full"></div></div>
             </div>
           </div>
-          <div class="rounded-2xl border border-gray-200 bg-white p-8 dark:border-dark-700 dark:bg-dark-900">
+          <div class="rounded-surface border border-gray-200 bg-white p-8 dark:border-dark-700 dark:bg-dark-900">
             <div class="skeleton h-5 w-32 mb-6"></div>
             <div class="space-y-4">
               <div class="skeleton h-4 w-full"></div>
@@ -155,7 +149,7 @@
         </div>
 
         <!-- Result Content -->
-        <div v-else-if="resultData" class="space-y-6">
+        <div v-else-if="resultData" class="space-y-4">
           <!-- Status Badge -->
           <div v-if="statusInfo" class="fade-up flex items-center justify-center mb-2">
             <div class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-gray-200 bg-white/90 shadow-sm backdrop-blur-sm dark:border-dark-700 dark:bg-dark-900/90">
@@ -174,7 +168,7 @@
             <div
               v-for="(ring, i) in ringItems"
               :key="i"
-              class="fade-up rounded-2xl border border-gray-200 bg-white/90 p-8 backdrop-blur-sm transition-all duration-300 hover:shadow-lg dark:border-dark-700 dark:bg-dark-900/90"
+              class="fade-up rounded-surface border border-gray-200 bg-white/90 p-8 backdrop-blur-sm transition duration-layout hover:shadow-lg dark:border-dark-700 dark:bg-dark-900/90"
               :class="`fade-up-delay-${Math.min(i + 1, 4)}`"
             >
               <div class="flex items-center justify-between mb-6">
@@ -182,13 +176,19 @@
                   {{ ring.title }}
                 </h3>
                 <!-- Clock icon -->
-                <svg v-if="ring.iconType === 'clock'" class="w-5 h-5 text-gray-400 dark:text-dark-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                </svg>
+                <Icon
+                  name="clock"
+                  size="md"
+                  v-if="ring.iconType === 'clock'"
+                  class="w-5 h-5 text-gray-400 dark:text-dark-500"
+                />
                 <!-- Calendar icon -->
-                <svg v-else-if="ring.iconType === 'calendar'" class="w-5 h-5 text-gray-400 dark:text-dark-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
+                <Icon
+                  name="calendar"
+                  size="md"
+                  v-else-if="ring.iconType === 'calendar'"
+                  class="w-5 h-5 text-gray-400 dark:text-dark-500"
+                />
                 <BalanceIcon v-else size="md" class="text-gray-400 dark:text-dark-500" />
               </div>
               <div class="flex justify-center">
@@ -202,6 +202,7 @@
                       stroke-width="10" stroke-linecap="round"
                       :stroke-dasharray="CIRCUMFERENCE.toFixed(2)"
                       :stroke-dashoffset="getRingOffset(ring)"
+                      :style="{ transitionDuration: `${RING_ANIMATION_MS}ms` }"
                     />
                     <defs>
                       <linearGradient :id="`ring-grad-${i}`" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -238,7 +239,7 @@
           <!-- Detail Card -->
           <div
             v-if="detailRows.length > 0"
-            class="fade-up fade-up-delay-3 rounded-2xl border border-gray-200 bg-white/90 backdrop-blur-sm overflow-hidden dark:border-dark-700 dark:bg-dark-900/90"
+            class="fade-up fade-up-delay-3 rounded-surface border border-gray-200 bg-white/90 backdrop-blur-sm overflow-hidden dark:border-dark-700 dark:bg-dark-900/90"
           >
             <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
               <h3 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.detailInfo') }}</h3>
@@ -250,7 +251,7 @@
                 class="px-8 py-4 flex items-center justify-between"
               >
                 <div class="flex items-center gap-3">
-                  <div class="w-8 h-8 rounded-lg flex items-center justify-center" :class="row.iconBg">
+                  <div class="w-8 h-8 rounded-control flex items-center justify-center" :class="row.iconBg">
                     <BalanceIcon
                       v-if="row.useBalanceIcon"
                       size="sm"
@@ -277,7 +278,7 @@
           <!-- Usage Stats Card -->
           <div
             v-if="usageStatCells.length > 0"
-            class="fade-up fade-up-delay-3 rounded-2xl border border-gray-200 bg-white/90 backdrop-blur-sm overflow-hidden dark:border-dark-700 dark:bg-dark-900/90"
+            class="fade-up fade-up-delay-3 rounded-surface border border-gray-200 bg-white/90 backdrop-blur-sm overflow-hidden dark:border-dark-700 dark:bg-dark-900/90"
           >
             <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
               <h3 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.tokenStats') }}</h3>
@@ -297,19 +298,18 @@
           <!-- 按日用量明细表 -->
           <div
             v-if="showDailyUsage"
-            class="fade-up fade-up-delay-4 rounded-2xl border border-gray-200 bg-white/90 backdrop-blur-sm overflow-hidden dark:border-dark-700 dark:bg-dark-900/90"
+            class="fade-up fade-up-delay-4 rounded-surface border border-gray-200 bg-white/90 backdrop-blur-sm overflow-hidden dark:border-dark-700 dark:bg-dark-900/90"
           >
             <div class="flex flex-col gap-3 px-8 py-5 border-b border-gray-200 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
               <h3 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.dailyDetail') }}</h3>
-              <div class="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 dark:border-dark-700 dark:bg-dark-950">
+              <div v-segmented class="segmented">
                 <button
                   v-for="option in dailyUsageOptions"
                   :key="option.value"
+                  type="button"
                   @click="setDailyUsageDays(option.value)"
-                  class="min-w-12 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                  :class="dailyUsageDays === option.value
-                    ? 'bg-primary-500 text-white'
-                    : 'text-gray-600 hover:bg-gray-100 dark:text-dark-300 dark:hover:bg-dark-800'"
+                  class="segmented-item min-w-12 px-3 py-1.5 text-xs"
+                  :class="{ 'segmented-item-active': dailyUsageDays === option.value }"
                 >
                   {{ option.label }}
                 </button>
@@ -353,7 +353,7 @@
           <!-- Model Stats Table -->
           <div
             v-if="modelStats.length > 0"
-            class="fade-up fade-up-delay-4 rounded-2xl border border-gray-200 bg-white/90 backdrop-blur-sm overflow-hidden dark:border-dark-700 dark:bg-dark-900/90"
+            class="fade-up fade-up-delay-4 rounded-surface border border-gray-200 bg-white/90 backdrop-blur-sm overflow-hidden dark:border-dark-700 dark:bg-dark-900/90"
           >
             <div class="px-8 py-5 border-b border-gray-200 dark:border-dark-700">
               <h3 class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">{{ t('keyUsage.modelStats') }}</h3>
@@ -422,6 +422,14 @@
 </template>
 
 <script setup lang="ts">
+import { useLocaleRefresh } from '@/composables/useLocaleRefresh'
+import { getLocale } from '@/i18n'
+import { localizedErrorMessage } from '@/i18n/errors'
+import { vContentReveal } from '@/directives/contentReveal'
+import { vSegmented } from '@/directives/segmented'
+import { useRoute as useMotionRoute } from 'vue-router'
+const motionRoute = useMotionRoute()
+
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores'
@@ -440,7 +448,7 @@ const { formatBalanceAmount } = useBalanceDisplay()
 
 // ==================== Site Settings (same as HomeView) ====================
 
-const siteName = computed(() => appStore.siteName || 'Sub2API')
+const siteName = computed(() => appStore.siteName || 'TokenRouter')
 const siteLogo = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
 const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
 const githubUrl = 'https://github.com/TokenFlux/TokenRouter'
@@ -459,7 +467,6 @@ const isQuerying = ref(false)
 const showResults = ref(false)
 const showLoading = ref(false)
 const showDatePicker = ref(false)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const resultData = ref<any>(null)
 const now = ref(new Date())
 let resetTimer: ReturnType<typeof setInterval> | null = null
@@ -541,6 +548,9 @@ function setDailyUsageDays(days: 7 | 30 | 90) {
 // ==================== Ring Animation ====================
 
 const CIRCUMFERENCE = 2 * Math.PI * 68
+// 圆环描边过渡与百分比数字滚动共用的时长，模板内联注入 transitionDuration，
+// 避免 JS/CSS 两处各写一份再漂移（历史上 1000ms 对 1.2s，数字比圆环先停）。
+const RING_ANIMATION_MS = 1200
 const RING_GRADIENTS = [
   { from: '#00D2FF', to: '#8BDDF8' },
   { from: '#6366F1', to: '#A5B4FC' },
@@ -551,7 +561,7 @@ const RING_GRADIENTS = [
 const ringAnimated = ref(false)
 const displayPcts = ref<number[]>([])
 
-const ringTrackColor = computed(() => isDark.value ? '#222222' : '#F0F0EE')
+const ringTrackColor = computed(() => isDark.value ? '#27272A' : '#F0F0EE')
 
 interface RingItem {
   title: string
@@ -578,13 +588,12 @@ function triggerRingAnimation(items: RingItem[]) {
         ringAnimated.value = true
 
         // Animate percentage numbers
-        const duration = 1000
         const startTime = performance.now()
         const targets = items.map(item => item.isBalance ? 0 : item.pct)
 
         function tick() {
           const elapsed = performance.now() - startTime
-          const p = Math.min(elapsed / duration, 1)
+          const p = Math.min(elapsed / RING_ANIMATION_MS, 1)
           const ease = 1 - Math.pow(1 - p, 3)
           displayPcts.value = targets.map(target => Math.round(ease * target))
           if (p < 1) requestAnimationFrame(tick)
@@ -761,7 +770,7 @@ const detailRows = computed<DetailRow[]>(() => {
       })
     }
     if (data.rate_limits) {
-      const windowMap: Record<string, string> = { '5h': '5H', '1d': locale.value === 'zh' ? '日' : 'D', '7d': '7D' }
+      const windowMap: Record<string, string> = { '5h': '5H', '1d': locale.value === 'zh-Hans' ? '日' : 'D', '7d': '7D' }
       for (const rl of data.rate_limits) {
         const pct = rl.limit > 0 ? (rl.used / rl.limit) * 100 : 0
         let valueStr = `${formatUsageBalance(rl.used)} / ${formatUsageBalance(rl.limit)}`
@@ -792,21 +801,21 @@ const detailRows = computed<DetailRow[]>(() => {
         const pct = (sub.daily_usage_usd / sub.daily_limit_usd) * 100
         rows.push({
           iconBg: 'bg-primary-500/10', iconColor: 'text-primary-500', iconSvg: '',
-          label: `${t('keyUsage.usedQuota')} (${locale.value === 'zh' ? '日' : 'D'})`, value: `${formatUsageBalance(sub.daily_usage_usd)} / ${formatUsageBalance(sub.daily_limit_usd)}`, valueClass: getUsageColor(pct), useBalanceIcon: true,
+          label: `${t('keyUsage.usedQuota')} (${locale.value === 'zh-Hans' ? '日' : 'D'})`, value: `${formatUsageBalance(sub.daily_usage_usd)} / ${formatUsageBalance(sub.daily_limit_usd)}`, valueClass: getUsageColor(pct), useBalanceIcon: true,
         })
       }
       if (sub.weekly_limit_usd > 0) {
         const pct = (sub.weekly_usage_usd / sub.weekly_limit_usd) * 100
         rows.push({
           iconBg: 'bg-indigo-500/10', iconColor: 'text-indigo-500', iconSvg: '',
-          label: `${t('keyUsage.usedQuota')} (${locale.value === 'zh' ? '周' : 'W'})`, value: `${formatUsageBalance(sub.weekly_usage_usd)} / ${formatUsageBalance(sub.weekly_limit_usd)}`, valueClass: getUsageColor(pct), useBalanceIcon: true,
+          label: `${t('keyUsage.usedQuota')} (${locale.value === 'zh-Hans' ? '周' : 'W'})`, value: `${formatUsageBalance(sub.weekly_usage_usd)} / ${formatUsageBalance(sub.weekly_limit_usd)}`, valueClass: getUsageColor(pct), useBalanceIcon: true,
         })
       }
       if (sub.monthly_limit_usd > 0) {
         const pct = (sub.monthly_usage_usd / sub.monthly_limit_usd) * 100
         rows.push({
           iconBg: 'bg-emerald-500/10', iconColor: 'text-emerald-500', iconSvg: '',
-          label: `${t('keyUsage.usedQuota')} (${locale.value === 'zh' ? '月' : 'M'})`, value: `${formatUsageBalance(sub.monthly_usage_usd)} / ${formatUsageBalance(sub.monthly_limit_usd)}`, valueClass: getUsageColor(pct), useBalanceIcon: true,
+          label: `${t('keyUsage.usedQuota')} (${locale.value === 'zh-Hans' ? '月' : 'M'})`, value: `${formatUsageBalance(sub.monthly_usage_usd)} / ${formatUsageBalance(sub.monthly_limit_usd)}`, valueClass: getUsageColor(pct), useBalanceIcon: true,
         })
       }
       if (sub.expires_at) {
@@ -871,7 +880,6 @@ const usageStatCells = computed<StatCell[]>(() => {
   ]
 })
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const modelStats = computed<any[]>(() => resultData.value?.model_stats || [])
 
 interface DailyUsageRow {
@@ -901,13 +909,13 @@ function formatUsageBalance(value: number | null | undefined): string {
 
 function fmtNum(val: number | null | undefined): string {
   if (val == null) return '-'
-  return val.toLocaleString()
+  return val.toLocaleString(getLocale())
 }
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return '-'
   const d = new Date(iso)
-  const loc = locale.value === 'zh' ? 'zh-CN' : 'en-US'
+  const loc = locale.value
   return d.toLocaleDateString(loc, { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
@@ -921,19 +929,27 @@ function getBrowserTimezone(): string {
 
 // ==================== API Query ====================
 
-async function fetchUsage(key: string) {
+async function fetchUsage(key: string): Promise<any> {
+  const requestedLocale = getLocale()
   const dateParams = getDateParams()
   const url = buildGatewayUrl('/v1/usage') + (dateParams ? '?' + dateParams : '')
   const res = await fetch(url, {
-    headers: { 'Authorization': 'Bearer ' + key },
+    headers: { 'Authorization': 'Bearer ' + key, 'Accept-Language': requestedLocale },
   })
+  const data = await res.json().catch(() => null)
+  if (requestedLocale !== getLocale()) return fetchUsage(key)
   if (!res.ok) {
-    const body = await res.json().catch(() => null)
-    const msg = body?.error?.message || body?.message || `${t('keyUsage.queryFailed')} (${res.status})`
-    throw new Error(msg)
+    const message = data?.error?.message || data?.message || `${t('keyUsage.queryFailed')} (${res.status})`
+    throw new Error(localizedErrorMessage(data?.error?.code || data?.reason, res.status, message))
   }
-  return await res.json()
+  return data
 }
+
+useLocaleRefresh(async () => {
+  if (!resultData.value || isQuerying.value) return
+  const data = await fetchUsage(apiKey.value.trim())
+  resultData.value = data
+})
 
 async function queryKey() {
   if (isQuerying.value) return
@@ -978,9 +994,10 @@ function formatResetTime(resetAt: string | null | undefined): string {
   const days = Math.floor(diff / 86400000)
   const hours = Math.floor((diff % 86400000) / 3600000)
   const mins = Math.floor((diff % 3600000) / 60000)
-  if (days > 0) return `${days}d ${hours}h`
-  if (hours > 0) return `${hours}h ${mins}m`
-  return `${mins}m`
+  const unit = (value: number, name: string) => new Intl.NumberFormat(getLocale(), { style: 'unit', unit: name, unitDisplay: 'narrow' }).format(value)
+  if (days > 0) return `${unit(days, 'day')} ${unit(hours, 'hour')}`
+  if (hours > 0) return `${unit(hours, 'hour')} ${unit(mins, 'minute')}`
+  return unit(mins, 'minute')
 }
 
 onMounted(() => {
@@ -996,24 +1013,10 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 自定义日期输入在浅色模式使用中性焦点圈，暗色模式保留原品牌强调。 */
-.input-ring {
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
-}
-.input-ring:focus {
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
-  border-color: rgba(45, 79, 104, 0.1);
-  outline: none;
-}
-
-:global(.dark) .input-ring:focus {
-  box-shadow: 0 0 0 3px rgba(0, 210, 255, 0.22);
-  border-color: #00D2FF;
-}
-
-/* Ring animation */
+/* Ring animation — 时长不在此写死，由模板内联 transitionDuration 注入 RING_ANIMATION_MS。 */
 .progress-ring {
-  transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition-property: stroke-dashoffset;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transform: rotate(-90deg);
   transform-origin: 50% 50%;
 }
@@ -1027,10 +1030,10 @@ onUnmounted(() => {
   background: linear-gradient(90deg, #DDF4FC 25%, #F6FCFF 50%, #DDF4FC 75%);
   background-size: 200% 100%;
   animation: shimmer-kv 1.8s ease-in-out infinite;
-  border-radius: 8px;
+  border-radius: var(--radius-surface);
 }
 :global(.dark) .skeleton {
-  background: linear-gradient(90deg, #1F1F23 25%, #121215 50%, #1F1F23 75%);
+  background: linear-gradient(90deg, #17171A 25%, #0F0F10 50%, #17171A 75%);
   background-size: 200% 100%;
 }
 

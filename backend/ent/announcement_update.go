@@ -14,7 +14,7 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/announcement"
 	"github.com/TokenFlux/TokenRouter/ent/announcementread"
 	"github.com/TokenFlux/TokenRouter/ent/predicate"
-	"github.com/TokenFlux/TokenRouter/internal/domain"
+	"github.com/TokenFlux/TokenRouter/internal/site"
 )
 
 // AnnouncementUpdate is the builder for updating Announcement entities.
@@ -27,6 +27,26 @@ type AnnouncementUpdate struct {
 // Where appends a list predicates to the AnnouncementUpdate builder.
 func (_u *AnnouncementUpdate) Where(ps ...predicate.Announcement) *AnnouncementUpdate {
 	_u.mutation.Where(ps...)
+	return _u
+}
+
+// SetLocalization sets the "localization" field.
+func (_u *AnnouncementUpdate) SetLocalization(v site.AnnouncementLocalization) *AnnouncementUpdate {
+	_u.mutation.SetLocalization(v)
+	return _u
+}
+
+// SetNillableLocalization sets the "localization" field if the given value is not nil.
+func (_u *AnnouncementUpdate) SetNillableLocalization(v *site.AnnouncementLocalization) *AnnouncementUpdate {
+	if v != nil {
+		_u.SetLocalization(*v)
+	}
+	return _u
+}
+
+// ClearLocalization clears the value of the "localization" field.
+func (_u *AnnouncementUpdate) ClearLocalization() *AnnouncementUpdate {
+	_u.mutation.ClearLocalization()
 	return _u
 }
 
@@ -87,13 +107,13 @@ func (_u *AnnouncementUpdate) SetNillableNotifyMode(v *string) *AnnouncementUpda
 }
 
 // SetTargeting sets the "targeting" field.
-func (_u *AnnouncementUpdate) SetTargeting(v domain.AnnouncementTargeting) *AnnouncementUpdate {
+func (_u *AnnouncementUpdate) SetTargeting(v site.AnnouncementTargeting) *AnnouncementUpdate {
 	_u.mutation.SetTargeting(v)
 	return _u
 }
 
 // SetNillableTargeting sets the "targeting" field if the given value is not nil.
-func (_u *AnnouncementUpdate) SetNillableTargeting(v *domain.AnnouncementTargeting) *AnnouncementUpdate {
+func (_u *AnnouncementUpdate) SetNillableTargeting(v *site.AnnouncementTargeting) *AnnouncementUpdate {
 	if v != nil {
 		_u.SetTargeting(*v)
 	}
@@ -320,6 +340,12 @@ func (_u *AnnouncementUpdate) sqlSave(ctx context.Context) (_node int, err error
 			}
 		}
 	}
+	if value, ok := _u.mutation.Localization(); ok {
+		_spec.SetField(announcement.FieldLocalization, field.TypeJSON, value)
+	}
+	if _u.mutation.LocalizationCleared() {
+		_spec.ClearField(announcement.FieldLocalization, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.Title(); ok {
 		_spec.SetField(announcement.FieldTitle, field.TypeString, value)
 	}
@@ -436,6 +462,26 @@ type AnnouncementUpdateOne struct {
 	mutation *AnnouncementMutation
 }
 
+// SetLocalization sets the "localization" field.
+func (_u *AnnouncementUpdateOne) SetLocalization(v site.AnnouncementLocalization) *AnnouncementUpdateOne {
+	_u.mutation.SetLocalization(v)
+	return _u
+}
+
+// SetNillableLocalization sets the "localization" field if the given value is not nil.
+func (_u *AnnouncementUpdateOne) SetNillableLocalization(v *site.AnnouncementLocalization) *AnnouncementUpdateOne {
+	if v != nil {
+		_u.SetLocalization(*v)
+	}
+	return _u
+}
+
+// ClearLocalization clears the value of the "localization" field.
+func (_u *AnnouncementUpdateOne) ClearLocalization() *AnnouncementUpdateOne {
+	_u.mutation.ClearLocalization()
+	return _u
+}
+
 // SetTitle sets the "title" field.
 func (_u *AnnouncementUpdateOne) SetTitle(v string) *AnnouncementUpdateOne {
 	_u.mutation.SetTitle(v)
@@ -493,13 +539,13 @@ func (_u *AnnouncementUpdateOne) SetNillableNotifyMode(v *string) *AnnouncementU
 }
 
 // SetTargeting sets the "targeting" field.
-func (_u *AnnouncementUpdateOne) SetTargeting(v domain.AnnouncementTargeting) *AnnouncementUpdateOne {
+func (_u *AnnouncementUpdateOne) SetTargeting(v site.AnnouncementTargeting) *AnnouncementUpdateOne {
 	_u.mutation.SetTargeting(v)
 	return _u
 }
 
 // SetNillableTargeting sets the "targeting" field if the given value is not nil.
-func (_u *AnnouncementUpdateOne) SetNillableTargeting(v *domain.AnnouncementTargeting) *AnnouncementUpdateOne {
+func (_u *AnnouncementUpdateOne) SetNillableTargeting(v *site.AnnouncementTargeting) *AnnouncementUpdateOne {
 	if v != nil {
 		_u.SetTargeting(*v)
 	}
@@ -755,6 +801,12 @@ func (_u *AnnouncementUpdateOne) sqlSave(ctx context.Context) (_node *Announceme
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.Localization(); ok {
+		_spec.SetField(announcement.FieldLocalization, field.TypeJSON, value)
+	}
+	if _u.mutation.LocalizationCleared() {
+		_spec.ClearField(announcement.FieldLocalization, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Title(); ok {
 		_spec.SetField(announcement.FieldTitle, field.TypeString, value)

@@ -40,7 +40,7 @@ export function useAntigravityOAuth() {
       return true
     } catch (err: any) {
       error.value =
-        err.response?.data?.detail || t('admin.accounts.oauth.antigravity.failedToGenerateUrl')
+        err.response?.data?.detail || t('admin.providers.oauth.antigravity.failedToGenerateUrl')
       appStore.showError(error.value)
       return false
     } finally {
@@ -56,7 +56,7 @@ export function useAntigravityOAuth() {
   }): Promise<AntigravityTokenInfo | null> => {
     const code = params.code?.trim()
     if (!code || !params.sessionId || !params.state) {
-      error.value = t('admin.accounts.oauth.antigravity.missingExchangeParams')
+      error.value = t('admin.providers.oauth.antigravity.missingExchangeParams')
       return null
     }
 
@@ -75,7 +75,7 @@ export function useAntigravityOAuth() {
       return tokenInfo as AntigravityTokenInfo
     } catch (err: any) {
       error.value =
-        err.response?.data?.detail || t('admin.accounts.oauth.antigravity.failedToExchangeCode')
+        err.response?.data?.detail || t('admin.providers.oauth.antigravity.failedToExchangeCode')
       appStore.showError(error.value)
       return null
     } finally {
@@ -88,7 +88,7 @@ export function useAntigravityOAuth() {
     proxyId?: number | null
   ): Promise<AntigravityTokenInfo | null> => {
     if (!refreshToken.trim()) {
-      error.value = t('admin.accounts.oauth.antigravity.pleaseEnterRefreshToken')
+      error.value = t('admin.providers.oauth.antigravity.pleaseEnterRefreshToken')
       return null
     }
 
@@ -103,7 +103,7 @@ export function useAntigravityOAuth() {
       return tokenInfo as AntigravityTokenInfo
     } catch (err: any) {
       error.value =
-        err.response?.data?.detail || t('admin.accounts.oauth.antigravity.failedToValidateRT')
+        err.response?.data?.detail || t('admin.providers.oauth.antigravity.failedToValidateRT')
       // Don't show global error toast for batch validation to avoid spamming
       // appStore.showError(error.value)
       return null

@@ -24,7 +24,7 @@ batchImageGuide: {
     heroBadge: '统一接入、智能路由、按量计费',
     heroTitle: '统一的大模型接口',
     heroSubtitle: '一个密钥，畅用多个 AI 模型',
-    heroDescription: '无需管理多个订阅账号，一站式接入 Claude、GPT、Gemini 等主流 AI 服务',
+    heroDescription: '无需管理多个订阅提供商，一站式接入 Claude、GPT、Gemini 等主流 AI 服务',
     tags: {
       subscriptionToApi: '订阅转 API',
       stickySession: '会话保持',
@@ -39,12 +39,12 @@ batchImageGuide: {
           desc: '每个 AI 服务都要单独订阅，每月支出越来越多'
         },
         complex: {
-          title: '多账号难管理',
-          desc: '不同平台的账号、密钥分散各处，管理起来很麻烦'
+          title: '多提供商难管理',
+          desc: '不同平台的提供商、密钥分散各处，管理起来很麻烦'
         },
         unstable: {
           title: '服务不稳定',
-          desc: '单一账号容易触发限制，影响正常使用'
+          desc: '单一提供商容易触发限制，影响正常使用'
         },
         noControl: {
           title: '用量无法控制',
@@ -60,8 +60,8 @@ batchImageGuide: {
     features: {
       unifiedGateway: '一键接入',
       unifiedGatewayDesc: '获取一个 API 密钥，即可调用所有已接入的 AI 模型，无需分别申请。',
-      multiAccount: '稳定可靠',
-      multiAccountDesc: '智能调度多个上游账号，自动切换和负载均衡，告别频繁报错。',
+      multiProvider: '稳定可靠',
+      multiProviderDesc: '智能调度多个上游提供商，自动切换和负载均衡，告别频繁报错。',
       balanceQuota: '用多少付多少',
       balanceQuotaDesc: '按实际使用量计费，支持设置配额上限，团队用量一目了然。',
       dataPolicies: '数据策略可控',
@@ -91,14 +91,14 @@ batchImageGuide: {
           us: '多模型随意切换'
         },
         management: {
-          feature: '账号管理',
+          feature: '提供商管理',
           official: '每个服务单独管理',
           us: '统一密钥，一站管理'
         },
         stability: {
           feature: '服务稳定性',
-          official: '单账号易触发限制',
-          us: '多账号池，自动切换'
+          official: '单提供商易触发限制',
+          us: '多提供商池，自动切换'
         },
         control: {
           feature: '用量控制',
@@ -121,6 +121,10 @@ batchImageGuide: {
       unavailable: '模型数据暂不可用',
       groups: '个服务组',
       modelCount: '模型'
+    },
+    featured: {
+      byProvider: 'by {provider}',
+      discountOff: '最高优惠{percent}%'
     },
     stats: {
       todayTokens: '今日总 Token 量',
@@ -244,8 +248,8 @@ batchImageGuide: {
   },
 // Setup Wizard
   setup: {
-    title: 'Sub2API 安装向导',
-    description: '配置您的 Sub2API 实例',
+    title: 'TokenRouter 安装向导',
+    description: '配置您的 TokenRouter 实例',
     database: {
       title: '数据库配置',
       description: '连接到您的 PostgreSQL 数据库',

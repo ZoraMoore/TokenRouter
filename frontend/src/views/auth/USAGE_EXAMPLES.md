@@ -1,6 +1,6 @@
 # Authentication Views Usage Examples
 
-This document provides practical examples of how to use the authentication views in the Sub2API frontend.
+This document provides practical examples of how to use the authentication views in the TokenRouter frontend.
 
 ## Quick Start
 
@@ -61,7 +61,7 @@ This document provides practical examples of how to use the authentication views
 // - On success:
 //   - Token stored in localStorage
 //   - User data stored in state
-//   - Success toast: "Account created successfully! Welcome to Sub2API."
+//   - Success toast: "Account created successfully! Welcome to TokenRouter."
 //   - Redirect to /dashboard
 // - On error:
 //   - Error message displayed inline
@@ -74,16 +74,13 @@ This document provides practical examples of how to use the authentication views
 ### Importing the Views
 
 ```typescript
-// Method 1: Direct import
+// 页面按文件路径导入。
 import LoginView from '@/views/auth/LoginView.vue'
 import RegisterView from '@/views/auth/RegisterView.vue'
 
-// Method 2: Named exports from index
-import { LoginView, RegisterView } from '@/views/auth'
-
-// Method 3: Lazy loading (recommended for routes)
-const LoginView = () => import('@/views/auth/LoginView.vue')
-const RegisterView = () => import('@/views/auth/RegisterView.vue')
+// 路由按需加载页面。
+const LoginRouteView = () => import('@/views/auth/LoginView.vue')
+const RegisterRouteView = () => import('@/views/auth/RegisterView.vue')
 ```
 
 ### Using in Router

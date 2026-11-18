@@ -37,6 +37,8 @@ type User struct {
 	Concurrency int `json:"concurrency,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
+	// PreferredLocale holds the value of the "preferred_locale" field.
+	PreferredLocale *string `json:"preferred_locale,omitempty"`
 	// Username holds the value of the "username" field.
 	Username string `json:"username,omitempty"`
 	// Notes holds the value of the "notes" field.
@@ -103,8 +105,6 @@ type UserEdges struct {
 	AuthIdentities []*AuthIdentity `json:"auth_identities,omitempty"`
 	// PendingAuthSessions holds the value of the pending_auth_sessions edge.
 	PendingAuthSessions []*PendingAuthSession `json:"pending_auth_sessions,omitempty"`
-	// PlatformQuotas holds the value of the platform_quotas edge.
-	PlatformQuotas []*UserPlatformQuota `json:"platform_quotas,omitempty"`
 	// TeamMemberships holds the value of the team_memberships edge.
 	TeamMemberships []*TeamMembership `json:"team_memberships,omitempty"`
 	// UserAllowedGroups holds the value of the user_allowed_groups edge.
@@ -113,7 +113,7 @@ type UserEdges struct {
 	UserDisabledPublicGroups []*UserDisabledPublicGroup `json:"user_disabled_public_groups,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [18]bool
+	loadedTypes [17]bool
 }
 
 // APIKeysOrErr returns the APIKeys value or an error if the edge
@@ -242,19 +242,10 @@ func (e UserEdges) PendingAuthSessionsOrErr() ([]*PendingAuthSession, error) {
 	return nil, &NotLoadedError{edge: "pending_auth_sessions"}
 }
 
-// PlatformQuotasOrErr returns the PlatformQuotas value or an error if the edge
-// was not loaded in eager-loading.
-func (e UserEdges) PlatformQuotasOrErr() ([]*UserPlatformQuota, error) {
-	if e.loadedTypes[14] {
-		return e.PlatformQuotas, nil
-	}
-	return nil, &NotLoadedError{edge: "platform_quotas"}
-}
-
 // TeamMembershipsOrErr returns the TeamMemberships value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) TeamMembershipsOrErr() ([]*TeamMembership, error) {
-	if e.loadedTypes[15] {
+	if e.loadedTypes[14] {
 		return e.TeamMemberships, nil
 	}
 	return nil, &NotLoadedError{edge: "team_memberships"}
@@ -263,7 +254,7 @@ func (e UserEdges) TeamMembershipsOrErr() ([]*TeamMembership, error) {
 // UserAllowedGroupsOrErr returns the UserAllowedGroups value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) UserAllowedGroupsOrErr() ([]*UserAllowedGroup, error) {
-	if e.loadedTypes[16] {
+	if e.loadedTypes[15] {
 		return e.UserAllowedGroups, nil
 	}
 	return nil, &NotLoadedError{edge: "user_allowed_groups"}
@@ -272,7 +263,7 @@ func (e UserEdges) UserAllowedGroupsOrErr() ([]*UserAllowedGroup, error) {
 // UserDisabledPublicGroupsOrErr returns the UserDisabledPublicGroups value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) UserDisabledPublicGroupsOrErr() ([]*UserDisabledPublicGroup, error) {
-	if e.loadedTypes[17] {
+	if e.loadedTypes[16] {
 		return e.UserDisabledPublicGroups, nil
 	}
 	return nil, &NotLoadedError{edge: "user_disabled_public_groups"}
@@ -289,7 +280,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case user.FieldID, user.FieldConcurrency, user.FieldRpmLimit, user.FieldAPIKeyLimit:
 			values[i] = new(sql.NullInt64)
-		case user.FieldEmail, user.FieldPasswordHash, user.FieldRole, user.FieldStatus, user.FieldUsername, user.FieldNotes, user.FieldTotpSecretEncrypted, user.FieldSignupSource, user.FieldBalanceNotifyThresholdType, user.FieldBalanceNotifyExtraEmails:
+		case user.FieldEmail, user.FieldPasswordHash, user.FieldRole, user.FieldStatus, user.FieldPreferredLocale, user.FieldUsername, user.FieldNotes, user.FieldTotpSecretEncrypted, user.FieldSignupSource, user.FieldBalanceNotifyThresholdType, user.FieldBalanceNotifyExtraEmails:
 			values[i] = new(sql.NullString)
 		case user.FieldCreatedAt, user.FieldUpdatedAt, user.FieldDeletedAt, user.FieldTotpEnabledAt, user.FieldLastLoginAt, user.FieldLastActiveAt:
 			values[i] = new(sql.NullTime)
@@ -374,6 +365,13 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
+			}
+		case user.FieldPreferredLocale:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field preferred_locale", values[i])
+			} else if value.Valid {
+				_m.PreferredLocale = new(string)
+				*_m.PreferredLocale = value.String
 			}
 		case user.FieldUsername:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -553,11 +551,6 @@ func (_m *User) QueryPendingAuthSessions() *PendingAuthSessionQuery {
 	return NewUserClient(_m.config).QueryPendingAuthSessions(_m)
 }
 
-// QueryPlatformQuotas queries the "platform_quotas" edge of the User entity.
-func (_m *User) QueryPlatformQuotas() *UserPlatformQuotaQuery {
-	return NewUserClient(_m.config).QueryPlatformQuotas(_m)
-}
-
 // QueryTeamMemberships queries the "team_memberships" edge of the User entity.
 func (_m *User) QueryTeamMemberships() *TeamMembershipQuery {
 	return NewUserClient(_m.config).QueryTeamMemberships(_m)
@@ -627,6 +620,11 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
+	builder.WriteString(", ")
+	if v := _m.PreferredLocale; v != nil {
+		builder.WriteString("preferred_locale=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("username=")
 	builder.WriteString(_m.Username)

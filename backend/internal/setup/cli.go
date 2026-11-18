@@ -1,4 +1,3 @@
-// Package setup provides CLI commands and application initialization helpers.
 package setup
 
 import (
@@ -13,7 +12,7 @@ import (
 	"golang.org/x/term"
 )
 
-// CLI input validation functions (matching Web API validation)
+// cliValidateHostname 校验命令行主机名的字符和长度，规则与 Web API 一致。
 func cliValidateHostname(host string) bool {
 	validHost := regexp.MustCompile(`^[a-zA-Z0-9.\-:]+$`)
 	return validHost.MatchString(host) && len(host) <= 253
@@ -45,13 +44,13 @@ func cliValidateSSLMode(mode string) bool {
 	return validModes[mode]
 }
 
-// RunCLI runs the CLI setup wizard
+// RunCLI runs the CLI setup wizard.
 func RunCLI() error {
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Println()
 	fmt.Println("╔═══════════════════════════════════════════╗")
-	fmt.Println("║       Sub2API Installation Wizard         ║")
+	fmt.Println("║     TokenRouter Installation Wizard       ║")
 	fmt.Println("╚═══════════════════════════════════════════╝")
 	fmt.Println()
 
@@ -96,7 +95,7 @@ func RunCLI() error {
 	cfg.Database.Password = promptPassword("PostgreSQL Password")
 
 	for {
-		cfg.Database.DBName = promptString(reader, "Database Name", "sub2api")
+		cfg.Database.DBName = promptString(reader, "Database Name", "tokenrouter")
 		if cliValidateDBName(cfg.Database.DBName) {
 			break
 		}
@@ -231,7 +230,7 @@ func RunCLI() error {
 	fmt.Println("╚═══════════════════════════════════════════╝")
 	fmt.Println()
 	fmt.Println("Start the server with:")
-	fmt.Println("  ./sub2api")
+	fmt.Println("  ./tokenrouter")
 	fmt.Println()
 	fmt.Printf("Admin panel: http://localhost:%d\n", cfg.Server.Port)
 	fmt.Println()

@@ -46,16 +46,6 @@ export async function list(
 }
 
 /**
- * Get redeem code by ID
- * @param id - Redeem code ID
- * @returns Redeem code details
- */
-export async function getById(id: number): Promise<RedeemCode> {
-  const { data } = await apiClient.get<RedeemCode>(`/admin/redeem-codes/${id}`)
-  return data
-}
-
-/**
  * Generate new redeem codes
  * @param count - Number of codes to generate
  * @param type - Type of redeem code
@@ -71,12 +61,15 @@ export async function generate(
   maxUses?: number,
   expiresAt?: number | null,
   code?: string,
-  expiresInDays?: number | null
+  expiresInDays?: number | null,
+  requiresPayment: boolean = false
 ): Promise<RedeemCode[]> {
   const payload: GenerateRedeemCodesRequest = {
     count,
     type,
-    value
+    value,
+    // 由后端在领取时核对付款记录。
+    requires_payment: requiresPayment
   }
 
   if (maxUses !== undefined && maxUses >= 0) {
@@ -161,39 +154,6 @@ export async function batchUpdate(
 }
 
 /**
- * Expire redeem code
- * @param id - Redeem code ID
- * @returns Updated redeem code
- */
-export async function expire(id: number): Promise<RedeemCode> {
-  const { data } = await apiClient.post<RedeemCode>(`/admin/redeem-codes/${id}/expire`)
-  return data
-}
-
-/**
- * Get redeem code statistics
- * @returns Statistics about redeem codes
- */
-export async function getStats(): Promise<{
-  total_codes: number
-  active_codes: number
-  used_codes: number
-  expired_codes: number
-  total_value_distributed: number
-  by_type: Record<RedeemCodeType, number>
-}> {
-  const { data } = await apiClient.get<{
-    total_codes: number
-    active_codes: number
-    used_codes: number
-    expired_codes: number
-    total_value_distributed: number
-    by_type: Record<RedeemCodeType, number>
-  }>('/admin/redeem-codes/stats')
-  return data
-}
-
-/**
  * Export redeem codes to CSV
  * @param filters - Optional filters
  * @returns CSV data as blob
@@ -214,14 +174,11 @@ export async function exportCodes(filters?: {
 
 export const redeemAPI = {
   list,
-  getById,
   generate,
   update,
   delete: deleteCode,
   batchDelete,
   batchUpdate,
-  expire,
-  getStats,
   exportCodes
 }
 

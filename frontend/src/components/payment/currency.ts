@@ -33,7 +33,7 @@ export function currencySymbol(currency?: string | null): string {
 
 export function paymentCurrencyFractionDigits(currency: string): number {
   try {
-    // 手续费计算和金额展示共用 ISO 币种默认精度，避免零小数或三位小数币种被固定成两位。
+    // 手续费和金额展示共用 ISO 币种精度，包括零位与三位小数币种。
     return new Intl.NumberFormat(undefined, {
       style: 'currency',
       currency,

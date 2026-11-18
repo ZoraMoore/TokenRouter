@@ -2,9 +2,9 @@
   <AppLayout>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <!-- Left: Search + Filters -->
-          <div class="flex min-w-0 flex-1 items-center gap-3">
+          <div class="flex min-w-0 flex-1 items-center gap-2">
             <div class="min-w-0 flex-1 sm:flex-none sm:w-64">
             <input
               v-model="searchQuery"
@@ -27,13 +27,13 @@
             <button
               @click="loadAnnouncements"
               :disabled="loading"
-              class="btn btn-secondary h-11 w-11 shrink-0 p-0"
+              class="btn btn-secondary shrink-0 btn-icon"
               :title="t('common.refresh')"
             >
-              <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
+              <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
             </button>
-            <button @click="openCreateDialog" class="btn btn-primary h-11 shrink-0 whitespace-nowrap">
-              <Icon name="plus" size="md" class="mr-1" />
+            <button @click="openCreateDialog" class="btn btn-primary shrink-0 whitespace-nowrap">
+              <Icon name="plus" size="sm" class="mr-1" />
               {{ t('admin.announcements.createAnnouncement') }}
             </button>
           </div>
@@ -42,6 +42,7 @@
 
       <template #table>
         <DataTable
+          column-order-storage-key="admin-announcements-column-order"
           :columns="columns"
           :data="announcements"
           :loading="loading"
@@ -118,28 +119,28 @@
             <div class="flex items-center space-x-1">
               <button
                 @click="openPreview(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+                class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-500/8 dark:hover:text-primary-500"
                 :title="t('admin.announcements.preview')"
               >
                 <Icon name="eye" size="sm" />
               </button>
               <button
                 @click="openReadStatus(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+                class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-500/8 dark:hover:text-primary-500"
                 :title="t('admin.announcements.readStatus')"
               >
                 <Icon name="chartBar" size="sm" />
               </button>
               <button
                 @click="openEditDialog(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-dark-600 dark:hover:text-gray-300"
+                class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-dark-700 dark:hover:text-gray-300"
                 :title="t('common.edit')"
               >
                 <Icon name="edit" size="sm" />
               </button>
               <button
                 @click="handleDelete(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
                 :title="t('common.delete')"
               >
                 <Icon name="trash" size="sm" />
@@ -178,15 +179,14 @@
       @close="closeEdit"
     >
       <form id="announcement-form" @submit.prevent="handleSave" class="space-y-4">
-        <div>
-          <label class="input-label">{{ t('admin.announcements.form.title') }}</label>
-          <input v-model="form.title" type="text" class="input" required />
-        </div>
-
-        <div>
-          <label class="input-label">{{ t('admin.announcements.form.content') }}</label>
-          <textarea v-model="form.content" rows="6" class="input" required></textarea>
-        </div>
+        <LocalizedFieldsEditor
+          v-model="form.localization"
+          :source="form.localization.source"
+          :fields="[
+            { key: 'title', label: t('admin.announcements.form.title'), required: true },
+            { key: 'content', label: t('admin.announcements.form.content'), multiline: true, rows: 6, required: true },
+          ]"
+        />
 
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
@@ -202,14 +202,23 @@
 
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
-            <label class="input-label">{{ t('admin.announcements.form.startsAt') }}</label>
-            <input v-model="form.starts_at_str" type="datetime-local" class="input" />
-            <p class="input-hint">{{ t('admin.announcements.form.startsAtHint') }}</p>
+            <label class="input-label" for="announcement-starts-at">{{ t('admin.announcements.form.startsAt') }}</label>
+            <DateTimePicker
+              id="announcement-starts-at"
+              v-model="form.starts_at_str"
+              :placeholder="t('admin.announcements.form.startsAtPlaceholder')"
+            />
           </div>
           <div>
-            <label class="input-label">{{ t('admin.announcements.form.endsAt') }}</label>
-            <input v-model="form.ends_at_str" type="datetime-local" class="input" />
-            <p class="input-hint">{{ t('admin.announcements.form.endsAtHint') }}</p>
+            <label class="input-label" for="announcement-ends-at">{{ t('admin.announcements.form.endsAt') }}</label>
+            <DateTimePicker
+              id="announcement-ends-at"
+              v-model="form.ends_at_str"
+              :placeholder="t('admin.announcements.form.endsAtPlaceholder')"
+              :min="form.starts_at_str"
+              :presets="endsAtPresets"
+              :presets-title="t('admin.announcements.form.duration')"
+            />
           </div>
         </div>
 
@@ -259,6 +268,9 @@
 </template>
 
 <script setup lang="ts">
+import LocalizedFieldsEditor from '@/components/common/LocalizedFieldsEditor.vue'
+import { originalContent, type LocalizedUpdate } from '@/i18n/content'
+import { getLocale } from '@/i18n'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -276,6 +288,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
+import DateTimePicker, { type DateTimePreset } from '@/components/common/DateTimePicker.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Icon from '@/components/icons/Icon.vue'
 
@@ -318,6 +331,19 @@ const statusOptions = computed(() => [
   { value: 'active', label: t('admin.announcements.statusLabels.active') },
   { value: 'archived', label: t('admin.announcements.statusLabels.archived') }
 ])
+
+// 结束时间的快捷选项：从开始时间起算，没填开始时间时从现在起算。
+const endsAtPresets = computed<DateTimePreset[]>(() =>
+  [1, 3, 7, 30].map((days) => ({
+    key: `${days}d`,
+    label: t('admin.announcements.form.durationDays', days),
+    resolve: () => {
+      const start = parseDateTimeLocalInput(form.starts_at_str)
+      const base = start === null ? Math.floor(Date.now() / 1000) : start
+      return formatDateTimeLocalInput(base + days * 24 * 60 * 60)
+    }
+  }))
+)
 
 const notifyModeOptions = computed(() => [
   { value: 'silent', label: t('admin.announcements.notifyModeLabels.silent') },
@@ -431,8 +457,7 @@ const editingAnnouncement = ref<Announcement | null>(null)
 const isEditing = computed(() => !!editingAnnouncement.value)
 
 const form = reactive({
-  title: '',
-  content: '',
+  localization: originalContent({ title: '', content: '' }, getLocale()) as LocalizedUpdate<{ title: string; content: string }>,
   status: 'draft',
   notify_mode: 'silent',
   starts_at_str: '',
@@ -453,8 +478,7 @@ async function loadSubscriptionPlans() {
 }
 
 function resetForm() {
-  form.title = ''
-  form.content = ''
+  form.localization = originalContent({ title: '', content: '' }, getLocale())
   form.status = 'draft'
   form.notify_mode = 'silent'
   form.starts_at_str = ''
@@ -463,8 +487,7 @@ function resetForm() {
 }
 
 function fillFormFromAnnouncement(a: Announcement) {
-  form.title = a.title
-  form.content = a.content
+  form.localization = JSON.parse(JSON.stringify(a.localization || originalContent({ title: a.title, content: a.content })))
   form.status = a.status
   form.notify_mode = a.notify_mode || 'silent'
 
@@ -497,8 +520,9 @@ function buildCreatePayload() {
   const endsAt = parseDateTimeLocalInput(form.ends_at_str)
 
   return {
-    title: form.title,
-    content: form.content,
+    localization: form.localization,
+    title: form.localization.source.title,
+    content: form.localization.source.content,
     status: form.status as any,
     notify_mode: form.notify_mode as any,
     targeting: form.targeting,
@@ -510,8 +534,7 @@ function buildCreatePayload() {
 function buildUpdatePayload(original: Announcement) {
   const payload: any = {}
 
-  if (form.title !== original.title) payload.title = form.title
-  if (form.content !== original.content) payload.content = form.content
+  if (JSON.stringify(form.localization) !== JSON.stringify(original.localization)) payload.localization = form.localization
   if (form.status !== original.status) payload.status = form.status
   if (form.notify_mode !== (original.notify_mode || 'silent')) payload.notify_mode = form.notify_mode
 

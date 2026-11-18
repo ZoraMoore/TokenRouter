@@ -65,3 +65,23 @@ describe('BaseDialog 移动端视口约束', () => {
     expect(document.body.classList).toContain('modal-open')
   })
 })
+
+// 分页表单可关闭外壳滚动，普通弹窗默认由外壳滚动。
+it('支持由内嵌表单管理滚动，并在重新打开时复位默认内容区', async () => {
+  const wrapper = mount(BaseDialog, {
+    props: { show: true, title: '设置' },
+    slots: { default: '<input />' },
+  })
+  wrappers.push(wrapper)
+  await nextTick()
+  const body = document.body.querySelector<HTMLElement>('.modal-body')!
+  expect(body.classList.contains('modal-body-contained')).toBe(false)
+  await wrapper.setProps({ bodyScroll: false })
+  expect(body.classList.contains('modal-body-contained')).toBe(true)
+  await wrapper.setProps({ bodyScroll: true })
+  body.scrollTop = 120
+  await wrapper.setProps({ show: false })
+  await wrapper.setProps({ show: true })
+  await nextTick()
+  expect(document.body.querySelector<HTMLElement>('.modal-body')!.scrollTop).toBe(0)
+})

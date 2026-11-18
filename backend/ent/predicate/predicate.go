@@ -12,12 +12,6 @@ type APIKey func(*sql.Selector)
 // APIKeyCompositeGroup is the predicate function for apikeycompositegroup builders.
 type APIKeyCompositeGroup func(*sql.Selector)
 
-// Account is the predicate function for account builders.
-type Account func(*sql.Selector)
-
-// AccountGroup is the predicate function for accountgroup builders.
-type AccountGroup func(*sql.Selector)
-
 // Announcement is the predicate function for announcement builders.
 type Announcement func(*sql.Selector)
 
@@ -39,8 +33,14 @@ type BatchImageItem func(*sql.Selector)
 // BatchImageJob is the predicate function for batchimagejob builders.
 type BatchImageJob func(*sql.Selector)
 
-// DataShareSession is the predicate function for datasharesession builders.
-type DataShareSession func(*sql.Selector)
+// CreativeRun is the predicate function for creativerun builders.
+type CreativeRun func(*sql.Selector)
+
+// CreativeRunOutbox is the predicate function for creativerunoutbox builders.
+type CreativeRunOutbox func(*sql.Selector)
+
+// CreativeRunOutput is the predicate function for creativerunoutput builders.
+type CreativeRunOutput func(*sql.Selector)
 
 // ErrorPassthroughRule is the predicate function for errorpassthroughrule builders.
 type ErrorPassthroughRule func(*sql.Selector)
@@ -71,6 +71,12 @@ type PromoCode func(*sql.Selector)
 
 // PromoCodeUsage is the predicate function for promocodeusage builders.
 type PromoCodeUsage func(*sql.Selector)
+
+// Provider is the predicate function for provider builders.
+type Provider func(*sql.Selector)
+
+// ProviderGroup is the predicate function for providergroup builders.
+type ProviderGroup func(*sql.Selector)
 
 // Proxy is the predicate function for proxy builders.
 type Proxy func(*sql.Selector)
@@ -128,9 +134,6 @@ type UserAttributeValue func(*sql.Selector)
 
 // UserDisabledPublicGroup is the predicate function for userdisabledpublicgroup builders.
 type UserDisabledPublicGroup func(*sql.Selector)
-
-// UserPlatformQuota is the predicate function for userplatformquota builders.
-type UserPlatformQuota func(*sql.Selector)
 
 // UserSubscription is the predicate function for usersubscription builders.
 type UserSubscription func(*sql.Selector)

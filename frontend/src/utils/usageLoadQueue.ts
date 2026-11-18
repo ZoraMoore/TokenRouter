@@ -1,18 +1,18 @@
 /**
  * Usage request scheduler - throttles Anthropic API calls by proxy exit.
  *
- * Anthropic OAuth/setup-token accounts sharing the same proxy exit are placed
+ * Anthropic OAuth/setup-token providers sharing the same proxy exit are placed
  * into a serial queue with a random 1-2s delay between requests, preventing
  * upstream 429 rate-limit errors.
  *
  * Proxy identity = host:port:username - two proxy records pointing to the
- * same exit share a single queue. Accounts without a proxy go into a
+ * same exit share a single queue. Providers without a proxy go into a
  * "direct" queue.
  *
  * All other platforms bypass the queue and execute immediately.
  */
 
-import type { Account } from '@/types'
+import type { Provider } from '@/types'
 
 const GROUP_DELAY_MIN_MS = 1000
 const GROUP_DELAY_MAX_MS = 2000
@@ -26,17 +26,17 @@ type Task<T> = {
 const queues = new Map<string, Task<unknown>[]>()
 const running = new Set<string>()
 
-/** Whether this account needs throttled queuing. */
-function needsThrottle(account: Account): boolean {
+/** Whether this provider needs throttled queuing. */
+function needsThrottle(provider: Provider): boolean {
   return (
-    account.platform === 'anthropic' &&
-    (account.type === 'oauth' || account.type === 'setup-token')
+    provider.platform === 'anthropic' &&
+    (provider.type === 'oauth' || provider.type === 'setup-token')
   )
 }
 
 /** Build a queue key from proxy connection details. */
-function buildGroupKey(account: Account): string {
-  const proxy = account.proxy
+function buildGroupKey(provider: Provider): string {
+  const proxy = provider.proxy
   const proxyIdentity = proxy
     ? `${proxy.host}:${proxy.port}:${proxy.username || ''}`
     : 'direct'
@@ -67,18 +67,18 @@ async function drain(groupKey: string) {
 }
 
 /**
- * Schedule a usage fetch. Anthropic accounts are queued by proxy exit;
+ * Schedule a usage fetch. Anthropic providers are queued by proxy exit;
  * all other platforms execute immediately.
  */
 export function enqueueUsageRequest<T>(
-  account: Account,
+  provider: Provider,
   fn: () => Promise<T>
 ): Promise<T> {
-  if (!needsThrottle(account)) {
+  if (!needsThrottle(provider)) {
     return fn()
   }
 
-  const key = buildGroupKey(account)
+  const key = buildGroupKey(provider)
 
   return new Promise<T>((resolve, reject) => {
     let queue = queues.get(key)

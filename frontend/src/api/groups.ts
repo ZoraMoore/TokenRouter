@@ -15,14 +15,16 @@ import type { Group } from '@/types'
  */
 export async function getAvailable(
   scope: 'personal' | 'team' = 'personal',
-  subscriptionId?: number
+  subscriptionId?: number,
+  includeModels = true
 ): Promise<Group[]> {
-  const params: { scope: 'personal' | 'team'; subscription_id?: number } = { scope }
+  const params: { scope: 'personal' | 'team'; subscription_id?: number; include_models?: boolean } = { scope }
+  if (!includeModels) params.include_models = false
   if (subscriptionId && subscriptionId > 0) {
     params.subscription_id = subscriptionId
   }
   const { data } = await apiClient.get<Group[]>('/groups/available', { params })
-  return data
+  return data.map(group => ({ ...group, canonical_name: group.name, name: group.display_name || group.name }))
 }
 
 /**

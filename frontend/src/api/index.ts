@@ -1,5 +1,5 @@
 /**
- * API Client for Sub2API Backend
+ * API Client for TokenRouter Backend
  * Central export point for all API modules
  */
 
@@ -20,7 +20,7 @@ export * as batchImageAPI from './batchImage'
 export { totpAPI } from './totp'
 export { teamAPI } from './team'
 export { marketplaceAPI } from './marketplace'
-export { dataSharingAPI } from './dataSharing'
+export * from './creative'
 export { passkeyAPI, type PasskeyCredentialSummary } from './passkey'
 export { default as announcementsAPI } from './announcements'
 

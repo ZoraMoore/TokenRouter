@@ -1,43 +1,40 @@
 <template>
   <div class="space-y-4">
-    <!-- Quick Amount Buttons -->
-    <div>
-      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-        {{ t('payment.quickAmounts') }}
-      </label>
-      <div class="grid grid-cols-3 gap-2">
-        <button
-          v-for="amt in filteredAmounts"
-          :key="amt"
-          type="button"
-          :class="[
-            'rounded-lg border-2 px-4 py-3 text-center font-medium transition-colors',
-            modelValue === amt
-              ? 'border-primary-500 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-900/40 dark:text-primary-300'
-              : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-200 dark:hover:border-dark-500',
-          ]"
-          @click="selectAmount(amt)"
-        >
-          {{ amt }}
-        </button>
-      </div>
+    <!-- 快捷金额：分段标题由父组件提供，这里只保留按钮网格。 -->
+    <div class="grid grid-cols-3 gap-2 sm:grid-cols-5">
+      <button
+        v-for="amt in filteredAmounts"
+        :key="amt"
+        type="button"
+        :aria-pressed="modelValue === amt"
+        :class="[
+          'h-9 rounded-control border px-3 text-center text-sm font-medium tabular-nums transition-colors',
+          modelValue === amt
+            ? 'border-primary-500 bg-primary-500/8 text-primary-600 ring-1 ring-primary-500 dark:text-primary-400'
+            : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-dark-600 dark:bg-dark-950 dark:text-dark-100 dark:hover:border-dark-500',
+        ]"
+        @click="selectAmount(amt)"
+      >
+        {{ amt }}
+      </button>
     </div>
 
-    <!-- Custom Amount Input -->
+    <!-- 自定义金额 -->
     <div>
-      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+      <label for="payment-custom-amount" class="mb-1.5 block text-xs font-medium text-gray-500 dark:text-dark-400">
         {{ t('payment.customAmount') }}
       </label>
-      <div class="relative">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-dark-500">
-          $
+      <div class="input-icon-wrap">
+        <span class="input-icon text-gray-400 dark:text-dark-500">
+          {{ symbol }}
         </span>
         <input
+          id="payment-custom-amount"
           type="text"
           inputmode="decimal"
           :value="customText"
           :placeholder="placeholderText"
-          class="input w-full py-3 pl-8 pr-4"
+          :class="['input input-has-icon tabular-nums', symbol.length === 1 ? 'input-icon-text' : '']"
           @input="handleInput"
         />
       </div>
@@ -48,16 +45,20 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { currencySymbol } from './currency'
 
 const props = withDefaults(defineProps<{
   amounts?: number[]
   modelValue: number | null
   min?: number
   max?: number
+  /** 支付币种，决定自定义金额输入框的货币符号前缀。 */
+  currency?: string
 }>(), {
   amounts: () => [10, 20, 50, 100, 200, 500, 1000, 2000, 5000],
   min: 0,
   max: 0,
+  currency: '',
 })
 
 const emit = defineEmits<{
@@ -67,6 +68,9 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const customText = ref('')
+
+// 金额前缀使用支付币种符号，NZ$、KWD 等多字符符号使用默认留白。
+const symbol = computed(() => currencySymbol(props.currency))
 
 // 0 = no limit
 const filteredAmounts = computed(() =>

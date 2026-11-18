@@ -1,19 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { buildOpsPlatformOptions } from '../platformOptions'
+import { CONCRETE_PLATFORM_OPTIONS } from '@/constants/platforms'
 
 describe('buildOpsPlatformOptions', () => {
-  it('包含 Qoder 并从分组数据补充未知平台', () => {
-    const options = buildOpsPlatformOptions(
-      [
-        { platform: 'qoder' },
-        { platform: ' future-ai ' },
-        { platform: 'FUTURE-AI' },
-      ],
-      '全部'
-    )
-
-    expect(options).toContainEqual({ value: 'qoder', label: 'Qoder' })
-    expect(options).toContainEqual({ value: 'future-ai', label: 'FUTURE-AI' })
-    expect(options.filter(option => option.value === 'future-ai')).toHaveLength(1)
+  it('执行平台目录独立于分组', () => {
+    expect(buildOpsPlatformOptions('全部')).toEqual([{ value: '', label: '全部' }, ...CONCRETE_PLATFORM_OPTIONS])
   })
 })

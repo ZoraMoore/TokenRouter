@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Chart as ChartJS, BarElement, CategoryScale, Legend, LinearScale, Tooltip } from 'chart.js'
 import { Bar } from 'vue-chartjs'
@@ -9,6 +9,8 @@ import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { externalTooltipHandler, hideExternalTooltip } from '@/utils/chartExternalTooltip'
+import { useChartTheme, CHART_TICK_FONT_SIZE } from '@/composables/useChartTheme'
 import {
   DEFAULT_LATENCY_BUCKET_BOUNDARIES,
   MAX_LATENCY_BUCKET_BOUNDARY_MS,
@@ -17,6 +19,8 @@ import {
 } from '../latencyBuckets'
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)
+
+onBeforeUnmount(hideExternalTooltip)
 
 interface Props {
   latencyData: OpsLatencyHistogramResponse | null
@@ -58,11 +62,11 @@ function applyBucketBoundaries() {
   showSettings.value = false
 }
 
-const isDarkMode = computed(() => document.documentElement.classList.contains('dark'))
+const { colors: themeColors } = useChartTheme()
 const colors = computed(() => ({
   blue: '#3b82f6',
-  grid: isDarkMode.value ? '#3F3F46' : '#F4F4F5',
-  text: isDarkMode.value ? '#A1A1AA' : '#71717A'
+  grid: themeColors.value.grid,
+  text: themeColors.value.muted
 }))
 
 const hasData = computed(() => (props.latencyData?.total_requests ?? 0) > 0)
@@ -96,17 +100,21 @@ const options = computed(() => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { display: false }
+      legend: { display: false },
+      tooltip: {
+        enabled: false,
+        external: externalTooltipHandler
+      }
     },
     scales: {
       x: {
         grid: { display: false },
-        ticks: { color: c.text, font: { size: 10 } }
+        ticks: { color: c.text, font: { size: CHART_TICK_FONT_SIZE } }
       },
       y: {
         beginAtZero: true,
         grid: { color: c.grid, borderDash: [4, 4] },
-        ticks: { color: c.text, font: { size: 10 } }
+        ticks: { color: c.text, font: { size: CHART_TICK_FONT_SIZE } }
       }
     }
   }
@@ -114,23 +122,16 @@ const options = computed(() => {
 </script>
 
 <template>
-  <div class="flex h-full flex-col rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-900 dark:ring-dark-700">
+  <div class="flex h-full flex-col rounded-surface bg-white p-6 shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-900 dark:ring-dark-700">
     <div class="mb-4 flex items-center justify-between gap-3">
       <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
-        <svg class="h-4 w-4 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
+        <Icon name="clock" size="sm" class="h-4 w-4 text-purple-500" />
         {{ t('admin.ops.latencyHistogram') }}
         <HelpTooltip :content="t('admin.ops.tooltips.latencyHistogram')" />
       </h3>
       <button
         type="button"
-        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-dark-800 dark:hover:text-gray-100"
+        class="flex shrink-0 rounded-control text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-dark-800 dark:hover:text-gray-100 btn-icon-sm"
         :title="t('admin.ops.latencyBuckets.settings')"
         :aria-label="t('admin.ops.latencyBuckets.settings')"
         data-test="latency-bucket-settings"

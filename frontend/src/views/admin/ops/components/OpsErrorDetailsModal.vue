@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Icon from '@/components/icons/Icon.vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -35,6 +36,9 @@ const page = ref(1)
 const pageSize = ref(10)
 
 const q = ref('')
+// requestId 是输入框里的内容，按回车后写入 appliedRequestId 再查询。
+const requestId = ref('')
+const appliedRequestId = ref('')
 const statusCode = ref<number | 'other' | null>(null)
 const phase = ref<string>('')
 const errorOwner = ref<string>('')
@@ -77,7 +81,7 @@ const phaseSelectOptions = computed(() => {
     { value: '', label: t('common.all') },
     { value: 'request', label: t('admin.ops.errorDetails.phase.request') || 'request' },
     { value: 'auth', label: t('admin.ops.errorDetails.phase.auth') || 'auth' },
-    { value: 'account_auth', label: t('admin.ops.errorDetails.phase.account_auth') || 'account_auth' },
+    { value: 'provider_auth', label: t('admin.ops.errorDetails.phase.provider_auth') || 'provider_auth' },
     { value: 'routing', label: t('admin.ops.errorDetails.phase.routing') || 'routing' },
     { value: 'upstream', label: t('admin.ops.errorDetails.phase.upstream') || 'upstream' },
     { value: 'network', label: t('admin.ops.errorDetails.phase.network') || 'network' },
@@ -130,6 +134,13 @@ async function fetchErrorLogs() {
     if (typeof props.groupId === 'number' && props.groupId > 0) params.group_id = props.groupId
 
     if (q.value.trim()) params.q = q.value.trim()
+    // 按请求 ID 查询时去掉时间条件，保留期内的记录都能查到。
+    if (appliedRequestId.value) {
+      params.request_id = appliedRequestId.value
+      delete params.time_range
+      delete params.start_time
+      delete params.end_time
+    }
     if (statusCode.value === 'other') params.status_codes_other = '1'
     else if (typeof statusCode.value === 'number') params.status_codes = String(statusCode.value)
 
@@ -154,8 +165,17 @@ async function fetchErrorLogs() {
   }
 }
 
+function searchRequests() {
+  requestId.value = requestId.value.trim()
+  appliedRequestId.value = requestId.value
+  page.value = 1
+  void fetchErrorLogs()
+}
+
   function resetFilters() {
     q.value = ''
+    requestId.value = ''
+    appliedRequestId.value = ''
     statusCode.value = null
     phase.value = props.errorType === 'upstream' ? 'upstream' : ''
     errorOwner.value = ''
@@ -221,26 +241,36 @@ watch(
     <div class="flex h-full min-h-0 flex-col">
       <!-- Filters -->
       <div class="mb-4 flex-shrink-0 border-b border-gray-200 pb-4 dark:border-dark-700">
-        <div class="grid grid-cols-2 gap-2 md:grid-cols-8">
+        <div class="grid grid-cols-2 gap-2 md:grid-cols-10">
           <div class="col-span-2 compact-select">
-            <div class="relative group">
+            <div class="relative">
               <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                <svg
-                  class="h-3.5 w-3.5 text-gray-400 transition-colors group-focus-within:text-blue-500"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                <Icon
+                  name="search"
+                  size="xs"
+                  class="h-3.5 w-3.5 text-gray-400"
+                />
               </div>
               <input
                 v-model="q"
                 type="text"
-                class="w-full rounded-lg border-gray-200 bg-gray-50/50 py-1.5 pl-9 pr-3 text-xs font-medium text-gray-700 transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/10 dark:border-dark-700 dark:bg-dark-950 dark:text-gray-300 dark:focus:bg-dark-800"
+                class="input pl-9 pr-3 text-xs"
                 :placeholder="t('admin.ops.errorDetails.searchPlaceholder')"
               />
             </div>
+          </div>
+
+          <div class="col-span-2">
+            <input
+              v-model="requestId"
+              type="text"
+              class="input px-3 font-mono text-xs"
+              spellcheck="false"
+              maxlength="255"
+              :aria-label="t('requests.id')"
+              :placeholder="t('requests.id')"
+              @keydown.enter.prevent="searchRequests"
+            />
           </div>
 
           <div class="compact-select">
@@ -262,7 +292,7 @@ watch(
           </div>
 
           <div class="col-span-2 flex items-center justify-start gap-1 md:col-span-2 md:justify-end">
-            <button type="button" class="btn btn-secondary btn-sm h-[34px] whitespace-nowrap" @click="resetFilters">
+            <button type="button" class="btn btn-secondary btn-sm h-9 whitespace-nowrap" @click="resetFilters">
               {{ t('common.reset') }}
             </button>
             <IpGeoBatchToolbar :ips="rows.map((row) => row.client_ip)" inline compact />
@@ -297,7 +327,8 @@ watch(
 </template>
 
 <style>
-.compact-select .select-trigger {
-  @apply py-1.5 px-3 text-xs rounded-lg;
+/* 触发器使用紧凑尺寸（py-1.5/px-3/text-xs）。 */
+.compact-select .input-trigger {
+  @apply py-1.5 px-3 text-xs rounded-control;
 }
 </style>

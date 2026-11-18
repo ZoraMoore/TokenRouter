@@ -1,0 +1,148 @@
+<template>
+  <SettingsSection
+    :title="t('admin.providers.quotaControl.title')"
+    :hint="t('admin.providers.quotaControl.hint')"
+  >
+    <SettingToggleRow
+      :id="`${uid}-window-cost`"
+      v-model="windowCostEnabled"
+      :label="t('admin.providers.quotaControl.windowCost.label')"
+      :hint="t('admin.providers.quotaControl.windowCost.hint')"
+      testid="window-cost-toggle"
+    />
+    <Collapse :open="windowCostEnabled" unmount-on-hide>
+      <SettingsSubpanel class="grid gap-4 space-y-0 md:grid-cols-2">
+        <div>
+          <label :for="`${uid}-window-cost-limit`" class="input-label">{{ t('admin.providers.quotaControl.windowCost.limit') }}</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon text-gray-500 dark:text-gray-400">$</span>
+            <input
+              :id="`${uid}-window-cost-limit`"
+              v-model.number="windowCostLimit"
+              type="number"
+              min="0"
+              step="1"
+              class="input input-has-icon input-icon-text"
+              :placeholder="t('admin.providers.quotaControl.windowCost.limitPlaceholder')"
+            />
+          </div>
+          <p class="input-hint">{{ t('admin.providers.quotaControl.windowCost.limitHint') }}</p>
+        </div>
+        <div>
+          <label :for="`${uid}-window-cost-reserve`" class="input-label">{{ t('admin.providers.quotaControl.windowCost.stickyReserve') }}</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon text-gray-500 dark:text-gray-400">$</span>
+            <input
+              :id="`${uid}-window-cost-reserve`"
+              v-model.number="windowCostStickyReserve"
+              type="number"
+              min="0"
+              step="1"
+              class="input input-has-icon input-icon-text"
+              :placeholder="t('admin.providers.quotaControl.windowCost.stickyReservePlaceholder')"
+            />
+          </div>
+          <p class="input-hint">{{ t('admin.providers.quotaControl.windowCost.stickyReserveHint') }}</p>
+        </div>
+      </SettingsSubpanel>
+    </Collapse>
+
+    <SettingToggleRow
+      :id="`${uid}-session-limit`"
+      v-model="sessionLimitEnabled"
+      :label="t('admin.providers.quotaControl.sessionLimit.label')"
+      :hint="t('admin.providers.quotaControl.sessionLimit.hint')"
+      testid="session-limit-toggle"
+    />
+    <Collapse :open="sessionLimitEnabled" unmount-on-hide>
+      <SettingsSubpanel class="grid gap-4 space-y-0 md:grid-cols-2">
+        <div>
+          <label :for="`${uid}-max-sessions`" class="input-label">{{ t('admin.providers.quotaControl.sessionLimit.maxSessions') }}</label>
+          <input
+            :id="`${uid}-max-sessions`"
+            v-model.number="maxSessions"
+            type="number"
+            min="1"
+            step="1"
+            class="input"
+            :placeholder="t('admin.providers.quotaControl.sessionLimit.maxSessionsPlaceholder')"
+          />
+          <p class="input-hint">{{ t('admin.providers.quotaControl.sessionLimit.maxSessionsHint') }}</p>
+        </div>
+        <div>
+          <label :for="`${uid}-idle-timeout`" class="input-label">{{ t('admin.providers.quotaControl.sessionLimit.idleTimeout') }}</label>
+          <div class="input-icon-wrap">
+            <input
+              :id="`${uid}-idle-timeout`"
+              v-model.number="sessionIdleTimeout"
+              type="number"
+              min="1"
+              step="1"
+              class="input pr-16"
+              :placeholder="t('admin.providers.quotaControl.sessionLimit.idleTimeoutPlaceholder')"
+            />
+            <span class="input-icon-right text-sm text-gray-500 dark:text-gray-400">{{ t('common.minutes') }}</span>
+          </div>
+          <p class="input-hint">{{ t('admin.providers.quotaControl.sessionLimit.idleTimeoutHint') }}</p>
+        </div>
+      </SettingsSubpanel>
+    </Collapse>
+
+    <SettingToggleRow
+      :id="`${uid}-rpm`"
+      v-model="rpmLimitEnabled"
+      :label="t('admin.providers.quotaControl.rpmLimit.label')"
+      :hint="t('admin.providers.quotaControl.rpmLimit.hint')"
+      testid="rpm-limit-toggle"
+    />
+    <Collapse :open="rpmLimitEnabled" unmount-on-hide>
+      <RpmLimitPanel
+        v-model:base-rpm="baseRpm"
+        v-model:strategy="rpmStrategy"
+        v-model:sticky-buffer="rpmStickyBuffer"
+      />
+    </Collapse>
+
+    <!-- 用户消息限速模式独立于 RPM 开关，始终可见。 -->
+    <div class="space-y-2">
+      <div>
+        <span class="text-sm font-medium text-primary-900 dark:text-dark-50">{{ t('admin.providers.quotaControl.rpmLimit.userMsgQueue') }}</span>
+        <p class="input-hint">{{ t('admin.providers.quotaControl.rpmLimit.userMsgQueueHint') }}</p>
+      </div>
+      <SettingsSegmented
+        v-model="userMsgQueueMode"
+        :ariaLabel="t('admin.providers.quotaControl.rpmLimit.userMsgQueue')"
+        :options="umqModeOptions"
+      />
+    </div>
+  </SettingsSection>
+</template>
+
+<script setup lang="ts">
+import { useId } from 'vue'
+import { useI18n } from 'vue-i18n'
+import Collapse from '@/components/common/Collapse.vue'
+import SettingsSection from '@/components/common/settings/SettingsSection.vue'
+import SettingsSegmented from '@/components/common/settings/SettingsSegmented.vue'
+import SettingsSubpanel from '@/components/common/settings/SettingsSubpanel.vue'
+import SettingToggleRow from '@/components/common/settings/SettingToggleRow.vue'
+import RpmLimitPanel from './RpmLimitPanel.vue'
+import { useUserMsgQueueModeOptions, type RpmStrategy } from './providerFormOptions'
+
+// Anthropic OAuth/Setup Token 的窗口费用、会话数和 RPM 限制，创建与编辑共用。
+const windowCostEnabled = defineModel<boolean>('windowCostEnabled', { required: true })
+const windowCostLimit = defineModel<number | null>('windowCostLimit', { required: true })
+const windowCostStickyReserve = defineModel<number | null>('windowCostStickyReserve', { required: true })
+const sessionLimitEnabled = defineModel<boolean>('sessionLimitEnabled', { required: true })
+const maxSessions = defineModel<number | null>('maxSessions', { required: true })
+const sessionIdleTimeout = defineModel<number | null>('sessionIdleTimeout', { required: true })
+const rpmLimitEnabled = defineModel<boolean>('rpmLimitEnabled', { required: true })
+const baseRpm = defineModel<number | null>('baseRpm', { required: true })
+const rpmStrategy = defineModel<RpmStrategy>('rpmStrategy', { required: true })
+const rpmStickyBuffer = defineModel<number | null>('rpmStickyBuffer', { required: true })
+const userMsgQueueMode = defineModel<string>('userMsgQueueMode', { required: true })
+
+const { t } = useI18n()
+const uid = useId()
+const umqModeOptions = useUserMsgQueueModeOptions()
+</script>

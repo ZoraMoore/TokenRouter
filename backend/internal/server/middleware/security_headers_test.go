@@ -2,20 +2,18 @@ package middleware
 
 import (
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/TokenFlux/TokenRouter/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-)
 
-func init() {
-	gin.SetMode(gin.TestMode)
-}
+	"github.com/TokenFlux/TokenRouter/internal/config"
+)
 
 func TestGenerateNonce(t *testing.T) {
 	t.Run("generates_valid_base64_string", func(t *testing.T) {
@@ -32,7 +30,7 @@ func TestGenerateNonce(t *testing.T) {
 
 	t.Run("generates_unique_nonces", func(t *testing.T) {
 		nonces := make(map[string]bool)
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			nonce, err := GenerateNonce()
 			require.NoError(t, err)
 			assert.False(t, nonces[nonce], "nonce should be unique")
@@ -263,7 +261,7 @@ func TestSecurityHeaders(t *testing.T) {
 		middleware := SecurityHeaders(cfg, nil)
 
 		nonces := make(map[string]bool)
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
 			c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
@@ -346,7 +344,19 @@ func TestEnhanceCSPPolicy(t *testing.T) {
 		assert.Equal(t, 1, countDirectiveValue(enhanced, "worker-src", TencentCaptchaWorkerSource))
 	})
 
-	t.Run("default_policy_already_carries_tencent_captcha_domains", func(t *testing.T) {
+	t.Run("adds_only_the_tf_cli_loopback_ports", func(t *testing.T) {
+		policy := "default-src 'self'; connect-src 'self'"
+		enhanced := enhanceCSPPolicy(policy)
+
+		for port := 43110; port <= 43119; port++ {
+			origin := fmt.Sprintf("http://127.0.0.1:%d", port)
+			assert.Equal(t, 1, countDirectiveValue(enhanced, "connect-src", origin))
+		}
+		assert.NotContains(t, enhanced, "http://127.0.0.1:*")
+		assert.NotContains(t, enhanced, "http://localhost")
+	})
+
+	t.Run("default_policy_already_carries_required_domains", func(t *testing.T) {
 		// 默认策略与中间件强制注入表必须同形，否则 config.example.yaml 会误导自建用户
 		for _, required := range requiredCSPDirectiveValues {
 			assert.Equal(t, 1, countDirectiveValue(config.DefaultCSPPolicy, required.directive, required.value),
@@ -411,23 +421,6 @@ func TestEnhanceCSPPolicy(t *testing.T) {
 	})
 }
 
-func countDirectiveValue(policy, directive, value string) int {
-	for _, rawDirective := range strings.Split(policy, ";") {
-		fields := strings.Fields(strings.TrimSpace(rawDirective))
-		if len(fields) == 0 || fields[0] != directive {
-			continue
-		}
-		count := 0
-		for _, field := range fields[1:] {
-			if field == value {
-				count++
-			}
-		}
-		return count
-	}
-	return 0
-}
-
 func TestAddToDirective(t *testing.T) {
 	t.Run("adds_to_existing_directive", func(t *testing.T) {
 		policy := "script-src 'self'; style-src 'self'"
@@ -460,9 +453,9 @@ func TestAddToDirective(t *testing.T) {
 	})
 }
 
-// Benchmark tests
+// BenchmarkGenerateNonce 测量 nonce 生成的开销。
 func BenchmarkGenerateNonce(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _ = GenerateNonce()
 	}
 }
@@ -475,10 +468,50 @@ func BenchmarkSecurityHeadersMiddleware(b *testing.B) {
 	middleware := SecurityHeaders(cfg, nil)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 		middleware(c)
 	}
+}
+
+// TestGoogleIdentityCSPPreservesOfficialAccountsOrigins 验证 Google SDK 的域名是外部契约，默认和旧自定义策略都必须允许真实来源。
+func TestGoogleIdentityCSPPreservesOfficialAccountsOrigins(t *testing.T) {
+	expected := map[string]string{
+		"script-src":  "https://accounts.google.com/gsi/client",
+		"style-src":   "https://accounts.google.com/gsi/style",
+		"connect-src": "https://accounts.google.com/gsi/",
+		"frame-src":   "https://accounts.google.com/gsi/",
+	}
+	for _, policy := range []string{config.DefaultCSPPolicy, enhanceCSPPolicy("default-src 'self'; script-src 'self'")} {
+		directives := map[string][]string{}
+		for part := range strings.SplitSeq(policy, ";") {
+			fields := strings.Fields(part)
+			if len(fields) > 0 {
+				directives[fields[0]] = fields[1:]
+			}
+		}
+		for directive, origin := range expected {
+			require.Contains(t, directives[directive], origin, directive)
+		}
+		require.NotContains(t, policy, "providers.google.com")
+	}
+}
+
+func countDirectiveValue(policy, directive, value string) int {
+	for rawDirective := range strings.SplitSeq(policy, ";") {
+		fields := strings.Fields(strings.TrimSpace(rawDirective))
+		if len(fields) == 0 || fields[0] != directive {
+			continue
+		}
+		count := 0
+		for _, field := range fields[1:] {
+			if field == value {
+				count++
+			}
+		}
+		return count
+	}
+	return 0
 }

@@ -10,8 +10,8 @@ vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (key: string) => {
       const messages: Record<string, string> = {
-        'admin.accounts.oauth.grok.failedToExchangeCode': 'Grok 授权码兑换失败',
-        'admin.accounts.oauth.grok.errors.GROK_OAUTH_INVALID_STATE':
+        'admin.providers.oauth.grok.failedToExchangeCode': 'Grok 授权码兑换失败',
+        'admin.providers.oauth.grok.errors.GROK_OAUTH_INVALID_STATE':
           'Grok OAuth state 与当前会话不匹配。请粘贴同一次生成的授权链接返回的回调 URL。'
       }
       return messages[key] ?? key

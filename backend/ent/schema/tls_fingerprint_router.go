@@ -1,21 +1,20 @@
-// Package schema 定义 Ent ORM 的数据库 schema。
 package schema
 
 import (
-	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
-	"github.com/TokenFlux/TokenRouter/internal/model"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
+	"github.com/TokenFlux/TokenRouter/internal/egress"
 )
 
 // TLSFingerprintRouter 定义 TLS 指纹路由器 schema。
 //
-// TLS 路由器按入站 User-Agent 选择 TLS 指纹模板，账号可在固定模板之上绑定一个
+// TLS 路由器按入站 User-Agent 选择 TLS 指纹模板，提供商可在固定模板之上绑定一个
 // 路由器，实现不同客户端运行时使用不同 TLS ClientHello。
 type TLSFingerprintRouter struct {
 	ent.Schema
@@ -70,13 +69,13 @@ func (TLSFingerprintRouter) Fields() []ent.Field {
 			Default(""),
 
 		// codex_invite_reset_tls_fingerprint_profile_id: Codex 邀请重置请求使用的 TLS 模板。
-		// nil 表示沿用账号 TLS 模板；0 表示内置默认模板；-1 表示随机模板；正数表示指定模板。
+		// nil 表示沿用提供商 TLS 模板；0 表示内置默认模板；-1 表示随机模板；正数表示指定模板。
 		field.Int64("codex_invite_reset_tls_fingerprint_profile_id").
 			Optional().
 			Nillable(),
 
 		// rules: 按顺序匹配的 UA 规则列表，命中第一条后返回对应 TLS 模板。
-		field.JSON("rules", []model.TLSFingerprintRouterRule{}).
+		field.JSON("rules", []egress.TLSFingerprintRouterRule{}).
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 	}

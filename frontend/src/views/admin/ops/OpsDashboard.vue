@@ -2,10 +2,10 @@
   <component :is="isFullscreen ? 'div' : AppLayout" :class="isFullscreen ? 'ba-theme-shell flex min-h-screen flex-col justify-center' : ''">
     <div v-if="isFullscreen" class="ba-theme-backdrop pointer-events-none fixed inset-0"></div>
 
-    <div :class="[isFullscreen ? 'relative z-10 p-4 md:p-6' : '', 'space-y-6 pb-12']">
+    <div :class="[isFullscreen ? 'relative z-10 p-4 md:p-6' : '', 'space-y-4 pb-12']">
       <div
         v-if="errorMessage"
-        class="rounded-2xl bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400"
+        class="rounded-surface bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400"
       >
         {{ errorMessage }}
       </div>
@@ -41,7 +41,7 @@
       />
 
       <!-- Row: Concurrency + Throughput -->
-      <div v-if="opsEnabled && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-6 lg:grid-cols-4">
+      <div v-if="opsEnabled && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-4 lg:grid-cols-4">
         <div class="h-[360px] lg:col-span-1">
           <OpsConcurrencyCard :platform-filter="platform" :group-id-filter="groupId" :refresh-token="dashboardRefreshToken" />
         </div>
@@ -69,7 +69,7 @@
       </div>
 
       <!-- Row: Visual Analysis (baseline 3-up grid) -->
-      <div v-if="opsEnabled && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-6 md:grid-cols-3">
+      <div v-if="opsEnabled && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-4 md:grid-cols-3">
         <OpsLatencyChart
           :latency-data="latencyHistogram"
           :loading="loadingLatency"
@@ -91,7 +91,7 @@
       </div>
 
       <!-- Token 请求统计始终展示，并与顶部筛选器共享分组状态。 -->
-      <div v-if="opsEnabled && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-6">
+      <div v-if="opsEnabled && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-4">
         <OpsTokenStatsCard
           :platform-filter="platform"
           :group-id-filter="groupId"
@@ -136,6 +136,8 @@
         <OpsRequestDetailsModal
           v-model="showRequestDetails"
           :time-range="timeRange"
+          :custom-start-time="customStartTime"
+          :custom-end-time="customEndTime"
           :preset="requestDetailsPreset"
           :platform="platform"
           :group-id="groupId"
@@ -187,7 +189,8 @@ import {
   defaultLatencyBucketBoundaries,
   normalizeLatencyBucketBoundaries,
   parseLatencyBucketBoundaries,
-  serializeLatencyBucketBoundaries
+  serializeLatencyBucketBoundaries,
+  LATENCY_BUCKET_STORAGE_KEY
 } from './latencyBuckets'
 
 const route = useRoute()
@@ -209,7 +212,7 @@ const lastUpdated = ref<Date | null>(new Date())
 const timeRange = ref<TimeRange>('1h')
 const platform = ref<string>('')
 const groupId = ref<number | null>(null)
-const groups = ref<Array<{ id: number; name: string; platform: string }>>([])
+const groups = ref<Array<{ id: number; name: string }>>([])
 const latencyBucketBoundaries = ref<number[]>(defaultLatencyBucketBoundaries())
 const invalidLatencyBoundsQuery = ref(false)
 const customStartTime = ref<string | null>(null)
@@ -300,6 +303,32 @@ const readQueryNumber = (key: string): number | null => {
   return Number.isFinite(n) ? n : null
 }
 
+function readPersistedLatencyBucketBoundaries(): number[] | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.localStorage.getItem(LATENCY_BUCKET_STORAGE_KEY) || ''
+    return parseLatencyBucketBoundaries(raw)
+  } catch {
+    // 本地存储不可用时继续使用默认配置，不阻断运维页加载。
+    return null
+  }
+}
+
+function persistLatencyBucketBoundaries(boundaries: readonly number[]) {
+  if (typeof window === 'undefined') return
+
+  try {
+    if (areDefaultLatencyBucketBoundaries(boundaries)) {
+      window.localStorage.removeItem(LATENCY_BUCKET_STORAGE_KEY)
+      return
+    }
+    window.localStorage.setItem(LATENCY_BUCKET_STORAGE_KEY, serializeLatencyBucketBoundaries(boundaries))
+  } catch {
+    // 本地存储不可用时仍保留当前页面内的设置。
+  }
+}
+
 const applyRouteQueryToState = () => {
   const nextTimeRange = readQueryString(QUERY_KEYS.timeRange)
   if (nextTimeRange && allowedTimeRanges.has(nextTimeRange as TimeRange)) {
@@ -314,7 +343,7 @@ const applyRouteQueryToState = () => {
   const rawLatencyBounds = readQueryString(QUERY_KEYS.latencyBounds)
   const parsedLatencyBounds = parseLatencyBucketBoundaries(rawLatencyBounds)
   invalidLatencyBoundsQuery.value = rawLatencyBounds !== '' && parsedLatencyBounds === null
-  latencyBucketBoundaries.value = parsedLatencyBounds ?? defaultLatencyBucketBoundaries()
+  latencyBucketBoundaries.value = parsedLatencyBounds ?? readPersistedLatencyBucketBoundaries() ?? defaultLatencyBucketBoundaries()
 
   // Deep links
   const openRules = readQueryString(QUERY_KEYS.openAlertRules)
@@ -408,7 +437,7 @@ const requestDetailsPreset = ref<OpsRequestDetailsPreset>({
 type DetailReturnTarget = 'errorList' | 'requestList' | null
 const detailReturnTarget = ref<DetailReturnTarget>(null)
 
-// 从详情返回时，列表弹窗应保留上一次的筛选/分页状态而非重置。
+// 从详情返回时，列表弹窗恢复上一次的筛选和分页状态。
 const resumeListState = ref(false)
 
 const showSettingsDialog = ref(false)
@@ -468,7 +497,7 @@ async function loadDashboardAdvancedSettings() {
 async function loadGroups() {
   try {
     const list = await adminAPI.groups.getAll()
-    groups.value = list.map((group) => ({ id: group.id, name: group.name, platform: group.platform }))
+    groups.value = list.map((group) => ({ id: group.id, name: group.name }))
   } catch (err) {
     console.error('[OpsDashboard] Failed to load groups', err)
     groups.value = []
@@ -529,10 +558,6 @@ function onPlatformChange(v: string | number | boolean | null) {
   const nextPlatform = typeof v === 'string' ? v : ''
   platform.value = nextPlatform
 
-  const selectedGroup = groups.value.find((group) => group.id === groupId.value)
-  if (nextPlatform && selectedGroup && selectedGroup.platform !== nextPlatform) {
-    groupId.value = null
-  }
 }
 
 function onGroupChange(v: string | number | boolean | null) {
@@ -555,6 +580,7 @@ function onLatencyBucketBoundariesChange(values: number[]) {
   if (!normalized || areLatencyBucketBoundariesEqual(normalized, latencyBucketBoundaries.value)) return
 
   latencyBucketBoundaries.value = normalized
+  persistLatencyBucketBoundaries(normalized)
   syncQueryToRoute()
   if (opsEnabled.value) {
     void refreshLatencyHistogram()
@@ -823,7 +849,8 @@ async function fetchData() {
 }
 
 watch(
-  () => [timeRange.value, platform.value, groupId.value] as const,
+  // 已处于 custom 时再次调整起止时间，也要刷新概览和图表。
+  () => [timeRange.value, customStartTime.value, customEndTime.value, platform.value, groupId.value] as const,
   () => {
     if (isApplyingRouteQuery.value) return
     if (opsEnabled.value) {

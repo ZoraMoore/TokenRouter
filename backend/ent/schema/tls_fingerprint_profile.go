@@ -1,14 +1,14 @@
-// Package schema 定义 Ent ORM 的数据库 schema。
 package schema
 
 import (
-	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
+
+	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
+	"github.com/TokenFlux/TokenRouter/internal/egress"
 )
 
 // TLSFingerprintProfile 定义 TLS 指纹配置模板的 schema。
@@ -72,6 +72,11 @@ func (TLSFingerprintProfile) Fields() []ent.Field {
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 
+		// signature_algorithms_cert: 证书签名算法扩展（50），与扩展 13 独立。
+		field.JSON("signature_algorithms_cert", []uint16{}).
+			Optional().
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
+
 		// alpn_protocols: ALPN 协议列表（如 ["http/1.1"]）
 		field.JSON("alpn_protocols", []string{}).
 			Optional().
@@ -95,6 +100,14 @@ func (TLSFingerprintProfile) Fields() []ent.Field {
 		// extensions: TLS 扩展类型 ID 列表，按发送顺序排列
 		field.JSON("extensions", []uint16{}).
 			Optional().
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
+
+		// verification 保存模板来源和本地回放/目标握手验证证据。
+		field.JSON("verification", egress.TLSFingerprintProfileVerification{}).
+			Default(egress.TLSFingerprintProfileVerification{
+				SourceKind:       egress.TLSFingerprintProfileSourceLegacy,
+				ValidationStatus: egress.TLSFingerprintProfileValidationDraft,
+			}).
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 	}
 }

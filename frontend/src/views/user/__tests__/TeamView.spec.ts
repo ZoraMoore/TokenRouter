@@ -91,7 +91,7 @@ const teamContext = {
   owner,
 }
 
-// 仅渲染团队页自身内容，避免布局中的全局导览控制器影响入口行为测试。
+// 布局用插槽替身，测试挂载团队页自身的入口。
 const AppLayoutStub = {
   template: '<div><slot /></div>',
 }
@@ -103,7 +103,6 @@ const mountTeamView = async () => {
         AppLayout: AppLayoutStub,
         BaseDialog: true,
         ConfirmDialog: true,
-        LoadingSpinner: true,
         Icon: true,
         TeamInvitationDialog: true,
         TotpStepUpDialog: true,

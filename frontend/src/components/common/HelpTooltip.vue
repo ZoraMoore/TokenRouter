@@ -1,23 +1,42 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
+import { useFloatingMotion } from '@/composables/useFloatingMotion'
+import MotionTransition from '@/components/common/MotionTransition.vue'
+import Icon from '@/components/icons/Icon.vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
   content?: string
-  trigger?: 'hover' | 'click' | 'both'
+  trigger?: 'hover' | 'click' | 'both' | 'manual'
+  // 手动提示跟随调用方状态，外部关闭后同步状态以供下次提交打开。
+  open?: boolean
+  tooltipId?: string
   placement?: 'top' | 'bottom'
   widthClass?: string
+  // 是否显示右上角关闭按钮；纯说明性的短提示可以关闭，靠点击外部/Esc 关闭。
+  closable?: boolean
 }>(), {
   trigger: 'hover',
   placement: 'top',
   widthClass: 'w-64',
+  closable: true,
+  open: undefined,
 })
 
-const show = ref(false)
+const emit = defineEmits<{ 'update:open': [value: boolean] }>()
+const internalShow = ref(false)
+const requestedShow = computed(() => props.open ?? internalShow.value)
 const clickPinned = ref(false)
 const resolvedPlacement = ref<'top' | 'bottom'>(props.placement)
 const triggerRef = useTemplateRef<HTMLElement>('trigger')
 const tooltipRef = useTemplateRef<HTMLElement>('tooltip')
 const tooltipStyle = ref({ top: '0px', left: '0px' })
+const caretLeft = ref('50%')
+const ancestorBlocked = useFloatingMotion(triggerRef, () => requestedShow.value, closeTooltip, updatePosition)
+const show = computed(() => requestedShow.value && !ancestorBlocked.value)
+
+watch(show, (visible) => {
+  if (visible) nextTick(updatePosition)
+})
 
 function hoverEnabled() {
   return props.trigger === 'hover' || props.trigger === 'both'
@@ -28,12 +47,14 @@ function clickEnabled() {
 }
 
 function openTooltip() {
-  show.value = true
+  internalShow.value = true
+  emit('update:open', true)
   nextTick(updatePosition)
 }
 
 function closeTooltip() {
-  show.value = false
+  internalShow.value = false
+  emit('update:open', false)
   clickPinned.value = false
 }
 
@@ -42,8 +63,19 @@ function onEnter() {
   openTooltip()
 }
 
-function onLeave() {
+function isInside(container: HTMLElement | null, target: EventTarget | null): boolean {
+  return target instanceof Node && !!container?.contains(target)
+}
+
+function onLeave(event?: MouseEvent) {
   if (!hoverEnabled() || clickPinned.value) return
+  if (event && isInside(tooltipRef.value, event.relatedTarget)) return
+  closeTooltip()
+}
+
+function onTooltipLeave(event: MouseEvent) {
+  if (props.trigger !== 'hover') return
+  if (isInside(triggerRef.value, event.relatedTarget)) return
   closeTooltip()
 }
 
@@ -58,8 +90,8 @@ function onClick(event: MouseEvent) {
   openTooltip()
 }
 
-function onDocumentClick(event: MouseEvent) {
-  if (!clickEnabled() || !show.value) return
+function onDocumentInteraction(event: Event) {
+  if ((!clickEnabled() && props.trigger !== 'manual') || !show.value) return
   const target = event.target as Node | null
   if (!target) return
   if (triggerRef.value?.contains(target) || tooltipRef.value?.contains(target)) return
@@ -67,7 +99,7 @@ function onDocumentClick(event: MouseEvent) {
 }
 
 function onDocumentKeydown(event: KeyboardEvent) {
-  if (!clickEnabled()) return
+  if (!clickEnabled() && props.trigger !== 'manual') return
   if (event.key === 'Escape') {
     closeTooltip()
   }
@@ -122,6 +154,8 @@ function updatePosition() {
     tooltipTop = rect.top - 8
   }
   resolvedPlacement.value = placement
+  // 提示框为了避开屏幕边缘发生横移时，箭头仍对准真实触发点。
+  caretLeft.value = `${Math.max(8, Math.min(tooltipWidth - 8, centeredLeft - left + halfTooltipWidth))}px`
   tooltipStyle.value = {
     top: `${placement === 'top' ? tooltipTop + tooltipHeight + 8 : tooltipTop}px`,
     left: `${left}px`,
@@ -129,14 +163,19 @@ function updatePosition() {
 }
 
 onMounted(() => {
-  document.addEventListener('click', onDocumentClick, true)
+  document.addEventListener('click', onDocumentInteraction, true)
+  document.addEventListener('pointerdown', onDocumentInteraction, true)
+  document.addEventListener('touchstart', onDocumentInteraction, { capture: true, passive: true })
   document.addEventListener('keydown', onDocumentKeydown)
   window.addEventListener('resize', onViewportChange)
   window.addEventListener('scroll', onViewportChange, true)
+  if (show.value) nextTick(updatePosition)
 })
 
 onBeforeUnmount(() => {
-  document.removeEventListener('click', onDocumentClick, true)
+  document.removeEventListener('click', onDocumentInteraction, true)
+  document.removeEventListener('pointerdown', onDocumentInteraction, true)
+  document.removeEventListener('touchstart', onDocumentInteraction, true)
   document.removeEventListener('keydown', onDocumentKeydown)
   window.removeEventListener('resize', onViewportChange)
   window.removeEventListener('scroll', onViewportChange, true)
@@ -144,65 +183,66 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
+  <div data-icon-trigger
     ref="trigger"
-    class="group relative ml-1 inline-flex items-center align-middle"
+    class="group relative inline-flex items-center align-middle"
+    :class="{ 'ml-1': trigger !== 'manual' }"
     @mouseenter="onEnter"
     @mouseleave="onLeave"
     @click="onClick"
   >
     <!-- 触发图标 -->
     <slot name="trigger">
-      <svg
+      <Icon
+        name="infoCircle"
+        size="sm"
         class="h-4 w-4 cursor-help text-gray-400 transition-colors hover:text-primary-600 dark:text-gray-500 dark:hover:text-primary-400"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="2"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-        />
-      </svg>
+      />
     </slot>
 
-    <!-- 挂载到 body，避免被弹窗的 overflow 裁剪 -->
+    <!-- 提示挂载到 body，脱离弹窗的 overflow 裁剪区域。 -->
     <Teleport to="body">
-      <div
-        ref="tooltip"
-        v-show="show"
-        role="tooltip"
-        :class="[
-          'fixed z-[99999] max-h-[calc(100vh-1.5rem)] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 overflow-y-auto rounded-lg bg-gray-900 p-3 text-xs leading-relaxed text-white shadow-xl ring-1 ring-white/10 dark:bg-gray-800',
-          resolvedPlacement === 'top' ? '-translate-y-full' : 'translate-y-0',
-          props.widthClass,
-        ]"
-        :style="{
-          top: resolvedPlacement === 'top'
-            ? `calc(${tooltipStyle.top} - 8px)`
-            : tooltipStyle.top,
-          left: tooltipStyle.left,
-        }"
-      >
-        <button
-          v-if="clickEnabled()"
-          type="button"
-          class="absolute right-1.5 top-1.5 rounded p-1 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
-          aria-label="Close"
-          @click.stop="closeTooltip"
-        >
-          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-        <slot>{{ content }}</slot>
+      <!-- before: 伪元素向下延伸一段透明区域，盖住提示框与触发图标之间的空隙，让指针能连续移入提示框。 -->
+      <MotionTransition name="fade" persisted>
         <div
-          class="absolute left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 dark:bg-gray-800"
-          :class="resolvedPlacement === 'top' ? '-bottom-1' : '-top-1'"
-        ></div>
-      </div>
+          ref="tooltip"
+          :id="tooltipId"
+          v-show="show" :inert="!(show) || undefined"
+          role="tooltip"
+          :class="[
+            'fixed z-help-tooltip max-w-[calc(100vw-1.5rem)] -translate-x-1/2 tooltip-panel rounded-control shadow-xl',
+            resolvedPlacement === 'top' ? '-translate-y-full' : 'translate-y-0',
+            props.widthClass,
+          ]"
+          :style="{
+            top: resolvedPlacement === 'top'
+              ? `calc(${tooltipStyle.top} - 8px)`
+              : tooltipStyle.top,
+            left: tooltipStyle.left,
+          }"
+          @mouseleave="onTooltipLeave"
+        >
+          <!-- 内容层独立滚动，小箭头位于滚动区域外。 -->
+          <div class="relative max-h-[calc(100vh-1.5rem)] overflow-y-auto p-3 text-xs leading-relaxed">
+            <button
+              v-if="clickEnabled() && closable"
+              type="button"
+              class="absolute right-1.5 top-1.5 rounded-compact p-1 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+              aria-label="Close"
+              @click.stop="closeTooltip"
+            >
+              <Icon name="x" size="xs" class="h-3.5 w-3.5" />
+            </button>
+            <slot>{{ content }}</slot>
+          </div>
+          <!-- 深色模式下箭头只描朝外的两条边，与面板边框连成一体。 -->
+          <div
+            class="tooltip-caret -translate-x-1/2"
+            :style="{ left: caretLeft }"
+            :class="resolvedPlacement === 'top' ? '-bottom-1 border-b border-r' : '-top-1 border-l border-t'"
+          ></div>
+        </div>
+      </MotionTransition>
     </Teleport>
   </div>
 </template>

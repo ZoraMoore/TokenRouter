@@ -18,67 +18,13 @@
   </div>
 
   <!-- 默认首页 -->
-  <div v-else class="ba-theme-shell relative flex min-h-screen flex-col overflow-hidden text-gray-950 dark:text-white">
+  <div v-else class="ba-theme-shell relative flex min-h-screen flex-col overflow-hidden pt-[var(--header-h)] text-gray-950 dark:text-white">
     <div class="ba-theme-backdrop pointer-events-none fixed inset-0"></div>
 
-    <header class="glass relative z-20 border-b border-primary-900/10 px-4 dark:border-dark-600/80 sm:px-6">
-      <nav class="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4">
-        <router-link to="/home" class="flex min-w-0 items-center gap-2.5">
-          <span class="h-8 w-8 shrink-0 overflow-hidden rounded-lg shadow-sm">
-            <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
-          </span>
-          <span class="truncate text-base font-semibold text-gray-950 dark:text-white">{{ siteName }}</span>
-        </router-link>
+    <!-- 首页与控制台共用顶栏，外壳为固定顶栏预留高度。 -->
+    <AppHeader public-page />
 
-        <div class="flex items-center gap-2 sm:gap-3">
-          <div class="hidden items-center gap-5 text-sm font-medium text-gray-600 dark:text-dark-300 md:flex">
-            <router-link to="/models" class="transition hover:text-gray-950 dark:hover:text-white">
-              {{ t('home.nav.models') }}
-            </router-link>
-            <a
-              v-if="docUrl"
-              :href="docUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="transition hover:text-gray-950 dark:hover:text-white"
-            >
-              {{ t('home.docs') }}
-            </a>
-          </div>
-
-          <LocaleSwitcher />
-
-          <button
-            @click="toggleTheme"
-            class="flex h-9 w-9 items-center justify-center rounded-control text-primary-900/90 transition-colors hover:bg-primary-100 hover:text-primary-900 dark:text-dark-100/80 dark:hover:bg-dark-800 dark:hover:text-white"
-            :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
-          >
-            <Icon v-if="isDark" name="sun" size="md" />
-            <Icon v-else name="moon" size="md" />
-          </button>
-
-          <router-link
-            v-if="isAuthenticated"
-            :to="dashboardPath"
-            class="inline-flex items-center gap-1.5 rounded-full bg-primary-600 py-1.5 pl-1.5 pr-3 text-xs font-semibold text-white shadow-none transition hover:bg-primary-700 dark:bg-primary-600 dark:text-white dark:hover:bg-primary-700"
-          >
-            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-primary-500 text-[10px] text-white">
-              {{ userInitial }}
-            </span>
-            {{ t('home.dashboard') }}
-          </router-link>
-          <router-link
-            v-else
-            to="/login"
-            class="inline-flex items-center rounded-full bg-gray-950 px-4 py-2 text-xs font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-dark-950 dark:hover:bg-dark-200"
-          >
-            {{ t('home.login') }}
-          </router-link>
-        </div>
-      </nav>
-    </header>
-
-    <main class="relative z-10 flex-1 px-4 pb-20 pt-16 sm:px-6 lg:px-8">
+    <main v-content-reveal="motionRoute?.path" class="relative z-10 flex-1 px-4 pb-20 pt-16 sm:px-6 lg:px-8">
       <section class="mx-auto max-w-5xl text-center">
         <h1 class="mx-auto max-w-4xl text-4xl font-bold leading-[1.05] tracking-tight text-gray-950 dark:text-white sm:text-5xl md:text-6xl lg:text-7xl">
           {{ homeHeroTitle }}
@@ -90,18 +36,18 @@
         <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <router-link
             :to="isAuthenticated ? dashboardPath : '/login'"
-            class="inline-flex min-h-[44px] min-w-[180px] items-center justify-center gap-2 rounded-lg bg-primary-600 px-6 py-3 text-sm font-semibold text-white shadow-none transition hover:bg-primary-700"
+            class="inline-flex min-h-[44px] min-w-[180px] items-center justify-center gap-2 rounded-control bg-primary-600 px-6 py-3 text-sm font-semibold text-white shadow-none transition hover:bg-primary-700"
           >
             {{ isAuthenticated ? t('home.goToDashboard') : t('home.getStarted') }}
             <Icon name="arrowRight" size="sm" :stroke-width="2" />
           </router-link>
           <router-link
             to="/models"
-            class="inline-flex min-h-[44px] min-w-[180px] items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-6 py-3 text-sm font-semibold text-gray-900 shadow-sm transition hover:border-black/20 hover:text-primary-600 dark:border-dark-700 dark:bg-dark-900 dark:text-dark-100 dark:hover:border-primary-500"
+            class="inline-flex min-h-[44px] min-w-[180px] items-center justify-center gap-2 rounded-control border border-gray-200 bg-white px-6 py-3 text-sm font-semibold text-gray-900 shadow-sm transition hover:border-black/20 hover:text-primary-600 dark:border-dark-700 dark:bg-dark-900 dark:text-dark-100 dark:hover:border-primary-500"
           >
             {{ t('home.exploreMarketplace') }}
             <span class="relative flex h-5 w-5 items-center justify-center overflow-hidden">
-              <Transition name="home-marketplace-icon" mode="out-in">
+              <MotionTransition name="home-marketplace-icon" mode="out-in">
                 <ProviderIcon
                   v-if="homeMarketplaceButtonBrand"
                   :key="homeMarketplaceButtonBrand"
@@ -109,23 +55,11 @@
                   size="18px"
                 />
                 <Icon v-else key="marketplace-fallback" name="sparkles" size="sm" class="text-primary-500" />
-              </Transition>
+              </MotionTransition>
             </span>
           </router-link>
         </div>
       </section>
-
-      <section class="mx-auto mt-16 grid max-w-4xl grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-4">
-        <div v-for="card in homeStatsCards" :key="card.key" class="text-center">
-          <p class="min-h-[1.1em] text-3xl font-bold tabular-nums tracking-tight text-gray-950 dark:text-white md:text-4xl">
-            {{ card.value }}
-          </p>
-          <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">{{ card.label }}</p>
-        </div>
-      </section>
-      <p v-if="homeStatsError" class="mt-4 text-center text-xs text-gray-500 dark:text-dark-400">
-        {{ t('home.stats.unavailable') }}
-      </p>
 
       <!-- Provider icon marquee -->
       <section class="mx-auto mt-14 max-w-5xl" aria-hidden="true">
@@ -143,7 +77,7 @@
       </section>
 
       <section class="mx-auto mt-20 grid max-w-7xl gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <article class="group overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-transparent transition duration-300 hover:-translate-y-1 hover:border-black/20 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-within:border-black/20 dark:border-dark-800 dark:bg-dark-900 dark:hover:border-dark-600 dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)]">
+        <article class="group overflow-hidden rounded-surface border border-gray-200 bg-white shadow-sm ring-1 ring-transparent transition duration-layout hover:-translate-y-1 hover:border-black/20 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-within:border-black/20 dark:border-dark-800 dark:bg-dark-900 dark:hover:border-dark-600 dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)]">
           <div class="relative h-44 overflow-hidden border-b border-gray-200 bg-white dark:border-dark-800 dark:bg-dark-950">
             <div class="absolute inset-0 transition-transform duration-500 ease-out group-hover:scale-110">
               <span
@@ -178,10 +112,10 @@
           </div>
         </article>
 
-        <article class="group overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-transparent transition duration-300 hover:-translate-y-1 hover:border-black/20 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-within:border-black/20 dark:border-dark-800 dark:bg-dark-900 dark:hover:border-dark-600 dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)]">
+        <article class="group overflow-hidden rounded-surface border border-gray-200 bg-white shadow-sm ring-1 ring-transparent transition duration-layout hover:-translate-y-1 hover:border-black/20 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-within:border-black/20 dark:border-dark-800 dark:bg-dark-900 dark:hover:border-dark-600 dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)]">
           <div class="relative flex h-44 items-center justify-center overflow-hidden border-b border-gray-200 bg-white dark:border-dark-800 dark:bg-dark-950">
             <div class="relative h-full w-full transition-transform duration-500 ease-out group-hover:scale-110">
-              <div class="absolute left-1/2 top-7 z-10 max-w-[82%] -translate-x-1/2 truncate rounded-lg bg-gray-100 px-3.5 py-1.5 text-xs font-medium text-gray-800 shadow-sm dark:bg-dark-900 dark:text-dark-100">
+              <div class="absolute left-1/2 top-7 z-10 max-w-[82%] -translate-x-1/2 truncate rounded-control bg-gray-100 px-3.5 py-1.5 text-xs font-medium text-gray-800 shadow-sm dark:bg-dark-900 dark:text-dark-100">
                 {{ homeRouteLabel }}
               </div>
               <svg
@@ -207,7 +141,7 @@
                 <span
                   v-for="brand in homeRouteProviderBrands"
                   :key="brand"
-                  class="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-100 bg-white text-gray-700 shadow-[0_5px_16px_rgba(0,0,0,0.13)] dark:border-dark-700 dark:bg-dark-900 dark:text-dark-100"
+                  class="flex h-9 w-9 items-center justify-center rounded-control border border-gray-100 bg-white text-gray-700 shadow-[0_5px_16px_rgba(0,0,0,0.13)] dark:border-dark-700 dark:bg-dark-900 dark:text-dark-100"
                 >
                   <ProviderIcon :brand="brand" size="17px" />
                 </span>
@@ -216,10 +150,10 @@
           </div>
           <div class="p-5">
             <h2 class="text-base font-semibold text-gray-900 dark:text-white">
-              {{ t('home.features.multiAccount') }}
+              {{ t('home.features.multiProvider') }}
             </h2>
             <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-dark-300">
-              {{ t('home.features.multiAccountDesc') }}
+              {{ t('home.features.multiProviderDesc') }}
             </p>
             <router-link :to="isAuthenticated ? dashboardPath : '/login'" class="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-300">
               {{ t('home.features.learnMore') }}
@@ -228,9 +162,9 @@
           </div>
         </article>
 
-        <article class="group overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-transparent transition duration-300 hover:-translate-y-1 hover:border-black/20 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-within:border-black/20 dark:border-dark-800 dark:bg-dark-900 dark:hover:border-dark-600 dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)]">
+        <article class="group overflow-hidden rounded-surface border border-gray-200 bg-white shadow-sm ring-1 ring-transparent transition duration-layout hover:-translate-y-1 hover:border-black/20 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-within:border-black/20 dark:border-dark-800 dark:bg-dark-900 dark:hover:border-dark-600 dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)]">
           <div class="flex h-44 items-center justify-center border-b border-gray-200 bg-gray-50 p-6 dark:border-dark-800 dark:bg-dark-950">
-            <div class="w-full max-w-[200px] rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-transform duration-500 ease-out group-hover:scale-110 dark:border-dark-700 dark:bg-dark-900">
+            <div class="w-full max-w-[200px] rounded-surface border border-gray-200 bg-white p-4 shadow-sm transition-transform duration-500 ease-out group-hover:scale-110 dark:border-dark-700 dark:bg-dark-900">
               <div class="mb-4 flex items-center justify-between text-xs text-gray-500 dark:text-dark-400">
                 <span>{{ t('home.features.usageChart') }}</span>
                 <Icon name="chart" size="sm" />
@@ -257,12 +191,12 @@
           </div>
         </article>
 
-        <article class="group overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-transparent transition duration-300 hover:-translate-y-1 hover:border-black/20 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-within:border-black/20 dark:border-dark-800 dark:bg-dark-900 dark:hover:border-dark-600 dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)]">
+        <article class="group overflow-hidden rounded-surface border border-gray-200 bg-white shadow-sm ring-1 ring-transparent transition duration-layout hover:-translate-y-1 hover:border-black/20 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-within:border-black/20 dark:border-dark-800 dark:bg-dark-900 dark:hover:border-dark-600 dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)]">
           <div class="flex h-44 items-center justify-center border-b border-gray-200 bg-gray-50 dark:border-dark-800 dark:bg-dark-950">
             <div class="relative flex h-24 w-24 items-center justify-center rounded-full border border-gray-200 bg-white shadow-sm transition-transform duration-500 ease-out group-hover:scale-110 dark:border-dark-700 dark:bg-dark-900">
               <Icon name="shield" size="xl" class="text-gray-400 dark:text-dark-300" />
               <span class="absolute -right-1 -top-1 flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">
-                <Icon name="check" size="md" :stroke-width="2" />
+                <Icon name="check" size="md" :stroke-width="2" :animate-on-hover="false" />
               </span>
             </div>
           </div>
@@ -292,7 +226,7 @@
           <div>
             <router-link to="/models" class="inline-flex items-center gap-2 text-2xl font-bold text-gray-950 hover:text-primary-600 dark:text-white dark:hover:text-primary-300">
               {{ t('home.providers.title') }}
-              <Icon name="chevronRight" size="md" />
+              <Icon name="chevronRight" size="md" :animate-on-hover="false" />
             </router-link>
             <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
               {{ formatMarketplaceStat(totalModelCount) }} {{ t('marketplace.modelsStat') }}
@@ -306,26 +240,56 @@
           </router-link>
         </div>
 
-        <div class="grid gap-6 lg:grid-cols-3">
+        <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <div
             v-if="homeMarketplaceLoading"
-            class="rounded-xl border border-gray-200 bg-white px-5 py-4 text-center text-sm text-gray-500 dark:border-dark-800 dark:bg-dark-900 dark:text-dark-400 lg:col-span-3"
+            class="rounded-surface border border-gray-200 bg-white px-5 py-4 text-center text-sm text-gray-500 dark:border-dark-800 dark:bg-dark-900 dark:text-dark-400 sm:col-span-2 lg:col-span-3"
           >
             {{ t('common.loading') }}
           </div>
 
           <div
             v-else-if="supportedProviders.length === 0"
-            class="rounded-xl border border-gray-200 bg-white px-5 py-4 text-center text-sm text-gray-500 dark:border-dark-800 dark:bg-dark-900 dark:text-dark-400 lg:col-span-3"
+            class="rounded-surface border border-gray-200 bg-white px-5 py-4 text-center text-sm text-gray-500 dark:border-dark-800 dark:bg-dark-900 dark:text-dark-400 sm:col-span-2 lg:col-span-3"
           >
             {{ homeMarketplaceError ? t('home.providers.unavailable') : t('home.providers.empty') }}
           </div>
+
+          <!-- 管理员配置了首页展示模型时，按 OpenRouter Featured Models 风格渲染单模型卡片 -->
+          <template v-else-if="featuredModels.length > 0">
+            <article
+              v-for="featured in featuredModels"
+              :key="featured.model.id"
+              class="rounded-surface border border-gray-200 bg-white p-6 shadow-sm ring-1 ring-transparent transition duration-layout hover:-translate-y-1 hover:border-black/20 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-within:border-black/20 dark:border-dark-800 dark:bg-dark-900 dark:hover:border-dark-600 dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)]"
+            >
+              <div class="flex items-start gap-4">
+                <!-- 图标与模型广场保持一致：模型图标体系 + 白底圆角方形 -->
+                <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-surface border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-950">
+                  <ModelIcon :model="featured.model.id" size="28px" />
+                </span>
+                <div class="min-w-0 flex-1">
+                  <h3 class="truncate text-lg font-semibold text-gray-950 dark:text-white">
+                    {{ featured.model.display_name || featured.model.id }}
+                  </h3>
+                  <p class="truncate text-sm text-gray-500 dark:text-dark-400">
+                    {{ t('home.featured.byProvider', { provider: homeProviderCategory(featured.group).label }) }}
+                  </p>
+                </div>
+              </div>
+              <!-- 左下角展示相对官方价的折扣，右下角留空；无折扣数据时整块底部区域不渲染 -->
+              <div v-if="featured.discountOff" class="mt-5 border-t border-gray-200 pt-5 dark:border-dark-800">
+                <p class="text-sm font-semibold tabular-nums text-gray-950 dark:text-white">
+                  {{ featured.discountOff }}
+                </p>
+              </div>
+            </article>
+          </template>
 
           <template v-else>
             <article
               v-for="provider in supportedProviders.slice(0, 6)"
               :key="provider.key"
-              class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm ring-1 ring-transparent transition duration-300 hover:-translate-y-1 hover:border-black/20 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-within:border-black/20 dark:border-dark-800 dark:bg-dark-900 dark:hover:border-dark-600 dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)]"
+              class="rounded-surface border border-gray-200 bg-white p-6 shadow-sm ring-1 ring-transparent transition duration-layout hover:-translate-y-1 hover:border-black/20 hover:shadow-[0_12px_32px_rgba(0,0,0,0.1)] focus-within:border-black/20 dark:border-dark-800 dark:bg-dark-900 dark:hover:border-dark-600 dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)]"
             >
               <div class="flex items-start gap-4">
                 <span
@@ -391,13 +355,13 @@
                 </div>
               </div>
               <div class="mt-4 grid max-w-[156px] grid-cols-3 gap-3">
-                <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-white/90 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:ring-dark-800">
+                <span class="flex h-10 w-10 items-center justify-center rounded-control bg-white/90 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:ring-dark-800">
                   <ProviderIcon brand="Google" size="20px" />
                 </span>
-                <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-white/90 text-gray-800 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:text-gray-100 dark:ring-dark-800">
+                <span class="flex h-10 w-10 items-center justify-center rounded-control bg-white/90 text-gray-800 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:text-gray-100 dark:ring-dark-800">
                   <GitHubMark class="h-5 w-5" />
                 </span>
-                <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-white/90 text-primary-500 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:ring-dark-800">
+                <span class="flex h-10 w-10 items-center justify-center rounded-control bg-white/90 text-primary-500 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:ring-dark-800">
                   <Icon name="mail" size="md" :stroke-width="1.8" />
                 </span>
               </div>
@@ -414,12 +378,12 @@
                 </div>
               </div>
               <div class="mt-4 space-y-2">
-                <div class="flex items-center gap-2 rounded-md bg-white/90 px-3 py-2 text-gray-700 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:text-dark-200 dark:ring-dark-800">
+                <div class="flex items-center gap-2 rounded-control bg-white/90 px-3 py-2 text-gray-700 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:text-dark-200 dark:ring-dark-800">
                   <span class="w-14 text-xs font-medium">Claude</span>
                   <span class="h-2 flex-1 rounded-full bg-primary-100 dark:bg-primary-400/20"></span>
                   <span class="h-2 w-12 rounded-full bg-primary-100 dark:bg-primary-400/20"></span>
                 </div>
-                <div class="flex items-center gap-2 rounded-md bg-white/90 px-3 py-2 text-gray-700 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:text-dark-200 dark:ring-dark-800">
+                <div class="flex items-center gap-2 rounded-control bg-white/90 px-3 py-2 text-gray-700 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:text-dark-200 dark:ring-dark-800">
                   <span class="w-14 text-xs font-medium">GPT</span>
                   <span class="h-2 flex-1 rounded-full bg-primary-100 dark:bg-primary-400/20"></span>
                   <span class="h-2 w-12 rounded-full bg-primary-100 dark:bg-primary-400/20"></span>
@@ -430,11 +394,11 @@
             <div v-else class="mt-8 max-w-[270px]">
               <div class="flex items-center gap-3 text-primary-500">
                 <Icon name="key" size="md" :stroke-width="1.8" />
-                <div class="flex-1 rounded-md bg-white/90 px-3 py-2 font-mono text-xs text-gray-600 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:text-dark-300 dark:ring-dark-800">
+                <div class="flex-1 rounded-control bg-white/90 px-3 py-2 font-mono text-xs text-gray-600 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:text-dark-300 dark:ring-dark-800">
                   TOKENFLUX_API_KEY
                 </div>
               </div>
-              <div class="mt-3 rounded-md bg-white/90 px-3 py-2 font-mono text-sm tracking-[0.2em] text-gray-950 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:text-white dark:ring-dark-800">
+              <div class="mt-3 rounded-control bg-white/90 px-3 py-2 font-mono text-sm tracking-[0.2em] text-gray-950 shadow-sm ring-1 ring-gray-100 dark:bg-dark-950 dark:text-white dark:ring-dark-800">
                 ••••••••••••••••
               </div>
             </div>
@@ -453,7 +417,7 @@
         <div class="mt-8">
           <router-link
             :to="isAuthenticated ? dashboardPath : '/login'"
-            class="inline-flex min-h-[44px] min-w-[180px] items-center justify-center gap-2 rounded-lg bg-primary-600 px-8 py-3 text-sm font-semibold text-white transition hover:bg-primary-700"
+            class="inline-flex min-h-[44px] min-w-[180px] items-center justify-center gap-2 rounded-control bg-primary-600 px-8 py-3 text-sm font-semibold text-white transition hover:bg-primary-700"
           >
             {{ isAuthenticated ? t('home.goToDashboard') : t('home.cta.button') }}
             <Icon name="arrowRight" size="sm" :stroke-width="2" />
@@ -468,7 +432,7 @@
           <!-- Brand -->
           <div class="col-span-2 sm:col-span-3 lg:col-auto lg:max-w-[240px] lg:shrink-0">
             <div class="flex items-center gap-2.5">
-              <span class="h-8 w-8 shrink-0 overflow-hidden rounded-lg shadow-sm">
+              <span class="h-8 w-8 shrink-0 overflow-hidden rounded-control shadow-sm">
                 <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
               </span>
               <span class="text-sm font-semibold text-gray-950 dark:text-white">{{ siteName }}</span>
@@ -516,17 +480,23 @@
 </template>
 
 <script setup lang="ts">
+import { useLocaleRefresh } from '@/composables/useLocaleRefresh'
+import { vContentReveal } from '@/directives/contentReveal'
+import { useRoute as useMotionRoute } from 'vue-router'
+const motionRoute = useMotionRoute()
+
+import MotionTransition from '@/components/common/MotionTransition.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import GitHubMark from '@/components/auth/GitHubMark.vue'
 import GoogleOneTap from '@/components/auth/GoogleOneTap.vue'
-import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
+import AppHeader from '@/components/layout/AppHeader.vue'
 import ProviderIcon from '@/components/common/ProviderIcon.vue'
+import ModelIcon from '@/components/common/ModelIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
-import { useTheme } from '@/composables/useTheme'
-import { getMarketplaceModels, getMarketplaceStats } from '@/api/marketplace'
-import type { MarketplaceGroup, MarketplaceStats } from '@/types'
+import { getMarketplaceModels } from '@/api/marketplace'
+import type { MarketplaceGroup, MarketplaceModel } from '@/types'
 import { sanitizeUrl } from '@/utils/url'
 import { hasAcceptedLoginAgreement } from '@/utils/loginAgreement'
 import { isGoogleOneTapEligible, isGoogleOneTapOriginSupported } from '@/utils/googleIdentity'
@@ -537,10 +507,7 @@ import {
   resolveProviderBrandKey,
 } from '@/utils/providerBrand'
 
-type HomeStatsKey = 'today-tokens' | 'total-tokens' | 'total-users' | 'supported-models'
-type HomeStatsIcon = 'bolt' | 'database' | 'users' | 'grid'
 type HomeStepIcon = 'userPlus' | 'grid' | 'key'
-type HomeStatFormat = 'compact' | 'number'
 
 interface HomeProviderCategory {
   key: string
@@ -554,15 +521,6 @@ interface HomeProviderSummary extends HomeProviderCategory {
   officialPriceRatio?: number
   sortOrder: number
   firstIndex: number
-}
-
-interface HomeStatsCard {
-  key: HomeStatsKey
-  label: string
-  value: string
-  icon: HomeStatsIcon
-  iconWrapClass: string
-  iconClass: string
 }
 
 interface HomeStep {
@@ -581,34 +539,27 @@ interface HomeProviderCloudIcon {
   scale: number
 }
 
+// 首页精选卡片：单个模型及其所属分组（分组提供品牌与折扣上下文）
+interface HomeFeaturedModel {
+  model: MarketplaceModel
+  group: MarketplaceGroup
+  // 相对官方价的折扣文案（如 "95.6% off"），分组无有效折扣时为 null
+  discountOff: string | null
+}
+
 const { t, locale } = useI18n()
 
 const authStore = useAuthStore()
 const appStore = useAppStore()
 
 // 站点设置直接读取已注入或已缓存的公开配置。
-const siteName = computed(() => appStore.siteName || 'Sub2API')
+const siteName = computed(() => appStore.siteName || 'TokenRouter')
 const siteLogo = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
 const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
-const currentLanguage = computed(() => String(locale.value).toLowerCase().startsWith('zh') ? 'zh' : 'en')
-const numberLocale = computed(() => currentLanguage.value === 'zh' ? 'zh-CN' : 'en-US')
-const homeHeroTitle = computed(() => {
-  const settings = appStore.cachedPublicSettings
-  return localizedHomeCopy(
-    settings?.site_title_zh,
-    settings?.site_title_en,
-    t('home.heroTitle')
-  )
-})
-const homeHeroSubtitle = computed(() => {
-  const settings = appStore.cachedPublicSettings
-  return localizedHomeCopy(
-    settings?.site_subtitle_zh,
-    settings?.site_subtitle_en,
-    t('home.heroDescription')
-  )
-})
+const numberLocale = computed(() => locale.value)
+const homeHeroTitle = computed(() => appStore.cachedPublicSettings?.site_text_overrides?.includes('site_title') ? appStore.cachedPublicSettings.site_title || '' : t('home.heroTitle'))
+const homeHeroSubtitle = computed(() => appStore.cachedPublicSettings?.site_text_overrides?.includes('site_subtitle') ? appStore.cachedPublicSettings.site_subtitle || '' : t('home.heroDescription'))
 
 // 自定义首页支持 URL iframe 和 HTML 两种模式。
 const isHomeContentUrl = computed(() => {
@@ -616,16 +567,9 @@ const isHomeContentUrl = computed(() => {
   return content.startsWith('http://') || content.startsWith('https://')
 })
 
-const { isDark, toggleTheme } = useTheme()
-
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const isAdmin = computed(() => authStore.isAdmin)
 const dashboardPath = computed(() => isAdmin.value ? '/admin/dashboard' : '/dashboard')
-const userInitial = computed(() => {
-  const user = authStore.user
-  if (!user || !user.email) return ''
-  return user.email.charAt(0).toUpperCase()
-})
 
 const googleOneTapClientID = computed(
   () => appStore.cachedPublicSettings?.google_oauth_client_id || ''
@@ -681,30 +625,17 @@ const footerColumns = computed(() => {
   return [{ title: t('home.footer.quickLinks'), links: quickLinks }]
 })
 
-// 服务商图标滚动条:图标列表复制一份实现无缝循环
+// 服务商图标滚动条复制一份列表，首尾衔接循环。
 const homeMarqueeBrands = computed(() => {
   const brands = homeProviderVisuals.value.slice(0, 20)
   return [...brands, ...brands]
 })
 
 const marketplaceGroups = ref<MarketplaceGroup[]>([])
-const homeStats = ref<MarketplaceStats | null>(null)
 const homeMarketplaceLoading = ref(true)
-const homeStatsLoading = ref(true)
 const homeMarketplaceError = ref(false)
-const homeStatsError = ref(false)
 const homeMarketplaceButtonIconIndex = ref(0)
 let homeMarketplaceButtonIconTimer: number | null = null
-const homeAnimatedStats = ref<Record<HomeStatsKey, number>>({
-  'today-tokens': 0,
-  'total-tokens': 0,
-  'total-users': 0,
-  'supported-models': 0,
-})
-const homeAnimatedStatKeys = new Set<HomeStatsKey>()
-const homeStatAnimationFrames = new Map<HomeStatsKey, number>()
-const homeStatAnimationDurationMs = 3200
-
 const providerVisualFallbacks = [
   'Google',
   'Meta',
@@ -761,12 +692,30 @@ const totalModelCount = computed(() =>
   marketplaceGroups.value.reduce((total, group) => total + group.models.length, 0)
 )
 
-const homeStatAnimationTargets = computed<Record<HomeStatsKey, number | null>>(() => ({
-  'today-tokens': homeStatsLoading.value ? null : normalizedHomeStatTarget(homeStats.value?.today_tokens),
-  'total-tokens': homeStatsLoading.value ? null : normalizedHomeStatTarget(homeStats.value?.total_tokens),
-  'total-users': homeStatsLoading.value ? null : normalizedHomeStatTarget(homeStats.value?.total_users),
-  'supported-models': homeMarketplaceLoading.value ? null : normalizedHomeStatTarget(totalModelCount.value),
-}))
+// 管理员在「系统设置 - 通用设置 - 首页模型展示」配置的模型 ID 列表（公开设置注入或接口返回）
+const homeFeaturedModelIds = computed<string[]>(() => {
+  const configured = appStore.cachedPublicSettings?.home_featured_models
+  return Array.isArray(configured) ? configured : []
+})
+
+// 按配置顺序在市场分组中解析模型，解析不到的 ID 直接跳过
+const featuredModels = computed<HomeFeaturedModel[]>(() => {
+  const resolved: HomeFeaturedModel[] = []
+  for (const modelId of homeFeaturedModelIds.value) {
+    for (const group of marketplaceGroups.value) {
+      const model = group.models.find(item => item.id === modelId)
+      if (model) {
+        resolved.push({
+          model,
+          group,
+          discountOff: formatFeaturedDiscountOff(group.official_price_ratio),
+        })
+        break
+      }
+    }
+  }
+  return resolved
+})
 
 const supportedProviders = computed<HomeProviderSummary[]>(() => {
   const summaries = new Map<string, HomeProviderSummary>()
@@ -820,41 +769,6 @@ const supportedProviders = computed<HomeProviderSummary[]>(() => {
     return left.firstIndex - right.firstIndex
   })
 })
-
-const homeStatsCards = computed<HomeStatsCard[]>(() => [
-  {
-    key: 'today-tokens',
-    label: t('home.stats.todayTokens'),
-    value: formatAnimatedHomeStat('today-tokens', homeStatAnimationTargets.value['today-tokens'], homeStatsLoading.value),
-    icon: 'bolt',
-    iconWrapClass: 'bg-sky-100 dark:bg-sky-500/15',
-    iconClass: 'text-sky-600 dark:text-sky-300',
-  },
-  {
-    key: 'total-tokens',
-    label: t('home.stats.totalTokens'),
-    value: formatAnimatedHomeStat('total-tokens', homeStatAnimationTargets.value['total-tokens'], homeStatsLoading.value),
-    icon: 'database',
-    iconWrapClass: 'bg-emerald-100 dark:bg-emerald-500/15',
-    iconClass: 'text-emerald-600 dark:text-emerald-300',
-  },
-  {
-    key: 'total-users',
-    label: t('home.stats.totalUsers'),
-    value: formatAnimatedHomeStat('total-users', homeStatAnimationTargets.value['total-users'], homeStatsLoading.value, 'number'),
-    icon: 'users',
-    iconWrapClass: 'bg-violet-100 dark:bg-violet-500/15',
-    iconClass: 'text-violet-600 dark:text-violet-300',
-  },
-  {
-    key: 'supported-models',
-    label: t('home.stats.supportedModels'),
-    value: formatAnimatedHomeStat('supported-models', homeStatAnimationTargets.value['supported-models'], homeMarketplaceLoading.value, 'number'),
-    icon: 'grid',
-    iconWrapClass: 'bg-primary-100 dark:bg-primary-500/15',
-    iconClass: 'text-primary-600 dark:text-primary-300',
-  },
-])
 
 const homeProviderVisuals = computed(() => {
   const brands = supportedProviders.value.map(provider => provider.iconBrand)
@@ -916,18 +830,7 @@ function homeProviderCategory(group: MarketplaceGroup): HomeProviderCategory {
     return homeProviderCategoryFromBrand(brandKey, brandSource)
   }
 
-  switch (group.platform) {
-    case 'anthropic':
-      return { key: 'claude', label: t('home.providers.claude'), iconBrand: 'Claude' }
-    case 'openai':
-      return { key: 'gpt', label: t('home.providers.gpt'), iconBrand: 'OpenAI' }
-    case 'gemini':
-      return { key: 'gemini', label: t('home.providers.gemini'), iconBrand: 'Gemini' }
-    case 'antigravity':
-      return { key: 'antigravity', label: t('home.providers.antigravity'), iconBrand: 'Antigravity' }
-  }
-
-  const fallbackLabel = brandSource || group.platform
+  const fallbackLabel = brandSource
   return {
     key: providerBrandFilterKey(fallbackLabel),
     label: fallbackLabel,
@@ -969,24 +872,17 @@ function formatOfficialPriceRatio(ratio: number): string {
   return t('marketplace.officialPriceDiscount', { discount })
 }
 
-function formatAnimatedHomeStat(
-  key: HomeStatsKey,
-  target: number | null,
-  loading: boolean,
-  format: HomeStatFormat = 'compact'
-): string {
-  if (loading) {
-    return '...'
+// 相对官方价的折扣百分比（分组级），如 0.044 返回 "95.6% off"；
+// 无有效倍率或价格不低于官方价时返回 null，卡片底部整块不渲染
+function formatFeaturedDiscountOff(ratio?: number): string | null {
+  const valid = validOfficialPriceRatio(ratio)
+  if (valid === null || valid >= 1) {
+    return null
   }
-  if (target === null) {
-    return '-'
-  }
-
-  const value = homeAnimatedStats.value[key]
-  const formatted = format === 'compact'
-    ? formatAnimatedCompactNumber(value, target)
-    : formatWholeNumber(value)
-  return `${formatted}+`
+  const percent = new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 1,
+  }).format((1 - valid) * 100)
+  return t('home.featured.discountOff', { percent })
 }
 
 function formatMarketplaceStat(value: number): string {
@@ -995,98 +891,6 @@ function formatMarketplaceStat(value: number): string {
   }
   return new Intl.NumberFormat(numberLocale.value).format(value)
 }
-
-function formatAnimatedCompactNumber(value: number, target: number): string {
-  const targetParts = new Intl.NumberFormat(numberLocale.value, {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).formatToParts(target)
-  const compactPart = targetParts.find(part => part.type === 'compact')?.value ?? ''
-  const scaledValue = compactPart ? scaleCompactValue(value, target) : value
-  const decimalDigits = compactPart && targetParts.some(part => part.type === 'fraction') ? 1 : 0
-  const numberText = new Intl.NumberFormat(numberLocale.value, {
-    minimumFractionDigits: decimalDigits,
-    maximumFractionDigits: decimalDigits,
-    useGrouping: false,
-  }).format(scaledValue)
-
-  return `${numberText}${compactPart}`
-}
-
-function scaleCompactValue(value: number, target: number): number {
-  const compactTargetNumber = Number(new Intl.NumberFormat(numberLocale.value, {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).formatToParts(target)
-    .filter(part => part.type === 'integer' || part.type === 'decimal' || part.type === 'fraction')
-    .map(part => part.value)
-    .join(''))
-  if (!Number.isFinite(compactTargetNumber) || compactTargetNumber <= 0) {
-    return value
-  }
-
-  return value / (target / compactTargetNumber)
-}
-
-function formatWholeNumber(value: number): string {
-  return new Intl.NumberFormat(numberLocale.value, {
-    maximumFractionDigits: 0,
-    useGrouping: false,
-  }).format(Math.round(value))
-}
-
-function normalizedHomeStatTarget(value?: number): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : null
-}
-
-function startHomeStatAnimation(key: HomeStatsKey, target: number) {
-  homeAnimatedStatKeys.add(key)
-  if (homeStatAnimationFrames.has(key)) {
-    cancelAnimationFrame(homeStatAnimationFrames.get(key)!)
-    homeStatAnimationFrames.delete(key)
-  }
-
-  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
-  if (reduceMotion || target === 0) {
-    homeAnimatedStats.value = { ...homeAnimatedStats.value, [key]: target }
-    return
-  }
-
-  const startTime = performance.now()
-  const tick = (now: number) => {
-    const progress = Math.min((now - startTime) / homeStatAnimationDurationMs, 1)
-    // 四次缓出配合更长时长，让计数器前段启动快，尾段明显慢下来。
-    const easedProgress = 1 - Math.pow(1 - progress, 4)
-    homeAnimatedStats.value = {
-      ...homeAnimatedStats.value,
-      [key]: target * easedProgress,
-    }
-
-    if (progress < 1) {
-      homeStatAnimationFrames.set(key, requestAnimationFrame(tick))
-      return
-    }
-
-    homeAnimatedStats.value = { ...homeAnimatedStats.value, [key]: target }
-    homeStatAnimationFrames.delete(key)
-  }
-
-  homeStatAnimationFrames.set(key, requestAnimationFrame(tick))
-}
-
-watch(
-  homeStatAnimationTargets,
-  (targets) => {
-    const statEntries = Object.entries(targets) as Array<[HomeStatsKey, number | null]>
-    statEntries.forEach(([key, target]) => {
-      if (target === null || homeAnimatedStatKeys.has(key)) {
-        return
-      }
-      startHomeStatAnimation(key, target)
-    })
-  },
-  { immediate: true }
-)
 
 watch(
   homeMarketplaceButtonBrands,
@@ -1099,22 +903,6 @@ watch(
   },
   { immediate: true }
 )
-
-function localizedHomeCopy(zhText: string | undefined, enText: string | undefined, fallback: string): string {
-  const primary = currentLanguage.value === 'zh' ? zhText : enText
-  const secondary = currentLanguage.value === 'zh' ? enText : zhText
-  return firstConfiguredText(primary, secondary, fallback)
-}
-
-function firstConfiguredText(...values: Array<string | undefined>): string {
-  for (const value of values) {
-    const normalized = value?.trim()
-    if (normalized) {
-      return normalized
-    }
-  }
-  return ''
-}
 
 function mergeProviderVisualBrands(brands: string[]): string[] {
   const seen = new Set<string>()
@@ -1132,7 +920,7 @@ function mergeProviderVisualBrands(brands: string[]): string[] {
   return merged
 }
 
-function providerIconWrapClass(provider: HomeProviderSummary): string {
+function providerIconWrapClass(provider: Pick<HomeProviderSummary, 'key' | 'iconBrand'>): string {
   if (provider.key === 'antigravity') {
     return 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:ring-rose-400/30'
   }
@@ -1154,21 +942,6 @@ async function fetchHomeMarketplace() {
   }
 }
 
-async function fetchHomeStats() {
-  homeStatsLoading.value = true
-  homeStatsError.value = false
-
-  try {
-    homeStats.value = await getMarketplaceStats()
-  } catch (error) {
-    console.error('Failed to load home marketplace stats:', error)
-    homeStats.value = null
-    homeStatsError.value = true
-  } finally {
-    homeStatsLoading.value = false
-  }
-}
-
 onMounted(async () => {
   authStore.checkAuth()
   homeMarketplaceButtonIconTimer = window.setInterval(() => {
@@ -1187,24 +960,23 @@ onMounted(async () => {
   }
 
   if (!homeContent.value) {
-    await Promise.all([fetchHomeMarketplace(), fetchHomeStats()])
+    await fetchHomeMarketplace()
   }
 })
 
 onUnmounted(() => {
-  homeStatAnimationFrames.forEach(frameId => cancelAnimationFrame(frameId))
-  homeStatAnimationFrames.clear()
   if (homeMarketplaceButtonIconTimer) {
     window.clearInterval(homeMarketplaceButtonIconTimer)
     homeMarketplaceButtonIconTimer = null
   }
 })
+useLocaleRefresh(fetchHomeMarketplace)
 </script>
 
 <style scoped>
 .home-marketplace-icon-enter-active,
 .home-marketplace-icon-leave-active {
-  transition: opacity 220ms ease, transform 220ms ease;
+  transition: opacity var(--motion-layout) var(--motion-ease), transform var(--motion-layout) var(--motion-ease);
 }
 
 .home-marketplace-icon-enter-from {
@@ -1217,7 +989,7 @@ onUnmounted(() => {
   transform: translateY(70%);
 }
 
-/* 服务商图标无缝滚动条,两端用渐隐遮罩 */
+/* 服务商图标循环滚动条，两端使用渐隐遮罩。 */
 .home-marquee {
   -webkit-mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
   mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);

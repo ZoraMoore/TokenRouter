@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { GROUP_PLATFORM_OPTIONS } from '@/constants/platforms'
+import { readFileSync } from 'node:fs'
 
-describe('GroupsView platform options', () => {
-  it('keeps all fork-supported concrete platforms available', () => {
-    expect(GROUP_PLATFORM_OPTIONS.map((option) => option.value)).toEqual(
-      expect.arrayContaining(['qoder', 'kimi', 'zhipu', 'deepseek'])
-    )
+describe('通用分组管理', () => {
+  it('不提交分组平台和默认分组字段', () => {
+    const source = readFileSync('src/views/admin/GroupsView.vue', 'utf8')
+    expect(source).not.toContain('createForm.platform')
+    expect(source).not.toContain('editForm.platform')
+    expect(source).not.toContain('is_default')
   })
 })

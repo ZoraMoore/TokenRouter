@@ -8,27 +8,26 @@ import (
 	"sync"
 )
 
-// HTMLCache manages the cached index.html with injected settings
+// HTMLCache manages the cached index.html with injected settings.
 type HTMLCache struct {
 	mu              sync.RWMutex
-	cachedHTML      []byte
-	etag            string
+	entries         map[string]CachedHTML
 	baseHTMLHash    string // Hash of the original index.html (immutable after build)
 	settingsVersion uint64 // Incremented when settings change
 }
 
-// CachedHTML represents the cache state
+// CachedHTML represents the cache state.
 type CachedHTML struct {
 	Content []byte
 	ETag    string
 }
 
-// NewHTMLCache creates a new HTML cache instance
+// NewHTMLCache creates a new HTML cache instance.
 func NewHTMLCache() *HTMLCache {
 	return &HTMLCache{}
 }
 
-// SetBaseHTML initializes the cache with the base HTML template
+// SetBaseHTML initializes the cache with the base HTML template.
 func (c *HTMLCache) SetBaseHTML(baseHTML []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -37,40 +36,42 @@ func (c *HTMLCache) SetBaseHTML(baseHTML []byte) {
 	c.baseHTMLHash = hex.EncodeToString(hash[:8]) // First 8 bytes for brevity
 }
 
-// Invalidate marks the cache as stale
+// Invalidate marks the cache as stale.
 func (c *HTMLCache) Invalidate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.entries = nil
 	c.settingsVersion++
-	c.cachedHTML = nil
-	c.etag = ""
 }
 
-// Get returns the cached HTML or nil if cache is stale
-func (c *HTMLCache) Get() *CachedHTML {
+// Snapshot 在同一次锁保护内读取语言快照和失效版本。
+func (c *HTMLCache) Snapshot(code string) (*CachedHTML, uint64) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-
-	if c.cachedHTML == nil {
-		return nil
+	snapshot, ok := c.entries[code]
+	if !ok {
+		return nil, c.settingsVersion
 	}
-	return &CachedHTML{
-		Content: c.cachedHTML,
-		ETag:    c.etag,
-	}
+	return &CachedHTML{Content: append([]byte(nil), snapshot.Content...), ETag: snapshot.ETag}, c.settingsVersion
 }
 
-// Set updates the cache with new rendered HTML
-func (c *HTMLCache) Set(html []byte, settingsJSON []byte) {
+// Publish 将语言加入 ETag，跨过失效点的渲染保持为当前请求私有。
+func (c *HTMLCache) Publish(code string, version uint64, html, settingsJSON []byte) CachedHTML {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	c.cachedHTML = html
-	c.etag = c.generateETag(settingsJSON)
+	key := append([]byte(code+"\n"), settingsJSON...)
+	rendered := CachedHTML{Content: html, ETag: c.generateETag(key)}
+	if version == c.settingsVersion {
+		if c.entries == nil {
+			c.entries = map[string]CachedHTML{}
+		}
+		c.entries[code] = CachedHTML{Content: append([]byte(nil), html...), ETag: rendered.ETag}
+	}
+	return rendered
 }
 
-// generateETag creates an ETag from base HTML hash + settings hash
+// generateETag creates an ETag from base HTML hash + settings hash.
 func (c *HTMLCache) generateETag(settingsJSON []byte) string {
 	settingsHash := sha256.Sum256(settingsJSON)
 	return `"` + c.baseHTMLHash + "-" + hex.EncodeToString(settingsHash[:8]) + `"`

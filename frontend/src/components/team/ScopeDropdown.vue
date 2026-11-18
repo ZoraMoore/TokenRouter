@@ -2,49 +2,53 @@
   <div ref="dropdownRef" class="relative" data-tour="keys-scope-switch">
     <button
       type="button"
-      class="btn btn-secondary h-11 w-11 p-0 md:h-auto md:w-auto md:px-3 md:py-2.5"
+      class="btn btn-secondary md:w-auto md:min-h-0 md:px-3 md:py-1.5 btn-icon"
       :title="t('team.scopeSwitch')"
       :aria-expanded="open"
       aria-haspopup="menu"
       data-test="scope-dropdown-trigger"
       @click="open = !open"
     >
-      <Icon :name="scope === 'team' ? 'users' : 'user'" size="md" class="md:mr-1.5" />
+      <Icon :name="scope === 'team' ? 'users' : 'user'" size="sm" class="md:mr-1.5" />
       <span class="hidden md:inline">{{ currentLabel }}</span>
-      <Icon name="chevronDown" size="xs" class="ml-1 hidden md:inline" />
+      <Icon name="chevronDown" size="xs" class="ml-1 hidden md:inline" :animate-on-hover="false" />
     </button>
 
-    <div
-      v-if="open"
-      class="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-gray-200 bg-white p-2 shadow-xl dark:border-gray-700 dark:bg-gray-800"
-      role="menu"
-      data-test="scope-dropdown-menu"
-    >
-      <button
-        v-for="option in options"
-        :key="option.value"
-        type="button"
-        role="menuitemradio"
-        :aria-checked="scope === option.value"
-        class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
-        :data-test="`scope-option-${option.value}`"
-        @click="setScope(option.value)"
+    <MotionTransition name="dropdown-fade">
+      <div
+        v-if="open" :inert="!(open) || undefined"
+        class="dropdown right-0 top-full z-50 mt-2 w-48 p-2"
+        role="menu"
+        data-test="scope-dropdown-menu"
       >
-        <Icon :name="option.icon" size="sm" class="text-gray-400 dark:text-gray-500" />
-        <span class="flex-1">{{ option.label }}</span>
-        <Icon
-          v-if="scope === option.value"
-          name="check"
-          size="sm"
-          class="text-primary-500"
-          :stroke-width="2"
-        />
-      </button>
-    </div>
+        <button
+          v-for="option in options"
+          :key="option.value"
+          type="button"
+          role="menuitemradio"
+          :aria-checked="scope === option.value"
+          class="dropdown-item-sm rounded-control"
+          :data-test="`scope-option-${option.value}`"
+          @click="setScope(option.value)"
+        >
+          <Icon :name="option.icon" size="sm" class="text-gray-400 dark:text-gray-500" />
+          <span class="flex-1">{{ option.label }}</span>
+          <Icon
+            v-if="scope === option.value"
+            name="check"
+            size="sm"
+            class="text-primary-500"
+            :stroke-width="2"
+            :animate-on-hover="false"
+          />
+        </button>
+      </div>
+    </MotionTransition>
   </div>
 </template>
 
 <script setup lang="ts">
+import MotionTransition from '@/components/common/MotionTransition.vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'

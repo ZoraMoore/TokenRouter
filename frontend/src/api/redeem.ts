@@ -4,7 +4,7 @@
  */
 
 import { apiClient } from './client'
-import type { RedeemCode, RedeemCodeRequest } from '@/types'
+import type { PaginatedResponse, RedeemCode, RedeemCodeRequest } from '@/types'
 
 export type RedeemHistoryItem = RedeemCode
 
@@ -22,11 +22,17 @@ export async function redeem(code: string): Promise<RedeemCode> {
 }
 
 /**
- * Get user's redemption history
- * @returns List of redeemed codes
+ * 按使用时间倒序分页获取当前用户的兑换历史
+ * @param page - 页码，从 1 开始
+ * @param pageSize - 每页条数
  */
-export async function getHistory(): Promise<RedeemHistoryItem[]> {
-  const { data } = await apiClient.get<RedeemHistoryItem[]>('/redeem/history')
+export async function getHistory(
+  page: number,
+  pageSize: number
+): Promise<PaginatedResponse<RedeemHistoryItem>> {
+  const { data } = await apiClient.get<PaginatedResponse<RedeemHistoryItem>>('/redeem/history', {
+    params: { page, page_size: pageSize }
+  })
   return data
 }
 

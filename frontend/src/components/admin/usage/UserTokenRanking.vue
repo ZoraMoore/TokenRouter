@@ -16,7 +16,7 @@
 
     <!-- 用户 Token 排行表 -->
     <div class="overflow-x-auto">
-      <table class="w-full min-w-max divide-y divide-gray-200 dark:divide-dark-700">
+      <table :aria-busy="loading" class="w-full min-w-max divide-y divide-gray-200 dark:divide-dark-700">
         <thead class="bg-gray-50 dark:bg-dark-800">
           <tr>
             <th class="w-16 px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 dark:text-dark-400 sm:px-6">#</th>
@@ -35,13 +35,9 @@
             </th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-900">
-          <tr v-if="loading">
-            <td :colspan="sortableColumns.length + 2" class="py-12 text-center">
-              <LoadingSpinner />
-            </td>
-          </tr>
-          <tr v-else-if="items.length === 0">
+        <TableSkeletonBody v-if="loading" :columns="sortableColumns.length + 2" />
+        <tbody v-else class="divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-900">
+          <tr v-if="items.length === 0">
             <td :colspan="sortableColumns.length + 2" class="py-12 text-center text-sm text-gray-400">
               {{ t('admin.dashboard.noDataAvailable') }}
             </td>
@@ -71,7 +67,7 @@
             <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-gray-500 dark:text-gray-400">{{ fmtTokens(item.output_tokens) }}</td>
             <td class="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-gray-500 dark:text-gray-400">{{ fmtTokens(item.cache_tokens) }}</td>
             <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ fmtTokens(item.total_tokens) }}</td>
-            <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium tabular-nums text-green-600 dark:text-green-400">${{ fmtCost(item.actual_cost) }}</td>
+            <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium tabular-nums text-green-600 dark:text-green-400">{{ fmtCost(item.actual_cost) }}</td>
           </tr>
         </tbody>
       </table>
@@ -80,13 +76,14 @@
 </template>
 
 <script setup lang="ts">
+import TableSkeletonBody from '@/components/common/TableSkeletonBody.vue'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getUserBreakdown, type UserBreakdownParams } from '@/api/admin/dashboard'
-import { formatCompactNumber, formatCostFixed } from '@/utils/format'
+import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
+import { formatCompactNumber } from '@/utils/format'
 import type { UserBreakdownItem } from '@/types'
 import Select from '@/components/common/Select.vue'
-import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
 const props = defineProps<{
   startDate: string
@@ -98,6 +95,7 @@ const props = defineProps<{
 defineEmits<{ (e: 'select-user', userId: number, email: string): void }>()
 
 const { t } = useI18n()
+const { formatBalanceAmount } = useBalanceDisplay()
 
 type SortKey = NonNullable<UserBreakdownParams['sort_by']>
 const sortableColumns: { key: SortKey; label: string }[] = [
@@ -130,7 +128,8 @@ const limit = ref(50)
 let reqSeq = 0
 
 const fmtTokens = (v: number) => formatCompactNumber(v)
-const fmtCost = (v: number) => formatCostFixed(v, 4)
+// 排行里的消费是用户实际扣费，按站点配置的余额单位显示。
+const fmtCost = (v: number) => formatBalanceAmount(v, { fractionDigits: 4 })
 
 const setSort = (key: SortKey) => {
   if (sortBy.value === key) return

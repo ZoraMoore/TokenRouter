@@ -5,18 +5,20 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 
-	"github.com/TokenFlux/TokenRouter/internal/config"
 	"github.com/gin-gonic/gin"
+
+	"github.com/TokenFlux/TokenRouter/internal/server/httpconfig"
 )
 
 const (
-	// CSPNonceKey is the context key for storing the CSP nonce
+	// CSPNonceKey is the context key for storing the CSP nonce.
 	CSPNonceKey = "csp_nonce"
-	// NonceTemplate is the placeholder in CSP policy for nonce
+	// NonceTemplate is the placeholder in CSP policy for nonce.
 	NonceTemplate = "__CSP_NONCE__"
-	// CloudflareInsightsDomain is the domain for Cloudflare Web Analytics
+	// CloudflareInsightsDomain is the domain for Cloudflare Web Analytics.
 	CloudflareInsightsDomain = "https://static.cloudflareinsights.com"
 	// GoogleIdentityScriptURL 是 Google Identity Services 官方脚本地址。
 	GoogleIdentityScriptURL = "https://accounts.google.com/gsi/client"
@@ -45,7 +47,7 @@ const (
 	TencentCaptchaWorkerSource = "blob:"
 	// AliyunCaptchaStaticDomain 是阿里云验证码 Web SDK 与样式资源域名。
 	AliyunCaptchaStaticDomain = "https://*.alicdn.com"
-	// StripeDomain is the domain for Stripe.js SDK
+	// StripeDomain is the domain for Stripe.js SDK.
 	StripeDomain = "https://*.stripe.com"
 	// AirwallexStaticDomain 是 Airwallex 生产环境 SDK 脚本域名。
 	AirwallexStaticDomain = "https://static.airwallex.com"
@@ -94,6 +96,17 @@ var requiredCSPDirectiveValues = []struct {
 	{"style-src", AirwallexDemoStaticDomain},
 	{"style-src", AirwallexDemoCheckoutDomain},
 	{"frame-src", AirwallexDemoCheckoutDomain},
+	// @project-doc docs/interfaces/tf_cli_web_import.md#browser_security_headers
+	{"connect-src", "http://127.0.0.1:43110"},
+	{"connect-src", "http://127.0.0.1:43111"},
+	{"connect-src", "http://127.0.0.1:43112"},
+	{"connect-src", "http://127.0.0.1:43113"},
+	{"connect-src", "http://127.0.0.1:43114"},
+	{"connect-src", "http://127.0.0.1:43115"},
+	{"connect-src", "http://127.0.0.1:43116"},
+	{"connect-src", "http://127.0.0.1:43117"},
+	{"connect-src", "http://127.0.0.1:43118"},
+	{"connect-src", "http://127.0.0.1:43119"},
 }
 
 // GenerateNonce generates a cryptographically secure random nonce.
@@ -106,7 +119,7 @@ func GenerateNonce() (string, error) {
 	return base64.StdEncoding.EncodeToString(b), nil
 }
 
-// GetNonceFromContext retrieves the CSP nonce from gin context
+// GetNonceFromContext retrieves the CSP nonce from gin context.
 func GetNonceFromContext(c *gin.Context) string {
 	if nonce, exists := c.Get(CSPNonceKey); exists {
 		if s, ok := nonce.(string); ok {
@@ -119,10 +132,10 @@ func GetNonceFromContext(c *gin.Context) string {
 // SecurityHeaders sets baseline security headers for all responses.
 // getFrameSrcOrigins is an optional function that returns extra origins to inject into frame-src;
 // pass nil to disable dynamic frame-src injection.
-func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string) gin.HandlerFunc {
+func SecurityHeaders(cfg httpconfig.CSPConfig, getFrameSrcOrigins func() []string) gin.HandlerFunc {
 	policy := strings.TrimSpace(cfg.Policy)
 	if policy == "" {
-		policy = config.DefaultCSPPolicy
+		policy = httpconfig.DefaultCSPPolicy
 	}
 
 	// Enhance policy with required directives (nonce placeholder and Cloudflare Insights)
@@ -192,17 +205,12 @@ func enhanceCSPPolicy(policy string) string {
 }
 
 func directiveHasValue(policy, directive, value string) bool {
-	for _, rawDirective := range strings.Split(policy, ";") {
+	for rawDirective := range strings.SplitSeq(policy, ";") {
 		fields := strings.Fields(strings.TrimSpace(rawDirective))
 		if len(fields) == 0 || fields[0] != directive {
 			continue
 		}
-		for _, field := range fields[1:] {
-			if field == value {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(fields[1:], value)
 	}
 	return false
 }

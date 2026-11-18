@@ -1,14 +1,14 @@
 package schema
 
 import (
-	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
 )
 
 // APIKeyCompositeGroup 保存复合 API Key 的分组前缀映射。
@@ -31,8 +31,6 @@ func (APIKeyCompositeGroup) Fields() []ent.Field {
 		field.String("prefix").MaxLen(32).NotEmpty(),
 		field.String("normalized_prefix").MaxLen(32).NotEmpty(),
 		field.Int("sort_order").Default(0),
-		field.Int("data_sharing_notice_version").Default(0),
-		field.Time("data_sharing_confirmed_at").Optional().Nillable(),
 	}
 }
 

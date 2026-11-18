@@ -3,13 +3,13 @@ import { flushPromises, mount } from '@vue/test-utils'
 import OpsConcurrencyCard from '../OpsConcurrencyCard.vue'
 
 const mockGetConcurrencyStats = vi.fn()
-const mockGetAccountAvailabilityStats = vi.fn()
+const mockGetProviderAvailabilityStats = vi.fn()
 const mockGetUserConcurrencyStats = vi.fn()
 
 vi.mock('@/api/admin/ops', () => ({
   opsAPI: {
     getConcurrencyStats: (...args: unknown[]) => mockGetConcurrencyStats(...args),
-    getAccountAvailabilityStats: (...args: unknown[]) => mockGetAccountAvailabilityStats(...args),
+    getProviderAvailabilityStats: (...args: unknown[]) => mockGetProviderAvailabilityStats(...args),
     getUserConcurrencyStats: (...args: unknown[]) => mockGetUserConcurrencyStats(...args),
   },
 }))
@@ -46,10 +46,10 @@ const concurrencyResponse = {
       waiting_in_queue: 1,
     },
   },
-  account: {
+  provider: {
     11: {
-      account_id: 11,
-      account_name: 'Claude 账号 A',
+      provider_id: 11,
+      provider_name: 'Claude 提供商 A',
       platform: 'anthropic',
       group_id: 7,
       group_name: 'Anthropic 主分组',
@@ -66,7 +66,7 @@ const availabilityResponse = {
   platform: {
     anthropic: {
       platform: 'anthropic',
-      total_accounts: 1,
+      total_providers: 1,
       available_count: 1,
       rate_limit_count: 0,
       error_count: 0,
@@ -77,16 +77,16 @@ const availabilityResponse = {
       group_id: 7,
       group_name: 'Anthropic 主分组',
       platform: 'anthropic',
-      total_accounts: 1,
+      total_providers: 1,
       available_count: 1,
       rate_limit_count: 0,
       error_count: 0,
     },
   },
-  account: {
+  provider: {
     11: {
-      account_id: 11,
-      account_name: 'Claude 账号 A',
+      provider_id: 11,
+      provider_name: 'Claude 提供商 A',
       platform: 'anthropic',
       group_id: 7,
       group_name: 'Anthropic 主分组',
@@ -103,7 +103,7 @@ describe('OpsConcurrencyCard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGetConcurrencyStats.mockResolvedValue(concurrencyResponse)
-    mockGetAccountAvailabilityStats.mockResolvedValue(availabilityResponse)
+    mockGetProviderAvailabilityStats.mockResolvedValue(availabilityResponse)
     mockGetUserConcurrencyStats.mockResolvedValue({
       enabled: true,
       user: {
@@ -120,7 +120,7 @@ describe('OpsConcurrencyCard', () => {
     })
   })
 
-  it('支持平台、分组、账号、用户四种维度并切换对应数据源', async () => {
+  it('支持平台、分组、提供商、用户四种维度并切换对应数据源', async () => {
     const wrapper = mount(OpsConcurrencyCard, {
       props: {
         refreshToken: 0,
@@ -131,15 +131,18 @@ describe('OpsConcurrencyCard', () => {
     expect(mockGetConcurrencyStats).toHaveBeenCalledWith('', null)
     expect(wrapper.get('h3').classes()).toContain('whitespace-nowrap')
     expect(wrapper.get('[role="group"]').classes()).toContain('grid-cols-4')
+    expect(wrapper.get('[data-test="concurrency-refresh"]').classes()).toEqual(
+      expect.arrayContaining(['h-7', 'w-7', 'justify-center', 'p-0'])
+    )
     expect(wrapper.text()).toContain('ANTHROPIC')
 
     await wrapper.get('[data-test="concurrency-dimension-group"]').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('Anthropic 主分组')
 
-    await wrapper.get('[data-test="concurrency-dimension-account"]').trigger('click')
+    await wrapper.get('[data-test="concurrency-dimension-provider"]').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('Claude 账号 A')
+    expect(wrapper.text()).toContain('Claude 提供商 A')
 
     await wrapper.get('[data-test="concurrency-dimension-user"]').trigger('click')
     await flushPromises()
@@ -151,7 +154,7 @@ describe('OpsConcurrencyCard', () => {
     expect(mockGetConcurrencyStats).toHaveBeenCalledTimes(4)
   })
 
-  it('在固定高度卡片内使用剩余空间滚动，并按分组筛选账号', async () => {
+  it('在固定高度卡片内使用剩余空间滚动，并按分组筛选提供商', async () => {
     const wrapper = mount(OpsConcurrencyCard, {
       props: {
         platformFilter: 'anthropic',
@@ -165,12 +168,12 @@ describe('OpsConcurrencyCard', () => {
     const scrollRegion = wrapper.find('.custom-scrollbar')
     expect(scrollRegion.classes()).toContain('min-h-0')
     expect(scrollRegion.classes()).toContain('overflow-y-auto')
-    expect(wrapper.text()).toContain('Claude 账号 A')
+    expect(wrapper.text()).toContain('Claude 提供商 A')
     expect(mockGetConcurrencyStats).toHaveBeenCalledWith('anthropic', 7)
   })
 
   it('分组视图不会展示筛选分组之外的后端数据', async () => {
-    mockGetAccountAvailabilityStats.mockResolvedValue({
+    mockGetProviderAvailabilityStats.mockResolvedValue({
       ...availabilityResponse,
       group: {
         ...availabilityResponse.group,
@@ -178,7 +181,7 @@ describe('OpsConcurrencyCard', () => {
           group_id: 8,
           group_name: '越界分组',
           platform: 'anthropic',
-          total_accounts: 1,
+          total_providers: 1,
           available_count: 1,
           rate_limit_count: 0,
           error_count: 0,

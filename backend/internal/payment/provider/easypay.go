@@ -1,4 +1,3 @@
-// Package provider contains concrete payment provider implementations.
 package provider
 
 import (
@@ -9,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"sort"
@@ -46,8 +46,30 @@ type easyPayCustomMethod struct {
 	DisplayName  string `json:"displayName"`
 }
 
+type easyPayQueryData struct {
+	TradeStatus *string `json:"trade_status"`
+	Status      *int    `json:"status"`
+	Money       *string `json:"money"`
+	TradeNo     *string `json:"trade_no"`
+}
+
+type easyPayQueryResponse struct {
+	Code        int              `json:"code"`
+	Msg         string           `json:"msg"`
+	TradeStatus *string          `json:"trade_status"`
+	Status      *int             `json:"status"`
+	Money       *string          `json:"money"`
+	TradeNo     *string          `json:"trade_no"`
+	Data        easyPayQueryData `json:"data"`
+}
+
+type easyPayRefundAttempt struct {
+	params   map[string]string
+	refundID string
+}
+
 // NewEasyPay creates a new EasyPay provider.
-// config keys: pid, pkey, apiBase, notifyUrl, returnUrl, cid, cidAlipay, cidWxpay
+// config keys: pid, pkey, apiBase, notifyUrl, returnUrl, cid, cidAlipay, cidWxpay.
 func NewEasyPay(instanceID string, config map[string]string) (*EasyPay, error) {
 	for _, k := range []string{"pid", "pkey", "apiBase", "notifyUrl", "returnUrl"} {
 		if strings.TrimSpace(config[k]) == "" {
@@ -55,9 +77,7 @@ func NewEasyPay(instanceID string, config map[string]string) (*EasyPay, error) {
 		}
 	}
 	cfg := make(map[string]string, len(config))
-	for k, v := range config {
-		cfg[k] = v
-	}
+	maps.Copy(cfg, config)
 	cfg["apiBase"] = normalizeEasyPayAPIBase(cfg["apiBase"])
 	return &EasyPay{
 		instanceID: instanceID,
@@ -202,7 +222,53 @@ func (e *EasyPay) createAPIPayment(ctx context.Context, req payment.CreatePaymen
 	if req.IsMobile && resp.PayURL2 != "" {
 		payURL = resp.PayURL2
 	}
-	return &payment.CreatePaymentResponse{TradeNo: resp.TradeNo, PayURL: payURL, QRCode: resp.QRCode}, nil
+	base := e.apiBase()
+	return &payment.CreatePaymentResponse{
+		TradeNo: resp.TradeNo,
+		PayURL:  resolveEasyPayReturnedRef(base, payURL),
+		QRCode:  resolveEasyPayReturnedRef(base, resp.QRCode),
+	}, nil
+}
+
+// resolveEasyPayReturnedRef absolutizes a payurl/payurl2/qrcode reference that
+// mapi.php returned, resolving it against the instance's configured apiBase.
+//
+// EasyPay-compatible upstreams disagree on this field: some answer with a full
+// checkout URL, others with a site-root-relative path such as
+// "/api/pay/toapp/<order>". createRedirectPayment already builds an absolute URL
+// itself (apiBase + "/submit.php?..."), but the mapi.php branch stored whatever
+// came back verbatim, and nothing downstream repairs it —
+// sanitizeCreatePaymentResponseDetails only strips NUL bytes before the value is
+// persisted to pay_url/qr_code. The frontend then feeds qr_code straight into
+// QRCode.toCanvas (PaymentQRCodeView.renderQR), so a relative path becomes a QR
+// whose payload is a bare path: WeChat renders it as text, and pay_url resolves
+// against the gateway's own domain and 404s.
+//
+// That is precisely the outcome the Alipay provider already refuses to produce —
+// "Setting it as QRCode would let the frontend render an unscannable image"
+// (createPagePayTrade) — so EasyPay is brought in line with the same rule.
+//
+// Only references beginning with "/" are resolved. Anything carrying a scheme is
+// already actionable and is returned untouched, which covers both absolute
+// https:// checkout URLs and app deep links (weixin://, wxp://, alipays://). A
+// reference without a leading slash is left alone as well: QR payloads are
+// frequently opaque tokens rather than paths, and rewriting "OrderToken123" into
+// "<apiBase>/OrderToken123" would break a payload that works today — strictly
+// worse than the bug this fixes.
+func resolveEasyPayReturnedRef(apiBase, ref string) string {
+	trimmed := strings.TrimSpace(ref)
+	if !strings.HasPrefix(trimmed, "/") {
+		return ref
+	}
+	base, err := url.Parse(strings.TrimSpace(apiBase))
+	if err != nil || base.Scheme == "" || base.Host == "" {
+		return ref
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme != "" {
+		return ref
+	}
+	return base.ResolveReference(parsed).String()
 }
 
 // resolveURLs returns (notifyURL, returnURL) preferring request values,
@@ -254,29 +320,12 @@ func (e *EasyPay) upstreamPaymentType(paymentType string) string {
 	return paymentType
 }
 
-type easyPayQueryData struct {
-	TradeStatus *string `json:"trade_status"`
-	Status      *int    `json:"status"`
-	Money       *string `json:"money"`
-	TradeNo     *string `json:"trade_no"`
-}
-
-type easyPayQueryResponse struct {
-	Code        int              `json:"code"`
-	Msg         string           `json:"msg"`
-	TradeStatus *string          `json:"trade_status"`
-	Status      *int             `json:"status"`
-	Money       *string          `json:"money"`
-	TradeNo     *string          `json:"trade_no"`
-	Data        easyPayQueryData `json:"data"`
-}
-
 func (e *EasyPay) QueryOrder(ctx context.Context, tradeNo string) (*payment.QueryOrderResponse, error) {
 	params := map[string]string{
 		"act": "order", "pid": e.config["pid"],
 		"key": e.config["pkey"], "out_trade_no": tradeNo,
 	}
-	body, statusCode, err := e.postRaw(ctx, e.apiBase()+"/api.php", params)
+	body, statusCode, err := e.getRaw(ctx, e.apiBase()+"/api.php", params)
 	if err != nil {
 		return nil, fmt.Errorf("easypay query: %w", err)
 	}
@@ -348,15 +397,46 @@ func parseEasyPayQueryResponse(statusCode int, body []byte, fallbackTradeNo stri
 	}, nil
 }
 
+// VerifyNotification 检查易支付通知字段和签名后解析支付结果。
+// @project-doc docs/domains/payments_and_entitlements.md#callback_security
 func (e *EasyPay) VerifyNotification(_ context.Context, rawBody string, _ map[string]string) (*payment.PaymentNotification, error) {
 	values, err := url.ParseQuery(rawBody)
 	if err != nil {
 		return nil, fmt.Errorf("parse notify: %w", err)
 	}
-	// url.ParseQuery already decodes values — no additional decode needed.
-	params := make(map[string]string)
-	for k := range values {
-		params[k] = values.Get(k)
+	// 易支付签名直接拼接参数值，验签前需要检查字段名和结构化字段的内容。
+	params := make(map[string]string, len(values))
+	for key, entries := range values {
+		switch key {
+		case "pid", "trade_no", "out_trade_no", "type", "name", "money", "trade_status", "param", "sign", "sign_type":
+		default:
+			return nil, fmt.Errorf("unexpected notify param: %s", key)
+		}
+		// 每个字段对应一个值，重复字段会让不同处理步骤读取到不同内容。
+		if len(entries) != 1 {
+			return nil, fmt.Errorf("duplicate notify param: %s", key)
+		}
+		params[key] = entries[0]
+	}
+	// 商品名和扩展参数允许自由文本，订单标识等字段需要独立于参数分隔符。
+	for _, key := range []string{"pid", "trade_no", "out_trade_no", "type", "money", "trade_status"} {
+		value := params[key]
+		if value == "" {
+			return nil, fmt.Errorf("missing notify param: %s", key)
+		}
+		if strings.ContainsAny(value, "&=\x00\r\n") || strings.TrimSpace(value) != value {
+			return nil, fmt.Errorf("invalid notify param: %s", key)
+		}
+	}
+	if !payment.ConfigEasyPayCustomMethodCodePattern.MatchString(params["type"]) {
+		return nil, fmt.Errorf("invalid notify param: type")
+	}
+	if params["pid"] != strings.TrimSpace(e.config["pid"]) {
+		return nil, fmt.Errorf("easypay notify pid mismatch")
+	}
+	amount, err := strconv.ParseFloat(params["money"], 64)
+	if err != nil || !payment.IsValidProviderAmount(amount) {
+		return nil, fmt.Errorf("invalid notify param: money")
 	}
 	sign := params["sign"]
 	if sign == "" {
@@ -369,18 +449,9 @@ func (e *EasyPay) VerifyNotification(_ context.Context, rawBody string, _ map[st
 	if params["trade_status"] == tradeStatusSuccess {
 		status = payment.ProviderStatusSuccess
 	}
-	amount, _ := strconv.ParseFloat(params["money"], 64)
-
-	metadata := e.MerchantIdentityMetadata()
-	if pid := strings.TrimSpace(params["pid"]); pid != "" {
-		if metadata == nil {
-			metadata = map[string]string{}
-		}
-		metadata["pid"] = pid
-	}
 	return &payment.PaymentNotification{
 		TradeNo: params["trade_no"], OrderID: params["out_trade_no"],
-		Amount: amount, Status: status, RawData: rawBody, Metadata: metadata,
+		Amount: amount, Status: status, RawData: rawBody, Metadata: e.MerchantIdentityMetadata(),
 	}, nil
 }
 
@@ -409,11 +480,6 @@ func (e *EasyPay) Refund(ctx context.Context, req payment.RefundRequest) (*payme
 	return nil, firstErr
 }
 
-type easyPayRefundAttempt struct {
-	params   map[string]string
-	refundID string
-}
-
 func (e *EasyPay) refundAttempts(req payment.RefundRequest) []easyPayRefundAttempt {
 	base := map[string]string{
 		"pid": e.config["pid"], "key": e.config["pkey"], "money": req.Amount,
@@ -434,9 +500,7 @@ func (e *EasyPay) refundAttempts(req payment.RefundRequest) []easyPayRefundAttem
 
 func cloneStringMap(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
+	maps.Copy(out, in)
 	return out
 }
 
@@ -505,7 +569,7 @@ func summarizeEasyPayResponse(body []byte) string {
 	}
 	if len(summary) > maxEasypayErrorSummary {
 		truncated := summary[:maxEasypayErrorSummary]
-		for len(truncated) > 0 && !utf8.ValidString(truncated) {
+		for truncated != "" && !utf8.ValidString(truncated) {
 			truncated = truncated[:len(truncated)-1]
 		}
 		return truncated + "..."
@@ -529,6 +593,42 @@ func (e *EasyPay) resolveCID(paymentType string) string {
 func (e *EasyPay) post(ctx context.Context, endpoint string, params map[string]string) ([]byte, error) {
 	body, _, err := e.postRaw(ctx, endpoint, params)
 	return body, err
+}
+
+// getRaw 使用查询参数调用 EasyPay 查单接口，并保留 HTTP 状态供安全解析。
+func (e *EasyPay) getRaw(ctx context.Context, endpoint string, params map[string]string) ([]byte, int, error) {
+	target, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, 0, err
+	}
+	query := target.Query()
+	for key, value := range params {
+		query.Set(key, value)
+	}
+	target.RawQuery = query.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	client := e.httpClient
+	if client == nil {
+		client = &http.Client{Timeout: easypayHTTPTimeout}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		// GET 查询串包含商户密钥，不能把 net/http 包装后的完整 URL 写入日志。
+		if urlErr, ok := err.(*url.Error); ok && urlErr.Err != nil {
+			return nil, 0, urlErr.Err
+		}
+		return nil, 0, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxEasypayResponseSize))
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return body, resp.StatusCode, nil
 }
 
 func (e *EasyPay) postRaw(ctx context.Context, endpoint string, params map[string]string) ([]byte, int, error) {

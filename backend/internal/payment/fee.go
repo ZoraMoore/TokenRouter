@@ -20,22 +20,9 @@ type FeeBreakdown struct {
 	PayAmount     float64 `json:"pay_amount"`
 }
 
-// CalculatePayAmount computes the total pay amount given a recharge amount and
-// fee rate (percentage). Fee = amount * feeRate / 100, rounded UP (away from zero)
-// to 2 decimal places. The returned string is formatted to exactly 2 decimal places.
-// If feeRate <= 0, the amount is returned as-is (formatted to 2 decimal places).
-func CalculatePayAmount(rechargeAmount float64, feeRate float64) string {
-	return CalculatePayAmountForCurrency(rechargeAmount, feeRate, DefaultPaymentCurrency)
-}
-
 // CalculatePayAmountForCurrency 按币种精度计算比例手续费后的应付金额。
 func CalculatePayAmountForCurrency(rechargeAmount float64, feeRate float64, currency string) string {
 	return CalculatePayAmountWithFeeForCurrency(rechargeAmount, FeeConfig{FeeRate: feeRate}, currency).PayAmountStringForCurrency(currency)
-}
-
-// CalculatePayAmountWithFee 计算固定手续费和比例手续费拆分后的实付金额。
-func CalculatePayAmountWithFee(baseAmount float64, cfg FeeConfig) FeeBreakdown {
-	return CalculatePayAmountWithFeeForCurrency(baseAmount, cfg, DefaultPaymentCurrency)
 }
 
 // CalculatePayAmountWithFeeForCurrency 按币种精度计算固定手续费和比例手续费拆分后的实付金额。
@@ -63,11 +50,6 @@ func CalculatePayAmountWithFeeForCurrency(baseAmount float64, cfg FeeConfig, cur
 		FeeAmount:     decimalToFloat(feeAmount),
 		PayAmount:     decimalToFloat(payAmount),
 	}
-}
-
-// PayAmountString 返回默认币种支付网关需要的字符串金额。
-func (b FeeBreakdown) PayAmountString() string {
-	return b.PayAmountStringForCurrency(DefaultPaymentCurrency)
 }
 
 // PayAmountStringForCurrency 按币种精度返回支付网关需要的字符串金额。

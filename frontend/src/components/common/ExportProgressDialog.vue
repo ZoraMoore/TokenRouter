@@ -15,7 +15,7 @@
           aria-valuemin="0"
           aria-valuemax="100"
           :aria-label="`${t('usage.exportingProgress')}: ${normalizedProgress}%`"
-          class="h-2 rounded-full bg-primary-600 transition-all"
+          class="h-2 rounded-full bg-primary-600 transition-[width,background-color]"
           :style="{ width: `${normalizedProgress}%` }"
         ></div>
       </div>
@@ -28,7 +28,7 @@
       <button
         @click="handleCancel"
         type="button"
-        class="rounded-md border border-primary-900/10 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-black/20 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/10 focus:ring-offset-2 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200 dark:hover:border-dark-600 dark:hover:bg-dark-600 dark:focus:ring-primary-500 dark:focus:ring-offset-dark-800"
+        class="btn btn-secondary"
       >
         {{ t('usage.cancelExport') }}
       </button>

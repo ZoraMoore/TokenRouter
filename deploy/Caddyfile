@@ -9,7 +9,7 @@
 }
 
 # 修改为你的域名
-api.sub2api.com {
+api.tokenrouter.com {
 	# 此基线假设客户端直连 Caddy。Caddy 位于 CDN 后时，应按
 	# docs/operations/edge_security.md 配置明确的可信代理 CIDR 并使用 {client_ip}；
 	# 否则 {remote_host} 只会得到 CDN 出口地址。
@@ -94,7 +94,7 @@ api.sub2api.com {
 	# 日志配置
 	# =========================================================================
 	log {
-		output file /var/log/caddy/sub2api.log {
+		output file /var/log/caddy/tokenrouter.log {
 			roll_size 50mb
 			roll_keep 10
 			roll_keep_for 720h

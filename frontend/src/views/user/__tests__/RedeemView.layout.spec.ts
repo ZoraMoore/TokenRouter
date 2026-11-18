@@ -8,17 +8,30 @@ const viewPath = resolve(dirname(fileURLToPath(import.meta.url)), '../RedeemView
 const viewSource = readFileSync(viewPath, 'utf8')
 
 describe('RedeemView responsive layout', () => {
-  it('places recent activity beside the primary content on wide screens', () => {
-    // 两栏仅在宽屏启用，确保移动端仍保持自然的单列阅读顺序。
+  it('locks the desktop viewport and keeps history inside its own card', () => {
+    // 宽屏按视口固定页面高度，历史记录在卡内滚动并分页。
+    expect(viewSource).toContain('<AppLayout fit-viewport>')
     expect(viewSource).toContain(
-      'max-w-6xl gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)] xl:items-start'
+      'grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[22.5rem_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]'
     )
-    expect(viewSource).toContain('data-testid="redeem-primary-column" class="min-w-0 space-y-6"')
-    expect(viewSource).toContain('data-testid="redeem-activity-column" class="card min-w-0"')
+    expect(viewSource).toContain('lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:min-h-0')
+    expect(viewSource).toContain('<div class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">')
+    expect(viewSource).toContain('<Pagination')
+    // 根容器位于 flex 列中，mx-auto 会让内容收缩并与页头错位。
+    expect(viewSource).not.toMatch(/class="[^"]*\bmx-auto\b/)
+    // 历史记录用分隔线划分列表项。
+    expect(viewSource).toContain('divide-y divide-gray-100')
+  })
+
+  it('shows active subscriptions below the redeem panel on wide screens', () => {
+    // 订阅概览复用顶栏弹层的列表组件，宽屏占据左栏剩余高度。
+    expect(viewSource).toContain('data-testid="redeem-subscriptions"')
+    expect(viewSource).toContain('lg:col-start-1 lg:row-start-2 lg:min-h-0')
+    expect(viewSource).toContain('<SubscriptionUsageList')
   })
 
   it('omits supplementary redeem guidance', () => {
-    // 页面只保留兑换操作与历史，避免再次加入重复说明或大小写提示。
+    // 兑换页展示兑换操作与历史。
     expect(viewSource).not.toContain("t('redeem.redeemCodeHint')")
     expect(viewSource).not.toContain("t('redeem.aboutCodes')")
     expect(viewSource).not.toContain('contactInfo')

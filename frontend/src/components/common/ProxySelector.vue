@@ -5,7 +5,8 @@
       @click="toggle"
       :disabled="disabled"
       :class="[
-        'select-trigger',
+        'input input-trigger',
+        'text-gray-900 dark:text-gray-100',
         isOpen && 'select-trigger-open',
         disabled && 'select-trigger-disabled'
       ]"
@@ -16,13 +17,14 @@
       <span class="select-icon">
         <Icon
           name="chevronDown"
-          size="md"
-          :class="['transition-transform duration-200', isOpen && 'rotate-180']"
+          size="sm"
+          :class="['transition-transform duration-normal', isOpen && 'rotate-180']"
+          :animate-on-hover="false"
         />
       </span>
     </button>
 
-    <Transition name="select-dropdown">
+    <MotionTransition name="dropdown-fade">
       <div v-if="isOpen" class="select-dropdown">
         <!-- Search and Batch Test Header -->
         <div class="select-header">
@@ -45,21 +47,13 @@
             class="batch-test-btn"
             :title="t('admin.proxies.batchTest')"
           >
-            <svg v-if="batchTesting" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle
-                class="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                stroke-width="4"
-              ></circle>
-              <path
-                class="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
+            <Icon
+              name="loader"
+              size="sm"
+              :animate-on-hover="false"
+              v-if="batchTesting"
+              class="h-4 w-4 animate-spin"
+            />
             <Icon v-else name="play" size="sm" />
           </button>
         </div>
@@ -67,16 +61,22 @@
         <!-- Options list -->
         <div class="select-options">
           <!-- No Proxy option -->
-          <div
+          <div data-icon-trigger
             @click="selectOption(null)"
             :class="['select-option', modelValue === null && 'select-option-selected']"
           >
-            <span class="select-option-label">{{ t('admin.accounts.noProxy') }}</span>
-            <Icon v-if="modelValue === null" name="check" size="sm" class="text-primary-500" />
+            <span class="select-option-label">{{ t('admin.providers.noProxy') }}</span>
+            <Icon
+              v-if="modelValue === null"
+              name="check"
+              size="sm"
+              class="text-primary-500"
+              :animate-on-hover="false"
+            />
           </div>
 
           <!-- Proxy options -->
-          <div
+          <div data-icon-trigger
             v-for="proxy in filteredProxies"
             :key="proxy.id"
             @click="selectOption(proxy.id)"
@@ -85,18 +85,18 @@
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
                 <span class="truncate font-medium">{{ proxy.name }}</span>
-                <!-- Account count badge -->
+                <!-- Provider count badge -->
                 <span
-                  v-if="proxy.account_count !== undefined"
-                  class="inline-flex flex-shrink-0 items-center rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-dark-600 dark:text-gray-400"
+                  v-if="proxy.provider_count !== undefined"
+                  class="inline-flex flex-shrink-0 items-center rounded-compact bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-dark-600 dark:text-gray-400"
                 >
-                  {{ proxy.account_count }}
+                  {{ proxy.provider_count }}
                 </span>
                 <!-- Test result badges -->
                 <template v-if="testResults[proxy.id]">
                   <span
                     v-if="testResults[proxy.id].success"
-                    class="inline-flex flex-shrink-0 items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                    class="inline-flex flex-shrink-0 items-center gap-1 rounded-compact bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
                   >
                     <span v-if="testResults[proxy.id].country">{{
                       testResults[proxy.id].country
@@ -107,7 +107,7 @@
                   </span>
                   <span
                     v-else
-                    class="inline-flex flex-shrink-0 items-center rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                    class="inline-flex flex-shrink-0 items-center rounded-compact bg-red-100 px-1.5 py-0.5 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-400"
                   >
                     {{ t('admin.proxies.testFailed') }}
                   </span>
@@ -126,26 +126,13 @@
               class="test-btn"
               :title="t('admin.proxies.testConnection')"
             >
-              <svg
+              <Icon
+                name="loader"
+                size="xs"
+                :animate-on-hover="false"
                 v-if="testingProxyIds.has(proxy.id)"
                 class="h-3.5 w-3.5 animate-spin"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  class="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  stroke-width="4"
-                ></circle>
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
+              />
               <Icon v-else name="play" size="xs" />
             </button>
 
@@ -154,6 +141,7 @@
               name="check"
               size="sm"
               class="flex-shrink-0 text-primary-500"
+              :animate-on-hover="false"
             />
           </div>
 
@@ -163,11 +151,12 @@
           </div>
         </div>
       </div>
-    </Transition>
+    </MotionTransition>
   </div>
 </template>
 
 <script setup lang="ts">
+import MotionTransition from '@/components/common/MotionTransition.vue'
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
@@ -217,7 +206,7 @@ const selectedProxy = computed(() => {
 
 const selectedLabel = computed(() => {
   if (!selectedProxy.value) {
-    return t('admin.accounts.noProxy')
+    return t('admin.providers.noProxy')
   }
   const proxy = selectedProxy.value
   return `${proxy.name} (${proxy.protocol}://${proxy.host}:${proxy.port})`
@@ -319,19 +308,8 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.select-trigger {
-  /* 普通选择器在浅色模式使用中性描边，暗色模式继续使用品牌强调。 */
-  @apply flex w-full items-center justify-between gap-2;
-  @apply rounded-control px-4 py-2.5 text-sm;
-  @apply bg-white dark:bg-dark-950;
-  @apply border border-primary-900/10 dark:border-dark-600;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply transition-all duration-200;
-  @apply focus:border-primary-900/10 focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:border-primary-500 dark:focus:ring-primary-500/30;
-  @apply hover:border-black/20 dark:hover:border-primary-500;
-  @apply cursor-pointer;
-}
-
+/* 基线配方(h-9/px-4/py-1.5/边框/焦点环)已与 .input 同源,模板以 input input-trigger 组合;
+   这里只保留展开/禁用两个状态增量。 */
 .select-trigger-open {
   @apply border-primary-900/10 ring-2 ring-black/10 dark:border-primary-500 dark:ring-primary-500/30;
 }
@@ -349,7 +327,7 @@ onUnmounted(() => {
 }
 
 .select-dropdown {
-  @apply absolute z-[100] mt-2 w-full;
+  @apply absolute z-tooltip mt-2 w-full;
   @apply bg-white dark:bg-dark-900;
   @apply rounded-control;
   @apply border border-primary-900/10 dark:border-dark-600;
@@ -388,7 +366,7 @@ onUnmounted(() => {
   @apply flex items-center justify-between gap-2;
   @apply px-4 py-2.5 text-sm;
   @apply text-gray-700 dark:text-gray-300;
-  @apply cursor-pointer transition-colors duration-150;
+  @apply cursor-pointer transition-colors duration-fast;
   @apply hover:bg-gray-50 dark:hover:bg-dark-800;
 }
 
@@ -408,21 +386,10 @@ onUnmounted(() => {
 }
 
 .test-btn {
-  @apply flex-shrink-0 rounded p-1;
+  @apply flex-shrink-0 rounded-compact p-1;
   @apply text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400;
   @apply hover:bg-emerald-50 dark:hover:bg-emerald-900/20;
   @apply transition-colors disabled:cursor-not-allowed disabled:opacity-50;
 }
 
-/* Dropdown animation */
-.select-dropdown-enter-active,
-.select-dropdown-leave-active {
-  transition: all 0.2s ease;
-}
-
-.select-dropdown-enter-from,
-.select-dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
 </style>

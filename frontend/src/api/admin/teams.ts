@@ -13,7 +13,7 @@ export interface AdminTeam {
   owner_email: string
 }
 
-// 管理端团队 API 只暴露运维所需操作，不提供团队密钥明文。
+// 管理端团队 API 提供团队运维操作。
 const teamsAPI = {
   async list(): Promise<AdminTeam[]> {
     const { data } = await apiClient.get<AdminTeam[]>('/admin/teams')

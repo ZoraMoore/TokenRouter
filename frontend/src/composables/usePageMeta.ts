@@ -16,7 +16,7 @@ export function usePageMeta() {
   const pageTitle = computed(() => {
     if (route.meta.hidePageHeading) return ''
 
-    // 自定义页面优先显示菜单配置的名称，而不是通用路由标题。
+    // 自定义页面优先显示菜单配置的名称。
     if (route.name === 'CustomPage') {
       const id = route.params.id as string
       const publicItems = appStore.cachedPublicSettings?.custom_menu_items ?? []

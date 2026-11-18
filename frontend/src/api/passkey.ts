@@ -1,7 +1,7 @@
 import { apiClient } from './client'
 import type { ActionCaptchaRequestProof, AuthResponse } from '@/types'
 
-// 用户端只接收凭据摘要，不暴露 credential ID 字节和公钥材料。
+// 用户端接收凭据摘要。
 export interface PasskeyCredentialSummary {
   id: number
   name: string

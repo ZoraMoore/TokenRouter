@@ -18,24 +18,19 @@
       </div>
 
       <!-- Rules Table -->
-      <div v-if="loading" class="flex items-center justify-center py-8">
-        <Icon name="refresh" size="lg" class="animate-spin text-gray-400" />
-      </div>
 
-      <div v-else-if="rules.length === 0" class="py-8 text-center">
-        <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-dark-700">
-          <Icon name="shield" size="lg" class="text-gray-400" />
-        </div>
-        <h4 class="mb-1 text-sm font-medium text-gray-900 dark:text-white">
-          {{ t('admin.errorPassthrough.noRules') }}
-        </h4>
-        <p class="text-sm text-gray-500 dark:text-gray-400">
-          {{ t('admin.errorPassthrough.createFirstRule') }}
-        </p>
-      </div>
+      <EmptyState
+        v-if="!loading && rules.length === 0"
+        :title="t('admin.errorPassthrough.noRules')"
+        :description="t('admin.errorPassthrough.createFirstRule')"
+      >
+        <template #icon>
+          <Icon name="shield" class="empty-state-icon h-10 w-10" />
+        </template>
+      </EmptyState>
 
-      <div v-else class="max-h-96 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+      <div v-else class="max-h-96 overflow-auto rounded-control border border-gray-200 dark:border-dark-600">
+        <table :aria-busy="loading" class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
           <thead class="sticky top-0 bg-gray-50 dark:bg-dark-700">
             <tr>
               <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
@@ -61,10 +56,11 @@
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-800">
+          <TableSkeletonBody v-if="loading" :columns="7" cell-class="px-3 py-2" />
+          <tbody v-else class="divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-800">
             <tr v-for="rule in rules" :key="rule.id" class="hover:bg-gray-50 dark:hover:bg-dark-700">
               <td class="whitespace-nowrap px-3 py-2">
-                <span class="inline-flex h-5 w-5 items-center justify-center rounded bg-gray-100 text-xs font-medium text-gray-700 dark:bg-dark-600 dark:text-gray-300">
+                <span class="inline-flex h-5 w-5 items-center justify-center rounded-compact bg-gray-100 text-xs font-medium text-gray-700 dark:bg-dark-600 dark:text-gray-300">
                   {{ rule.priority }}
                 </span>
               </td>
@@ -153,6 +149,7 @@
                       name="checkCircle"
                       size="xs"
                       class="text-yellow-500"
+                      :animate-on-hover="false"
                     />
                     <span class="text-gray-600 dark:text-gray-400">
                       {{ t('admin.errorPassthrough.skipMonitoring') }}
@@ -161,20 +158,13 @@
                 </div>
               </td>
               <td class="px-3 py-2">
-                <button
-                  @click="toggleEnabled(rule)"
-                  :class="[
-                    'relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-                    rule.enabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-                  ]"
-                >
-                  <span
-                    :class="[
-                      'pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                      rule.enabled ? 'translate-x-3' : 'translate-x-0'
-                    ]"
-                  />
-                </button>
+                <!-- 异步保存，值由 toggleEnabled 写回规则。 -->
+                <Toggle
+                  :model-value="rule.enabled"
+                  size="sm"
+                  off-tone="soft"
+                  @update:model-value="toggleEnabled(rule)"
+                />
               </td>
               <td class="px-3 py-2">
                 <div class="flex items-center gap-1">
@@ -251,7 +241,7 @@
         </div>
 
         <!-- Match Conditions -->
-        <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+        <div class="rounded-control border border-gray-200 p-3 dark:border-dark-600">
           <h4 class="mb-2 text-sm font-medium text-gray-900 dark:text-white">
             {{ t('admin.errorPassthrough.form.matchConditions') }}
           </h4>
@@ -313,7 +303,7 @@
                   type="checkbox"
                   :value="platform.value"
                   v-model="form.platforms"
-                  class="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  class="h-3.5 w-3.5 rounded-compact border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
                 <span class="text-xs text-gray-700 dark:text-gray-300">{{ platform.label }}</span>
               </label>
@@ -323,7 +313,7 @@
         </div>
 
         <!-- Response Behavior -->
-        <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+        <div class="rounded-control border border-gray-200 p-3 dark:border-dark-600">
           <h4 class="mb-2 text-sm font-medium text-gray-900 dark:text-white">
             {{ t('admin.errorPassthrough.form.responseBehavior') }}
           </h4>
@@ -334,7 +324,7 @@
                 <input
                   type="checkbox"
                   v-model="form.passthrough_code"
-                  class="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  class="h-3.5 w-3.5 rounded-compact border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
                 <span class="text-xs font-medium text-gray-700 dark:text-gray-300">
                   {{ t('admin.errorPassthrough.form.passthroughCode') }}
@@ -357,7 +347,7 @@
                 <input
                   type="checkbox"
                   v-model="form.passthrough_body"
-                  class="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  class="h-3.5 w-3.5 rounded-compact border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
                 <span class="text-xs font-medium text-gray-700 dark:text-gray-300">
                   {{ t('admin.errorPassthrough.form.passthroughBody') }}
@@ -381,7 +371,7 @@
           <input
             type="checkbox"
             v-model="form.skip_monitoring"
-            class="h-3.5 w-3.5 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"
+            class="h-3.5 w-3.5 rounded-compact border-gray-300 text-yellow-600 focus:ring-yellow-500"
           />
           <span class="text-xs font-medium text-gray-700 dark:text-gray-300">
             {{ t('admin.errorPassthrough.form.skipMonitoring') }}
@@ -394,7 +384,7 @@
           <input
             type="checkbox"
             v-model="form.enabled"
-            class="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            class="h-3.5 w-3.5 rounded-compact border-gray-300 text-primary-600 focus:ring-primary-500"
           />
           <span class="text-xs font-medium text-gray-700 dark:text-gray-300">
             {{ t('admin.errorPassthrough.form.enabled') }}
@@ -408,7 +398,13 @@
             {{ t('common.cancel') }}
           </button>
           <button @click="handleSubmit" :disabled="submitting" class="btn btn-primary">
-            <Icon v-if="submitting" name="refresh" size="sm" class="mr-1 animate-spin" />
+            <Icon
+              v-if="submitting"
+              name="refresh"
+              size="sm"
+              class="mr-1 animate-spin"
+              :animate-on-hover="false"
+            />
             {{ showEditModal ? t('common.update') : t('common.create') }}
           </button>
         </div>
@@ -430,6 +426,7 @@
 </template>
 
 <script setup lang="ts">
+import TableSkeletonBody from '@/components/common/TableSkeletonBody.vue'
 import { ref, reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -439,6 +436,8 @@ import type { ErrorPassthroughRule } from '@/api/admin/errorPassthrough'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
+import Toggle from '@/components/common/Toggle.vue'
 
 const props = defineProps<{
   show: boolean
@@ -448,7 +447,6 @@ const emit = defineEmits<{
   close: []
 }>()
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 void emit // suppress unused warning - emit is used via $emit in template
 
 const { t } = useI18n()

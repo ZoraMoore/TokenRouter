@@ -1,5 +1,5 @@
 # =============================================================================
-# Sub2API Dockerfile for GoReleaser
+# TokenRouter Dockerfile for GoReleaser
 # =============================================================================
 # This Dockerfile is used by GoReleaser to build Docker images.
 # It only packages the pre-built binary, no compilation needed.
@@ -37,19 +37,18 @@ COPY --from=pg-client /usr/local/bin/psql /usr/local/bin/psql
 COPY --from=pg-client /usr/local/lib/libpq.so.5* /usr/local/lib/
 
 # Create non-root user
-RUN addgroup -g 1000 sub2api && \
-    adduser -u 1000 -G sub2api -s /bin/sh -D sub2api
+RUN addgroup -g 1000 tokenrouter && \
+    adduser -u 1000 -G tokenrouter -s /bin/sh -D tokenrouter
 
 WORKDIR /app
 
-# 从 GoReleaser 构建上下文复制预编译二进制及运行时兜底资源
-COPY sub2api /app/sub2api
-COPY --chown=sub2api:sub2api backend/resources /app/resources
+# 从 GoReleaser 构建上下文复制已内嵌默认价格补充的二进制。
+COPY tokenrouter /app/tokenrouter
 
 # Create data directory
-RUN mkdir -p /app/data && chown -R sub2api:sub2api /app
+RUN mkdir -p /app/data && chown -R tokenrouter:tokenrouter /app
 
-# Copy entrypoint script (fixes volume permissions then drops to sub2api)
+# Copy entrypoint script (fixes volume permissions then drops to tokenrouter)
 COPY deploy/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
@@ -58,6 +57,8 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:${SERVER_PORT:-8080}/health || exit 1
 
-# Run the application (entrypoint fixes /app/data ownership then execs as sub2api)
+# Run the application (entrypoint fixes /app/data ownership then execs as tokenrouter)
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["/app/sub2api"]
+# 旧 Compose 可继续调用原可执行路径。
+RUN ln -s /app/tokenrouter /app/sub2api
+CMD ["/app/tokenrouter"]

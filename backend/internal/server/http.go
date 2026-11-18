@@ -1,94 +1,37 @@
-// Package server provides HTTP server initialization and configuration.
 package server
 
 import (
-	"context"
 	"log"
-	"log/slog"
 	"net/http"
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/config"
-	"github.com/TokenFlux/TokenRouter/internal/handler"
-	"github.com/TokenFlux/TokenRouter/internal/pkg/websearch"
-	middleware2 "github.com/TokenFlux/TokenRouter/internal/server/middleware"
-	"github.com/TokenFlux/TokenRouter/internal/service"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/wire"
-	"github.com/redis/go-redis/v9"
 	"golang.org/x/net/http2"
+
+	middleware2 "github.com/TokenFlux/TokenRouter/internal/server/middleware"
 )
 
-// ProviderSet 提供服务器层的依赖
+// ProviderSet 提供服务器层的依赖。
 var ProviderSet = wire.NewSet(
 	ProvideRouter,
 	ProvideHTTPServer,
 )
 
-// ProvideRouter 提供路由器
-func ProvideRouter(
-	cfg *config.Config,
-	handlers *handler.Handlers,
-	jwtAuth middleware2.JWTAuthMiddleware,
-	adminAuth middleware2.AdminAuthMiddleware,
-	apiKeyAuth middleware2.APIKeyAuthMiddleware,
-	auditLog middleware2.AuditLogMiddleware,
-	stepUpAuth middleware2.StepUpAuthMiddleware,
-	apiKeyService *service.APIKeyService,
-	subscriptionService *service.SubscriptionService,
-	opsService *service.OpsService,
-	settingService *service.SettingService,
-	redisClient *redis.Client,
-) *gin.Engine {
-	if cfg.Server.Mode == "release" {
+// ProvideRouter 提供路由器。
+func ProvideRouter(cfg Options, runtime *RouterRuntime) *gin.Engine {
+	if cfg.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	r := gin.New()
 	r.Use(middleware2.Recovery())
-	configureTrustedProxies(r, cfg.Server)
+	configureTrustedProxies(r, cfg)
 
-	// Wire up websearch Manager builder so it initializes on startup and rebuilds on config save.
-	settingService.SetWebSearchManagerBuilder(context.Background(), func(cfg *service.WebSearchEmulationConfig, proxyURLs map[int64]string) {
-		if cfg == nil || !cfg.Enabled || len(cfg.Providers) == 0 {
-			service.SetWebSearchManager(nil)
-			return
-		}
-		configs := make([]websearch.ProviderConfig, 0, len(cfg.Providers))
-		for _, p := range cfg.Providers {
-			if p.APIKey == "" {
-				continue
-			}
-			pc := websearch.ProviderConfig{
-				Type:       p.Type,
-				APIKey:     p.APIKey,
-				QuotaLimit: derefInt64(p.QuotaLimit),
-				ExpiresAt:  p.ExpiresAt,
-			}
-			if p.SubscribedAt != nil {
-				pc.SubscribedAt = p.SubscribedAt
-			}
-			if p.ProxyID != nil {
-				pc.ProxyID = *p.ProxyID
-				if u, ok := proxyURLs[*p.ProxyID]; ok {
-					pc.ProxyURL = u
-				} else {
-					// Proxy configured but not found — skip this provider to prevent direct connection.
-					slog.Warn("websearch: proxy not found for provider, skipping",
-						"provider", p.Type, "proxy_id", *p.ProxyID)
-					continue
-				}
-			}
-			configs = append(configs, pc)
-		}
-		service.SetWebSearchManager(websearch.NewManager(configs, redisClient))
-	})
-
-	return SetupRouter(r, handlers, jwtAuth, adminAuth, apiKeyAuth, auditLog, stepUpAuth, apiKeyService, subscriptionService, opsService, settingService, cfg, redisClient)
+	return SetupRouter(r, runtime)
 }
 
-func configureTrustedProxies(r *gin.Engine, cfg config.ServerConfig) {
+func configureTrustedProxies(r *gin.Engine, cfg Options) {
 	if cfg.TrustedProxiesConfigured {
 		if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 			log.Printf("Failed to set trusted proxies: %v", err)
@@ -109,32 +52,30 @@ func configureTrustedProxies(r *gin.Engine, cfg config.ServerConfig) {
 
 // ProvideHTTPServer 提供 HTTP 服务器
 // @project-doc docs/operations/edge_security.md#http_ingress_limits
-func ProvideHTTPServer(cfg *config.Config, router *gin.Engine) *http.Server {
+func ProvideHTTPServer(cfg Options, router *gin.Engine) *http.Server {
 	httpHandler := http.Handler(router)
 	server := &http.Server{
-		Addr:           cfg.Server.Address(),
+		Addr:           cfg.Address,
 		Handler:        httpHandler,
-		MaxHeaderBytes: cfg.Server.MaxHeaderBytes,
+		MaxHeaderBytes: cfg.MaxHeaderBytes,
 		// ReadHeaderTimeout: 读取请求头的超时时间，防止慢速请求头攻击
-		ReadHeaderTimeout: time.Duration(cfg.Server.ReadHeaderTimeout) * time.Second,
+		ReadHeaderTimeout: time.Duration(cfg.ReadHeaderTimeout) * time.Second,
 		// IdleTimeout: 空闲连接超时时间，释放不活跃的连接资源
-		IdleTimeout: time.Duration(cfg.Server.IdleTimeout) * time.Second,
+		IdleTimeout: time.Duration(cfg.IdleTimeout) * time.Second,
 		// 注意：不设置 WriteTimeout，因为流式响应可能持续十几分钟
 		// 不设置 ReadTimeout，因为大请求体可能需要较长时间读取
 	}
 
-	globalMaxSize := cfg.Server.MaxRequestBodySize
-	if globalMaxSize <= 0 {
-		globalMaxSize = cfg.Gateway.MaxBodySize
-	}
+	globalMaxSize := cfg.MaxRequestBodySize
 	if globalMaxSize > 0 {
 		httpHandler = http.MaxBytesHandler(httpHandler, globalMaxSize)
 		log.Printf("Global max request body size: %d bytes (%.2f MB)", globalMaxSize, float64(globalMaxSize)/(1<<20))
 	}
 
 	// 根据配置决定是否启用 H2C
-	if cfg.Server.H2C.Enabled {
-		h2cConfig := cfg.Server.H2C
+	if cfg.H2C.Enabled {
+		h2cConfig := cfg.H2C
+		//nolint:staticcheck // HTTP/1 与 h2c 使用独立空闲超时，http.HTTP2Config 尚无独立的 IdleTimeout 字段。
 		if err := http2.ConfigureServer(server, &http2.Server{
 			MaxConcurrentStreams:         h2cConfig.MaxConcurrentStreams,
 			IdleTimeout:                  time.Duration(h2cConfig.IdleTimeout) * time.Second,
@@ -160,11 +101,4 @@ func ProvideHTTPServer(cfg *config.Config, router *gin.Engine) *http.Server {
 
 	server.Handler = httpHandler
 	return server
-}
-
-func derefInt64(p *int64) int64 {
-	if p == nil {
-		return 0
-	}
-	return *p
 }

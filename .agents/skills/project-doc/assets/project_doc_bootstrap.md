@@ -1,6 +1,6 @@
 # Project Doc 建库备忘录
 
-> 本文件只在首次建库未完成时存在。每完成一个工作单元立即更新；所有完成条件满足后删除本文件。
+> 本文件在首次建库期间存在。每完成一个工作单元立即更新，完成条件全部满足后删除本文件。
 
 ## 当前状态
 
@@ -9,7 +9,7 @@
 - 主语言：<code>{{primary_language}}</code>
 - 总体状态：<code>{{planned|in_progress|blocked}}</code>
 - 当前项目：<code>{{current_item_or_none}}</code>
-- 下一项唯一动作：{{next_action}}
+- 下一步：{{next_action}}
 - 最后更新：<code>{{timestamp_with_timezone}}</code>
 
 ## 结构决策
@@ -24,7 +24,7 @@
 
 ## 锚点计划
 
-| 文档章节 | 稳定 ID | 代码语义入口 | 状态 |
+| 文档章节 | 稳定 ID | 代码入口 | 状态 |
 | --- | --- | --- | --- |
 | <code>{{document_path}}#{{section_id}}</code> | <code>{{section_id}}</code> | <code>{{code_path_or_symbol}}</code> | <code>{{planned|in_progress|verified|blocked}}</code> |
 
@@ -53,6 +53,6 @@
 ## 交接说明
 
 - 已核实：{{verified_summary}}
-- 不要重复：{{completed_work_to_preserve}}
+- 保持现状的已完成工作：{{completed_work_to_preserve}}
 - 恢复入口：{{exact_file_symbol_or_command_to_inspect_next}}
 - 当前风险：{{known_risk_or_none}}

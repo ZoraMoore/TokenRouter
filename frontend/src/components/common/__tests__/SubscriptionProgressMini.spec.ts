@@ -48,7 +48,7 @@ describe('SubscriptionProgressMini', () => {
   })
 
   it('在订阅弹层展示精确到分钟的本地到期时间', async () => {
-    // 使用不带时区偏移的本地时间，避免测试环境时区改变期望值。
+    // 测试时间使用无时区偏移的本地时间。
     const expiresAt = '2026-08-08T10:33:45'
     mockGetActiveSubscriptions.mockResolvedValue([
       {
@@ -89,4 +89,56 @@ describe('SubscriptionProgressMini', () => {
     expect(wrapper.text()).not.toContain('Expires tomorrow')
     wrapper.unmount()
   })
+
+  it('状态变体没有订阅时仍渲染插槽，但不显示状态点也不可展开', async () => {
+    mockGetActiveSubscriptions.mockResolvedValue([])
+
+    const wrapper = mountStatusVariant()
+    await flushPromises()
+
+    const button = wrapper.get('button')
+    expect(button.text()).toContain('8,215.03')
+    expect(button.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-testid="subscription-status-dot"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('状态变体有订阅时按最高用量显示状态点并可展开详情', async () => {
+    mockGetActiveSubscriptions.mockResolvedValue([
+      {
+        id: 1,
+        user_id: 7,
+        plan_id: 101,
+        expires_at: '2026-08-08T10:33:45',
+        status: 'active',
+        daily_limit_usd: 100,
+        daily_usage_usd: 95,
+        plan: { name: 'Lite+' }
+      }
+    ])
+
+    const wrapper = mountStatusVariant()
+    await flushPromises()
+
+    const dot = wrapper.get('[data-testid="subscription-status-dot"]')
+    expect(dot.classes()).toContain('bg-red-500')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.text()).toContain('My Subscriptions')
+    wrapper.unmount()
+  })
 })
+
+// 以余额文本作为插槽内容挂载顶栏使用的状态变体。
+function mountStatusVariant() {
+  return mount(SubscriptionProgressMini, {
+    props: { variant: 'status' },
+    slots: { default: '<span>8,215.03</span>' },
+    global: {
+      plugins: [createPinia(), createTestI18n()],
+      stubs: {
+        Icon: { template: '<span />' },
+        RouterLink: { template: '<a><slot /></a>' }
+      }
+    }
+  })
+}

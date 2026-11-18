@@ -12,7 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/TokenFlux/TokenRouter/ent/batchimagejob"
-	"github.com/TokenFlux/TokenRouter/internal/domain"
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 // BatchImageJobCreate is the builder for creating a BatchImageJob entity.
@@ -77,16 +77,16 @@ func (_c *BatchImageJobCreate) SetNillableAPIKeyID(v *int64) *BatchImageJobCreat
 	return _c
 }
 
-// SetAccountID sets the "account_id" field.
-func (_c *BatchImageJobCreate) SetAccountID(v int64) *BatchImageJobCreate {
-	_c.mutation.SetAccountID(v)
+// SetProviderID sets the "provider_id" field.
+func (_c *BatchImageJobCreate) SetProviderID(v int64) *BatchImageJobCreate {
+	_c.mutation.SetProviderID(v)
 	return _c
 }
 
-// SetNillableAccountID sets the "account_id" field if the given value is not nil.
-func (_c *BatchImageJobCreate) SetNillableAccountID(v *int64) *BatchImageJobCreate {
+// SetNillableProviderID sets the "provider_id" field if the given value is not nil.
+func (_c *BatchImageJobCreate) SetNillableProviderID(v *int64) *BatchImageJobCreate {
 	if v != nil {
-		_c.SetAccountID(*v)
+		_c.SetProviderID(*v)
 	}
 	return _c
 }
@@ -119,9 +119,9 @@ func (_c *BatchImageJobCreate) SetNillablePreferredSubscriptionID(v *int64) *Bat
 	return _c
 }
 
-// SetProvider sets the "provider" field.
-func (_c *BatchImageJobCreate) SetProvider(v string) *BatchImageJobCreate {
-	_c.mutation.SetProvider(v)
+// SetPlatform sets the "platform" field.
+func (_c *BatchImageJobCreate) SetPlatform(v string) *BatchImageJobCreate {
+	_c.mutation.SetPlatform(v)
 	return _c
 }
 
@@ -334,7 +334,7 @@ func (_c *BatchImageJobCreate) SetNillableBalanceHoldAmount(v *float64) *BatchIm
 }
 
 // SetSubscriptionHoldAllocations sets the "subscription_hold_allocations" field.
-func (_c *BatchImageJobCreate) SetSubscriptionHoldAllocations(v []domain.BillingAllocation) *BatchImageJobCreate {
+func (_c *BatchImageJobCreate) SetSubscriptionHoldAllocations(v []billing.BillingAllocation) *BatchImageJobCreate {
 	_c.mutation.SetSubscriptionHoldAllocations(v)
 	return _c
 }
@@ -805,12 +805,12 @@ func (_c *BatchImageJobCreate) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "BatchImageJob.billing_mode": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.Provider(); !ok {
-		return &ValidationError{Name: "provider", err: errors.New(`ent: missing required field "BatchImageJob.provider"`)}
+	if _, ok := _c.mutation.Platform(); !ok {
+		return &ValidationError{Name: "platform", err: errors.New(`ent: missing required field "BatchImageJob.platform"`)}
 	}
-	if v, ok := _c.mutation.Provider(); ok {
-		if err := batchimagejob.ProviderValidator(v); err != nil {
-			return &ValidationError{Name: "provider", err: fmt.Errorf(`ent: validator failed for field "BatchImageJob.provider": %w`, err)}
+	if v, ok := _c.mutation.Platform(); ok {
+		if err := batchimagejob.PlatformValidator(v); err != nil {
+			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "BatchImageJob.platform": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Model(); !ok {
@@ -987,9 +987,9 @@ func (_c *BatchImageJobCreate) createSpec() (*BatchImageJob, *sqlgraph.CreateSpe
 		_spec.SetField(batchimagejob.FieldAPIKeyID, field.TypeInt64, value)
 		_node.APIKeyID = &value
 	}
-	if value, ok := _c.mutation.AccountID(); ok {
-		_spec.SetField(batchimagejob.FieldAccountID, field.TypeInt64, value)
-		_node.AccountID = &value
+	if value, ok := _c.mutation.ProviderID(); ok {
+		_spec.SetField(batchimagejob.FieldProviderID, field.TypeInt64, value)
+		_node.ProviderID = &value
 	}
 	if value, ok := _c.mutation.BillingMode(); ok {
 		_spec.SetField(batchimagejob.FieldBillingMode, field.TypeString, value)
@@ -999,9 +999,9 @@ func (_c *BatchImageJobCreate) createSpec() (*BatchImageJob, *sqlgraph.CreateSpe
 		_spec.SetField(batchimagejob.FieldPreferredSubscriptionID, field.TypeInt64, value)
 		_node.PreferredSubscriptionID = &value
 	}
-	if value, ok := _c.mutation.Provider(); ok {
-		_spec.SetField(batchimagejob.FieldProvider, field.TypeString, value)
-		_node.Provider = value
+	if value, ok := _c.mutation.Platform(); ok {
+		_spec.SetField(batchimagejob.FieldPlatform, field.TypeString, value)
+		_node.Platform = value
 	}
 	if value, ok := _c.mutation.Model(); ok {
 		_spec.SetField(batchimagejob.FieldModel, field.TypeString, value)
@@ -1309,27 +1309,27 @@ func (u *BatchImageJobUpsert) ClearAPIKeyID() *BatchImageJobUpsert {
 	return u
 }
 
-// SetAccountID sets the "account_id" field.
-func (u *BatchImageJobUpsert) SetAccountID(v int64) *BatchImageJobUpsert {
-	u.Set(batchimagejob.FieldAccountID, v)
+// SetProviderID sets the "provider_id" field.
+func (u *BatchImageJobUpsert) SetProviderID(v int64) *BatchImageJobUpsert {
+	u.Set(batchimagejob.FieldProviderID, v)
 	return u
 }
 
-// UpdateAccountID sets the "account_id" field to the value that was provided on create.
-func (u *BatchImageJobUpsert) UpdateAccountID() *BatchImageJobUpsert {
-	u.SetExcluded(batchimagejob.FieldAccountID)
+// UpdateProviderID sets the "provider_id" field to the value that was provided on create.
+func (u *BatchImageJobUpsert) UpdateProviderID() *BatchImageJobUpsert {
+	u.SetExcluded(batchimagejob.FieldProviderID)
 	return u
 }
 
-// AddAccountID adds v to the "account_id" field.
-func (u *BatchImageJobUpsert) AddAccountID(v int64) *BatchImageJobUpsert {
-	u.Add(batchimagejob.FieldAccountID, v)
+// AddProviderID adds v to the "provider_id" field.
+func (u *BatchImageJobUpsert) AddProviderID(v int64) *BatchImageJobUpsert {
+	u.Add(batchimagejob.FieldProviderID, v)
 	return u
 }
 
-// ClearAccountID clears the value of the "account_id" field.
-func (u *BatchImageJobUpsert) ClearAccountID() *BatchImageJobUpsert {
-	u.SetNull(batchimagejob.FieldAccountID)
+// ClearProviderID clears the value of the "provider_id" field.
+func (u *BatchImageJobUpsert) ClearProviderID() *BatchImageJobUpsert {
+	u.SetNull(batchimagejob.FieldProviderID)
 	return u
 }
 
@@ -1369,15 +1369,15 @@ func (u *BatchImageJobUpsert) ClearPreferredSubscriptionID() *BatchImageJobUpser
 	return u
 }
 
-// SetProvider sets the "provider" field.
-func (u *BatchImageJobUpsert) SetProvider(v string) *BatchImageJobUpsert {
-	u.Set(batchimagejob.FieldProvider, v)
+// SetPlatform sets the "platform" field.
+func (u *BatchImageJobUpsert) SetPlatform(v string) *BatchImageJobUpsert {
+	u.Set(batchimagejob.FieldPlatform, v)
 	return u
 }
 
-// UpdateProvider sets the "provider" field to the value that was provided on create.
-func (u *BatchImageJobUpsert) UpdateProvider() *BatchImageJobUpsert {
-	u.SetExcluded(batchimagejob.FieldProvider)
+// UpdatePlatform sets the "platform" field to the value that was provided on create.
+func (u *BatchImageJobUpsert) UpdatePlatform() *BatchImageJobUpsert {
+	u.SetExcluded(batchimagejob.FieldPlatform)
 	return u
 }
 
@@ -1664,7 +1664,7 @@ func (u *BatchImageJobUpsert) AddBalanceHoldAmount(v float64) *BatchImageJobUpse
 }
 
 // SetSubscriptionHoldAllocations sets the "subscription_hold_allocations" field.
-func (u *BatchImageJobUpsert) SetSubscriptionHoldAllocations(v []domain.BillingAllocation) *BatchImageJobUpsert {
+func (u *BatchImageJobUpsert) SetSubscriptionHoldAllocations(v []billing.BillingAllocation) *BatchImageJobUpsert {
 	u.Set(batchimagejob.FieldSubscriptionHoldAllocations, v)
 	return u
 }
@@ -2218,31 +2218,31 @@ func (u *BatchImageJobUpsertOne) ClearAPIKeyID() *BatchImageJobUpsertOne {
 	})
 }
 
-// SetAccountID sets the "account_id" field.
-func (u *BatchImageJobUpsertOne) SetAccountID(v int64) *BatchImageJobUpsertOne {
+// SetProviderID sets the "provider_id" field.
+func (u *BatchImageJobUpsertOne) SetProviderID(v int64) *BatchImageJobUpsertOne {
 	return u.Update(func(s *BatchImageJobUpsert) {
-		s.SetAccountID(v)
+		s.SetProviderID(v)
 	})
 }
 
-// AddAccountID adds v to the "account_id" field.
-func (u *BatchImageJobUpsertOne) AddAccountID(v int64) *BatchImageJobUpsertOne {
+// AddProviderID adds v to the "provider_id" field.
+func (u *BatchImageJobUpsertOne) AddProviderID(v int64) *BatchImageJobUpsertOne {
 	return u.Update(func(s *BatchImageJobUpsert) {
-		s.AddAccountID(v)
+		s.AddProviderID(v)
 	})
 }
 
-// UpdateAccountID sets the "account_id" field to the value that was provided on create.
-func (u *BatchImageJobUpsertOne) UpdateAccountID() *BatchImageJobUpsertOne {
+// UpdateProviderID sets the "provider_id" field to the value that was provided on create.
+func (u *BatchImageJobUpsertOne) UpdateProviderID() *BatchImageJobUpsertOne {
 	return u.Update(func(s *BatchImageJobUpsert) {
-		s.UpdateAccountID()
+		s.UpdateProviderID()
 	})
 }
 
-// ClearAccountID clears the value of the "account_id" field.
-func (u *BatchImageJobUpsertOne) ClearAccountID() *BatchImageJobUpsertOne {
+// ClearProviderID clears the value of the "provider_id" field.
+func (u *BatchImageJobUpsertOne) ClearProviderID() *BatchImageJobUpsertOne {
 	return u.Update(func(s *BatchImageJobUpsert) {
-		s.ClearAccountID()
+		s.ClearProviderID()
 	})
 }
 
@@ -2288,17 +2288,17 @@ func (u *BatchImageJobUpsertOne) ClearPreferredSubscriptionID() *BatchImageJobUp
 	})
 }
 
-// SetProvider sets the "provider" field.
-func (u *BatchImageJobUpsertOne) SetProvider(v string) *BatchImageJobUpsertOne {
+// SetPlatform sets the "platform" field.
+func (u *BatchImageJobUpsertOne) SetPlatform(v string) *BatchImageJobUpsertOne {
 	return u.Update(func(s *BatchImageJobUpsert) {
-		s.SetProvider(v)
+		s.SetPlatform(v)
 	})
 }
 
-// UpdateProvider sets the "provider" field to the value that was provided on create.
-func (u *BatchImageJobUpsertOne) UpdateProvider() *BatchImageJobUpsertOne {
+// UpdatePlatform sets the "platform" field to the value that was provided on create.
+func (u *BatchImageJobUpsertOne) UpdatePlatform() *BatchImageJobUpsertOne {
 	return u.Update(func(s *BatchImageJobUpsert) {
-		s.UpdateProvider()
+		s.UpdatePlatform()
 	})
 }
 
@@ -2632,7 +2632,7 @@ func (u *BatchImageJobUpsertOne) UpdateBalanceHoldAmount() *BatchImageJobUpsertO
 }
 
 // SetSubscriptionHoldAllocations sets the "subscription_hold_allocations" field.
-func (u *BatchImageJobUpsertOne) SetSubscriptionHoldAllocations(v []domain.BillingAllocation) *BatchImageJobUpsertOne {
+func (u *BatchImageJobUpsertOne) SetSubscriptionHoldAllocations(v []billing.BillingAllocation) *BatchImageJobUpsertOne {
 	return u.Update(func(s *BatchImageJobUpsert) {
 		s.SetSubscriptionHoldAllocations(v)
 	})
@@ -3419,31 +3419,31 @@ func (u *BatchImageJobUpsertBulk) ClearAPIKeyID() *BatchImageJobUpsertBulk {
 	})
 }
 
-// SetAccountID sets the "account_id" field.
-func (u *BatchImageJobUpsertBulk) SetAccountID(v int64) *BatchImageJobUpsertBulk {
+// SetProviderID sets the "provider_id" field.
+func (u *BatchImageJobUpsertBulk) SetProviderID(v int64) *BatchImageJobUpsertBulk {
 	return u.Update(func(s *BatchImageJobUpsert) {
-		s.SetAccountID(v)
+		s.SetProviderID(v)
 	})
 }
 
-// AddAccountID adds v to the "account_id" field.
-func (u *BatchImageJobUpsertBulk) AddAccountID(v int64) *BatchImageJobUpsertBulk {
+// AddProviderID adds v to the "provider_id" field.
+func (u *BatchImageJobUpsertBulk) AddProviderID(v int64) *BatchImageJobUpsertBulk {
 	return u.Update(func(s *BatchImageJobUpsert) {
-		s.AddAccountID(v)
+		s.AddProviderID(v)
 	})
 }
 
-// UpdateAccountID sets the "account_id" field to the value that was provided on create.
-func (u *BatchImageJobUpsertBulk) UpdateAccountID() *BatchImageJobUpsertBulk {
+// UpdateProviderID sets the "provider_id" field to the value that was provided on create.
+func (u *BatchImageJobUpsertBulk) UpdateProviderID() *BatchImageJobUpsertBulk {
 	return u.Update(func(s *BatchImageJobUpsert) {
-		s.UpdateAccountID()
+		s.UpdateProviderID()
 	})
 }
 
-// ClearAccountID clears the value of the "account_id" field.
-func (u *BatchImageJobUpsertBulk) ClearAccountID() *BatchImageJobUpsertBulk {
+// ClearProviderID clears the value of the "provider_id" field.
+func (u *BatchImageJobUpsertBulk) ClearProviderID() *BatchImageJobUpsertBulk {
 	return u.Update(func(s *BatchImageJobUpsert) {
-		s.ClearAccountID()
+		s.ClearProviderID()
 	})
 }
 
@@ -3489,17 +3489,17 @@ func (u *BatchImageJobUpsertBulk) ClearPreferredSubscriptionID() *BatchImageJobU
 	})
 }
 
-// SetProvider sets the "provider" field.
-func (u *BatchImageJobUpsertBulk) SetProvider(v string) *BatchImageJobUpsertBulk {
+// SetPlatform sets the "platform" field.
+func (u *BatchImageJobUpsertBulk) SetPlatform(v string) *BatchImageJobUpsertBulk {
 	return u.Update(func(s *BatchImageJobUpsert) {
-		s.SetProvider(v)
+		s.SetPlatform(v)
 	})
 }
 
-// UpdateProvider sets the "provider" field to the value that was provided on create.
-func (u *BatchImageJobUpsertBulk) UpdateProvider() *BatchImageJobUpsertBulk {
+// UpdatePlatform sets the "platform" field to the value that was provided on create.
+func (u *BatchImageJobUpsertBulk) UpdatePlatform() *BatchImageJobUpsertBulk {
 	return u.Update(func(s *BatchImageJobUpsert) {
-		s.UpdateProvider()
+		s.UpdatePlatform()
 	})
 }
 
@@ -3833,7 +3833,7 @@ func (u *BatchImageJobUpsertBulk) UpdateBalanceHoldAmount() *BatchImageJobUpsert
 }
 
 // SetSubscriptionHoldAllocations sets the "subscription_hold_allocations" field.
-func (u *BatchImageJobUpsertBulk) SetSubscriptionHoldAllocations(v []domain.BillingAllocation) *BatchImageJobUpsertBulk {
+func (u *BatchImageJobUpsertBulk) SetSubscriptionHoldAllocations(v []billing.BillingAllocation) *BatchImageJobUpsertBulk {
 	return u.Update(func(s *BatchImageJobUpsert) {
 		s.SetSubscriptionHoldAllocations(v)
 	})

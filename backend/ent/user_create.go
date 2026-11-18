@@ -24,7 +24,6 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/usagelog"
 	"github.com/TokenFlux/TokenRouter/ent/user"
 	"github.com/TokenFlux/TokenRouter/ent/userattributevalue"
-	"github.com/TokenFlux/TokenRouter/ent/userplatformquota"
 	"github.com/TokenFlux/TokenRouter/ent/usersubscription"
 )
 
@@ -156,6 +155,20 @@ func (_c *UserCreate) SetStatus(v string) *UserCreate {
 func (_c *UserCreate) SetNillableStatus(v *string) *UserCreate {
 	if v != nil {
 		_c.SetStatus(*v)
+	}
+	return _c
+}
+
+// SetPreferredLocale sets the "preferred_locale" field.
+func (_c *UserCreate) SetPreferredLocale(v string) *UserCreate {
+	_c.mutation.SetPreferredLocale(v)
+	return _c
+}
+
+// SetNillablePreferredLocale sets the "preferred_locale" field if the given value is not nil.
+func (_c *UserCreate) SetNillablePreferredLocale(v *string) *UserCreate {
+	if v != nil {
+		_c.SetPreferredLocale(*v)
 	}
 	return _c
 }
@@ -580,21 +593,6 @@ func (_c *UserCreate) AddPendingAuthSessions(v ...*PendingAuthSession) *UserCrea
 	return _c.AddPendingAuthSessionIDs(ids...)
 }
 
-// AddPlatformQuotaIDs adds the "platform_quotas" edge to the UserPlatformQuota entity by IDs.
-func (_c *UserCreate) AddPlatformQuotaIDs(ids ...int64) *UserCreate {
-	_c.mutation.AddPlatformQuotaIDs(ids...)
-	return _c
-}
-
-// AddPlatformQuotas adds the "platform_quotas" edges to the UserPlatformQuota entity.
-func (_c *UserCreate) AddPlatformQuotas(v ...*UserPlatformQuota) *UserCreate {
-	ids := make([]int64, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddPlatformQuotaIDs(ids...)
-}
-
 // AddTeamMembershipIDs adds the "team_memberships" edge to the TeamMembership entity by IDs.
 func (_c *UserCreate) AddTeamMembershipIDs(ids ...int64) *UserCreate {
 	_c.mutation.AddTeamMembershipIDs(ids...)
@@ -773,6 +771,11 @@ func (_c *UserCreate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "User.status": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.PreferredLocale(); ok {
+		if err := user.PreferredLocaleValidator(v); err != nil {
+			return &ValidationError{Name: "preferred_locale", err: fmt.Errorf(`ent: validator failed for field "User.preferred_locale": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Username(); !ok {
 		return &ValidationError{Name: "username", err: errors.New(`ent: missing required field "User.username"`)}
 	}
@@ -884,6 +887,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(user.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.PreferredLocale(); ok {
+		_spec.SetField(user.FieldPreferredLocale, field.TypeString, value)
+		_node.PreferredLocale = &value
 	}
 	if value, ok := _c.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
@@ -1177,22 +1184,6 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.PlatformQuotasIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.PlatformQuotasTable,
-			Columns: []string{user.PlatformQuotasColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userplatformquota.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
 	if nodes := _c.mutation.TeamMembershipsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -1390,6 +1381,24 @@ func (u *UserUpsert) SetStatus(v string) *UserUpsert {
 // UpdateStatus sets the "status" field to the value that was provided on create.
 func (u *UserUpsert) UpdateStatus() *UserUpsert {
 	u.SetExcluded(user.FieldStatus)
+	return u
+}
+
+// SetPreferredLocale sets the "preferred_locale" field.
+func (u *UserUpsert) SetPreferredLocale(v string) *UserUpsert {
+	u.Set(user.FieldPreferredLocale, v)
+	return u
+}
+
+// UpdatePreferredLocale sets the "preferred_locale" field to the value that was provided on create.
+func (u *UserUpsert) UpdatePreferredLocale() *UserUpsert {
+	u.SetExcluded(user.FieldPreferredLocale)
+	return u
+}
+
+// ClearPreferredLocale clears the value of the "preferred_locale" field.
+func (u *UserUpsert) ClearPreferredLocale() *UserUpsert {
+	u.SetNull(user.FieldPreferredLocale)
 	return u
 }
 
@@ -1823,6 +1832,27 @@ func (u *UserUpsertOne) SetStatus(v string) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateStatus() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetPreferredLocale sets the "preferred_locale" field.
+func (u *UserUpsertOne) SetPreferredLocale(v string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetPreferredLocale(v)
+	})
+}
+
+// UpdatePreferredLocale sets the "preferred_locale" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdatePreferredLocale() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdatePreferredLocale()
+	})
+}
+
+// ClearPreferredLocale clears the value of the "preferred_locale" field.
+func (u *UserUpsertOne) ClearPreferredLocale() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearPreferredLocale()
 	})
 }
 
@@ -2461,6 +2491,27 @@ func (u *UserUpsertBulk) SetStatus(v string) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateStatus() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetPreferredLocale sets the "preferred_locale" field.
+func (u *UserUpsertBulk) SetPreferredLocale(v string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetPreferredLocale(v)
+	})
+}
+
+// UpdatePreferredLocale sets the "preferred_locale" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdatePreferredLocale() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdatePreferredLocale()
+	})
+}
+
+// ClearPreferredLocale clears the value of the "preferred_locale" field.
+func (u *UserUpsertBulk) ClearPreferredLocale() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearPreferredLocale()
 	})
 }
 

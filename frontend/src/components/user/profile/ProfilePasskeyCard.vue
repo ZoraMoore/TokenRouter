@@ -1,6 +1,6 @@
 <template>
   <div class="card">
-    <div class="flex items-start justify-between border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+    <div class="flex items-end justify-between border-b border-gray-100 px-6 py-4 dark:border-dark-700">
       <div>
         <h2 class="text-lg font-medium text-gray-900 dark:text-white">
           {{ t('profile.passkey.title') }}
@@ -29,39 +29,39 @@
         {{ t('profile.passkey.unsupported') }}
       </div>
       <div v-else>
-        <form
-          v-if="showAddForm"
-          class="mb-5 flex flex-col gap-3 rounded-lg border border-gray-200 p-4 dark:border-dark-700 sm:flex-row sm:items-end"
-          @submit.prevent="addPasskey"
-        >
-          <div class="flex-1">
-            <label for="passkey-name" class="input-label">{{ t('profile.passkey.name') }}</label>
-            <input
-              id="passkey-name"
-              v-model="newName"
-              class="input"
-              maxlength="100"
-              :placeholder="t('profile.passkey.namePlaceholder')"
-              autofocus
-            />
-          </div>
-          <div class="flex gap-2">
-            <button type="button" class="btn btn-secondary" :disabled="busy" @click="cancelAdd">
-              {{ t('common.cancel') }}
-            </button>
-            <button type="submit" class="btn btn-primary" :disabled="busy">
-              {{ busy ? t('common.processing') : t('profile.passkey.continue') }}
-            </button>
-          </div>
-        </form>
+        <Collapse :open="showAddForm" unmount-on-hide>
+          <form
 
-        <div v-if="loading" class="flex justify-center py-6">
-          <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-500"></div>
-        </div>
+            class="mb-5 flex flex-col gap-3 rounded-control border border-gray-200 p-4 dark:border-dark-700 sm:flex-row sm:items-end"
+            @submit.prevent="addPasskey"
+          >
+            <div class="flex-1">
+              <label for="passkey-name" class="input-label">{{ t('profile.passkey.name') }}</label>
+              <input
+                id="passkey-name"
+                v-model="newName"
+                class="input"
+                maxlength="100"
+                :placeholder="t('profile.passkey.namePlaceholder')"
+                autofocus
+              />
+            </div>
+            <div class="flex gap-2">
+              <button type="button" class="btn btn-secondary" :disabled="busy" @click="cancelAdd">
+                {{ t('common.cancel') }}
+              </button>
+              <button type="submit" class="btn btn-primary" :disabled="busy">
+                {{ busy ? t('common.processing') : t('profile.passkey.continue') }}
+              </button>
+            </div>
+          </form>
+        </Collapse>
+
+        <ContentSkeleton v-if="loading" variant="list" :rows="3" class="py-4" />
 
         <div
           v-else-if="credentials.length === 0"
-          class="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400"
+          class="rounded-control border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400"
         >
           {{ t('profile.passkey.empty') }}
         </div>
@@ -95,7 +95,7 @@
             <div class="flex shrink-0 gap-2">
               <button
                 type="button"
-                class="btn btn-secondary btn-sm h-8 w-8 p-0"
+                class="btn btn-secondary btn-icon-sm"
                 :disabled="busy"
                 :aria-label="t('common.edit')"
                 :title="t('common.edit')"
@@ -105,7 +105,7 @@
               </button>
               <button
                 type="button"
-                class="btn btn-ghost btn-sm h-8 w-8 p-0 text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/30"
+                class="btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/30 btn-icon-sm"
                 :disabled="busy"
                 :aria-label="t('common.delete')"
                 :title="t('common.delete')"
@@ -122,6 +122,9 @@
 </template>
 
 <script setup lang="ts">
+import ContentSkeleton from '@/components/common/ContentSkeleton.vue'
+import Collapse from '@/components/common/Collapse.vue'
+
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { passkeyAPI, type PasskeyCredentialSummary } from '@/api'
@@ -139,7 +142,7 @@ const showAddForm = ref(false)
 const newName = ref('')
 const credentials = ref<PasskeyCredentialSummary[]>([])
 
-// 只在后端启用且浏览器支持 WebAuthn 时读取凭据，避免无效请求与错误提示。
+// 后端启用 Passkey 且浏览器支持 WebAuthn 时读取凭据。
 async function loadCredentials(): Promise<void> {
   if (!props.enabled) {
     credentials.value = []

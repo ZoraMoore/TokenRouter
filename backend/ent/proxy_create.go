@@ -11,7 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/TokenFlux/TokenRouter/ent/account"
+	"github.com/TokenFlux/TokenRouter/ent/provider"
 	"github.com/TokenFlux/TokenRouter/ent/proxy"
 )
 
@@ -187,19 +187,19 @@ func (_c *ProxyCreate) SetNillableExpiryWarnDays(v *int) *ProxyCreate {
 	return _c
 }
 
-// AddAccountIDs adds the "accounts" edge to the Account entity by IDs.
-func (_c *ProxyCreate) AddAccountIDs(ids ...int64) *ProxyCreate {
-	_c.mutation.AddAccountIDs(ids...)
+// AddProviderIDs adds the "providers" edge to the Provider entity by IDs.
+func (_c *ProxyCreate) AddProviderIDs(ids ...int64) *ProxyCreate {
+	_c.mutation.AddProviderIDs(ids...)
 	return _c
 }
 
-// AddAccounts adds the "accounts" edges to the Account entity.
-func (_c *ProxyCreate) AddAccounts(v ...*Account) *ProxyCreate {
+// AddProviders adds the "providers" edges to the Provider entity.
+func (_c *ProxyCreate) AddProviders(v ...*Provider) *ProxyCreate {
 	ids := make([]int64, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddAccountIDs(ids...)
+	return _c.AddProviderIDs(ids...)
 }
 
 // SetBackupProxy sets the "backup_proxy" edge to the Proxy entity.
@@ -416,15 +416,15 @@ func (_c *ProxyCreate) createSpec() (*Proxy, *sqlgraph.CreateSpec) {
 		_spec.SetField(proxy.FieldExpiryWarnDays, field.TypeInt, value)
 		_node.ExpiryWarnDays = value
 	}
-	if nodes := _c.mutation.AccountsIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.ProvidersIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: true,
-			Table:   proxy.AccountsTable,
-			Columns: []string{proxy.AccountsColumn},
+			Table:   proxy.ProvidersTable,
+			Columns: []string{proxy.ProvidersColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+				IDSpec: sqlgraph.NewFieldSpec(provider.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {

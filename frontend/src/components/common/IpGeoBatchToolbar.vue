@@ -11,8 +11,8 @@
       :class="inline
         ? compact
           ? 'btn btn-secondary btn-sm h-[34px] w-[34px] p-0'
-          : 'btn btn-secondary h-11 w-11 p-0'
-        : 'inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-primary-400 dark:hover:bg-primary-900/30'"
+          : 'btn btn-secondary h-9 w-9 p-0'
+        : 'inline-flex items-center gap-1 rounded-compact px-2 py-1 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-primary-400 dark:hover:bg-primary-900/30'"
       :disabled="loading || pendingCount === 0"
       :aria-label="loading ? t('usage.ipGeo.batchFetching') : t('usage.ipGeo.batchFetch')"
       :title="loading ? t('usage.ipGeo.batchFetching') : t('usage.ipGeo.batchFetch')"
@@ -36,7 +36,7 @@ const props = withDefaults(defineProps<{
   ips: Array<string | null | undefined>
   /** 嵌入页面操作栏时使用按钮样式，不显示表格工具条边框。 */
   inline?: boolean
-  /** 紧凑筛选区使用小尺寸按钮，避免撑高或挤压网格布局。 */
+  /** 紧凑筛选区使用小尺寸按钮。 */
   compact?: boolean
 }>(), {
   inline: false,

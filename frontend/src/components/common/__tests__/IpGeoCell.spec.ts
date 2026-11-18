@@ -18,8 +18,8 @@ vi.mock('vue-i18n', async () => {
     useI18n: () => ({
       t: (key: string) => {
         const table: Record<string, string> = {
+          'common.loading': 'Loading...',
           'usage.ipGeo.fetch': 'Fetch region',
-          'usage.ipGeo.fetching': 'Fetching...',
           'usage.ipGeo.failed': 'Failed',
           'usage.ipGeo.private': 'Private address',
           'usage.ipGeo.refreshTitle': 'Refresh',
@@ -50,10 +50,13 @@ describe('IpGeoCell', () => {
     expect(mocks.fetchOne).toHaveBeenCalledWith('8.8.8.8')
   })
 
-  it('renders loading state', () => {
+  it('加载属地时显示带加载标签的行内骨架', () => {
     mocks.getEntry.mockReturnValue({ status: 'loading' })
     const wrapper = mount(IpGeoCell, { props: { ip: '8.8.8.8' } })
-    expect(wrapper.text()).toContain('Fetching...')
+    expect(wrapper.get('[role="status"]').attributes('aria-label')).toBe('Loading...')
+    expect(wrapper.get('[role="status"]').attributes('aria-busy')).toBe('true')
+    expect(wrapper.find('.skeleton').exists()).toBe(true)
+    expect(wrapper.find('button').exists()).toBe(false)
   })
 
   it('renders success state with label, tooltip detail, and a refresh button', async () => {

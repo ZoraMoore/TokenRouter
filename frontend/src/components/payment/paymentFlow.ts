@@ -58,7 +58,7 @@ export interface PaymentLaunchContext {
   orderType: OrderType
   isMobile: boolean
   isWechatBrowser?: boolean
-  /** 开启后支付宝不再按移动端跳转，始终走二维码等待流程。 */
+  /** 开启后支付宝使用二维码等待流程。 */
   forceQRCode?: boolean
   /** 开启后移动端支付宝预下单流程优先于强制二维码设置。 */
   mobilePrecreateDeepLink?: boolean

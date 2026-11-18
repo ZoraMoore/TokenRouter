@@ -62,16 +62,16 @@ declare module 'vue-router' {
     requiresTeam?: boolean
 
     /**
-     * 是否要求数据共享功能开关已启用
-     * @default false
-     */
-    requiresDataSharing?: boolean
-
-    /**
      * 是否要求用量排行功能开关已启用
      * @default false
      */
     requiresUsageRanking?: boolean
+
+    /**
+     * 是否要求创作台功能开关已启用
+     * @default false
+     */
+    requiresCreative?: boolean
 
     /**
      * 是否要求邀请返利功能开关已启用
@@ -93,5 +93,10 @@ declare module 'vue-router' {
      * 页面自身已经提供标题区时，隐藏 AppLayout 的通用标题。
      */
     hidePageHeading?: boolean
+
+    /**
+     * 全屏工作区页面（如创作台）隐藏侧栏，内容区占满可用宽度。
+     */
+    hideSidebar?: boolean
   }
 }

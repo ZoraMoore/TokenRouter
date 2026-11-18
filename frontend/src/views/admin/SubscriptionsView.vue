@@ -3,24 +3,24 @@
     <TablePageLayout>
       <template #filters>
         <!-- Top Toolbar: Left (search + filters) / Right (actions) -->
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <!-- Left: Fuzzy user search + filters (wrap to multiple lines) -->
-          <div class="flex min-w-0 flex-1 flex-nowrap items-center gap-3">
+          <div class="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
             <!-- User Search -->
             <div
-              class="relative min-w-0 flex-1 sm:flex-none sm:w-64"
+              class="input-icon-wrap min-w-0 flex-1 sm:flex-none sm:w-64"
               data-filter-user-search
             >
               <Icon
                 name="search"
                 size="md"
-                class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                class="input-icon text-gray-400"
               />
               <input
                 v-model="filterUserKeyword"
                 type="text"
                 :placeholder="t('admin.users.searchUsers')"
-                class="input pl-10 pr-8"
+                class="input input-has-icon pr-8"
                 @input="debounceSearchFilterUsers"
                 @focus="showFilterUserDropdown = true"
               />
@@ -35,158 +35,136 @@
               </button>
 
               <!-- User Dropdown -->
-              <div
-                v-if="showFilterUserDropdown && (filterUserResults.length > 0 || filterUserKeyword)"
-                class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
-              >
+              <MotionTransition name="dropdown-fade">
                 <div
-                  v-if="filterUserLoading"
-                  class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
+                  v-if="showFilterUserDropdown && (filterUserResults.length > 0 || filterUserKeyword)" :inert="!(showFilterUserDropdown && (filterUserResults.length > 0 || filterUserKeyword)) || undefined"
+                  class="dropdown z-50 mt-1 max-h-menu-sm w-full overflow-auto py-0"
                 >
-                  {{ t('common.loading') }}
+                  <div
+                    v-if="filterUserLoading"
+                    class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
+                  >
+                    {{ t('common.loading') }}
+                  </div>
+                  <div
+                    v-else-if="filterUserResults.length === 0 && filterUserKeyword"
+                    class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
+                  >
+                    {{ t('common.noOptionsFound') }}
+                  </div>
+                  <button
+                    v-for="user in filterUserResults"
+                    :key="user.id"
+                    type="button"
+                    @click="selectFilterUser(user)"
+                    class="dropdown-item"
+                  >
+                    <span class="font-medium text-gray-900 dark:text-white">{{ user.email }}</span>
+                    <span class="text-gray-500 dark:text-gray-400">#{{ user.id }}</span>
+                  </button>
                 </div>
-                <div
-                  v-else-if="filterUserResults.length === 0 && filterUserKeyword"
-                  class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
-                >
-                  {{ t('common.noOptionsFound') }}
-                </div>
-                <button
-                  v-for="user in filterUserResults"
-                  :key="user.id"
-                  type="button"
-                  @click="selectFilterUser(user)"
-                  class="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <span class="font-medium text-gray-900 dark:text-white">{{ user.email }}</span>
-                  <span class="ml-2 text-gray-500 dark:text-gray-400">#{{ user.id }}</span>
-                </button>
-              </div>
+              </MotionTransition>
             </div>
 
             <!-- Filters -->
-            <div ref="filterDropdownRef" class="relative shrink-0">
-              <button
-                type="button"
-                class="btn btn-secondary relative h-11 w-11 p-0"
-                :aria-expanded="showFilterDropdown"
-                :aria-label="t('common.filter')"
-                :title="t('common.filter')"
-                @click="showFilterDropdown = !showFilterDropdown"
-              >
-                <Icon name="filter" size="sm" />
-                <span
-                  v-if="activeFilterCount > 0"
-                  class="pointer-events-none absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-100 px-1.5 text-xs font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300"
-                >
-                  {{ activeFilterCount }}
-                </span>
-              </button>
-
-              <div
-                v-if="showFilterDropdown"
-                class="absolute left-auto right-0 top-full z-[60] mt-2 w-[min(32rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white shadow-xl dark:border-dark-600 dark:bg-dark-900 sm:left-0 sm:right-auto"
-                @click.stop
-              >
-                <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-dark-700">
-                  <div class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('common.filter') }}</div>
-                  <button
-                    v-if="activeFilterCount > 0"
-                    type="button"
-                    class="text-xs font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
-                    @click="resetSubscriptionFilters"
-                  >
-                    {{ t('common.reset') }}
-                  </button>
-                </div>
-                <div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
-                  <div>
-                    <label class="input-label">{{ t('admin.subscriptions.columns.status') }}</label>
-                    <Select v-model="filters.status" :options="statusOptions" :placeholder="t('admin.subscriptions.allStatus')" @change="applyFilters" />
-                  </div>
-                  <div>
-                    <label class="input-label">{{ t('admin.subscriptions.form.group') }}</label>
-                    <Select v-model="filters.plan_id" :options="planOptions" :placeholder="t('admin.announcements.form.selectPackages')" @change="applyFilters" />
-                  </div>
-                  <div class="sm:col-span-2">
-                    <label class="input-label">{{ t('admin.accounts.columns.platform') }}</label>
-                    <Select v-model="filters.platform" :options="platformFilterOptions" :placeholder="t('admin.subscriptions.allPlatforms')" @change="applyFilters" />
-                  </div>
-                </div>
-              </div>
-            </div>
+            <FilterDropdown :active-count="activeFilterCount" :columns="2" @reset="resetSubscriptionFilters">
+              <FilterField :label="t('admin.subscriptions.columns.status')">
+                <Select v-model="filters.status" :options="statusOptions" :placeholder="t('admin.subscriptions.allStatus')" @change="applyFilters" />
+              </FilterField>
+              <FilterField :label="t('admin.subscriptions.form.group')">
+                <Select v-model="filters.plan_id" :options="planOptions" :placeholder="t('admin.announcements.form.selectPackages')" @change="applyFilters" />
+              </FilterField>
+            </FilterDropdown>
           </div>
 
           <!-- Right: Actions -->
-          <div class="flex shrink-0 flex-wrap items-center justify-end gap-3">
+          <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
             <button
               @click="loadSubscriptions"
               :disabled="loading"
-              class="btn btn-secondary h-11 w-11 shrink-0 p-0"
+              class="btn btn-secondary shrink-0 btn-icon"
               :title="t('common.refresh')"
             >
-              <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
+              <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
             </button>
             <!-- Column Settings Dropdown -->
             <div class="relative" ref="columnDropdownRef">
               <button
                 @click="showColumnDropdown = !showColumnDropdown"
-                class="btn btn-secondary h-11 w-11 shrink-0 p-0"
+                class="btn btn-secondary shrink-0 btn-icon"
                 :title="t('admin.users.columnSettings')"
               >
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
-                </svg>
+                <Icon name="columns" size="sm" class="h-4 w-4" />
                 <span class="hidden">{{ t('admin.users.columnSettings') }}</span>
               </button>
               <!-- Dropdown menu -->
-              <div
-                v-if="showColumnDropdown"
-                class="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
-              >
-                <div class="p-2">
-                  <!-- User column mode selection -->
-                  <div class="mb-2 border-b border-gray-200 pb-2 dark:border-gray-700">
-                    <div class="px-3 py-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-                      {{ t('admin.subscriptions.columns.user') }}
+              <MotionTransition name="dropdown-fade">
+                <div
+                  v-if="showColumnDropdown" :inert="!(showColumnDropdown) || undefined"
+                  class="dropdown right-0 z-50 mt-2 w-48 origin-top-right py-0"
+                >
+                  <div class="p-2">
+                    <!-- User column mode selection -->
+                    <div class="mb-2 border-b border-gray-200 pb-2 dark:border-dark-600">
+                      <div class="px-3 py-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                        {{ t('admin.subscriptions.columns.user') }}
+                      </div>
+                      <button
+                        @click="setUserColumnMode('email')"
+                        class="dropdown-item-sm justify-between rounded-control"
+                      >
+                        <span>{{ t('admin.users.columns.email') }}</span>
+                        <Icon
+                          v-if="userColumnMode === 'email'"
+                          name="check"
+                          size="sm"
+                          class="text-primary-500"
+                          :animate-on-hover="false"
+                        />
+                      </button>
+                      <button
+                        @click="setUserColumnMode('username')"
+                        class="dropdown-item-sm justify-between rounded-control"
+                      >
+                        <span>{{ t('admin.users.columns.username') }}</span>
+                        <Icon
+                          v-if="userColumnMode === 'username'"
+                          name="check"
+                          size="sm"
+                          class="text-primary-500"
+                          :animate-on-hover="false"
+                        />
+                      </button>
                     </div>
+                    <!-- Other columns toggle -->
                     <button
-                      @click="setUserColumnMode('email')"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                      v-for="col in toggleableColumns"
+                      :key="col.key"
+                      @click="toggleColumn(col.key)"
+                      class="dropdown-item-sm justify-between rounded-control"
                     >
-                      <span>{{ t('admin.users.columns.email') }}</span>
-                      <Icon v-if="userColumnMode === 'email'" name="check" size="sm" class="text-primary-500" />
-                    </button>
-                    <button
-                      @click="setUserColumnMode('username')"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
-                    >
-                      <span>{{ t('admin.users.columns.username') }}</span>
-                      <Icon v-if="userColumnMode === 'username'" name="check" size="sm" class="text-primary-500" />
+                      <span>{{ col.label }}</span>
+                      <Icon
+                        v-if="isColumnVisible(col.key)"
+                        name="check"
+                        size="sm"
+                        class="text-primary-500"
+                        :animate-on-hover="false"
+                      />
                     </button>
                   </div>
-                  <!-- Other columns toggle -->
-                  <button
-                    v-for="col in toggleableColumns"
-                    :key="col.key"
-                    @click="toggleColumn(col.key)"
-                    class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
-                  >
-                    <span>{{ col.label }}</span>
-                    <Icon v-if="isColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
-                  </button>
                 </div>
-              </div>
+              </MotionTransition>
             </div>
             <button
               @click="showGuideModal = true"
-              class="btn btn-secondary h-11 w-11 shrink-0 p-0"
+              class="btn btn-secondary shrink-0 btn-icon"
               :title="t('admin.subscriptions.guide.showGuide')"
             >
-              <Icon name="questionCircle" size="md" />
+              <Icon name="questionCircle" size="sm" />
             </button>
-            <button @click="showAssignModal = true" class="btn btn-primary h-11 whitespace-nowrap">
-              <Icon name="plus" size="md" class="mr-2" />
+            <button @click="showAssignModal = true" class="btn btn-primary whitespace-nowrap">
+              <Icon name="plus" size="sm" class="mr-2" />
               {{ t('admin.subscriptions.assignSubscription') }}
             </button>
           </div>
@@ -196,6 +174,7 @@
       <!-- Subscriptions Table -->
       <template #table>
         <DataTable
+          column-order-storage-key="admin-subscriptions-column-order"
           :columns="columns"
           :data="subscriptions"
           :loading="loading"
@@ -206,17 +185,14 @@
         >
           <template #cell-user="{ row }">
             <div class="flex items-center gap-2">
-              <div
-                class="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30"
-              >
-                <span class="text-sm font-medium text-primary-700 dark:text-primary-300">
-                  {{ userColumnMode === 'email'
-                    ? (row.user?.email?.charAt(0).toUpperCase() || '?')
-                    : (row.user?.username?.charAt(0).toUpperCase() || '?')
-                  }}
-                </span>
-              </div>
-              <span class="font-medium text-gray-900 dark:text-white">
+              <UserAvatar
+                :avatar-url="row.user?.avatar_url || ''"
+                :user-id="row.user_id"
+                :alt="row.user?.email || ''"
+                size-class="h-8 w-8"
+              />
+              <!-- 用户名按基线对齐，移动卡片的标签对齐用户名。行高 32px 和头像等高，用户名仍在头像中线上。 -->
+              <span class="self-baseline font-medium leading-8 text-gray-900 dark:text-white">
                 {{ userColumnMode === 'email'
                   ? (row.user?.email || t('admin.redeem.userPrefix', { id: row.user_id }))
                   : (row.user?.username || '-')
@@ -243,7 +219,7 @@
                   <span class="usage-label">{{ t('admin.subscriptions.daily') }}</span>
                   <div class="h-1.5 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="h-1.5 rounded-full transition-[width,background-color]"
                       :class="getProgressClass(row.daily_usage_usd, row.daily_limit_usd)"
                       :style="{
                         width: getProgressWidth(row.daily_usage_usd, row.daily_limit_usd)
@@ -257,19 +233,7 @@
                   </span>
                 </div>
                 <div class="reset-info" v-if="row.daily_window_start">
-                  <svg
-                    class="h-3 w-3"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
+                  <Icon name="clock" size="xs" class="h-3 w-3" />
                   <span>{{ formatDailyUsageWindow(row) }}</span>
                 </div>
               </div>
@@ -280,7 +244,7 @@
                   <span class="usage-label">{{ t('admin.subscriptions.weekly') }}</span>
                   <div class="h-1.5 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="h-1.5 rounded-full transition-[width,background-color]"
                       :class="getProgressClass(row.weekly_usage_usd, row.weekly_limit_usd)"
                       :style="{
                         width: getProgressWidth(row.weekly_usage_usd, row.weekly_limit_usd)
@@ -294,19 +258,7 @@
                   </span>
                 </div>
                 <div class="reset-info" v-if="row.weekly_window_start">
-                  <svg
-                    class="h-3 w-3"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
+                  <Icon name="clock" size="xs" class="h-3 w-3" />
                   <span>{{ formatUsageWindow(row, row.weekly_window_start, 'weekly') }}</span>
                 </div>
               </div>
@@ -317,7 +269,7 @@
                   <span class="usage-label">{{ t('admin.subscriptions.monthly') }}</span>
                   <div class="h-1.5 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
                     <div
-                      class="h-1.5 rounded-full transition-all"
+                      class="h-1.5 rounded-full transition-[width,background-color]"
                       :class="getProgressClass(row.monthly_usage_usd, row.monthly_limit_usd)"
                       :style="{
                         width: getProgressWidth(row.monthly_usage_usd, row.monthly_limit_usd)
@@ -331,19 +283,7 @@
                   </span>
                 </div>
                 <div class="reset-info" v-if="row.monthly_window_start">
-                  <svg
-                    class="h-3 w-3"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
+                  <Icon name="clock" size="xs" class="h-3 w-3" />
                   <span>{{ formatUsageWindow(row, row.monthly_window_start, 'monthly') }}</span>
                 </div>
               </div>
@@ -355,7 +295,7 @@
                   !row.weekly_limit_usd &&
                   !row.monthly_limit_usd
                 "
-                class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-50 to-teal-50 px-3 py-2 dark:from-emerald-900/20 dark:to-teal-900/20"
+                class="flex items-center gap-2 rounded-control bg-gradient-to-r from-emerald-50 to-teal-50 px-3 py-2 dark:from-emerald-900/20 dark:to-teal-900/20"
               >
                 <span class="text-lg text-emerald-600 dark:text-emerald-400">∞</span>
                 <span class="text-xs font-medium text-emerald-700 dark:text-emerald-300">
@@ -415,7 +355,7 @@
               <button
                 v-if="row.status === 'active' || row.status === 'expired'"
                 @click="handleExtend(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+                class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-500/8 dark:hover:text-primary-500"
               >
                 <Icon name="calendar" size="sm" />
                 <span class="text-xs">{{ t('admin.subscriptions.adjust') }}</span>
@@ -424,7 +364,7 @@
                 v-if="row.status === 'active'"
                 @click="handleResetQuota(row)"
                 :disabled="resettingQuota && resettingSubscription?.id === row.id"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-900/20 dark:hover:text-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+                class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-900/20 dark:hover:text-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Icon name="refresh" size="sm" />
                 <span class="text-xs">{{ t('admin.subscriptions.resetQuota') }}</span>
@@ -432,7 +372,7 @@
               <button
                 v-if="row.status === 'active' || row.status === 'pending'"
                 @click="handleRevoke(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               >
                 <Icon name="ban" size="sm" />
                 <span class="text-xs">{{ revokeActionText(row) }}</span>
@@ -440,7 +380,7 @@
               <button
                 v-if="row.status === 'revoked'"
                 @click="handleRestore(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/20 dark:hover:text-green-400"
+                class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/20 dark:hover:text-green-400"
               >
                 <Icon name="refresh" size="sm" />
                 <span class="text-xs">{{ t('admin.subscriptions.restore') }}</span>
@@ -504,33 +444,35 @@
               <Icon name="x" size="sm" :stroke-width="2" />
             </button>
             <!-- User Dropdown -->
-            <div
-              v-if="showUserDropdown && (userSearchResults.length > 0 || userSearchKeyword)"
-              class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
-            >
+            <MotionTransition name="dropdown-fade">
               <div
-                v-if="userSearchLoading"
-                class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
+                v-if="showUserDropdown && (userSearchResults.length > 0 || userSearchKeyword)" :inert="!(showUserDropdown && (userSearchResults.length > 0 || userSearchKeyword)) || undefined"
+                class="dropdown z-50 mt-1 max-h-menu-sm w-full overflow-auto py-0"
               >
-                {{ t('common.loading') }}
+                <div
+                  v-if="userSearchLoading"
+                  class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
+                >
+                  {{ t('common.loading') }}
+                </div>
+                <div
+                  v-else-if="userSearchResults.length === 0 && userSearchKeyword"
+                  class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
+                >
+                  {{ t('common.noOptionsFound') }}
+                </div>
+                <button
+                  v-for="user in userSearchResults"
+                  :key="user.id"
+                  type="button"
+                  @click="selectUser(user)"
+                  class="dropdown-item"
+                >
+                  <span class="font-medium text-gray-900 dark:text-white">{{ user.email }}</span>
+                  <span class="text-gray-500 dark:text-gray-400">#{{ user.id }}</span>
+                </button>
               </div>
-              <div
-                v-else-if="userSearchResults.length === 0 && userSearchKeyword"
-                class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
-              >
-                {{ t('common.noOptionsFound') }}
-              </div>
-              <button
-                v-for="user in userSearchResults"
-                :key="user.id"
-                type="button"
-                @click="selectUser(user)"
-                class="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                <span class="font-medium text-gray-900 dark:text-white">{{ user.email }}</span>
-                <span class="ml-2 text-gray-500 dark:text-gray-400">#{{ user.id }}</span>
-              </button>
-            </div>
+            </MotionTransition>
           </div>
         </div>
         <div>
@@ -559,26 +501,13 @@
             :disabled="submitting"
             class="btn btn-primary"
           >
-            <svg
+            <Icon
+              name="loader"
+              size="sm"
+              :animate-on-hover="false"
               v-if="submitting"
               class="-ml-1 mr-2 h-4 w-4 animate-spin"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                class="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                stroke-width="4"
-              ></circle>
-              <path
-                class="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
+            />
             {{ submitting ? t('admin.subscriptions.assigning') : t('admin.subscriptions.assign') }}
           </button>
         </div>
@@ -598,7 +527,7 @@
         @submit.prevent="handleExtendSubscription"
         class="space-y-5"
       >
-        <div class="rounded-lg bg-gray-50 p-4 dark:bg-dark-700">
+        <div class="rounded-control bg-gray-50 p-4 dark:bg-dark-700">
           <p class="text-sm text-gray-600 dark:text-gray-400">
             {{ t('admin.subscriptions.adjustingFor') }}
             <span class="font-medium text-gray-900 dark:text-white">{{
@@ -689,12 +618,12 @@
     />
     <!-- Subscription Guide Modal -->
     <teleport to="body">
-      <transition name="modal">
+      <MotionTransition name="modal">
         <div v-if="showGuideModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" @mousedown.self="showGuideModal = false">
-          <div class="fixed inset-0 bg-black/50" @click="showGuideModal = false"></div>
-          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-surface bg-white p-6 shadow-2xl dark:bg-dark-800 sm:rounded-dialog">
+          <div class="fixed inset-0 bg-[var(--overlay-bg)]" @click="showGuideModal = false"></div>
+          <div class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-surface bg-white p-6 shadow-2xl dark:bg-dark-900 sm:rounded-dialog">
             <button type="button" class="absolute right-4 top-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" @click="showGuideModal = false">
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              <Icon name="x" size="sm" />
             </button>
 
             <h2 class="mb-4 text-lg font-bold text-gray-900 dark:text-white">{{ t('admin.subscriptions.guide.title') }}</h2>
@@ -742,7 +671,7 @@
                 <span class="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">3</span>
                 {{ t('admin.subscriptions.guide.step3.title') }}
               </h3>
-              <div class="ml-8 overflow-hidden rounded-lg border border-gray-200 dark:border-dark-600">
+              <div class="ml-8 overflow-hidden rounded-control border border-gray-200 dark:border-dark-600">
                 <table class="w-full text-sm">
                   <tbody>
                     <tr v-for="(row, i) in guideActionRows" :key="i" class="border-b border-gray-100 dark:border-dark-700 last:border-0">
@@ -755,7 +684,7 @@
             </div>
 
             <!-- Tip -->
-            <div class="rounded-lg bg-blue-50 p-3 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+            <div class="rounded-control bg-blue-50 p-3 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
               {{ t('admin.subscriptions.guide.tip') }}
             </div>
 
@@ -764,12 +693,13 @@
             </div>
           </div>
         </div>
-      </transition>
+      </MotionTransition>
     </teleport>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
+import MotionTransition from '@/components/common/MotionTransition.vue'
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -788,9 +718,11 @@ import Pagination from '@/components/common/Pagination.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import UserAvatar from '@/components/common/UserAvatar.vue'
 import Select from '@/components/common/Select.vue'
+import FilterDropdown from '@/components/common/FilterDropdown.vue'
+import FilterField from '@/components/common/FilterField.vue'
 import Icon from '@/components/icons/Icon.vue'
-import { GROUP_PLATFORM_OPTIONS } from '@/constants/platforms'
 import {
   getRemainingDurationParts,
   getRemainingExpiryDuration,
@@ -954,8 +886,6 @@ const columns = computed<Column[]>(() =>
 // Column dropdown state
 const showColumnDropdown = ref(false)
 const columnDropdownRef = ref<HTMLElement | null>(null)
-const showFilterDropdown = ref(false)
-const filterDropdownRef = ref<HTMLElement | null>(null)
 
 // Filter options
 const statusOptions = computed(() => [
@@ -991,16 +921,14 @@ let userSearchTimeout: ReturnType<typeof setTimeout> | null = null
 const filters = reactive({
   status: 'active',
   plan_id: '',
-  platform: '',
   user_id: null as number | null
 })
 
-const activeFilterCount = computed(() => [filters.status, filters.plan_id, filters.platform].filter(Boolean).length)
+const activeFilterCount = computed(() => [filters.status, filters.plan_id].filter(Boolean).length)
 
 const resetSubscriptionFilters = () => {
   filters.status = ''
   filters.plan_id = ''
-  filters.platform = ''
   applyFilters()
 }
 
@@ -1044,10 +972,6 @@ const planOptions = computed(() => [
   ...plans.value.map((plan) => ({ value: plan.id.toString(), label: plan.name }))
 ])
 
-const platformFilterOptions = computed(() => [
-  { value: '', label: t('admin.subscriptions.allPlatforms') },
-  ...GROUP_PLATFORM_OPTIONS
-])
 
 const subscriptionPlanOptions = computed<PlanOption[]>(() =>
   plans.value.map((plan) => ({
@@ -1078,7 +1002,6 @@ const loadSubscriptions = async () => {
       {
         status: (filters.status as any) || undefined,
         plan_id: filters.plan_id ? parseInt(filters.plan_id) : undefined,
-        platform: filters.platform || undefined,
         user_id: filters.user_id || undefined,
         sort_by: sortState.sort_by,
         sort_order: sortState.sort_order
@@ -1528,9 +1451,6 @@ const handleClickOutside = (event: MouseEvent) => {
   if (columnDropdownRef.value && !columnDropdownRef.value.contains(target)) {
     showColumnDropdown.value = false
   }
-  if (filterDropdownRef.value && !filterDropdownRef.value.contains(target)) {
-    showFilterDropdown.value = false
-  }
 }
 
 onMounted(() => {
@@ -1566,6 +1486,6 @@ onUnmounted(() => {
 }
 
 .reset-info {
-  @apply flex items-center gap-1 pl-12 text-[10px] text-blue-600 dark:text-blue-400;
+  @apply flex items-center gap-1 pl-12 text-xs text-blue-600 dark:text-blue-400;
 }
 </style>

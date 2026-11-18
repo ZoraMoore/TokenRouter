@@ -73,6 +73,20 @@ func (_c *RedeemCodeCreate) SetNillableStatus(v *string) *RedeemCodeCreate {
 	return _c
 }
 
+// SetRequiresPayment sets the "requires_payment" field.
+func (_c *RedeemCodeCreate) SetRequiresPayment(v bool) *RedeemCodeCreate {
+	_c.mutation.SetRequiresPayment(v)
+	return _c
+}
+
+// SetNillableRequiresPayment sets the "requires_payment" field if the given value is not nil.
+func (_c *RedeemCodeCreate) SetNillableRequiresPayment(v *bool) *RedeemCodeCreate {
+	if v != nil {
+		_c.SetRequiresPayment(*v)
+	}
+	return _c
+}
+
 // SetMaxUses sets the "max_uses" field.
 func (_c *RedeemCodeCreate) SetMaxUses(v int) *RedeemCodeCreate {
 	_c.mutation.SetMaxUses(v)
@@ -271,6 +285,10 @@ func (_c *RedeemCodeCreate) defaults() {
 		v := redeemcode.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.RequiresPayment(); !ok {
+		v := redeemcode.DefaultRequiresPayment
+		_c.mutation.SetRequiresPayment(v)
+	}
 	if _, ok := _c.mutation.MaxUses(); !ok {
 		v := redeemcode.DefaultMaxUses
 		_c.mutation.SetMaxUses(v)
@@ -313,6 +331,9 @@ func (_c *RedeemCodeCreate) check() error {
 		if err := redeemcode.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "RedeemCode.status": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.RequiresPayment(); !ok {
+		return &ValidationError{Name: "requires_payment", err: errors.New(`ent: missing required field "RedeemCode.requires_payment"`)}
 	}
 	if _, ok := _c.mutation.MaxUses(); !ok {
 		return &ValidationError{Name: "max_uses", err: errors.New(`ent: missing required field "RedeemCode.max_uses"`)}
@@ -365,6 +386,10 @@ func (_c *RedeemCodeCreate) createSpec() (*RedeemCode, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(redeemcode.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.RequiresPayment(); ok {
+		_spec.SetField(redeemcode.FieldRequiresPayment, field.TypeBool, value)
+		_node.RequiresPayment = value
 	}
 	if value, ok := _c.mutation.MaxUses(); ok {
 		_spec.SetField(redeemcode.FieldMaxUses, field.TypeInt, value)
@@ -543,6 +568,18 @@ func (u *RedeemCodeUpsert) SetStatus(v string) *RedeemCodeUpsert {
 // UpdateStatus sets the "status" field to the value that was provided on create.
 func (u *RedeemCodeUpsert) UpdateStatus() *RedeemCodeUpsert {
 	u.SetExcluded(redeemcode.FieldStatus)
+	return u
+}
+
+// SetRequiresPayment sets the "requires_payment" field.
+func (u *RedeemCodeUpsert) SetRequiresPayment(v bool) *RedeemCodeUpsert {
+	u.Set(redeemcode.FieldRequiresPayment, v)
+	return u
+}
+
+// UpdateRequiresPayment sets the "requires_payment" field to the value that was provided on create.
+func (u *RedeemCodeUpsert) UpdateRequiresPayment() *RedeemCodeUpsert {
+	u.SetExcluded(redeemcode.FieldRequiresPayment)
 	return u
 }
 
@@ -777,6 +814,20 @@ func (u *RedeemCodeUpsertOne) SetStatus(v string) *RedeemCodeUpsertOne {
 func (u *RedeemCodeUpsertOne) UpdateStatus() *RedeemCodeUpsertOne {
 	return u.Update(func(s *RedeemCodeUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetRequiresPayment sets the "requires_payment" field.
+func (u *RedeemCodeUpsertOne) SetRequiresPayment(v bool) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetRequiresPayment(v)
+	})
+}
+
+// UpdateRequiresPayment sets the "requires_payment" field to the value that was provided on create.
+func (u *RedeemCodeUpsertOne) UpdateRequiresPayment() *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateRequiresPayment()
 	})
 }
 
@@ -1198,6 +1249,20 @@ func (u *RedeemCodeUpsertBulk) SetStatus(v string) *RedeemCodeUpsertBulk {
 func (u *RedeemCodeUpsertBulk) UpdateStatus() *RedeemCodeUpsertBulk {
 	return u.Update(func(s *RedeemCodeUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetRequiresPayment sets the "requires_payment" field.
+func (u *RedeemCodeUpsertBulk) SetRequiresPayment(v bool) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetRequiresPayment(v)
+	})
+}
+
+// UpdateRequiresPayment sets the "requires_payment" field to the value that was provided on create.
+func (u *RedeemCodeUpsertBulk) UpdateRequiresPayment() *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateRequiresPayment()
 	})
 }
 

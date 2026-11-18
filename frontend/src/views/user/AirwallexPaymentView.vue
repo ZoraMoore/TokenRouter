@@ -1,11 +1,15 @@
 <template>
   <AppLayout>
-    <div class="mx-auto max-w-lg space-y-6 py-8">
-      <div v-if="loading" class="flex items-center justify-center py-20">
-        <div class="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+    <div class="mx-auto max-w-lg space-y-4 py-8">
+      <div v-if="loading" class="space-y-4" role="status" :aria-label="t('common.loading')" aria-busy="true" data-loading-skeleton>
+        <div class="card space-y-3 p-6" aria-hidden="true">
+          <Skeleton width="35%" :height="16" class="mx-auto" />
+          <Skeleton width="55%" :height="36" class="mx-auto" />
+        </div>
+        <ContentSkeleton variant="form" :rows="3" class="card p-6" />
       </div>
 
-      <div v-else-if="errorMessage" class="card p-8 text-center">
+      <div v-else-if="errorMessage" class="card p-6 text-center">
         <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
           <Icon name="exclamationCircle" size="xl" class="text-red-500" />
         </div>
@@ -16,7 +20,7 @@
 
       <div v-else class="card p-6">
         <div class="flex flex-col items-center space-y-4 py-4">
-          <div class="h-10 w-10 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+          <div class="spinner h-10 w-10 text-emerald-500"></div>
           <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('payment.qr.payInNewWindowHint') }}</p>
         </div>
       </div>
@@ -25,6 +29,9 @@
 </template>
 
 <script setup lang="ts">
+import { vendorLocale } from '@/i18n/catalog'
+import Skeleton from '@/components/common/Skeleton.vue'
+import ContentSkeleton from '@/components/common/ContentSkeleton.vue'
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -91,7 +98,7 @@ function restoreAirwallexSnapshot(): PaymentRecoverySnapshot | null {
 
 onMounted(async () => {
   const snapshot = restoreAirwallexSnapshot()
-  const checkoutLocale = locale.value.toLowerCase().startsWith('zh') ? 'zh' : 'en'
+  const checkoutLocale = vendorLocale('airwallex', locale.value)
 
   if (!snapshot) {
     loading.value = false

@@ -75,7 +75,7 @@ export interface GrokSSOToOAuthItemResult {
   index: number
   name?: string
   email?: string
-  account?: unknown
+  provider?: unknown
   error?: string
 }
 
@@ -163,12 +163,12 @@ export async function refreshGrokToken(
 }
 
 export async function queryQuota(id: number): Promise<GrokQuotaProbeResult> {
-  const { data } = await apiClient.get<GrokQuotaProbeResult>(`/admin/grok/accounts/${id}/quota`)
+  const { data } = await apiClient.get<GrokQuotaProbeResult>(`/admin/grok/providers/${id}/quota`)
   return data
 }
 
 export async function resetQuota(id: number): Promise<GrokQuotaResetResult> {
-  const { data } = await apiClient.post<GrokQuotaResetResult>(`/admin/grok/accounts/${id}/reset-quota`)
+  const { data } = await apiClient.post<GrokQuotaResetResult>(`/admin/grok/providers/${id}/reset-quota`)
   return data
 }
 
@@ -196,7 +196,7 @@ export async function validateSSOToken(
 
 /**
  * 密码登录先换取临时 SSO，再兑换 Build OAuth。
- * 密码只在本次调用中通过网络发送，绝不写入持久化凭证。
+ * 密码用于本次网络授权请求。
  */
 export async function authorizePassword(
   emailAndPassword: string,

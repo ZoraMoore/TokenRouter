@@ -1,0 +1,639 @@
+{
+  "claude-opus-4-5": {
+    "InputPricePerToken": 5e-06,
+    "OutputPricePerToken": 2.5e-05,
+    "CacheCreationPricePerToken": 6.25e-06,
+    "CacheReadPricePerToken": 5e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "claude-sonnet-4": {
+    "InputPricePerToken": 3e-06,
+    "OutputPricePerToken": 1.5e-05,
+    "CacheCreationPricePerToken": 3.75e-06,
+    "CacheReadPricePerToken": 3e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "claude-3-5-sonnet": {
+    "InputPricePerToken": 3e-06,
+    "OutputPricePerToken": 1.5e-05,
+    "CacheCreationPricePerToken": 3.75e-06,
+    "CacheReadPricePerToken": 3e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "claude-3-5-haiku": {
+    "InputPricePerToken": 1e-06,
+    "OutputPricePerToken": 5e-06,
+    "CacheCreationPricePerToken": 1.25e-06,
+    "CacheReadPricePerToken": 1e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "claude-3-opus": {
+    "InputPricePerToken": 1.5e-05,
+    "OutputPricePerToken": 7.5e-05,
+    "CacheCreationPricePerToken": 1.875e-05,
+    "CacheReadPricePerToken": 1.5e-06,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "claude-3-haiku": {
+    "InputPricePerToken": 2.5e-07,
+    "OutputPricePerToken": 1.25e-06,
+    "CacheCreationPricePerToken": 3e-07,
+    "CacheReadPricePerToken": 3e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "claude-opus-4-6": {
+    "InputPricePerToken": 5e-06,
+    "OutputPricePerToken": 2.5e-05,
+    "CacheCreationPricePerToken": 6.25e-06,
+    "CacheReadPricePerToken": 5e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "claude-opus-4-7": {
+    "InputPricePerToken": 5e-06,
+    "OutputPricePerToken": 2.5e-05,
+    "CacheCreationPricePerToken": 6.25e-06,
+    "CacheReadPricePerToken": 5e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "claude-opus-4-8": {
+    "InputPricePerToken": 5e-06,
+    "OutputPricePerToken": 2.5e-05,
+    "CacheCreationPricePerToken": 6.25e-06,
+    "CacheReadPricePerToken": 5e-07,
+    "CacheCreation5mPrice": 6.25e-06,
+    "CacheCreation1hPrice": 1e-05,
+    "SupportsCacheBreakdown": true,
+    "SupportsServiceTier": true,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "claude-opus-5": {
+    "InputPricePerToken": 5e-06,
+    "OutputPricePerToken": 2.5e-05,
+    "CacheCreationPricePerToken": 6.25e-06,
+    "CacheReadPricePerToken": 5e-07,
+    "CacheCreation5mPrice": 6.25e-06,
+    "CacheCreation1hPrice": 1e-05,
+    "SupportsCacheBreakdown": true,
+    "SupportsServiceTier": true,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "claude-fable-5": {
+    "InputPricePerToken": 1e-05,
+    "OutputPricePerToken": 5e-05,
+    "CacheCreationPricePerToken": 1.25e-05,
+    "CacheCreation5mPrice": 1.25e-05,
+    "CacheCreation1hPrice": 2e-05,
+    "CacheReadPricePerToken": 1e-06,
+    "SupportsCacheBreakdown": true,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "claude-fable-5-1": {
+    "InputPricePerToken": 1e-05,
+    "OutputPricePerToken": 5e-05,
+    "CacheCreationPricePerToken": 1.25e-05,
+    "CacheCreation5mPrice": 1.25e-05,
+    "CacheCreation1hPrice": 2e-05,
+    "CacheReadPricePerToken": 2.5e-07,
+    "SupportsCacheBreakdown": true,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2,
+    "MaxReasoningEffortMultiplier": 3
+  },
+  "gemini-3.1-pro": {
+    "InputPricePerToken": 2e-06,
+    "OutputPricePerToken": 1.2e-05,
+    "CacheCreationPricePerToken": 2e-06,
+    "CacheReadPricePerToken": 2e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "gemini-3.5-flash": {
+    "InputPricePerToken": 1.5e-06,
+    "OutputPricePerToken": 9e-06,
+    "CacheReadPricePerToken": 1.5e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "gemini-3.6-flash": {
+    "InputPricePerToken": 1.5e-06,
+    "OutputPricePerToken": 7.5e-06,
+    "CacheReadPricePerToken": 1.5e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "gpt-5.4": {
+    "InputPricePerToken": 2.5e-06,
+    "InputPricePerTokenPriority": 5e-06,
+    "OutputPricePerToken": 1.5e-05,
+    "OutputPricePerTokenPriority": 3e-05,
+    "CacheCreationPricePerToken": 2.5e-06,
+    "CacheReadPricePerToken": 2.5e-07,
+    "CacheReadPricePerTokenPriority": 5e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5
+  },
+  "gpt-5.5": {
+    "InputPricePerToken": 5e-06,
+    "InputPricePerTokenPriority": 1.25e-05,
+    "OutputPricePerToken": 3e-05,
+    "OutputPricePerTokenPriority": 7.5e-05,
+    "CacheCreationPricePerToken": 5e-06,
+    "CacheReadPricePerToken": 5e-07,
+    "CacheReadPricePerTokenPriority": 1.25e-06,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5
+  },
+  "gpt-5.5-pro": {
+    "InputPricePerToken": 3e-05,
+    "InputPricePerTokenPriority": 7.5e-05,
+    "OutputPricePerToken": 0.00018,
+    "OutputPricePerTokenPriority": 0.00045,
+    "CacheCreationPricePerToken": 3e-05,
+    "CacheReadPricePerToken": 3e-06,
+    "CacheReadPricePerTokenPriority": 7.5e-06,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5
+  },
+  "gpt-6-astra": {
+    "InputPricePerToken": 1e-05,
+    "OutputPricePerToken": 5e-05,
+    "CacheCreationPricePerToken": 1.25e-05,
+    "CacheReadPricePerToken": 1e-06,
+    "SupportsServiceTier": true,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "gpt-5.6-sol": {
+    "InputPricePerToken": 5e-06,
+    "InputPricePerTokenPriority": 1e-05,
+    "OutputPricePerToken": 3e-05,
+    "OutputPricePerTokenPriority": 6e-05,
+    "CacheCreationPricePerToken": 6.25e-06,
+    "CacheCreationPricePerTokenPriority": 1.25e-05,
+    "CacheReadPricePerToken": 5e-07,
+    "CacheReadPricePerTokenPriority": 1e-06,
+    "SupportsServiceTier": true,
+    "FlexMultiplier": 0.5
+  },
+  "gpt-5.6-terra": {
+    "InputPricePerToken": 2e-06,
+    "InputPricePerTokenPriority": 4e-06,
+    "OutputPricePerToken": 1.2e-05,
+    "OutputPricePerTokenPriority": 2.4e-05,
+    "CacheCreationPricePerToken": 2.5e-06,
+    "CacheCreationPricePerTokenPriority": 5e-06,
+    "CacheReadPricePerToken": 2e-07,
+    "CacheReadPricePerTokenPriority": 4e-07,
+    "SupportsServiceTier": true,
+    "FlexMultiplier": 0.5
+  },
+  "gpt-5.6-luna": {
+    "InputPricePerToken": 2e-07,
+    "InputPricePerTokenPriority": 4e-07,
+    "OutputPricePerToken": 1.2e-06,
+    "OutputPricePerTokenPriority": 2.4e-06,
+    "CacheCreationPricePerToken": 2.5e-07,
+    "CacheCreationPricePerTokenPriority": 5e-07,
+    "CacheReadPricePerToken": 2e-08,
+    "CacheReadPricePerTokenPriority": 4e-08,
+    "SupportsServiceTier": true,
+    "FlexMultiplier": 0.5
+  },
+  "gpt-5.4-mini": {
+    "InputPricePerToken": 7.5e-07,
+    "OutputPricePerToken": 4.5e-06,
+    "CacheReadPricePerToken": 7.5e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "gpt-5.4-nano": {
+    "InputPricePerToken": 2e-07,
+    "OutputPricePerToken": 1.25e-06,
+    "CacheReadPricePerToken": 2e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "gpt-5.2": {
+    "InputPricePerToken": 1.75e-06,
+    "InputPricePerTokenPriority": 3.5e-06,
+    "OutputPricePerToken": 1.4e-05,
+    "OutputPricePerTokenPriority": 2.8e-05,
+    "CacheCreationPricePerToken": 1.75e-06,
+    "CacheReadPricePerToken": 1.75e-07,
+    "CacheReadPricePerTokenPriority": 3.5e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5
+  },
+  "gpt-5.3-codex": {
+    "InputPricePerToken": 1.5e-06,
+    "InputPricePerTokenPriority": 3e-06,
+    "OutputPricePerToken": 1.2e-05,
+    "OutputPricePerTokenPriority": 2.4e-05,
+    "CacheCreationPricePerToken": 1.5e-06,
+    "CacheReadPricePerToken": 1.5e-07,
+    "CacheReadPricePerTokenPriority": 3e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5
+  },
+  "deepseek-v4-pro": {
+    "InputPricePerToken": 6.6e-07,
+    "OutputPricePerToken": 1.98e-06,
+    "CacheReadPricePerToken": 2.2e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "deepseek-v4-flash": {
+    "InputPricePerToken": 2.2e-07,
+    "OutputPricePerToken": 6.6e-07,
+    "CacheReadPricePerToken": 7e-09,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "deepseek-v4-flash-vision-exp": {
+    "InputPricePerToken": 2.2e-07,
+    "OutputPricePerToken": 6.6e-07,
+    "CacheReadPricePerToken": 7e-09,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-5.2": {
+    "InputPricePerToken": 1.4e-06,
+    "OutputPricePerToken": 4.4e-06,
+    "CacheReadPricePerToken": 2.6e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-5.1": {
+    "InputPricePerToken": 1.4e-06,
+    "OutputPricePerToken": 4.4e-06,
+    "CacheReadPricePerToken": 2.6e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-5": {
+    "InputPricePerToken": 1e-06,
+    "OutputPricePerToken": 3.2e-06,
+    "CacheReadPricePerToken": 2e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-5-turbo": {
+    "InputPricePerToken": 1.2e-06,
+    "OutputPricePerToken": 4e-06,
+    "CacheReadPricePerToken": 2.4e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-4.7": {
+    "InputPricePerToken": 6e-07,
+    "OutputPricePerToken": 2.2e-06,
+    "CacheReadPricePerToken": 1.1e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-4.7-flashx": {
+    "InputPricePerToken": 7e-08,
+    "OutputPricePerToken": 4e-07,
+    "CacheReadPricePerToken": 1e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-4.6": {
+    "InputPricePerToken": 6e-07,
+    "OutputPricePerToken": 2.2e-06,
+    "CacheReadPricePerToken": 1.1e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-4.5": {
+    "InputPricePerToken": 6e-07,
+    "OutputPricePerToken": 2.2e-06,
+    "CacheReadPricePerToken": 1.1e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-4.5-x": {
+    "InputPricePerToken": 2.2e-06,
+    "OutputPricePerToken": 8.9e-06,
+    "CacheReadPricePerToken": 4.5e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-4.5-air": {
+    "InputPricePerToken": 2e-07,
+    "OutputPricePerToken": 1.1e-06,
+    "CacheReadPricePerToken": 3e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-4.5-airx": {
+    "InputPricePerToken": 1.1e-06,
+    "OutputPricePerToken": 4.5e-06,
+    "CacheReadPricePerToken": 2.2e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-4-32b-0414-128k": {
+    "InputPricePerToken": 1e-07,
+    "OutputPricePerToken": 1e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-4.5-flash": {
+    "InputPricePerToken": 0.0,
+    "OutputPricePerToken": 0.0,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "glm-4.7-flash": {
+    "InputPricePerToken": 0.0,
+    "OutputPricePerToken": 0.0,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "kimi-k3": {
+    "InputPricePerToken": 3e-06,
+    "OutputPricePerToken": 1.5e-05,
+    "CacheReadPricePerToken": 3e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "k3": {
+    "InputPricePerToken": 3e-06,
+    "OutputPricePerToken": 1.5e-05,
+    "CacheReadPricePerToken": 3e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "k3-256k": {
+    "InputPricePerToken": 3e-06,
+    "OutputPricePerToken": 1.5e-05,
+    "CacheReadPricePerToken": 3e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "kimi-k2.6": {
+    "InputPricePerToken": 9.5e-07,
+    "OutputPricePerToken": 4e-06,
+    "CacheReadPricePerToken": 1.5e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "kimi-for-coding": {
+    "InputPricePerToken": 9.5e-07,
+    "OutputPricePerToken": 4e-06,
+    "CacheReadPricePerToken": 1.5e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "kimi-k2.5": {
+    "InputPricePerToken": 6e-07,
+    "OutputPricePerToken": 3e-06,
+    "CacheReadPricePerToken": 9.8e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "kimi-k2-thinking": {
+    "InputPricePerToken": 5.6e-07,
+    "OutputPricePerToken": 2.24e-06,
+    "CacheReadPricePerToken": 1.4e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "kimi-k2": {
+    "InputPricePerToken": 5.6e-07,
+    "OutputPricePerToken": 2.24e-06,
+    "CacheReadPricePerToken": 1.4e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "minimax-m3": {
+    "InputPricePerToken": 6e-07,
+    "OutputPricePerToken": 2.4e-06,
+    "CacheReadPricePerToken": 1.2e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "minimax-m2.7": {
+    "InputPricePerToken": 3e-07,
+    "OutputPricePerToken": 1.2e-06,
+    "CacheReadPricePerToken": 6e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "minimax-m2.7-highspeed": {
+    "InputPricePerToken": 6e-07,
+    "OutputPricePerToken": 2.4e-06,
+    "CacheReadPricePerToken": 6e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "minimax-m2.5": {
+    "InputPricePerToken": 3e-07,
+    "OutputPricePerToken": 1.2e-06,
+    "CacheReadPricePerToken": 3e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "minimax-m2.1": {
+    "InputPricePerToken": 3e-07,
+    "OutputPricePerToken": 1.2e-06,
+    "CacheReadPricePerToken": 3e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "minimax-m2": {
+    "InputPricePerToken": 3e-07,
+    "OutputPricePerToken": 1.2e-06,
+    "CacheReadPricePerToken": 3e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "doubao-embedding-vision": {
+    "InputPricePerToken": 9.8e-08,
+    "ImageInputPricePerToken": 2.52e-07,
+    "OutputPricePerToken": 0.0,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "grok-4.5": {
+    "InputPricePerToken": 2e-06,
+    "OutputPricePerToken": 6e-06,
+    "CacheReadPricePerToken": 3e-07,
+    "SupportsCacheBreakdown": false,
+    "LongContextInputThreshold": 200000,
+    "LongContextThresholdInclusive": true,
+    "LongContextInputMultiplier": 2.0,
+    "LongContextOutputMultiplier": 2.0,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "grok-4.6": {
+    "InputPricePerToken": 2e-06,
+    "OutputPricePerToken": 6e-06,
+    "CacheReadPricePerToken": 5e-07,
+    "SupportsCacheBreakdown": false,
+    "LongContextInputThreshold": 200000,
+    "LongContextThresholdInclusive": true,
+    "LongContextInputMultiplier": 2.0,
+    "LongContextOutputMultiplier": 2.0,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "grok-4.3": {
+    "InputPricePerToken": 1.25e-06,
+    "OutputPricePerToken": 2.5e-06,
+    "CacheReadPricePerToken": 2e-07,
+    "SupportsCacheBreakdown": false,
+    "LongContextInputThreshold": 200000,
+    "LongContextThresholdInclusive": true,
+    "LongContextInputMultiplier": 2.0,
+    "LongContextOutputMultiplier": 2.0,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "grok-4.20": {
+    "InputPricePerToken": 1.25e-06,
+    "OutputPricePerToken": 2.5e-06,
+    "CacheReadPricePerToken": 2e-07,
+    "SupportsCacheBreakdown": false,
+    "LongContextInputThreshold": 200000,
+    "LongContextThresholdInclusive": true,
+    "LongContextInputMultiplier": 2.0,
+    "LongContextOutputMultiplier": 2.0,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "grok-4.20-0309-reasoning": {
+    "InputPricePerToken": 1.25e-06,
+    "OutputPricePerToken": 2.5e-06,
+    "CacheReadPricePerToken": 2e-07,
+    "SupportsCacheBreakdown": false,
+    "LongContextInputThreshold": 200000,
+    "LongContextThresholdInclusive": true,
+    "LongContextInputMultiplier": 2.0,
+    "LongContextOutputMultiplier": 2.0,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "grok-4.20-0309-non-reasoning": {
+    "InputPricePerToken": 1.25e-06,
+    "OutputPricePerToken": 2.5e-06,
+    "CacheReadPricePerToken": 2e-07,
+    "SupportsCacheBreakdown": false,
+    "LongContextInputThreshold": 200000,
+    "LongContextThresholdInclusive": true,
+    "LongContextInputMultiplier": 2.0,
+    "LongContextOutputMultiplier": 2.0,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "grok-4.20-multi-agent-0309": {
+    "InputPricePerToken": 1.25e-06,
+    "OutputPricePerToken": 2.5e-06,
+    "CacheReadPricePerToken": 2e-07,
+    "SupportsCacheBreakdown": false,
+    "LongContextInputThreshold": 200000,
+    "LongContextThresholdInclusive": true,
+    "LongContextInputMultiplier": 2.0,
+    "LongContextOutputMultiplier": 2.0,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "grok-3-mini": {
+    "InputPricePerToken": 3e-07,
+    "OutputPricePerToken": 5e-07,
+    "CacheReadPricePerToken": 7.5e-08,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "grok-3-mini-fast": {
+    "InputPricePerToken": 6e-07,
+    "OutputPricePerToken": 4e-06,
+    "CacheReadPricePerToken": 1.5e-07,
+    "SupportsCacheBreakdown": false,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "grok-build-0.1": {
+    "InputPricePerToken": 1e-06,
+    "OutputPricePerToken": 2e-06,
+    "CacheReadPricePerToken": 2e-07,
+    "SupportsCacheBreakdown": false,
+    "LongContextInputThreshold": 200000,
+    "LongContextThresholdInclusive": true,
+    "LongContextInputMultiplier": 2.0,
+    "LongContextOutputMultiplier": 2.0,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  },
+  "grok-composer-2.5-fast": {
+    "InputPricePerToken": 1e-06,
+    "OutputPricePerToken": 2e-06,
+    "CacheReadPricePerToken": 2e-07,
+    "SupportsCacheBreakdown": false,
+    "LongContextInputThreshold": 200000,
+    "LongContextThresholdInclusive": true,
+    "LongContextInputMultiplier": 2.0,
+    "LongContextOutputMultiplier": 2.0,
+    "FlexMultiplier": 0.5,
+    "FastMultiplier": 2
+  }
+}

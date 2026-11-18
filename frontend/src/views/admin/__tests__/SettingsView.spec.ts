@@ -1,20 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h } from "vue";
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises, mount, DOMWrapper } from "@vue/test-utils";
 
 import SettingsView from "../SettingsView.vue";
+import BaseDialog from "@/components/common/BaseDialog.vue";
 
 const {
   getSettings,
+  getCreativeModelCandidates,
+  getCreativeWorkerStatus,
   updateSettings,
   getWebSearchEmulationConfig,
   updateWebSearchEmulationConfig,
+  testWebSearchEmulation,
   getAdminApiKey,
   getOverloadCooldownSettings,
   getOpenAI403CooldownSettings,
   updateOpenAI403CooldownSettings,
-  getOpenAIOAuthImportDefaults,
-  updateOpenAIOAuthImportDefaults,
   getRateLimit429CooldownSettings,
   updateRateLimit429CooldownSettings,
   getPanelRateLimitSettings,
@@ -33,22 +35,24 @@ const {
   updateProvider,
   createProvider,
   deleteProvider,
-  listTLSFingerprintProfiles,
   fetchPublicSettings,
   adminSettingsFetch,
   showError,
   showSuccess,
+  getMarketplaceModels,
+  getMarketplaceStats,
 } = vi.hoisted(() => ({
   getSettings: vi.fn(),
+  getCreativeModelCandidates: vi.fn(),
+  getCreativeWorkerStatus: vi.fn(),
   updateSettings: vi.fn(),
   getWebSearchEmulationConfig: vi.fn(),
   updateWebSearchEmulationConfig: vi.fn(),
+  testWebSearchEmulation: vi.fn(),
   getAdminApiKey: vi.fn(),
   getOverloadCooldownSettings: vi.fn(),
   getOpenAI403CooldownSettings: vi.fn(),
   updateOpenAI403CooldownSettings: vi.fn(),
-  getOpenAIOAuthImportDefaults: vi.fn(),
-  updateOpenAIOAuthImportDefaults: vi.fn(),
   getRateLimit429CooldownSettings: vi.fn(),
   updateRateLimit429CooldownSettings: vi.fn(),
   getPanelRateLimitSettings: vi.fn().mockResolvedValue({
@@ -90,28 +94,38 @@ const {
   updateProvider: vi.fn(),
   createProvider: vi.fn(),
   deleteProvider: vi.fn(),
-  listTLSFingerprintProfiles: vi.fn(),
   fetchPublicSettings: vi.fn(),
   adminSettingsFetch: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
+  getMarketplaceModels: vi.fn().mockResolvedValue([]),
+  getMarketplaceStats: vi.fn().mockResolvedValue({
+    today_tokens: 0,
+    total_tokens: 0,
+    total_users: 0,
+  }),
 }));
 
-const localeRef = vi.hoisted(() => ({ value: "zh-CN" }));
+// 使用 Vue ref，使模板取得语言字符串。
+const localeRef = await vi.hoisted(async () => {
+  const { ref } = await import("vue");
+  return ref("zh-CN");
+});
 
 vi.mock("@/api", () => ({
   adminAPI: {
     settings: {
       getSettings,
+      getCreativeModelCandidates,
+      getCreativeWorkerStatus,
       updateSettings,
       getWebSearchEmulationConfig,
       updateWebSearchEmulationConfig,
+      testWebSearchEmulation,
       getAdminApiKey,
       getOverloadCooldownSettings,
       getOpenAI403CooldownSettings,
       updateOpenAI403CooldownSettings,
-      getOpenAIOAuthImportDefaults,
-      updateOpenAIOAuthImportDefaults,
       getRateLimit429CooldownSettings,
       updateRateLimit429CooldownSettings,
       getPanelRateLimitSettings,
@@ -123,7 +137,7 @@ vi.mock("@/api", () => ({
       getRectifierSettings,
       getBetaPolicySettings,
     },
-    accounts: {
+    providers: {
       getOllamaCloudUsageSettings,
       updateOllamaCloudUsageSettings,
     },
@@ -139,10 +153,12 @@ vi.mock("@/api", () => ({
       createProvider,
       deleteProvider,
     },
-    tlsFingerprintProfiles: {
-      list: listTLSFingerprintProfiles,
-    },
   },
+}));
+
+vi.mock("@/api/marketplace", () => ({
+  getMarketplaceModels,
+  getMarketplaceStats,
 }));
 
 vi.mock("@/stores", () => ({
@@ -196,7 +212,7 @@ vi.mock("vue-i18n", async () => {
       "启用后，注册或修改邮箱时会按归一化后的邮箱地址检查重复注册。",
     "admin.settings.registration.emailDomainQuota": "非白名单域名限量注册",
     "admin.settings.registration.emailDomainQuotaHint":
-      "开启后，其他可注册主域名各限注册一个账户。",
+      "开启后，其他可注册主域名各限注册一个提供商。",
     "admin.settings.wechatConnect.title": "微信登录",
     "admin.settings.wechatConnect.description": "用于微信开放平台或公众号/小程序的第三方登录配置。",
     "admin.settings.wechatConnect.enabledLabel": "启用微信登录",
@@ -224,7 +240,7 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.authSourceDefaults.description": "按注册来源配置新用户默认余额、并发、订阅与授权策略。",
     "admin.settings.authSourceDefaults.requireEmailLabel": "第三方注册强制补充邮箱",
     "admin.settings.authSourceDefaults.requireEmailHint": "启用后，Linux DO、OIDC、微信注册缺少邮箱时必须先补充邮箱地址。",
-    "admin.settings.authSourceDefaults.enabledHint": "以下默认值会在该来源注册新用户时发放；首次绑定时授权仅作用于已有账号绑定该来源。",
+    "admin.settings.authSourceDefaults.enabledHint": "以下默认值会在该来源注册新用户时发放；首次绑定时授权仅作用于已有提供商绑定该来源。",
     "admin.settings.authSourceDefaults.sources.email.title": "邮箱注册",
     "admin.settings.authSourceDefaults.sources.email.description": "适用于邮箱密码注册的新用户默认配额。",
     "admin.settings.authSourceDefaults.sources.linuxdo.title": "Linux DO 登录",
@@ -234,7 +250,7 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.authSourceDefaults.sources.wechat.title": "微信登录",
     "admin.settings.authSourceDefaults.sources.wechat.description": "适用于微信第三方注册的新用户默认配额。",
     "admin.settings.authSourceDefaults.grantOnFirstBindLabel": "首次绑定时授权",
-    "admin.settings.authSourceDefaults.grantOnFirstBindHint": "已有账号首次绑定该来源时发放默认权益。",
+    "admin.settings.authSourceDefaults.grantOnFirstBindHint": "已有提供商首次绑定该来源时发放默认权益。",
     "admin.settings.authSourceDefaults.defaultSubscriptionsLabel": "默认订阅",
     "admin.settings.authSourceDefaults.defaultSubscriptionsHint": "仅对当前认证来源生效，未配置时不追加来源专属订阅。",
     "admin.settings.authSourceDefaults.noSourceSubscriptions": "当前来源未配置专属默认订阅。",
@@ -244,7 +260,6 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.paymentVisibleMethods.sourceHint": "启用后必须明确选择一个来源；未配置状态不会对外展示该支付方式。",
     "admin.settings.paymentVisibleMethods.sourceRequiredError": "{title} 已启用，请先选择支付来源。",
     "admin.settings.payment.configGuide": "查看支付配置说明",
-    "admin.settings.payment.findProvider": "查看支持的支付方式",
     "admin.settings.gatewaySections.label": "网关设置分类",
     "admin.settings.gatewaySections.general": "通用",
     "admin.settings.gatewaySections.anthropic": "Anthropic",
@@ -256,19 +271,19 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.scheduling.advancedDescription": "高级调度器按分组启用，使用通用候选评分、Top-K 加权和运行时错误率与首 token 延迟反馈。未启用高级调度器的分组继续使用基础调度器。",
     "admin.settings.scheduling.advancedHelp.trigger": "查看高级调度器评分与选择原理",
     "admin.settings.scheduling.advancedHelp.title": "高级调度器如何工作",
-    "admin.settings.scheduling.advancedHelp.summary": "请求会先通过硬过滤，再对剩余候选账号打分；高分账号进入 Top-K 候选池。",
+    "admin.settings.scheduling.advancedHelp.summary": "请求会先通过硬过滤，再对剩余候选提供商打分；高分提供商进入 Top-K 候选池。",
     "admin.settings.scheduling.advancedHelp.formula": "总分 = 各信号的归一化得分 × 对应权重 + 可选的粘性加分",
     "admin.settings.scheduling.advancedHelp.hardFilterTitle": "先硬过滤：",
-    "admin.settings.scheduling.advancedHelp.hardFilter": "按分组、模型与能力、账号状态、限流、代理和并发槽位排除不可用账号。",
+    "admin.settings.scheduling.advancedHelp.hardFilter": "按分组、模型与能力、提供商状态、限流、代理和并发槽位排除不可用提供商。",
     "admin.settings.scheduling.advancedHelp.scoreTitle": "再计算分数：",
     "admin.settings.scheduling.advancedHelp.score": "优先级、低负载、低排队、低错误率、低首 token 延迟、窗口重置和额度余量会按权重加总；缺失的可选信号保持中性。",
     "admin.settings.scheduling.advancedHelp.feedbackTitle": "持续反馈：",
-    "admin.settings.scheduling.advancedHelp.feedback": "请求结果和首 token 延迟以平滑统计更新账号表现，让后续请求避开近期表现较差的账号。",
+    "admin.settings.scheduling.advancedHelp.feedback": "请求结果和首 token 延迟以平滑统计更新提供商表现，让后续请求避开近期表现较差的提供商。",
     "admin.settings.scheduling.advancedHelp.selectionTitle": "Top-K 加权选择：",
-    "admin.settings.scheduling.advancedHelp.selection": "取分数最高的 Top-K，再按分数权重随机选择，避免单一账号长期垄断；开启粘性加权后，上一响应和会话账号会获得额外优先。",
-    "admin.settings.scheduling.advancedHelp.boundary": "每次尝试都会重查硬约束；发生分组回退时按目标分组重新调度。响应流开始后不会中途切换账号。",
-    "admin.settings.openaiQuotaAutoPause.title": "OpenAI 账号配额自动暂停",
-    "admin.settings.openaiQuotaAutoPause.description": "当 OpenAI 账号 5h / 7d 用量达到阈值时，调度会自动跳过该账号；窗口滚动后自动恢复。账号级阈值优先于此全局默认值。",
+    "admin.settings.scheduling.advancedHelp.selection": "取分数最高的 Top-K，再按分数权重随机选择，避免单一提供商长期垄断；开启粘性加权后，上一响应和会话提供商会获得额外优先。",
+    "admin.settings.scheduling.advancedHelp.boundary": "每次尝试都会重查硬约束；发生分组回退时按目标分组重新调度。响应流开始后不会中途切换提供商。",
+    "admin.settings.openaiQuotaAutoPause.title": "OpenAI 提供商配额自动暂停",
+    "admin.settings.openaiQuotaAutoPause.description": "当 OpenAI 提供商 5h / 7d 用量达到阈值时，调度会自动跳过该提供商；窗口滚动后自动恢复。提供商级阈值优先于此全局默认值。",
     "admin.settings.openaiQuotaAutoPause.default5h": "默认 5h 用量阈值 (%)",
     "admin.settings.openaiQuotaAutoPause.default7d": "默认 7d 用量阈值 (%)",
     "admin.settings.openaiQuotaAutoPause.thresholdHint": "取值 0-100，留空或 0 表示不启用全局默认阈值。",
@@ -276,7 +291,16 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.scheduling.stickyWeightedTitle": "粘性加权",
     "admin.settings.scheduling.stickyWeightedDescription": "开启后，上一响应和会话粘性作为评分信号参与选择；关闭时保留既有粘性优先行为。",
     "admin.settings.scheduling.subscriptionPriorityTitle": "订阅优先",
-    "admin.settings.scheduling.subscriptionPriorityDescription": "具备订阅能力的账号会获得订阅优先评分；缺少该能力的账号保持中性。",
+    "admin.settings.scheduling.subscriptionPriorityDescription": "具备订阅能力的提供商会获得订阅优先评分；缺少该能力的提供商保持中性。",
+    "admin.settings.scheduling.stickyEscapeTitle": "粘性健康切换",
+    "admin.settings.scheduling.stickyEscapeDescription": "绑定提供商的错误率或首 token 延迟超过阈值时，本次请求允许切换到其它提供商，并保留原粘性绑定。",
+    "admin.settings.scheduling.stickyEscapeEnabled": "强制粘性切换",
+    "admin.settings.scheduling.stickyEscapeTTFT": "TTFT 切换阈值（毫秒）",
+    "admin.settings.scheduling.stickyEscapeErrorRate": "错误率切换阈值（0-1）",
+    "admin.settings.scheduling.ewmaTitle": "EWMA 反馈因子",
+    "admin.settings.scheduling.ewmaDescription": "控制运行时错误率和首 token 延迟反馈对最新样本的敏感度；值越大越重视最新观测。",
+    "admin.settings.scheduling.ewmaErrorRateAlpha": "错误率 EWMA 因子",
+    "admin.settings.scheduling.ewmaTTFTAlpha": "TTFT EWMA 因子",
     "admin.settings.scheduling.weightsTitle": "高级调度权重",
     "admin.settings.scheduling.weightsDescription": "留空时使用配置或内置默认值；非空设置优先。权重对所有启用高级调度器的分组生效。",
     "admin.settings.scheduling.defaultPlaceholder": "配置/默认：{value}",
@@ -307,49 +331,41 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.defaults.platformQuotaNotice": "月限额为 30 天滚动窗口，非自然月",
     "admin.settings.authSourceDefaults.platformQuotasOverride": "平台限额覆盖",
     "admin.settings.authSourceDefaults.platformQuotasOverrideHint": "留空的字段继承「系统默认平台限额」；填 0 表示禁止该窗口使用。",
-    "admin.accounts.openAIOAuthImportDefaultsTitle": "OpenAI OAuth 导入默认值",
-    "admin.accounts.openAIOAuthImportDefaultsDescription": "这些默认值会在添加 OpenAI OAuth 账号时自动带入，也会用于批量导入中缺失字段的 OpenAI OAuth 账号。",
-    "admin.accounts.openAIOAuthImportDefaultsAccount": "账号字段",
-    "admin.accounts.openAIOAuthImportDefaultsOpenAIOptions": "OpenAI OAuth 选项",
-    "admin.accounts.openAIOAuthImportDefaultsUnset": "不设置",
-    "admin.accounts.openAIOAuthImportDefaultsCredentialsJson": "Credentials 附加 JSON",
-    "admin.accounts.openAIOAuthImportDefaultsExtraJson": "Extra 附加 JSON",
-    "admin.accounts.openAIOAuthImportDefaultsSaved": "导入默认值已保存",
-    "admin.accounts.openai.oauthPassthrough": "自动透传（仅替换认证）",
-    "admin.accounts.openai.oauthPassthroughDesc": "开启后，该 OpenAI 账号将自动透传请求与响应，仅替换认证并保留计费/并发/审计及必要安全过滤；如遇兼容性问题可随时关闭回滚。",
-    "admin.accounts.openai.wsMode": "WS mode",
-    "admin.accounts.openai.wsModeDesc": "仅对当前 OpenAI 账号类型生效。",
-    "admin.accounts.openai.wsModeOff": "关闭（off）",
-    "admin.accounts.openai.wsModeCtxPool": "上下文池（ctx_pool）",
-    "admin.accounts.openai.wsModePassthrough": "透传（passthrough）",
-    "admin.accounts.openai.codexCLIOnly": "仅允许 Codex 官方客户端",
-    "admin.accounts.openai.codexCLIOnlyDesc": "仅对 OpenAI OAuth 生效。开启后仅允许 Codex 官方客户端家族访问；关闭后完全绕过并保持原逻辑。",
-    "admin.accounts.openai.codexCLIOnlyAllowClaudeCode": "额外放行 Claude Code 的 Codex 插件",
-    "admin.accounts.openai.codexCLIOnlyAllowClaudeCodeDesc": "仅在上方开关开启时生效。额外放行通过 Claude Code 的 Codex 插件发起的请求。",
-    "admin.accounts.autoPause5hDisabled": "禁用 5h 自动暂停",
-    "admin.accounts.autoPause7dDisabled": "禁用 7d 自动暂停",
-    "admin.accounts.autoPause5hThreshold": "5h 用量阈值(%)",
-    "admin.accounts.autoPause7dThreshold": "7d 用量阈值(%)",
-    "admin.accounts.autoPauseDisabledHint": "开启后该账号永不进入自动暂停。",
-    "admin.accounts.autoPauseThresholdHint": "留空或填 0 表示使用全局默认阈值。",
-    "admin.accounts.openai.compactMode": "旧版 Compact 端点",
-    "admin.accounts.openai.compactModeDesc": "仅控制本账号参与旧版 /responses/compact 调度，不影响原生 remote_compaction_v2。自动跟随探测结果，强制开启始终允许，强制关闭始终排除。",
-    "admin.accounts.openai.compactModeAuto": "自动",
-    "admin.accounts.openai.compactModeForceOn": "强制开启",
-    "admin.accounts.openai.compactModeForceOff": "强制关闭",
-    "admin.accounts.openai.nativeCompactV2Mode": "原生 V2 压缩",
-    "admin.accounts.openai.nativeCompactV2ModeDesc": "仅控制本账号参与原生 remote_compaction_v2 调度。自动跟随原生 V2 探测结果，强制开启始终允许，强制关闭始终排除。",
-    "admin.accounts.openai.nativeCompactV2ModeAuto": "自动",
-    "admin.accounts.openai.nativeCompactV2ModeForceOn": "强制开启",
-    "admin.accounts.openai.nativeCompactV2ModeForceOff": "强制关闭",
-    "admin.accounts.quotaControl.tlsFingerprint.label": "TLS 指纹模拟",
-    "admin.accounts.quotaControl.tlsFingerprint.hint": "模拟 Node.js/Claude Code/Codex CLI 客户端的 TLS 指纹",
-    "admin.accounts.quotaControl.tlsFingerprint.defaultProfile": "内置默认",
-    "admin.accounts.quotaControl.tlsFingerprint.randomProfile": "随机",
-    "admin.accounts.modelWhitelist": "模型白名单",
-    "admin.accounts.modelMapping": "模型映射",
-    "admin.accounts.mapRequestModels": "将请求模型映射到实际模型。",
-    "admin.accounts.addMapping": "添加映射",
+    "admin.providers.openai.oauthPassthrough": "自动透传（仅替换认证）",
+    "admin.providers.openai.oauthPassthroughDesc": "开启后，该 OpenAI 提供商将自动透传请求与响应，仅替换认证并保留计费/并发/审计及必要安全过滤；如遇兼容性问题可随时关闭回滚。",
+    "admin.providers.openai.wsMode": "WS mode",
+    "admin.providers.openai.wsModeDesc": "仅对当前 OpenAI 提供商类型生效。",
+    "admin.providers.openai.wsModeOff": "关闭（off）",
+    "admin.providers.openai.wsModeCtxPool": "上下文池（ctx_pool）",
+    "admin.providers.openai.wsModePassthrough": "透传（passthrough）",
+    "admin.providers.openai.codexCLIOnly": "仅允许 Codex 官方客户端",
+    "admin.providers.openai.codexCLIOnlyDesc": "仅对 OpenAI OAuth 生效。开启后仅允许 Codex 官方客户端家族访问；关闭后完全绕过并保持原逻辑。",
+    "admin.providers.openai.codexCLIOnlyAllowClaudeCode": "额外放行 Claude Code 的 Codex 插件",
+    "admin.providers.openai.codexCLIOnlyAllowClaudeCodeDesc": "仅在上方开关开启时生效。额外放行通过 Claude Code 的 Codex 插件发起的请求。",
+    "admin.providers.autoPause5hDisabled": "禁用 5h 自动暂停",
+    "admin.providers.autoPause7dDisabled": "禁用 7d 自动暂停",
+    "admin.providers.autoPause5hThreshold": "5h 用量阈值(%)",
+    "admin.providers.autoPause7dThreshold": "7d 用量阈值(%)",
+    "admin.providers.autoPauseDisabledHint": "开启后该提供商永不进入自动暂停。",
+    "admin.providers.autoPauseThresholdHint": "留空或填 0 表示使用全局默认阈值。",
+    "admin.providers.openai.compactMode": "旧版 Compact 端点",
+    "admin.providers.openai.compactModeDesc": "仅控制本提供商参与旧版 /responses/compact 调度，不影响原生 remote_compaction_v2。自动跟随探测结果，强制开启始终允许，强制关闭始终排除。",
+    "admin.providers.openai.compactModeAuto": "自动",
+    "admin.providers.openai.compactModeForceOn": "强制开启",
+    "admin.providers.openai.compactModeForceOff": "强制关闭",
+    "admin.providers.openai.nativeCompactV2Mode": "原生 V2 压缩",
+    "admin.providers.openai.nativeCompactV2ModeDesc": "仅控制本提供商参与原生 remote_compaction_v2 调度。自动跟随原生 V2 探测结果，强制开启始终允许，强制关闭始终排除。",
+    "admin.providers.openai.nativeCompactV2ModeAuto": "自动",
+    "admin.providers.openai.nativeCompactV2ModeForceOn": "强制开启",
+    "admin.providers.openai.nativeCompactV2ModeForceOff": "强制关闭",
+    "admin.providers.quotaControl.tlsFingerprint.label": "TLS 指纹模拟",
+    "admin.providers.quotaControl.tlsFingerprint.hint": "模拟 Node.js/Claude Code/Codex CLI 客户端的 TLS 指纹",
+    "admin.providers.quotaControl.tlsFingerprint.defaultProfile": "内置默认",
+    "admin.providers.quotaControl.tlsFingerprint.randomProfile": "随机",
+    "admin.providers.modelWhitelist": "模型白名单",
+    "admin.providers.modelMapping": "模型映射",
+    "admin.providers.mapRequestModels": "将请求模型映射到实际模型。",
+    "admin.providers.addMapping": "添加映射",
   };
   return {
     ...actual,
@@ -485,6 +501,7 @@ const baseSettingsResponse = {
   registration_email_suffix_whitelist: [],
   registration_email_normalization: false,
   registration_email_domain_quota_enabled: false,
+  user_email_change_enabled: false,
   promo_code_enabled: true,
   invitation_code_enabled: false,
   password_reset_enabled: false,
@@ -494,7 +511,7 @@ const baseSettingsResponse = {
   default_concurrency: 1,
   default_user_api_key_limit: 100,
   default_subscriptions: [],
-  site_name: "Sub2API",
+  site_name: "TokenRouter",
   site_logo: "",
   site_subtitle: "",
   site_name_zh: "",
@@ -594,6 +611,8 @@ const baseSettingsResponse = {
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",
   payment_enabled: true,
+  creative_enabled: true,
+  creative_model_settings: [],
   payment_min_amount: 1,
   payment_max_amount: 10000,
   payment_daily_limit: 50000,
@@ -621,6 +640,11 @@ const baseSettingsResponse = {
   payment_visible_method_wxpay_enabled: true,
   advanced_scheduler_sticky_weighted_enabled: false,
   advanced_scheduler_subscription_priority_enabled: false,
+  advanced_scheduler_ewma_error_rate_alpha: "",
+  advanced_scheduler_ewma_ttft_alpha: "",
+  advanced_scheduler_sticky_escape_enabled: true,
+  advanced_scheduler_sticky_escape_ttft_ms: "",
+  advanced_scheduler_sticky_escape_error_rate: "",
   advanced_scheduler_lb_top_k: "",
   advanced_scheduler_weight_priority: "",
   advanced_scheduler_weight_load: "",
@@ -641,7 +665,12 @@ const baseSettingsResponse = {
   advanced_scheduler_effective_weight_quota_headroom: "0",
   advanced_scheduler_effective_weight_previous_response: "5",
   advanced_scheduler_effective_weight_session_sticky: "3",
-  openai_account_quota_auto_pause: {
+  advanced_scheduler_effective_ewma_error_rate_alpha: "0.2",
+  advanced_scheduler_effective_ewma_ttft_alpha: "0.2",
+  advanced_scheduler_effective_sticky_escape_enabled: true,
+  advanced_scheduler_effective_sticky_escape_ttft_ms: "15000",
+  advanced_scheduler_effective_sticky_escape_error_rate: "0.5",
+  openai_provider_quota_auto_pause: {
     default_threshold_5h: 0,
     default_threshold_7d: 0,
   },
@@ -649,21 +678,15 @@ const baseSettingsResponse = {
   balance_low_notify_threshold: 0,
   balance_low_notify_recharge_url: "",
   subscription_expiry_notify_enabled: true,
-  account_quota_notify_enabled: false,
-  account_quota_notify_emails: [],
-  // 平台限额嵌套字段（新后端契约）
-  default_platform_quotas: {
-    anthropic:   { daily: null, weekly: null, monthly: null },
-    openai:      { daily: null, weekly: 12.5, monthly: null },
-    gemini:      { daily: null, weekly: null, monthly: 200 },
-    antigravity: { daily: null, weekly: null, monthly: null },
-  },
+  provider_quota_notify_enabled: false,
+  provider_quota_notify_emails: [],
 };
 
 function mountView() {
   return mount(SettingsView, {
     global: {
       stubs: {
+        "transition-group": true,
         AppLayout: AppLayoutStub,
         Select: SelectStub,
         Toggle: ToggleStub,
@@ -700,6 +723,13 @@ async function openSecurityTab(wrapper: ReturnType<typeof mountView>) {
 
   expect(securityTabButton).toBeDefined();
   await securityTabButton?.trigger("click");
+  await flushPromises();
+}
+
+// 通过吸底保存条保存：先确认保存条已出现，再提交表单。
+async function saveFromSaveBar(wrapper: ReturnType<typeof mountView>) {
+  expect(wrapper.find('[data-testid="settings-save-bar"]').exists()).toBe(true);
+  await wrapper.find("form").trigger("submit.prevent");
   await flushPromises();
 }
 
@@ -742,6 +772,7 @@ async function openUsersTab(wrapper: ReturnType<typeof mountView>) {
 describe("admin SettingsView payment visible method controls", () => {
   beforeEach(() => {
     getSettings.mockReset();
+    getCreativeModelCandidates.mockReset();
     updateSettings.mockReset();
     getWebSearchEmulationConfig.mockReset();
     updateWebSearchEmulationConfig.mockReset();
@@ -749,8 +780,6 @@ describe("admin SettingsView payment visible method controls", () => {
     getOverloadCooldownSettings.mockReset();
     getOpenAI403CooldownSettings.mockReset();
     updateOpenAI403CooldownSettings.mockReset();
-    getOpenAIOAuthImportDefaults.mockReset();
-    updateOpenAIOAuthImportDefaults.mockReset();
     getRateLimit429CooldownSettings.mockReset();
     updateRateLimit429CooldownSettings.mockReset();
     getStreamTimeoutSettings.mockReset();
@@ -764,7 +793,6 @@ describe("admin SettingsView payment visible method controls", () => {
     updateProvider.mockReset();
     createProvider.mockReset();
     deleteProvider.mockReset();
-    listTLSFingerprintProfiles.mockReset();
     fetchPublicSettings.mockReset();
     adminSettingsFetch.mockReset();
     showError.mockReset();
@@ -772,6 +800,7 @@ describe("admin SettingsView payment visible method controls", () => {
     localeRef.value = "zh-CN";
 
     getSettings.mockResolvedValue({ ...baseSettingsResponse });
+    getCreativeModelCandidates.mockResolvedValue([]);
     updateSettings.mockImplementation(async (payload) => ({
       ...baseSettingsResponse,
       ...payload,
@@ -806,10 +835,6 @@ describe("admin SettingsView payment visible method controls", () => {
       threshold_count: 3,
       threshold_window_minutes: 180,
     });
-    getOpenAIOAuthImportDefaults.mockResolvedValue({
-      credentials: { model_whitelist: [] },
-    });
-    updateOpenAIOAuthImportDefaults.mockImplementation(async (payload) => payload);
     getRateLimit429CooldownSettings.mockResolvedValue({
       enabled: true,
       cooldown_seconds: 5,
@@ -845,12 +870,76 @@ describe("admin SettingsView payment visible method controls", () => {
     getProviders.mockResolvedValue({
       data: [],
     });
-    listTLSFingerprintProfiles.mockResolvedValue([
-      { id: 7, name: "Codex TLS" },
-      { id: 9, name: "Node TLS" },
-    ]);
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
+  });
+
+  it("搜索测试默认隐藏，点击测试后以弹窗展示并可关闭", async () => {
+    getWebSearchEmulationConfig.mockResolvedValue({ enabled: true, providers: [] });
+    testWebSearchEmulation.mockReset();
+    testWebSearchEmulation.mockResolvedValue({
+      provider: "brave",
+      results: [
+        { title: "测试结果", url: "https://example.com", snippet: "结果摘要" },
+      ],
+    });
+    const wrapper = mountView();
+    const querySelector =
+      'input[placeholder="admin.settings.webSearchEmulation.testDefaultQuery"]';
+    try {
+      await flushPromises();
+      await openGatewayTab(wrapper);
+      // 挂载 BaseDialog 检查组件注册与 Teleport 位置。
+      expect(wrapper.findComponent(BaseDialog).exists()).toBe(true);
+      expect(wrapper.find("basedialog").exists()).toBe(false);
+      expect(wrapper.find(querySelector).exists()).toBe(false);
+      expect(document.body.querySelector(querySelector)).toBeNull();
+
+      await openGatewaySection(wrapper, "anthropic");
+      const providerCard = wrapper.get(
+        '[data-testid="gateway-card-web-search-emulation"]',
+      );
+      await providerCard.findAll("button")
+        .find(button => button.text() === "admin.settings.webSearchEmulation.addProvider")!
+        .trigger("click");
+      const openTest = providerCard.findAll("button")
+        .find(button => button.text() === "admin.settings.webSearchEmulation.test")!;
+      await openTest.trigger("click");
+      await flushPromises();
+
+      const dialog = new DOMWrapper(document.body).get('[role="dialog"]');
+      expect(dialog.text()).toContain("admin.settings.webSearchEmulation.testResultTitle");
+      expect(document.body.classList.contains("modal-open")).toBe(true);
+      await dialog.get(querySelector).setValue("测试查询");
+      await dialog.findAll("button")
+        .find(button => button.text() === "admin.settings.webSearchEmulation.test")!
+        .trigger("click");
+      await flushPromises();
+      expect(testWebSearchEmulation).toHaveBeenCalledWith("测试查询");
+      expect(dialog.text()).toContain("测试结果");
+      expect(updateSettings).not.toHaveBeenCalled();
+
+      await dialog.findAll("button")
+        .find(button => button.text() === "common.close")!
+        .trigger("click");
+      await flushPromises();
+      await vi.waitFor(() => {
+        expect(document.body.querySelector(querySelector)).toBeNull();
+      });
+      expect(document.body.classList.contains("modal-open")).toBe(false);
+
+      await openTest.trigger("click");
+      await flushPromises();
+      expect(new DOMWrapper(document.body).get('[role="dialog"]').text())
+        .not.toContain("测试结果");
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      await flushPromises();
+      await vi.waitFor(() => {
+        expect(document.body.querySelector(querySelector)).toBeNull();
+      });
+    } finally {
+      wrapper.unmount();
+    }
   });
 
   it("renders panel rate limit card and saves settings", async () => {
@@ -876,10 +965,7 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(userRpmInput.exists()).toBe(true);
     await userRpmInput.setValue("120");
 
-    const saveButton = wrapper.find('[data-testid="panel-rate-limit-save"]');
-    expect(saveButton.exists()).toBe(true);
-    await saveButton.trigger("click");
-    await flushPromises();
+    await saveFromSaveBar(wrapper);
 
     expect(updatePanelRateLimitSettings).toHaveBeenCalledWith({
       enabled: true,
@@ -888,6 +974,8 @@ describe("admin SettingsView payment visible method controls", () => {
       exempt_admin: true,
       public_ip_rpm: 300,
     });
+    // 只修改了面板限流时，全局设置不重复提交。
+    expect(updateSettings).not.toHaveBeenCalled();
     expect(showSuccess).toHaveBeenCalled();
   });
 
@@ -901,6 +989,7 @@ describe("admin SettingsView payment visible method controls", () => {
       usage_ranking_show_requests: false,
       usage_ranking_show_actual_cost: false,
     });
+    getCreativeModelCandidates.mockResolvedValue([]);
 
     const wrapper = mountView();
     await flushPromises();
@@ -1171,20 +1260,12 @@ describe("admin SettingsView payment visible method controls", () => {
 
     const paymentLinks = wrapper
       .findAll("a")
-      .filter((node) =>
-        ["查看支付配置说明", "查看支持的支付方式"].includes(node.text()),
-      );
+      .filter((node) => node.text() === "查看支付配置说明");
 
-    expect(paymentLinks).toHaveLength(2);
+    expect(paymentLinks).toHaveLength(1);
     expect(paymentLinks[0]?.attributes("href")).toBe(
       "https://github.com/TokenFlux/TokenRouter/blob/main/docs/guides/payments/configuration.md",
     );
-    expect(paymentLinks[1]?.attributes("href")).toBe(
-      "https://github.com/TokenFlux/TokenRouter/blob/main/docs/guides/payments/configuration.md#支持的支付方式",
-    );
-    for (const link of paymentLinks) {
-      expect(link.attributes("href")).toContain("docs/guides/payments/configuration.md");
-    }
   });
 
   it("does not submit legacy visible payment method settings", async () => {
@@ -1371,7 +1452,7 @@ describe("admin SettingsView payment visible method controls", () => {
   it("renders and submits OpenAI quota auto-pause gateway settings", async () => {
     getSettings.mockResolvedValueOnce({
       ...baseSettingsResponse,
-      openai_account_quota_auto_pause: {
+      openai_provider_quota_auto_pause: {
         default_threshold_5h: 0.95,
         default_threshold_7d: 0.9,
       },
@@ -1381,7 +1462,7 @@ describe("admin SettingsView payment visible method controls", () => {
 
     await flushPromises();
 
-    expect(wrapper.text()).toContain("OpenAI 账号配额自动暂停");
+    expect(wrapper.text()).toContain("OpenAI 提供商配额自动暂停");
     const fiveHourInput = wrapper.get('[data-testid="settings-openai-quota-auto-pause-5h"]');
     const sevenDayInput = wrapper.get('[data-testid="settings-openai-quota-auto-pause-7d"]');
     expect((fiveHourInput.element as HTMLInputElement).value).toBe("95");
@@ -1394,7 +1475,7 @@ describe("admin SettingsView payment visible method controls", () => {
 
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        openai_account_quota_auto_pause: {
+        openai_provider_quota_auto_pause: {
           default_threshold_5h: 0.885,
           default_threshold_7d: 0.775,
         },
@@ -1460,6 +1541,7 @@ describe("admin SettingsView payment visible method controls", () => {
     const wrapper = mount(SettingsView, {
       global: {
         stubs: {
+        "transition-group": true,
           AppLayout: AppLayoutStub,
           Select: SelectStub,
           Toggle: ToggleStub,
@@ -1557,6 +1639,7 @@ describe("admin SettingsView payment visible method controls", () => {
     const wrapper = mount(SettingsView, {
       global: {
         stubs: {
+        "transition-group": true,
           AppLayout: AppLayoutStub,
           Select: SelectStub,
           Toggle: ToggleStub,
@@ -1624,6 +1707,7 @@ describe("admin SettingsView payment visible method controls", () => {
     const wrapper = mount(SettingsView, {
       global: {
         stubs: {
+        "transition-group": true,
           AppLayout: AppLayoutStub,
           Select: SelectStub,
           Toggle: ToggleStub,
@@ -1690,6 +1774,7 @@ describe("admin SettingsView payment visible method controls", () => {
     const wrapper = mount(SettingsView, {
       global: {
         stubs: {
+        "transition-group": true,
           AppLayout: AppLayoutStub,
           Select: SelectStub,
           Toggle: ToggleStub,
@@ -1794,14 +1879,12 @@ describe("admin SettingsView payment visible method controls", () => {
       wrapper.get('[data-testid="gateway-card-openai-403-cooldown"]').isVisible(),
     ).toBe(true);
     expect(
-      wrapper.get('[data-testid="gateway-card-openai-oauth-defaults"]').isVisible(),
-    ).toBe(true);
-    expect(wrapper.get('[data-testid="gateway-card-scheduling"]').isVisible()).toBe(true);
-    expect(
-      wrapper
-        .get('[data-testid="gateway-scheduling-general-advanced"]')
-        .isVisible(),
+      wrapper.find('[data-testid="gateway-card-openai-oauth-defaults"]').exists(),
     ).toBe(false);
+    expect(
+      wrapper.get('[data-testid="gateway-card-openai-scheduling"]').isVisible(),
+    ).toBe(true);
+    expect(wrapper.get('[data-testid="gateway-card-scheduling"]').isVisible()).toBe(false);
     expect(
       wrapper
         .get('[data-testid="gateway-card-user-prompt-replacement"]')
@@ -1880,27 +1963,11 @@ describe("admin SettingsView payment visible method controls", () => {
     ).toBe("true");
   });
 
-  it("preserves unsaved gateway form state while switching platform sections", async () => {
+  it("requires explicit groups and omits platform quota settings", async () => {
     const wrapper = mountView();
-
     await flushPromises();
     await openGatewayTab(wrapper);
-
-    const ungroupedKeyToggle = wrapper.get(
-      '[data-testid="gateway-allow-ungrouped-key"]',
-    );
-    await ungroupedKeyToggle.setValue(true);
-    expect((ungroupedKeyToggle.element as HTMLInputElement).checked).toBe(true);
-
-    await openGatewaySection(wrapper, "openai");
-    await openGatewaySection(wrapper, "general");
-
-    expect(
-      (
-        wrapper.get('[data-testid="gateway-allow-ungrouped-key"]')
-          .element as HTMLInputElement
-      ).checked,
-    ).toBe(true);
+    expect(wrapper.find('[data-testid="gateway-allow-ungrouped-key"]').exists()).toBe(false);
   });
 
   it("omits the retired CCH signing setting from the UI and update payload", async () => {
@@ -1936,9 +2003,14 @@ describe("admin SettingsView payment visible method controls", () => {
     const advancedCard = wrapper.get(
       '[data-testid="gateway-scheduling-general-advanced"]',
     );
+    const generalCard = wrapper.get(
+      '[data-testid="gateway-scheduling-general"]',
+    );
+    expect(generalCard.isVisible()).toBe(true);
     expect(advancedCard.isVisible()).toBe(true);
-    expect(advancedCard.classes()).toContain("border-t");
-    expect(advancedCard.find("h3").text()).toBe("通用高级调度器");
+    // settings-section 类让它和前一个分区之间显示分隔线。
+    expect(advancedCard.classes()).toContain("settings-section");
+    expect(advancedCard.find("h4").text()).toBe("通用高级调度器");
     expect(
       advancedCard
         .get('[data-testid="advanced-scheduler-help"] button')
@@ -1946,6 +2018,9 @@ describe("admin SettingsView payment visible method controls", () => {
     ).toBe("查看高级调度器评分与选择原理");
     expect(advancedCard.text()).toContain("通用高级调度器");
     expect(wrapper.text()).not.toContain("OpenAI 实验调度策略");
+    expect(advancedCard.text()).toContain("EWMA");
+    expect(generalCard.text()).toContain("强制粘性切换");
+    expect(advancedCard.text()).not.toContain("强制粘性切换");
 
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
@@ -1954,6 +2029,11 @@ describe("admin SettingsView payment visible method controls", () => {
       expect.objectContaining({
         advanced_scheduler_sticky_weighted_enabled: false,
         advanced_scheduler_subscription_priority_enabled: false,
+        advanced_scheduler_ewma_error_rate_alpha: "",
+        advanced_scheduler_ewma_ttft_alpha: "",
+        advanced_scheduler_sticky_escape_enabled: true,
+        advanced_scheduler_sticky_escape_ttft_ms: "",
+        advanced_scheduler_sticky_escape_error_rate: "",
       }),
     );
     expect(updateSettings.mock.calls[0]?.[0]).not.toHaveProperty(
@@ -1997,8 +2077,7 @@ describe("admin SettingsView payment visible method controls", () => {
     await card.get('[data-testid="ollama-cloud-usage-global-enabled"]').setValue(true);
     await card.get('[data-testid="ollama-cloud-usage-global-debounce"]').setValue(3);
     await card.get('[data-testid="ollama-cloud-usage-global-interval"]').setValue(90);
-    await card.get('[data-testid="ollama-cloud-usage-global-save"]').trigger("click");
-    await flushPromises();
+    await saveFromSaveBar(wrapper);
 
     expect(updateOllamaCloudUsageSettings).toHaveBeenCalledWith({
       enabled: true,
@@ -2025,175 +2104,93 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(paymentHelpImageUpload?.attributes("data-remove-label")).toBe("移除");
   });
 
-  it("renders and submits OpenAI OAuth import default TLS fingerprint settings", async () => {
-    getOpenAIOAuthImportDefaults.mockResolvedValueOnce({
-      credentials: { model_whitelist: ["gpt-5.2"] },
-      extra: {
-        enable_tls_fingerprint: true,
-        tls_fingerprint_profile_id: 7,
-      },
+  it("loads creative model candidates and submits the configured capability subset", async () => {
+    const creativeSettings = [{
+      group_id: 12,
+      model: "gpt-image-2",
+      operations: ["generate", "inpaint"],
+    }];
+    getSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      creative_model_settings: creativeSettings,
     });
+    getCreativeModelCandidates.mockResolvedValue([{
+      group_id: 12,
+      group_name: "Images",
+      platform: "openai",
+      model: "gpt-image-2",
+      operations: ["generate", "edit", "inpaint"],
+    }]);
 
     const wrapper = mountView();
+    await flushPromises();
+    expect(getCreativeModelCandidates).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain("admin.settings.features.creative.modelSettings.title");
 
+    await wrapper.find("form").trigger("submit");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ creative_model_settings: creativeSettings }),
+    );
+  });
+
+  it("removes stale Gemini inpaint when saving creative model settings", async () => {
+    getSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      creative_model_settings: [{
+        group_id: 12,
+        model: "gemini-3.1-flash-image",
+        operations: ["generate", "inpaint"],
+      }],
+    });
+    getCreativeModelCandidates.mockResolvedValue([{
+      group_id: 12,
+      group_name: "Gemini Images",
+      platform: "gemini",
+      model: "gemini-3.1-flash-image",
+      operations: ["generate", "edit"],
+    }]);
+
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.find("form").trigger("submit");
     await flushPromises();
 
-    expect(listTLSFingerprintProfiles).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain("TLS 指纹模拟");
-
-    const toggle = wrapper.get('[data-testid="openai-oauth-default-tls-fingerprint-toggle"]');
-    expect((toggle.element as HTMLInputElement).checked).toBe(true);
-
-    const profileSelect = wrapper.get('[data-testid="openai-oauth-default-tls-fingerprint-profile"]');
-    expect((profileSelect.element as HTMLSelectElement).value).toBe("7");
-    await profileSelect.setValue("9");
-
-    const defaultsCard = wrapper.get("#openai-oauth-import-defaults");
-    const saveButton = defaultsCard
-      .findAll("button")
-      .find((node) => node.text() === "common.save");
-    expect(saveButton).toBeDefined();
-    await saveButton?.trigger("click");
-    await flushPromises();
-
-    expect(updateOpenAIOAuthImportDefaults).toHaveBeenCalledWith(
+    expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        extra: expect.objectContaining({
-          enable_tls_fingerprint: true,
-          tls_fingerprint_profile_id: 9,
-        }),
+        creative_model_settings: [{
+          group_id: 12,
+          model: "gemini-3.1-flash-image",
+          operations: ["generate"],
+        }],
       }),
     );
   });
 
-  it("loads and submits the OpenAI OAuth import default native V2 compact mode", async () => {
-    getOpenAIOAuthImportDefaults.mockResolvedValueOnce({
-      credentials: { model_whitelist: ["gpt-5.2"] },
-      extra: { openai_native_compaction_v2_mode: "force_off" },
+  it("drops a Gemini setting that only contains stale inpaint", async () => {
+    getSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      creative_model_settings: [{
+        group_id: 12,
+        model: "gemini-3.1-flash-image",
+        operations: ["inpaint"],
+      }],
     });
+    getCreativeModelCandidates.mockResolvedValue([{
+      group_id: 12,
+      group_name: "Gemini Images",
+      platform: "gemini",
+      model: "gemini-3.1-flash-image",
+      operations: ["generate", "edit"],
+    }]);
 
     const wrapper = mountView();
     await flushPromises();
-
-    const mode = wrapper.get('[data-testid="openai-oauth-default-native-compaction-v2-mode"]');
-    expect((mode.element as HTMLSelectElement).value).toBe("force_off");
-    await mode.setValue("force_on");
-
-    const defaultsCard = wrapper.get("#openai-oauth-import-defaults");
-    const saveButton = defaultsCard
-      .findAll("button")
-      .find((node) => node.text() === "common.save");
-    expect(saveButton).toBeDefined();
-    await saveButton?.trigger("click");
+    await wrapper.find("form").trigger("submit");
     await flushPromises();
 
-    expect(updateOpenAIOAuthImportDefaults).toHaveBeenCalledWith(
-      expect.objectContaining({
-        extra: expect.objectContaining({ openai_native_compaction_v2_mode: "force_on" }),
-      }),
-    );
-  });
-
-  it("loads and submits the OpenAI OAuth import default Codex image tool policy", async () => {
-    getOpenAIOAuthImportDefaults.mockResolvedValueOnce({
-      credentials: { model_whitelist: ["gpt-5.2"] },
-      extra: {
-        codex_image_generation_explicit_tool_policy: "strip",
-        codex_image_generation_bridge: false,
-        codex_image_generation_bridge_enabled: true,
-      },
-    });
-
-    const wrapper = mountView();
-    await flushPromises();
-
-    const blockButton = wrapper.get(
-      '[data-testid="openai-oauth-default-codex-image-tool-block"]',
-    );
-    expect(blockButton.attributes("aria-checked")).toBe("true");
-
-    await wrapper
-      .get('[data-testid="openai-oauth-default-codex-image-tool-enabled"]')
-      .trigger("click");
-
-    const defaultsCard = wrapper.get("#openai-oauth-import-defaults");
-    const saveButton = defaultsCard
-      .findAll("button")
-      .find((node) => node.text() === "common.save");
-    expect(saveButton).toBeDefined();
-    await saveButton?.trigger("click");
-    await flushPromises();
-
-    const extra = updateOpenAIOAuthImportDefaults.mock.calls[0]?.[0]?.extra;
-    expect(extra?.codex_image_generation_bridge).toBe(true);
-    expect(extra).not.toHaveProperty("codex_image_generation_bridge_enabled");
-    expect(extra).not.toHaveProperty("codex_image_generation_explicit_tool_policy");
-  });
-
-  it("renders and submits OpenAI OAuth import default auto-pause and Claude Code allow settings", async () => {
-    getOpenAIOAuthImportDefaults.mockResolvedValueOnce({
-      credentials: { model_whitelist: ["gpt-5.2"] },
-      extra: {
-        codex_cli_only: true,
-        codex_cli_only_allowed_clients: ["claude_code"],
-        auto_pause_5h_threshold: 0.91,
-        auto_pause_7d_threshold: 0.82,
-        auto_pause_5h_disabled: true,
-      },
-    });
-
-    const wrapper = mountView();
-
-    await flushPromises();
-
-    const allowClaudeCodeToggle = wrapper.get(
-      '[data-testid="openai-oauth-default-codex-allow-claude-code-toggle"]',
-    );
-    expect((allowClaudeCodeToggle.element as HTMLInputElement).checked).toBe(true);
-
-    const fiveHourDisabledToggle = wrapper.get(
-      '[data-testid="openai-oauth-default-auto-pause-5h-disabled"]',
-    );
-    expect((fiveHourDisabledToggle.element as HTMLInputElement).checked).toBe(true);
-    await fiveHourDisabledToggle.setValue(false);
-
-    const fiveHourThreshold = wrapper.get(
-      '[data-testid="openai-oauth-default-auto-pause-5h-threshold"]',
-    );
-    expect((fiveHourThreshold.element as HTMLInputElement).value).toBe("91");
-    await fiveHourThreshold.setValue("95");
-
-    const sevenDayThreshold = wrapper.get(
-      '[data-testid="openai-oauth-default-auto-pause-7d-threshold"]',
-    );
-    expect((sevenDayThreshold.element as HTMLInputElement).value).toBe("82");
-
-    const sevenDayDisabledToggle = wrapper.get(
-      '[data-testid="openai-oauth-default-auto-pause-7d-disabled"]',
-    );
-    await sevenDayDisabledToggle.setValue(true);
-
-    const defaultsCard = wrapper.get("#openai-oauth-import-defaults");
-    const saveButton = defaultsCard
-      .findAll("button")
-      .find((node) => node.text() === "common.save");
-    expect(saveButton).toBeDefined();
-    await saveButton?.trigger("click");
-    await flushPromises();
-
-    expect(updateOpenAIOAuthImportDefaults).toHaveBeenCalledWith(
-      expect.objectContaining({
-        extra: expect.objectContaining({
-          codex_cli_only: true,
-          codex_cli_only_allowed_clients: ["claude_code"],
-          auto_pause_5h_threshold: 0.95,
-          auto_pause_7d_threshold: 0.82,
-          auto_pause_7d_disabled: true,
-        }),
-      }),
-    );
-    expect(updateOpenAIOAuthImportDefaults.mock.calls[0]?.[0]?.extra).not.toHaveProperty(
-      "auto_pause_5h_disabled",
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ creative_model_settings: [] }),
     );
   });
 });
@@ -2201,6 +2198,7 @@ describe("admin SettingsView payment visible method controls", () => {
 describe("admin SettingsView security tab controls", () => {
   beforeEach(() => {
     getSettings.mockReset();
+    getCreativeModelCandidates.mockReset();
     updateSettings.mockReset();
     getWebSearchEmulationConfig.mockReset();
     updateWebSearchEmulationConfig.mockReset();
@@ -2208,8 +2206,6 @@ describe("admin SettingsView security tab controls", () => {
     getOverloadCooldownSettings.mockReset();
     getOpenAI403CooldownSettings.mockReset();
     updateOpenAI403CooldownSettings.mockReset();
-    getOpenAIOAuthImportDefaults.mockReset();
-    updateOpenAIOAuthImportDefaults.mockReset();
     getRateLimit429CooldownSettings.mockReset();
     updateRateLimit429CooldownSettings.mockReset();
     getStreamTimeoutSettings.mockReset();
@@ -2221,7 +2217,6 @@ describe("admin SettingsView security tab controls", () => {
     updateProvider.mockReset();
     createProvider.mockReset();
     deleteProvider.mockReset();
-    listTLSFingerprintProfiles.mockReset();
     fetchPublicSettings.mockReset();
     adminSettingsFetch.mockReset();
     showError.mockReset();
@@ -2231,6 +2226,7 @@ describe("admin SettingsView security tab controls", () => {
       ...baseSettingsResponse,
       payment_visible_method_wxpay_source: "official_wxpay",
     });
+    getCreativeModelCandidates.mockResolvedValue([]);
     updateSettings.mockImplementation(async (payload) => ({
       ...baseSettingsResponse,
       payment_visible_method_wxpay_source: "official_wxpay",
@@ -2266,10 +2262,6 @@ describe("admin SettingsView security tab controls", () => {
       threshold_count: 3,
       threshold_window_minutes: 180,
     });
-    getOpenAIOAuthImportDefaults.mockResolvedValue({
-      credentials: { model_whitelist: [] },
-    });
-    updateOpenAIOAuthImportDefaults.mockImplementation(async (payload) => payload);
     getRateLimit429CooldownSettings.mockResolvedValue({
       enabled: true,
       cooldown_seconds: 5,
@@ -2299,7 +2291,6 @@ describe("admin SettingsView security tab controls", () => {
     getProviders.mockResolvedValue({
       data: [],
     });
-    listTLSFingerprintProfiles.mockResolvedValue([]);
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
   });
@@ -2391,6 +2382,72 @@ describe("admin SettingsView security tab controls", () => {
         registration_email_domain_quota_enabled: true,
       }),
     );
+  });
+
+  it("renders and submits the user email change switch", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      user_email_change_enabled: true,
+    });
+
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+
+    const emailChangeSetting = wrapper.get('[data-testid="user-email-change-setting"]');
+    const emailChangeToggle = emailChangeSetting.get("input.toggle-stub");
+    expect((emailChangeToggle.element as HTMLInputElement).checked).toBe(true);
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_email_change_enabled: true,
+      }),
+    );
+  });
+
+  it("shows the save bar only while settings have unsaved changes", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+
+    expect(wrapper.find('[data-testid="settings-save-bar"]').exists()).toBe(false);
+
+    await wrapper
+      .get('[data-testid="user-email-change-setting"] input.toggle-stub')
+      .setValue(true);
+    expect(wrapper.find('[data-testid="settings-save-bar"]').exists()).toBe(true);
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalled();
+    // jsdom 不会结束离场动画，这里检查保存条已经进入退出状态。
+    expect(
+      wrapper.get('[data-testid="settings-save-bar"]').attributes("inert"),
+    ).toBeDefined();
+  });
+
+  it("reloads changed settings from the server when discarding", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    const loadsBefore = getSettings.mock.calls.length;
+
+    await wrapper
+      .get('[data-testid="user-email-change-setting"] input.toggle-stub')
+      .setValue(true);
+    await wrapper.get('[data-testid="settings-save-bar-discard"]').trigger("click");
+    await flushPromises();
+
+    expect(getSettings.mock.calls.length).toBe(loadsBefore + 1);
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(
+      (wrapper.get('[data-testid="user-email-change-setting"] input.toggle-stub')
+        .element as HTMLInputElement).checked,
+    ).toBe(false);
   });
 
   it("loads and echoes WeChat Connect fields from the backend payload", async () => {
@@ -2554,229 +2611,5 @@ describe("admin SettingsView security tab controls", () => {
         oidc_connect_validate_id_token: false,
       }),
     );
-  });
-});
-
-describe("admin SettingsView platform quota matrix", () => {
-  beforeEach(() => {
-    getSettings.mockReset();
-    updateSettings.mockReset();
-    getWebSearchEmulationConfig.mockReset();
-    updateWebSearchEmulationConfig.mockReset();
-    getAdminApiKey.mockReset();
-    getOverloadCooldownSettings.mockReset();
-    getRateLimit429CooldownSettings.mockReset();
-    updateRateLimit429CooldownSettings.mockReset();
-    getStreamTimeoutSettings.mockReset();
-    getRectifierSettings.mockReset();
-    getBetaPolicySettings.mockReset();
-    getGroups.mockReset();
-    listProxies.mockReset();
-    getProviders.mockReset();
-    updateProvider.mockReset();
-    createProvider.mockReset();
-    deleteProvider.mockReset();
-    fetchPublicSettings.mockReset();
-    adminSettingsFetch.mockReset();
-    showError.mockReset();
-    showSuccess.mockReset();
-    localeRef.value = "zh-CN";
-
-    getSettings.mockResolvedValue({ ...baseSettingsResponse });
-    updateSettings.mockImplementation(async (payload) => ({
-      ...baseSettingsResponse,
-      ...payload,
-    }));
-    getWebSearchEmulationConfig.mockResolvedValue({ enabled: false, providers: [] });
-    updateWebSearchEmulationConfig.mockResolvedValue({ enabled: false, providers: [] });
-    getAdminApiKey.mockResolvedValue({ exists: false, masked_key: "" });
-    getOverloadCooldownSettings.mockResolvedValue({});
-    getRateLimit429CooldownSettings.mockResolvedValue({});
-    updateRateLimit429CooldownSettings.mockResolvedValue({});
-    getStreamTimeoutSettings.mockResolvedValue({});
-    getRectifierSettings.mockResolvedValue({});
-    getBetaPolicySettings.mockResolvedValue({});
-    getGroups.mockResolvedValue([]);
-    listProxies.mockResolvedValue({ items: [] });
-    getProviders.mockResolvedValue({ data: [] });
-  });
-
-  it("从 baseSettings 加载默认平台配额数据并在 Users tab 渲染 6 平台行", async () => {
-    const wrapper = mountView();
-    await flushPromises();
-    await openUsersTab(wrapper);
-
-    expect(getSettings).toHaveBeenCalled();
-
-    const html = wrapper.html();
-    // 表格行的平台字段：font-mono 渲染纯英文 platform key
-    expect(html).toContain("anthropic");
-    expect(html).toContain("openai");
-    expect(html).toContain("gemini");
-    expect(html).toContain("antigravity");
-    expect(html).toContain("qoder");
-    expect(html).toContain("grok");
-  });
-
-  it("保存时 updateSettings payload 应包含嵌套 default_platform_quotas 对象（含全 6 平台）", async () => {
-    const wrapper = mountView();
-    await flushPromises();
-    await openUsersTab(wrapper);
-
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-
-    expect(updateSettings).toHaveBeenCalled();
-    const lastCallArgs = updateSettings.mock.calls.at(-1);
-    expect(lastCallArgs).toBeDefined();
-    const payload = lastCallArgs![0] as Record<string, unknown>;
-
-    // 应携带嵌套对象，而非扁平字段
-    expect(payload).toHaveProperty("default_platform_quotas");
-    const quotas = payload["default_platform_quotas"] as Record<string, unknown>;
-    const platforms = ["anthropic", "openai", "gemini", "antigravity", "qoder", "grok"];
-    for (const p of platforms) {
-      expect(quotas).toHaveProperty(p);
-      const pq = quotas[p] as Record<string, unknown>;
-      expect(pq).toHaveProperty("daily");
-      expect(pq).toHaveProperty("weekly");
-      expect(pq).toHaveProperty("monthly");
-    }
-
-    // 不应存在旧扁平字段
-    expect(payload).not.toHaveProperty("default_platform_quota_anthropic_daily");
-    expect(payload).not.toHaveProperty("default_platform_quota_openai_weekly");
-  });
-
-  it("加载并保存默认 API Key 数量上限的显式零值", async () => {
-    getSettings.mockResolvedValueOnce({
-      ...baseSettingsResponse,
-      default_user_api_key_limit: 17,
-    });
-    const wrapper = mountView();
-    await flushPromises();
-    await openUsersTab(wrapper);
-
-    const input = wrapper.get('[data-test="default-user-api-key-limit"]');
-    expect((input.element as HTMLInputElement).value).toBe("17");
-    await input.setValue("0");
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-
-    const payload = updateSettings.mock.calls.at(-1)![0] as Record<string, unknown>;
-    expect(payload["default_user_api_key_limit"]).toBe(0);
-  });
-
-  it("拒绝负数默认 API Key 数量上限", async () => {
-    const wrapper = mountView();
-    await flushPromises();
-    await openUsersTab(wrapper);
-    await wrapper.get('[data-test="default-user-api-key-limit"]').setValue("-1");
-
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-
-    expect(updateSettings).not.toHaveBeenCalled();
-    expect(showError).toHaveBeenCalledWith(
-      "admin.settings.defaults.defaultUserApiKeyLimitInvalid",
-    );
-  });
-
-  it("拒绝空的默认 API Key 数量上限", async () => {
-    const wrapper = mountView();
-    await flushPromises();
-    await openUsersTab(wrapper);
-    await wrapper.get('[data-test="default-user-api-key-limit"]').setValue("");
-
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-
-    expect(updateSettings).not.toHaveBeenCalled();
-    expect(showError).toHaveBeenCalledWith(
-      "admin.settings.defaults.defaultUserApiKeyLimitInvalid",
-    );
-  });
-
-  it("拒绝超过数据库范围的默认 API Key 数量上限", async () => {
-    const wrapper = mountView();
-    await flushPromises();
-    await openUsersTab(wrapper);
-    await wrapper
-      .get('[data-test="default-user-api-key-limit"]')
-      .setValue("2147483648");
-
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-
-    expect(updateSettings).not.toHaveBeenCalled();
-    expect(showError).toHaveBeenCalledWith(
-      "admin.settings.defaults.defaultUserApiKeyLimitInvalid",
-    );
-  });
-
-  it("加载后 form.default_platform_quotas 含全 6 平台，从嵌套 JSON 正确读取数值", async () => {
-    getSettings.mockResolvedValueOnce({
-      ...baseSettingsResponse,
-      default_platform_quotas: {
-        anthropic: { daily: 5, weekly: null, monthly: null },
-        openai:    { daily: null, weekly: 12.5, monthly: null },
-        // gemini / antigravity / qoder / grok 缺失 → 应被归一化为全 null
-      },
-    });
-
-    const wrapper = mountView();
-    await flushPromises();
-    await openUsersTab(wrapper);
-
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-
-    const payload = updateSettings.mock.calls.at(-1)![0] as Record<string, unknown>;
-    const quotas = payload["default_platform_quotas"] as Record<string, Record<string, unknown>>;
-
-    expect(quotas["anthropic"]?.["daily"]).toBe(5);
-    expect(quotas["openai"]?.["weekly"]).toBe(12.5);
-    // 缺失平台应补全为 null
-    expect(quotas["gemini"]).toEqual({ daily: null, weekly: null, monthly: null });
-    expect(quotas["antigravity"]).toEqual({ daily: null, weekly: null, monthly: null });
-    expect(quotas["qoder"]).toEqual({ daily: null, weekly: null, monthly: null });
-    expect(quotas["grok"]).toEqual({ daily: null, weekly: null, monthly: null });
-  });
-
-  it("空输入（v-model.number 产出 \"\"）在提交时清洗为 null 而非空字符串", async () => {
-    // 模拟后端返回带有 anthropic daily 值的配额
-    getSettings.mockResolvedValueOnce({
-      ...baseSettingsResponse,
-      default_platform_quotas: {
-        anthropic: { daily: 10, weekly: null, monthly: null },
-        openai:    { daily: null, weekly: null, monthly: null },
-        gemini:    { daily: null, weekly: null, monthly: null },
-        antigravity: { daily: null, weekly: null, monthly: null },
-      },
-    });
-
-    const wrapper = mountView();
-    await flushPromises();
-    await openUsersTab(wrapper);
-
-    // 找到 anthropic daily 输入框并清空（模拟用户删除值）
-    const inputs = wrapper.findAll('input[type="number"]');
-    const anthropicDailyInput = inputs.find((i) => {
-      const parent = i.element.closest("tr");
-      return parent?.textContent?.includes("anthropic");
-    });
-
-    if (anthropicDailyInput) {
-      // 设置为空字符串，模拟 v-model.number 在清空时产出 ""
-      await anthropicDailyInput.setValue("");
-    }
-
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-
-    const payload = updateSettings.mock.calls.at(-1)![0] as Record<string, unknown>;
-    const quotas = payload["default_platform_quotas"] as Record<string, Record<string, unknown>>;
-    // 不管输入是什么，提交值应为 null（而非 "" 或 NaN）
-    expect(quotas["anthropic"]?.["daily"]).toBe(null);
   });
 });

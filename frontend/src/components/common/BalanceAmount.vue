@@ -23,7 +23,7 @@ const props = withDefaults(defineProps<{
 
 const { hasCustomBalanceIcon, formatBalanceAmount } = useBalanceDisplay()
 
-// 配置 SVG 图标时由图标承担金额标识，避免同时重复显示文本符号。
+// 配置 SVG 图标时用图标标识金额，文本部分显示数值。
 const formattedAmount = computed(() => formatBalanceAmount(props.amount, {
   fractionDigits: props.fractionDigits,
   useGrouping: props.useGrouping,

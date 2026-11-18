@@ -36,6 +36,11 @@ vi.mock('@/api', () => ({
   }
 }))
 
+// 本组只验证认证流程的倒计时，图标的帧调度由图标交互测试覆盖。
+vi.mock('@/components/icons/Icon.vue', () => ({
+  default: { template: '<svg aria-hidden="true" />' }
+}))
+
 const flushPromises = async () => {
   await Promise.resolve()
   await Promise.resolve()
@@ -59,7 +64,7 @@ describe('TOTP 弹窗定时器清理', () => {
     mocks.getVerificationMethod.mockResolvedValue({ method: 'email' })
     mocks.sendVerifyCode.mockResolvedValue({ success: true })
     mocks.initiateSetup.mockResolvedValue({
-      qr_code_url: 'otpauth://totp/Sub2API:test?secret=ABC123',
+      qr_code_url: 'otpauth://totp/TokenRouter:test?secret=ABC123',
       secret: 'ABC123',
       setup_token: 'setup-token'
     })
@@ -91,8 +96,12 @@ describe('TOTP 弹窗定时器清理', () => {
     await sendButton!.trigger('click')
     await flushPromises()
 
-    expect(setIntervalSpy).toHaveBeenCalledTimes(1)
-    const timerId = setIntervalSpy.mock.results[0]?.value
+    // 弹窗进入动画也可能使用浏览器帧计时，仅核对业务倒计时的生命周期。
+    const cooldownCalls = setIntervalSpy.mock.calls
+      .map((call, index) => ({ delay: call[1], id: setIntervalSpy.mock.results[index]?.value }))
+      .filter(call => call.delay === 1000)
+    expect(cooldownCalls).toHaveLength(1)
+    const timerId = cooldownCalls[0].id
 
     wrapper.unmount()
 
@@ -111,8 +120,12 @@ describe('TOTP 弹窗定时器清理', () => {
     await sendButton!.trigger('click')
     await flushPromises()
 
-    expect(setIntervalSpy).toHaveBeenCalledTimes(1)
-    const timerId = setIntervalSpy.mock.results[0]?.value
+    // 弹窗进入动画也可能使用浏览器帧计时，仅核对业务倒计时的生命周期。
+    const cooldownCalls = setIntervalSpy.mock.calls
+      .map((call, index) => ({ delay: call[1], id: setIntervalSpy.mock.results[index]?.value }))
+      .filter(call => call.delay === 1000)
+    expect(cooldownCalls).toHaveLength(1)
+    const timerId = cooldownCalls[0].id
 
     wrapper.unmount()
 

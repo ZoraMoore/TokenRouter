@@ -6,7 +6,7 @@
 import dashboardAPI from './dashboard'
 import usersAPI from './users'
 import groupsAPI from './groups'
-import accountsAPI from './accounts'
+import providersAPI from './providers'
 import proxiesAPI from './proxies'
 import redeemAPI from './redeem'
 import promoAPI from './promo'
@@ -22,16 +22,14 @@ import qoderAPI from './qoder'
 import userAttributesAPI from './userAttributes'
 import opsAPI from './ops'
 import errorPassthroughAPI from './errorPassthrough'
-import dataManagementAPI from './dataManagement'
 import apiKeysAPI from './apiKeys'
 import scheduledTestsAPI from './scheduledTests'
 import backupAPI from './backup'
 import tlsFingerprintProfileAPI from './tlsFingerprintProfile'
 import tlsFingerprintRouterAPI from './tlsFingerprintRouter'
-import channelsAPI from './channels'
+import channelsAPI from './pricing'
 import adminPaymentAPI from './payment'
 import riskControlAPI from './riskControl'
-import adminDataSharingAPI from './dataSharing'
 import auditAPI from './audit'
 import teamsAPI from './teams'
 
@@ -42,7 +40,7 @@ export const adminAPI = {
   dashboard: dashboardAPI,
   users: usersAPI,
   groups: groupsAPI,
-  accounts: accountsAPI,
+  providers: providersAPI,
   proxies: proxiesAPI,
   redeem: redeemAPI,
   promo: promoAPI,
@@ -58,16 +56,14 @@ export const adminAPI = {
   userAttributes: userAttributesAPI,
   ops: opsAPI,
   errorPassthrough: errorPassthroughAPI,
-  dataManagement: dataManagementAPI,
   apiKeys: apiKeysAPI,
   scheduledTests: scheduledTestsAPI,
   backup: backupAPI,
   tlsFingerprintProfiles: tlsFingerprintProfileAPI,
   tlsFingerprintRouters: tlsFingerprintRouterAPI,
-  channels: channelsAPI,
+  pricing: channelsAPI,
   payment: adminPaymentAPI,
   riskControl: riskControlAPI,
-  dataSharing: adminDataSharingAPI,
   audit: auditAPI,
   teams: teamsAPI
 }
@@ -76,7 +72,7 @@ export {
   dashboardAPI,
   usersAPI,
   groupsAPI,
-  accountsAPI,
+  providersAPI,
   proxiesAPI,
   redeemAPI,
   promoAPI,
@@ -92,7 +88,6 @@ export {
   userAttributesAPI,
   opsAPI,
   errorPassthroughAPI,
-  dataManagementAPI,
   apiKeysAPI,
   scheduledTestsAPI,
   backupAPI,
@@ -101,7 +96,6 @@ export {
   channelsAPI,
   adminPaymentAPI,
   riskControlAPI,
-  adminDataSharingAPI,
   auditAPI,
   teamsAPI
 }
@@ -112,12 +106,12 @@ export default adminAPI
 export type { AuditLog, AuditLogQuery, AuditLogListResponse } from './audit'
 export type { BalanceHistoryItem } from './users'
 export type { ErrorPassthroughRule, CreateRuleRequest, UpdateRuleRequest } from './errorPassthrough'
-export type { BackupAgentHealth, DataManagementConfig } from './dataManagement'
 export type {
   TLSFingerprintProfile,
   CreateProfileRequest,
   UpdateProfileRequest,
   TLSFingerprintCollectorStatus,
+  TLSFingerprintAuthenticatedIngressStatus,
   TLSFingerprintCollectorSession,
   TLSFingerprintCaptureRecord
 } from './tlsFingerprintProfile'
@@ -129,4 +123,3 @@ export type {
   UpdateTLSFingerprintRouterRequest
 } from './tlsFingerprintRouter'
 export type { ContentModerationConfig, ContentModerationLog, ModerationMode } from './riskControl'
-export type { DataShareStats, AdminDataShareSessionFilters } from './dataSharing'

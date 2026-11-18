@@ -3,18 +3,20 @@ package middleware
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/config"
-	"github.com/TokenFlux/TokenRouter/internal/middleware"
-	"github.com/TokenFlux/TokenRouter/internal/service"
-
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	identitycore "github.com/TokenFlux/TokenRouter/internal/identity"
+	"github.com/TokenFlux/TokenRouter/internal/identity/httpapi/authctx"
+	"github.com/TokenFlux/TokenRouter/internal/server/runtimeconfig"
+	settingscore "github.com/TokenFlux/TokenRouter/internal/settings"
 )
 
 // panelRateLimitStubRepo 内存版 SettingRepository，仅覆盖本测试用到的方法。
@@ -23,14 +25,26 @@ type panelRateLimitStubRepo struct {
 	values map[string]string
 }
 
-func (r *panelRateLimitStubRepo) Get(_ context.Context, key string) (*service.Setting, error) {
+// fakePanelAllower 内存计数版限流原语。
+type fakePanelAllower struct {
+	mu     sync.Mutex
+	counts map[string]int64
+	err    error
+}
+
+type panelTestIdentity struct {
+	userID int64
+	role   string
+}
+
+func (r *panelRateLimitStubRepo) Get(_ context.Context, key string) (*settingscore.Setting, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	value, ok := r.values[key]
 	if !ok {
-		return nil, service.ErrSettingNotFound
+		return nil, settingscore.ErrSettingNotFound
 	}
-	return &service.Setting{Key: key, Value: value}, nil
+	return &settingscore.Setting{Key: key, Value: value}, nil
 }
 
 func (r *panelRateLimitStubRepo) GetValue(_ context.Context, key string) (string, error) {
@@ -38,7 +52,7 @@ func (r *panelRateLimitStubRepo) GetValue(_ context.Context, key string) (string
 	defer r.mu.Unlock()
 	value, ok := r.values[key]
 	if !ok {
-		return "", service.ErrSettingNotFound
+		return "", settingscore.ErrSettingNotFound
 	}
 	return value, nil
 }
@@ -71,9 +85,7 @@ func (r *panelRateLimitStubRepo) SetMultiple(_ context.Context, settings map[str
 	if r.values == nil {
 		r.values = make(map[string]string)
 	}
-	for key, value := range settings {
-		r.values[key] = value
-	}
+	maps.Copy(r.values, settings)
 	return nil
 }
 
@@ -81,9 +93,7 @@ func (r *panelRateLimitStubRepo) GetAll(_ context.Context) (map[string]string, e
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := make(map[string]string, len(r.values))
-	for key, value := range r.values {
-		out[key] = value
-	}
+	maps.Copy(out, r.values)
 	return out, nil
 }
 
@@ -94,52 +104,39 @@ func (r *panelRateLimitStubRepo) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-// fakePanelAllower 内存计数版限流原语。
-type fakePanelAllower struct {
-	mu     sync.Mutex
-	counts map[string]int64
-	err    error
-}
-
-func (f *fakePanelAllower) Allow(_ context.Context, key string, limit int, window time.Duration) (middleware.AllowResult, error) {
+func (f *fakePanelAllower) Allow(_ context.Context, key string, limit int, window time.Duration) (AllowResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {
-		return middleware.AllowResult{}, f.err
+		return AllowResult{}, f.err
 	}
 	if f.counts == nil {
 		f.counts = make(map[string]int64)
 	}
 	f.counts[key]++
 	count := f.counts[key]
-	result := middleware.AllowResult{Allowed: count <= int64(limit), Count: count}
+	result := AllowResult{Allowed: count <= int64(limit), Count: count}
 	if !result.Allowed {
 		result.RetryAfter = window
 	}
 	return result, nil
 }
 
-func newPanelRateLimitTestService(t *testing.T, settingsJSON string) *service.SettingService {
+func newPanelRateLimitTestService(t *testing.T, settingsJSON string) *runtimeconfig.PanelSettings {
 	t.Helper()
 	repo := &panelRateLimitStubRepo{}
 	if settingsJSON != "" {
 		repo.values = map[string]string{"panel_rate_limit_settings": settingsJSON}
 	}
-	return service.NewSettingService(repo, &config.Config{})
-}
-
-type panelTestIdentity struct {
-	userID int64
-	role   string
+	return runtimeconfig.NewPanelSettings(repo)
 }
 
 func newPanelTestRouter(limiter gin.HandlerFunc, identity *panelTestIdentity) *gin.Engine {
-	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	if identity != nil {
 		router.Use(func(c *gin.Context) {
-			c.Set(string(ContextKeyUser), AuthSubject{UserID: identity.userID})
-			c.Set(string(ContextKeyUserRole), identity.role)
+			c.Set(string(authctx.ContextKeyUser), authctx.AuthSubject{UserID: identity.userID})
+			c.Set(string(authctx.ContextKeyUserRole), identity.role)
 			c.Next()
 		})
 	}
@@ -165,8 +162,8 @@ func TestPanelRateLimiterGlobalPerUser(t *testing.T) {
 		settingService: newPanelRateLimitTestService(t, `{"enabled":true,"user_rpm":2,"heavy_rpm":1,"exempt_admin":true,"public_ip_rpm":0}`),
 	}
 
-	userA := newPanelTestRouter(p.Global(), &panelTestIdentity{userID: 1, role: service.RoleUser})
-	userB := newPanelTestRouter(p.Global(), &panelTestIdentity{userID: 2, role: service.RoleUser})
+	userA := newPanelTestRouter(p.Global(), &panelTestIdentity{userID: 1, role: identitycore.RoleUser})
+	userB := newPanelTestRouter(p.Global(), &panelTestIdentity{userID: 2, role: identitycore.RoleUser})
 
 	require.Equal(t, http.StatusOK, performPanelRequest(userA, "127.0.0.1:1000").Code)
 	require.Equal(t, http.StatusOK, performPanelRequest(userA, "127.0.0.1:1000").Code)
@@ -191,7 +188,7 @@ func TestPanelRateLimiterHeavyUsesHeavyRPM(t *testing.T) {
 		settingService: newPanelRateLimitTestService(t, `{"enabled":true,"user_rpm":100,"heavy_rpm":1,"exempt_admin":true,"public_ip_rpm":0}`),
 	}
 
-	router := newPanelTestRouter(p.Heavy(), &panelTestIdentity{userID: 7, role: service.RoleUser})
+	router := newPanelTestRouter(p.Heavy(), &panelTestIdentity{userID: 7, role: identitycore.RoleUser})
 	require.Equal(t, http.StatusOK, performPanelRequest(router, "127.0.0.1:1000").Code)
 	require.Equal(t, http.StatusTooManyRequests, performPanelRequest(router, "127.0.0.1:1000").Code)
 
@@ -206,8 +203,8 @@ func TestPanelRateLimiterAdminExemption(t *testing.T) {
 		limiter:        &fakePanelAllower{},
 		settingService: newPanelRateLimitTestService(t, `{"enabled":true,"user_rpm":1,"heavy_rpm":1,"exempt_admin":true,"public_ip_rpm":0}`),
 	}
-	admin := newPanelTestRouter(p.Global(), &panelTestIdentity{userID: 9, role: service.RoleAdmin})
-	for i := 0; i < 5; i++ {
+	admin := newPanelTestRouter(p.Global(), &panelTestIdentity{userID: 9, role: identitycore.RoleAdmin})
+	for range 5 {
 		require.Equal(t, http.StatusOK, performPanelRequest(admin, "127.0.0.1:1000").Code)
 	}
 
@@ -216,7 +213,7 @@ func TestPanelRateLimiterAdminExemption(t *testing.T) {
 		limiter:        &fakePanelAllower{},
 		settingService: newPanelRateLimitTestService(t, `{"enabled":true,"user_rpm":1,"heavy_rpm":1,"exempt_admin":false,"public_ip_rpm":0}`),
 	}
-	admin2 := newPanelTestRouter(p2.Global(), &panelTestIdentity{userID: 9, role: service.RoleAdmin})
+	admin2 := newPanelTestRouter(p2.Global(), &panelTestIdentity{userID: 9, role: identitycore.RoleAdmin})
 	require.Equal(t, http.StatusOK, performPanelRequest(admin2, "127.0.0.1:1000").Code)
 	require.Equal(t, http.StatusTooManyRequests, performPanelRequest(admin2, "127.0.0.1:1000").Code)
 }
@@ -227,8 +224,8 @@ func TestPanelRateLimiterDisabledOrMissingSubject(t *testing.T) {
 		limiter:        &fakePanelAllower{},
 		settingService: newPanelRateLimitTestService(t, `{"enabled":false,"user_rpm":1,"heavy_rpm":1,"exempt_admin":true,"public_ip_rpm":1}`),
 	}
-	router := newPanelTestRouter(p.Global(), &panelTestIdentity{userID: 3, role: service.RoleUser})
-	for i := 0; i < 3; i++ {
+	router := newPanelTestRouter(p.Global(), &panelTestIdentity{userID: 3, role: identitycore.RoleUser})
+	for range 3 {
 		require.Equal(t, http.StatusOK, performPanelRequest(router, "127.0.0.1:1000").Code)
 	}
 
@@ -238,18 +235,18 @@ func TestPanelRateLimiterDisabledOrMissingSubject(t *testing.T) {
 		settingService: newPanelRateLimitTestService(t, `{"enabled":true,"user_rpm":1,"heavy_rpm":1,"exempt_admin":true,"public_ip_rpm":0}`),
 	}
 	anonymous := newPanelTestRouter(p2.Global(), nil)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		require.Equal(t, http.StatusOK, performPanelRequest(anonymous, "127.0.0.1:1000").Code)
 	}
 
 	// nil 限流器（测试环境注入 nil）：直接放行
 	var nilLimiter *PanelRateLimiter
-	nilRouter := newPanelTestRouter(nilLimiter.Global(), &panelTestIdentity{userID: 3, role: service.RoleUser})
+	nilRouter := newPanelTestRouter(nilLimiter.Global(), &panelTestIdentity{userID: 3, role: identitycore.RoleUser})
 	require.Equal(t, http.StatusOK, performPanelRequest(nilRouter, "127.0.0.1:1000").Code)
 
 	// Redis 客户端未初始化时也必须 fail-open，不能在请求路径空指针崩溃。
 	withoutRedis := NewPanelRateLimiter(nil, newPanelRateLimitTestService(t, `{"enabled":true,"user_rpm":1,"heavy_rpm":1,"exempt_admin":false,"public_ip_rpm":1}`))
-	withoutRedisRouter := newPanelTestRouter(withoutRedis.Global(), &panelTestIdentity{userID: 3, role: service.RoleUser})
+	withoutRedisRouter := newPanelTestRouter(withoutRedis.Global(), &panelTestIdentity{userID: 3, role: identitycore.RoleUser})
 	require.Equal(t, http.StatusOK, performPanelRequest(withoutRedisRouter, "127.0.0.1:1000").Code)
 }
 
@@ -258,13 +255,13 @@ func TestPanelRateLimiterFailOpenOnRedisError(t *testing.T) {
 		limiter:        &fakePanelAllower{err: errors.New("redis down")},
 		settingService: newPanelRateLimitTestService(t, `{"enabled":true,"user_rpm":1,"heavy_rpm":1,"exempt_admin":true,"public_ip_rpm":1}`),
 	}
-	router := newPanelTestRouter(p.Global(), &panelTestIdentity{userID: 5, role: service.RoleUser})
-	for i := 0; i < 3; i++ {
+	router := newPanelTestRouter(p.Global(), &panelTestIdentity{userID: 5, role: identitycore.RoleUser})
+	for range 3 {
 		require.Equal(t, http.StatusOK, performPanelRequest(router, "127.0.0.1:1000").Code)
 	}
 
 	publicRouter := newPanelTestRouter(p.PublicIP(), nil)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		require.Equal(t, http.StatusOK, performPanelRequest(publicRouter, "203.0.113.9:1000").Code)
 	}
 }
@@ -284,7 +281,7 @@ func TestPanelRateLimiterPublicIP(t *testing.T) {
 	require.Equal(t, http.StatusOK, performPanelRequest(router, "198.51.100.7:1000").Code)
 
 	// 回环/内网地址（反代内部转发地址）：跳过计数，绝不误拦
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		require.Equal(t, http.StatusOK, performPanelRequest(router, "127.0.0.1:1000").Code)
 		require.Equal(t, http.StatusOK, performPanelRequest(router, "10.0.0.8:1000").Code)
 		require.Equal(t, http.StatusOK, performPanelRequest(router, "172.17.0.1:1000").Code)

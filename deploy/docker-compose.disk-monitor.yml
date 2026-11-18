@@ -1,0 +1,17 @@
+# 运维监控通过两块宿主机磁盘上的空目录读取容量。
+# 启用前确认 /mnt/data 已挂载数据盘。
+services:
+  sub2api:
+    volumes:
+      - type: bind
+        source: ${OPS_SYSTEM_DISK_PATH:-/opt/sub2api/disk-monitor}
+        target: /host-disks/system
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ${OPS_DATA_DISK_PATH:-/mnt/data/disk-monitor}
+        target: /host-disks/data
+        read_only: true
+        bind:
+          create_host_path: true

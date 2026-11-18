@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import Icon from '@/components/icons/Icon.vue'
+import { computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Chart as ChartJS,
@@ -18,8 +19,12 @@ import type { ChartState } from '../types'
 import { formatHistoryLabel, sumNumbers } from '../utils/opsFormatters'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import { externalTooltipHandler, hideExternalTooltip } from '@/utils/chartExternalTooltip'
+import { useChartTheme, CHART_TICK_FONT_SIZE, CHART_LEGEND_FONT_SIZE } from '@/composables/useChartTheme'
 
 ChartJS.register(Title, Tooltip, Legend, LineElement, LinearScale, PointElement, CategoryScale, Filler)
+
+onBeforeUnmount(hideExternalTooltip)
 
 interface Props {
   points: OpsThroughputTrendPoint[]
@@ -31,12 +36,13 @@ interface Props {
 const props = defineProps<Props>()
 const { t } = useI18n()
 
-const isDarkMode = computed(() => document.documentElement.classList.contains('dark'))
+// 品牌调图表:网格/刻度用品牌色系(dark-200/primary-900 字面值),不归 zinc 档位。
+const { isDark } = useChartTheme()
 const colors = computed(() => ({
   primary: '#00D2FF',
   primaryAlpha: '#00D2FF26',
-  grid: isDarkMode.value ? '#29292E' : '#DDF4FC',
-  text: isDarkMode.value ? '#D9D9DE' : '#2D4F68'
+  grid: isDark.value ? '#27272A' : '#DDF4FC',
+  text: isDark.value ? '#D4D4D8' : '#2D4F68'
 }))
 
 const totalRequests = computed(() => sumNumbers(props.points.map((p) => p.request_count)))
@@ -81,16 +87,11 @@ const options = computed(() => {
       legend: {
         position: 'top' as const,
         align: 'end' as const,
-        labels: { color: c.text, usePointStyle: true, boxWidth: 6, font: { size: 10 } }
+        labels: { color: c.text, usePointStyle: true, boxWidth: 6, font: { size: CHART_LEGEND_FONT_SIZE } }
       },
       tooltip: {
-        backgroundColor: isDarkMode.value ? '#1F1F23' : '#ffffff',
-        titleColor: isDarkMode.value ? '#FFFFFF' : '#071A2A',
-        bodyColor: isDarkMode.value ? '#D9D9DE' : '#2D4F68',
-        borderColor: c.grid,
-        borderWidth: 1,
-        padding: 10,
-        displayColors: true,
+        enabled: false,
+        external: externalTooltipHandler,
         callbacks: {
           label: (context: any) => {
             const value = typeof context?.parsed?.y === 'number' ? context.parsed.y : 0
@@ -105,7 +106,7 @@ const options = computed(() => {
         grid: { display: false },
         ticks: {
           color: c.text,
-          font: { size: 10 },
+          font: { size: CHART_TICK_FONT_SIZE },
           maxTicksLimit: 8,
           autoSkip: true,
           autoSkipPadding: 10
@@ -118,7 +119,7 @@ const options = computed(() => {
         grid: { color: c.grid, borderDash: [4, 4] },
         ticks: {
           color: c.text,
-          font: { size: 10 },
+          font: { size: CHART_TICK_FONT_SIZE },
           callback: (value: any) => Number(value).toFixed(3)
         }
       }
@@ -128,12 +129,10 @@ const options = computed(() => {
 </script>
 
 <template>
-  <div class="flex h-full flex-col rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-900 dark:ring-dark-700">
+  <div class="flex h-full flex-col rounded-surface bg-white p-6 shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-900 dark:ring-dark-700">
     <div class="mb-4 flex shrink-0 items-center justify-between">
       <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
-        <svg class="h-4 w-4 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h10M7 12h6m-6 5h3" />
-        </svg>
+        <Icon name="filter" size="sm" class="h-4 w-4 text-primary-500" />
         {{ t('admin.ops.switchRateTrend') }}
         <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.switchRateTrend')" />
       </h3>

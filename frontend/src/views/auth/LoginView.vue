@@ -18,14 +18,14 @@
       </div>
 
       <!-- Login Form -->
-      <form @submit.prevent="handleLogin" class="space-y-5">
+      <form @submit.prevent="handleLogin" :novalidate="agreementGateActive" class="space-y-5">
         <!-- Email Input -->
         <div>
           <label for="email" class="input-label">
             {{ t('auth.emailLabel') }}
           </label>
-          <div class="relative">
-            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+          <div class="input-icon-wrap input-icon-lg">
+            <div class="input-icon">
               <Icon name="mail" size="md" class="text-gray-400 dark:text-dark-500" />
             </div>
             <input
@@ -36,7 +36,7 @@
               autofocus
               autocomplete="email"
               :disabled="authActionDisabled"
-              class="input pl-11"
+              class="input input-has-icon"
               :class="{ 'input-error': errors.email }"
               :placeholder="t('auth.emailPlaceholder')"
             />
@@ -48,8 +48,8 @@
           <label for="password" class="input-label">
             {{ t('auth.passwordLabel') }}
           </label>
-          <div class="relative">
-            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+          <div class="input-icon-wrap input-icon-lg">
+            <div class="input-icon">
               <Icon name="lock" size="md" class="text-gray-400 dark:text-dark-500" />
             </div>
             <input
@@ -59,7 +59,7 @@
               required
               autocomplete="current-password"
               :disabled="authActionDisabled"
-              class="input pl-11 pr-11"
+              class="input input-has-icon input-has-icon-right"
               :class="{ 'input-error': errors.password }"
               :placeholder="t('auth.passwordPlaceholder')"
             />
@@ -67,10 +67,10 @@
               type="button"
               @click="showPassword = !showPassword"
               :disabled="authActionDisabled"
-              class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
+              class="input-icon-right text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
             >
-              <Icon v-if="showPassword" name="eyeOff" size="md" />
-              <Icon v-else name="eye" size="md" />
+              <Icon v-if="showPassword" name="eyeOff" size="sm" />
+              <Icon v-else name="eye" size="sm" />
             </button>
           </div>
           <div class="mt-1 flex items-center justify-between">
@@ -111,6 +111,7 @@
           :mode="loginAgreementMode"
           :updated-at="loginAgreementUpdatedAt"
           :visible="showAgreementModal"
+          v-model:hint-visible="showAgreementHint"
           @accept="acceptLoginAgreement"
           @reject="rejectLoginAgreement"
           @open="showAgreementModal = true"
@@ -119,30 +120,17 @@
         <!-- 提交按钮 -->
         <button
           type="submit"
-          :disabled="authActionDisabled || (turnstileEnabled && !turnstileToken)"
+          :disabled="authActionDisabled || (!agreementGateActive && turnstileEnabled && !turnstileToken)"
           class="btn btn-primary w-full"
         >
-          <svg
+          <Icon
+            name="loader"
+            size="sm"
+            :animate-on-hover="false"
             v-if="isLoading"
             class="-ml-1 mr-2 h-4 w-4 animate-spin text-white"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              class="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              stroke-width="4"
-            ></circle>
-            <path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
-          <Icon v-else name="login" size="md" class="mr-2" />
+          />
+          <Icon v-else name="login" size="sm" class="mr-2" />
           {{ isLoading ? t('auth.signingIn') : t('auth.signIn') }}
         </button>
       </form>
@@ -162,7 +150,7 @@
           :disabled="authActionDisabled"
           @click="handlePasskeyLogin"
         >
-          <Icon name="key" size="md" class="mr-2" />
+          <Icon name="key" size="sm" class="mr-2" />
           {{ passkeyLoading ? t('auth.passkeySigningIn') : t('auth.passkeySignIn') }}
         </button>
         <EmailOAuthButtons
@@ -217,7 +205,9 @@
 
   <!-- 2FA Modal -->
   <TotpLoginModal
-    v-if="show2FAModal"
+    v-if="totpPresent"
+    :show="show2FAModal"
+    @after-leave="totpAfterLeave"
     ref="totpModalRef"
     :temp-token="totpTempToken"
     :user-email-masked="totpUserEmailMasked"
@@ -227,6 +217,7 @@
 </template>
 
 <script setup lang="ts">
+import { useLeavingPresence } from '@/composables/useLeavingPresence'
 import { computed, ref, reactive, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -259,7 +250,8 @@ import { extractI18nErrorMessage } from '@/utils/apiError'
 import { clearAllAffiliateCodes } from '@/utils/oauthAffiliate'
 import {
   hasAcceptedLoginAgreement,
-  LOGIN_AGREEMENT_STORAGE_KEY
+  LOGIN_AGREEMENT_STORAGE_KEY,
+  revokeLoginAgreement
 } from '@/utils/loginAgreement'
 import { isGoogleOneTapEligible, isGoogleOneTapOriginSupported } from '@/utils/googleIdentity'
 
@@ -307,6 +299,7 @@ const loginAgreementRevision = ref<string>('')
 const loginAgreementDocuments = ref<LoginAgreementDocument[]>([])
 const agreementAccepted = ref<boolean>(false)
 const showAgreementModal = ref<boolean>(false)
+const showAgreementHint = ref(false)
 
 // Turnstile
 const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
@@ -331,6 +324,7 @@ const captchaEnabled = computed(
 
 // 2FA state
 const show2FAModal = ref<boolean>(false)
+const { present: totpPresent, afterLeave: totpAfterLeave } = useLeavingPresence(() => show2FAModal.value)
 const totpTempToken = ref<string>('')
 const totpUserEmailMasked = ref<string>('')
 const totpModalRef = ref<InstanceType<typeof TotpLoginModal> | null>(null)
@@ -356,7 +350,9 @@ const agreementGateActive = computed(
 )
 
 const authActionDisabled = computed(
-  () => isLoading.value || passkeyLoading.value || !publicSettingsLoaded.value || agreementGateActive.value
+  // 弹窗模式在同意条款后开放认证操作。复选框模式允许先填写，在触发认证动作时校验同意状态。
+  () => isLoading.value || passkeyLoading.value || !publicSettingsLoaded.value ||
+    (agreementGateActive.value && loginAgreementMode.value !== 'checkbox')
 )
 
 const showPasskeyLogin = computed(
@@ -485,14 +481,16 @@ function acceptLoginAgreement(): void {
     )
   }
   agreementAccepted.value = true
+  showAgreementHint.value = false
   showAgreementModal.value = false
 }
 
 function rejectLoginAgreement(): void {
-  localStorage.removeItem(LOGIN_AGREEMENT_STORAGE_KEY)
+  revokeLoginAgreement()
   agreementAccepted.value = false
   showAgreementModal.value = false
-  appStore.showWarning('未同意最新条款前，无法输入账号密码或使用快捷登录。')
+  showAgreementHint.value = false
+  if (loginAgreementMode.value !== 'checkbox') appStore.showWarning(t('auth.agreementRequired'))
 }
 
 // ==================== Turnstile Handlers ====================
@@ -533,6 +531,17 @@ async function acquireActionProof(): Promise<boolean> {
   return true
 }
 
+// 所有认证入口共享同一门禁，未同意时不能触发验证码、网络请求或第三方跳转。
+function ensureAgreementAccepted(): boolean {
+  if (!agreementGateActive.value) return true
+  if (loginAgreementMode.value === 'checkbox') {
+    showAgreementHint.value = true
+  } else {
+    showAgreementModal.value = true
+  }
+  return false
+}
+
 // ==================== Validation ====================
 
 function validateForm(): boolean {
@@ -543,13 +552,7 @@ function validateForm(): boolean {
 
   let isValid = true
 
-  if (agreementGateActive.value) {
-    appStore.showWarning('请先阅读并同意最新条款后再登录。')
-    if (loginAgreementMode.value !== 'checkbox') {
-      showAgreementModal.value = true
-    }
-    return false
-  }
+  if (!ensureAgreementAccepted()) return false
 
   // Email validation
   if (!formData.email.trim()) {
@@ -581,6 +584,7 @@ function validateForm(): boolean {
 // ==================== Form Handlers ====================
 
 async function handleLogin(): Promise<void> {
+  if (authActionDisabled.value) return
   googleOneTapRef.value?.cancelPrompt()
   // Clear previous error
   errorMessage.value = ''
@@ -640,13 +644,7 @@ async function handleLogin(): Promise<void> {
 
 async function handlePasskeyLogin(): Promise<void> {
   googleOneTapRef.value?.cancelPrompt()
-  if (agreementGateActive.value) {
-    appStore.showWarning(t('legal.loginAgreementPrompt.loginRequiredWarning'))
-    if (loginAgreementMode.value !== 'checkbox') {
-      showAgreementModal.value = true
-    }
-    return
-  }
+  if (authActionDisabled.value || !ensureAgreementAccepted()) return
 
   passkeyLoading.value = true
   try {
@@ -683,7 +681,7 @@ async function handlePasskeyLogin(): Promise<void> {
 
 async function handleOAuthStart(request: OAuthLoginStart): Promise<void> {
   googleOneTapRef.value?.cancelPrompt()
-  if (authActionDisabled.value) return
+  if (authActionDisabled.value || !ensureAgreementAccepted()) return
 
   if (!actionCaptchaEnabled.value) {
     window.location.href = buildOAuthLoginStartURL(request)
@@ -755,14 +753,4 @@ function handle2FACancel(): void {
 </script>
 
 <style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: all 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
 </style>

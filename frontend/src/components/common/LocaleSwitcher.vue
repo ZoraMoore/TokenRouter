@@ -6,43 +6,55 @@
       :class="triggerClass"
       :title="currentLocale?.name"
     >
-      <span class="text-base leading-none">{{ currentLocale?.flag }}</span>
+      <!-- 顶栏状态变体用语言图标（文/A 字形）与相邻图标按钮对齐，也避开国旗 emoji 在 Windows 上无法渲染的问题。 -->
+      <Icon v-if="variant === 'status'" name="languages" size="md" />
+      <span v-if="variant === 'status' && showLabel" class="max-w-14 truncate text-xs leading-none sm:max-w-24">{{ t('common.language') }}</span>
+      <span v-else class="text-base leading-none">{{ currentLocale?.flag }}</span>
       <span v-if="variant !== 'status'" class="hidden sm:inline">{{ currentLocale?.code.toUpperCase() }}</span>
       <Icon
         v-if="variant !== 'status'"
         name="chevronDown"
         size="xs"
-        class="text-gray-400 transition-transform duration-200"
+        class="text-gray-400 transition-transform duration-normal"
         :class="{ 'rotate-180': isOpen }"
+        :animate-on-hover="false"
       />
     </button>
 
-    <transition name="dropdown">
+    <!-- 语言列表用顶栏的内缩菜单样式，当前语言文字转为品牌色并在行尾打勾。 -->
+    <MotionTransition name="dropdown-fade">
       <div
         v-if="isOpen"
-        class="absolute right-0 z-50 mt-1 w-32 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-700 dark:bg-dark-800"
+        class="dropdown right-0 z-50 mt-2 w-44 origin-top-right py-0"
       >
-        <button
-          v-for="locale in availableLocales"
-          :key="locale.code"
-          :disabled="switching"
-          @click="selectLocale(locale.code)"
-          class="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
-          :class="{
-            'bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400':
-              locale.code === currentLocaleCode
-          }"
-        >
-          <span class="text-base">{{ locale.flag }}</span>
-          <span>{{ locale.name }}</span>
-          <Icon v-if="locale.code === currentLocaleCode" name="check" size="sm" class="ml-auto text-primary-500" />
-        </button>
+        <div class="menu-section">
+          <button
+            v-for="locale in availableLocales"
+            :key="locale.code"
+            type="button"
+            :disabled="switching"
+            @click="selectLocale(locale.code)"
+            class="menu-item whitespace-nowrap"
+            :class="{ 'text-primary-700 dark:text-primary-500': locale.code === currentLocaleCode }"
+          >
+            <span class="text-base leading-none">{{ locale.flag }}</span>
+            <span class="min-w-0 truncate">{{ locale.name }}</span>
+            <Icon
+              v-if="locale.code === currentLocaleCode"
+              name="check"
+              size="sm"
+              class="ml-auto shrink-0"
+              :animate-on-hover="false"
+            />
+          </button>
+        </div>
       </div>
-    </transition>
+    </MotionTransition>
   </div>
 </template>
 
 <script setup lang="ts">
+import MotionTransition from '@/components/common/MotionTransition.vue'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
@@ -50,11 +62,13 @@ import { setLocale, availableLocales } from '@/i18n'
 
 const props = withDefaults(defineProps<{
   variant?: 'default' | 'status'
+  showLabel?: boolean
 }>(), {
-  variant: 'default'
+  variant: 'default',
+  showLabel: false,
 })
 
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 
 const isOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -65,9 +79,10 @@ const currentLocale = computed(() => availableLocales.find((l) => l.code === loc
 const variant = computed(() => props.variant)
 const triggerClass = computed(() => {
   if (variant.value === 'status') {
-    return 'flex h-10 items-center gap-2 rounded-control px-2.5 text-sm font-medium text-primary-900/75 transition-colors hover:bg-primary-100 hover:text-primary-900 disabled:cursor-not-allowed disabled:opacity-60 dark:text-dark-100/80 dark:hover:bg-dark-800 dark:hover:text-white'
+    if (props.showLabel) return 'header-status-labeled-button'
+    return 'flex h-9 w-9 items-center justify-center rounded-control text-primary-900 transition-colors hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-dark-100 dark:hover:bg-dark-700 dark:hover:text-white'
   }
-  return 'flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-gray-300 dark:hover:bg-dark-700'
+  return 'flex items-center gap-1.5 rounded-control px-2 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-gray-300 dark:hover:bg-dark-700'
 })
 
 function toggleDropdown() {
@@ -104,14 +119,4 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.dropdown-enter-active,
-.dropdown-leave-active {
-  transition: all 0.15s ease;
-}
-
-.dropdown-enter-from,
-.dropdown-leave-to {
-  opacity: 0;
-  transform: scale(0.95) translateY(-4px);
-}
 </style>

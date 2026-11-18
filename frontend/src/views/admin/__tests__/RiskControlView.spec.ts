@@ -241,9 +241,9 @@ describe('admin RiskControlView', () => {
       events: 0,
       requests: 0,
       users: 0,
-      accounts: 0,
+      providers: 0,
       by_user: [],
-      by_account: [],
+      by_provider: [],
     })
     getGroups.mockResolvedValue([])
     getProxies.mockResolvedValue([])
@@ -365,8 +365,8 @@ describe('admin RiskControlView', () => {
       api_key_name: 'team-key',
       group_id: 3101,
       group_name: 'openai',
-      account_id: 4101,
-      account_name: 'upstream-account',
+      provider_id: 4101,
+      provider_name: 'upstream-provider',
       endpoint: '/v1/responses',
       model: 'gpt-5',
       upstream_status: 400,
@@ -847,7 +847,7 @@ describe('admin RiskControlView', () => {
     expect(apiKeyLoadCard.get('h2').text()).toBe('admin.riskControl.preBlockAPIKeyLoad')
     expect(apiKeyLoadCard.text()).toContain('admin.riskControl.preBlockAPIKeyLoadHint')
     expect(wrapper.get('[data-test="pre-block-api-key-load-list"]').classes()).toEqual(expect.arrayContaining([
-      'max-h-[280px]',
+      'max-h-[280px]', // check-ui-allow: 规则列表局部高度属登记例外,与源文件豁免一致
       'overflow-y-auto',
     ]))
   })

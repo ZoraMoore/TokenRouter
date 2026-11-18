@@ -1,13 +1,9 @@
-//go:build unit
-
 package payment
 
 import (
 	"encoding/json"
 	"testing"
 	"time"
-
-	dbent "github.com/TokenFlux/TokenRouter/ent"
 )
 
 func TestInstanceSupportsType(t *testing.T) {
@@ -114,12 +110,10 @@ func TestGetInstanceChannelLimitsFallsBackToLegacyDirectAliases(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Helper to build test PaymentProviderInstance values
-// ---------------------------------------------------------------------------
 
-func testInstance(id int64, providerKey, limits string) *dbent.PaymentProviderInstance {
-	return &dbent.PaymentProviderInstance{
+func testInstance(id int64, providerKey, limits string) *ProviderInstance {
+	return &ProviderInstance{
 		ID:          id,
 		ProviderKey: providerKey,
 		Limits:      limits,
@@ -134,9 +128,7 @@ func makeLimitsJSON(paymentType string, cl ChannelLimits) string {
 	return string(b)
 }
 
-// ---------------------------------------------------------------------------
 // filterByLimits
-// ---------------------------------------------------------------------------
 
 func TestFilterByLimits(t *testing.T) {
 	t.Parallel()
@@ -287,9 +279,7 @@ func TestFilterByLimits(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // pickLeastAmount
-// ---------------------------------------------------------------------------
 
 func TestPickLeastAmount(t *testing.T) {
 	t.Parallel()
@@ -345,16 +335,14 @@ func TestPickLeastAmount(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
 // getInstanceChannelLimits
-// ---------------------------------------------------------------------------
 
 func TestGetInstanceChannelLimits(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name        string
-		inst        *dbent.PaymentProviderInstance
+		inst        *ProviderInstance
 		paymentType PaymentType
 		want        ChannelLimits
 	}{
@@ -425,9 +413,7 @@ func TestGetInstanceChannelLimits(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // startOfDay
-// ---------------------------------------------------------------------------
 
 func TestStartOfDay(t *testing.T) {
 	t.Parallel()
@@ -547,10 +533,7 @@ func TestDecryptConfig_PlaintextAndLegacyCompat(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			lb := NewDefaultLoadBalancer(nil, tt.key)
-			got, err := lb.decryptConfig(tt.stored)
-			if err != nil {
-				t.Fatalf("decryptConfig unexpected error: %v", err)
-			}
+			got := lb.decryptConfig(tt.stored)
 			if !stringMapEqual(got, tt.want) {
 				t.Fatalf("decryptConfig = %v, want %v", got, tt.want)
 			}
@@ -571,9 +554,7 @@ func stringMapEqual(a, b map[string]string) bool {
 	return true
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 // int64SliceEqual compares two int64 slices for equality.
 // Both nil and empty slices are treated as equal.

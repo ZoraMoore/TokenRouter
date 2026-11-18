@@ -94,6 +94,20 @@ func (_u *RedeemCodeUpdate) SetNillableStatus(v *string) *RedeemCodeUpdate {
 	return _u
 }
 
+// SetRequiresPayment sets the "requires_payment" field.
+func (_u *RedeemCodeUpdate) SetRequiresPayment(v bool) *RedeemCodeUpdate {
+	_u.mutation.SetRequiresPayment(v)
+	return _u
+}
+
+// SetNillableRequiresPayment sets the "requires_payment" field if the given value is not nil.
+func (_u *RedeemCodeUpdate) SetNillableRequiresPayment(v *bool) *RedeemCodeUpdate {
+	if v != nil {
+		_u.SetRequiresPayment(*v)
+	}
+	return _u
+}
+
 // SetMaxUses sets the "max_uses" field.
 func (_u *RedeemCodeUpdate) SetMaxUses(v int) *RedeemCodeUpdate {
 	_u.mutation.ResetMaxUses()
@@ -387,6 +401,9 @@ func (_u *RedeemCodeUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(redeemcode.FieldStatus, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.RequiresPayment(); ok {
+		_spec.SetField(redeemcode.FieldRequiresPayment, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.MaxUses(); ok {
 		_spec.SetField(redeemcode.FieldMaxUses, field.TypeInt, value)
 	}
@@ -599,6 +616,20 @@ func (_u *RedeemCodeUpdateOne) SetStatus(v string) *RedeemCodeUpdateOne {
 func (_u *RedeemCodeUpdateOne) SetNillableStatus(v *string) *RedeemCodeUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
+	}
+	return _u
+}
+
+// SetRequiresPayment sets the "requires_payment" field.
+func (_u *RedeemCodeUpdateOne) SetRequiresPayment(v bool) *RedeemCodeUpdateOne {
+	_u.mutation.SetRequiresPayment(v)
+	return _u
+}
+
+// SetNillableRequiresPayment sets the "requires_payment" field if the given value is not nil.
+func (_u *RedeemCodeUpdateOne) SetNillableRequiresPayment(v *bool) *RedeemCodeUpdateOne {
+	if v != nil {
+		_u.SetRequiresPayment(*v)
 	}
 	return _u
 }
@@ -925,6 +956,9 @@ func (_u *RedeemCodeUpdateOne) sqlSave(ctx context.Context) (_node *RedeemCode, 
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(redeemcode.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RequiresPayment(); ok {
+		_spec.SetField(redeemcode.FieldRequiresPayment, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.MaxUses(); ok {
 		_spec.SetField(redeemcode.FieldMaxUses, field.TypeInt, value)

@@ -1,18 +1,15 @@
 package middleware
 
 import (
-	"math"
 	"net/netip"
-	"strconv"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/gin-gonic/gin"
-)
 
-// IngressRejectReason 标识预期的网关准入失败，此类失败不能视为运维请求错误。
-type IngressRejectReason string
+	keyhttp "github.com/TokenFlux/TokenRouter/internal/apikey/httpapi"
+	identityhttp "github.com/TokenFlux/TokenRouter/internal/identity/httpapi"
+)
 
 const (
 	IngressRejectQueryAPIKeyDeprecated  IngressRejectReason = "query_api_key_deprecated"
@@ -27,49 +24,25 @@ const (
 	IngressRejectGroupUnassigned        IngressRejectReason = "group_unassigned"
 	IngressRejectInvalidAuthRateLimited IngressRejectReason = "invalid_auth_rate_limited"
 	IngressRejectAPIKeyAuthOverloaded   IngressRejectReason = "api_key_auth_overloaded"
+
+	ingressRejectReasonContextKey = "ingress_reject_reason"
 )
 
-const ingressRejectReasonContextKey = "ingress_reject_reason"
+var activeIngressRejectRecorder atomic.Pointer[ingressRejectRecorderHolder]
+
+// IngressRejectReason 标识预期的网关准入失败，此类失败不能视为运维请求错误。
+type IngressRejectReason string
 
 type IngressRejectRecorder interface {
 	RecordIngressReject(reason, routeFamily, protocol, clientIP string, userID, apiKeyID int64)
 }
 
-func invalidAuthClientKey(c *gin.Context) string {
-	return normalizeIngressRejectIP(SecurityClientIP(c))
-}
-
-func rejectInvalidAuthAbuse(c *gin.Context, apiKeyService interface {
-	CheckInvalidAuthAbuse(string) (time.Duration, bool)
-}) bool {
-	if c == nil || apiKeyService == nil {
-		return false
-	}
-	retry, blocked := apiKeyService.CheckInvalidAuthAbuse(invalidAuthClientKey(c))
-	if !blocked {
-		return false
-	}
-	retrySeconds := int(math.Ceil(retry.Seconds()))
-	if retrySeconds < 1 {
-		retrySeconds = 1
-	}
-	c.Header("Retry-After", strconv.Itoa(retrySeconds))
-	MarkIngressRejected(c, IngressRejectInvalidAuthRateLimited)
-	return true
-}
-
-func recordInvalidAuthFailure(c *gin.Context, apiKeyService interface {
-	RecordInvalidAuthFailure(string)
-}) {
-	if c == nil || apiKeyService == nil {
-		return
-	}
-	apiKeyService.RecordInvalidAuthFailure(invalidAuthClientKey(c))
-}
-
 type ingressRejectRecorderHolder struct{ recorder IngressRejectRecorder }
 
-var activeIngressRejectRecorder atomic.Pointer[ingressRejectRecorderHolder]
+// InvalidAuthClientKey 供装配复用相同的地址归一化，不改变无效认证分桶。
+func InvalidAuthClientKey(c *gin.Context) string {
+	return normalizeIngressRejectIP(identityhttp.SecurityClientIP(c))
+}
 
 func SetIngressRejectRecorder(recorder IngressRejectRecorder) {
 	if recorder == nil {
@@ -106,14 +79,14 @@ func recordIngressReject(c *gin.Context, reason IngressRejectReason) {
 		return
 	}
 	routeFamily, protocol := ingressRejectRoute(c.Request.URL.Path)
-	clientIP := normalizeIngressRejectIP(SecurityClientIP(c))
+	clientIP := normalizeIngressRejectIP(identityhttp.SecurityClientIP(c))
 	var userID, apiKeyID int64
-	if apiKey, ok := GetAPIKeyFromContext(c); ok && apiKey != nil {
+	if apiKey, ok := keyhttp.GetAPIKeyFromContext(c); ok && apiKey != nil {
 		apiKeyID = apiKey.ID
 		if apiKey.User != nil {
 			userID = apiKey.User.ID
 		}
-	} else if apiKey, ok := GetOpsFallbackAPIKey(c); ok && apiKey != nil {
+	} else if apiKey, ok := keyhttp.GetOpsFallbackAPIKey(c); ok && apiKey != nil {
 		apiKeyID = apiKey.ID
 		if apiKey.User != nil {
 			userID = apiKey.User.ID

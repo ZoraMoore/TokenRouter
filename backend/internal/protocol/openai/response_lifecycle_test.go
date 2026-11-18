@@ -1,0 +1,62 @@
+package openai
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
+)
+
+// TestResponseLifecycleNormalizer 验证兼容字段不会覆盖上游响应内容或把失败改成成功。
+func TestResponseLifecycleNormalizer(t *testing.T) {
+	tests := []struct {
+		name, header, payload, wantType, wantStatus string
+		unchanged                                   bool
+	}{
+		{"bare created", "response.created", `{"object":"response","id":"resp_1","status":"in_progress","output":[],"vendor":{"opaque":"keep"}}`, "response.created", "in_progress", false},
+		{"bare completed", "response.completed", `{"object":"response","id":"resp_1","status":"completed","output":[],"vendor":{"opaque":"keep"}}`, "response.completed", "completed", false},
+		{"wrapped missing type", "response.completed", `{"response":{"id":"resp_1","status":"completed","vendor":{"opaque":"keep"}}}`, "response.completed", "completed", false},
+		{"done completed", "response.done", `{"type":"response.done","response":{"id":"resp_1","status":"completed","vendor":{"opaque":"keep"}}}`, "response.completed", "completed", false},
+		{"done failed", "response.done", `{"type":"response.done","response":{"id":"resp_1","status":"failed","error":{"code":"server_error"},"vendor":{"opaque":"keep"}}}`, "response.failed", "failed", false},
+		{"done incomplete", "response.done", `{"type":"response.done","response":{"id":"resp_1","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"vendor":{"opaque":"keep"}}}`, "response.incomplete", "incomplete", false},
+		{"missing status with error", "response.done", `{"type":"response.done","response":{"id":"resp_1","error":{"code":"server_error"},"vendor":{"opaque":"keep"}}}`, "response.failed", "failed", false},
+		{"missing status with incomplete details", "response.done", `{"type":"response.done","response":{"id":"resp_1","error":null,"incomplete_details":{"reason":"max_output_tokens"},"vendor":{"opaque":"keep"}}}`, "response.incomplete", "incomplete", false},
+		{"missing status without evidence", "response.done", `{"type":"response.done","response":{"id":"resp_1","error":null,"incomplete_details":null,"output":[]}}`, "response.done", "", true},
+		{"standard unchanged", "response.completed", `{"type":"response.completed","sequence_number":7,"response":{"id":"resp_1","status":"completed"}}`, "response.completed", "completed", true},
+		{"invalid JSON", "response.completed", `{"object":"response"`, "response.completed", "", true},
+		{"unidentified object", "response.completed", `{"output":[]}`, "response.completed", "", true},
+		{"unknown event", "custom.event", `{"object":"response","id":"resp_1"}`, "custom.event", "", true},
+		{"done ongoing", "response.done", `{"type":"response.done","response":{"id":"resp_1","status":"in_progress"}}`, "response.done", "in_progress", true},
+		{"sentinel unchanged", "", `[DONE]`, "", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var normalizer ResponseLifecycleNormalizer
+			data, eventType, duplicate := normalizer.Normalize([]byte(tt.payload), tt.header)
+			require.False(t, duplicate)
+			require.Equal(t, tt.wantType, eventType)
+			if tt.unchanged {
+				require.Equal(t, tt.payload, string(data))
+				return
+			}
+			require.Equal(t, tt.wantType, gjson.GetBytes(data, "type").String())
+			require.Equal(t, tt.wantStatus, gjson.GetBytes(data, "response.status").String())
+			require.Equal(t, "keep", gjson.GetBytes(data, "response.vendor.opaque").String())
+			require.Equal(t, gjson.Number, gjson.GetBytes(data, "sequence_number").Type)
+		})
+	}
+}
+
+func TestResponseLifecycleNormalizerDuplicateKeepsUsage(t *testing.T) {
+	var normalizer ResponseLifecycleNormalizer
+	normalizer.Normalize([]byte(`{"type":"response.output_text.delta","sequence_number":20,"delta":"hi"}`), "")
+	first, _, duplicate := normalizer.Normalize([]byte(`{"object":"response","id":"resp_1","status":"completed","usage":{"output_tokens":2}}`), "response.completed")
+	require.False(t, duplicate)
+	require.EqualValues(t, 21, gjson.GetBytes(first, "sequence_number").Int())
+	second, eventType, duplicate := normalizer.Normalize([]byte(`{"type":"response.done","response":{"id":"resp_1","status":"completed","usage":{"output_tokens":3}}}`), "response.done")
+	require.True(t, duplicate)
+	require.Equal(t, "response.completed", eventType)
+	require.EqualValues(t, 3, gjson.GetBytes(second, "response.usage.output_tokens").Int())
+	_, _, duplicate = normalizer.Normalize([]byte(`{"type":"response.done","response":{"id":"resp_2","status":"completed"}}`), "")
+	require.False(t, duplicate)
+}

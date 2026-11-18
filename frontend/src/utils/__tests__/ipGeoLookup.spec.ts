@@ -175,7 +175,7 @@ describe('fetchBatch', () => {
 
     expect(getEntry('203.0.113.20').status).toBe('success')
     expect(getEntry('203.0.113.21').status).toBe('error')
-    // 响应本身是 200，只是个别 IP 缺失/无法定位，属于业务级失败而非网络级失败
+    // HTTP 响应为 200，个别 IP 缺失或无法定位时记录为业务失败。
     expect(ok).toBe(true)
   })
 
@@ -217,7 +217,7 @@ describe('ipGeoLookup localStorage persistence', () => {
 
   it('hydrates the in-memory cache from a non-expired localStorage entry on module load', async () => {
     localStorage.setItem(
-      'sub2api:ip-geo-cache:v1',
+      'tokenrouter:ip-geo-cache:v1',
       JSON.stringify({
         '121.35.47.43': { label: 'CN · Guangdong · Shenzhen', fetchedAt: Date.now() },
       })
@@ -233,7 +233,7 @@ describe('ipGeoLookup localStorage persistence', () => {
   it('ignores expired localStorage entries on module load', async () => {
     const twentyFiveHoursAgo = Date.now() - 25 * 60 * 60 * 1000
     localStorage.setItem(
-      'sub2api:ip-geo-cache:v1',
+      'tokenrouter:ip-geo-cache:v1',
       JSON.stringify({
         '8.8.8.8': { label: 'US · California', fetchedAt: twentyFiveHoursAgo },
       })
@@ -253,7 +253,7 @@ describe('ipGeoLookup localStorage persistence', () => {
 
     await mod.fetchOne('1.2.4.8')
 
-    const stored = JSON.parse(localStorage.getItem('sub2api:ip-geo-cache:v1') || '{}')
+    const stored = JSON.parse(localStorage.getItem('tokenrouter:ip-geo-cache:v1') || '{}')
     expect(stored['1.2.4.8']).toEqual(expect.objectContaining({ label: 'CN' }))
   })
 
@@ -261,7 +261,7 @@ describe('ipGeoLookup localStorage persistence', () => {
     const now = new Date('2026-07-01T00:00:00Z')
     vi.setSystemTime(now)
     localStorage.setItem(
-      'sub2api:ip-geo-cache:v1',
+      'tokenrouter:ip-geo-cache:v1',
       JSON.stringify({
         '8.8.4.4': { label: 'US · California', fetchedAt: now.getTime() },
       })

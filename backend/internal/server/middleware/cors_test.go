@@ -5,17 +5,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/TokenFlux/TokenRouter/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/TokenFlux/TokenRouter/internal/config"
 )
-
-func init() {
-	// cors_test 与 security_headers_test 在同一个包，但 init 是幂等的
-	gin.SetMode(gin.TestMode)
-}
-
-// --- Task 8.2: 验证 CORS 条件化头部 ---
 
 func TestCORS_DisallowedOrigin_NoAllowHeaders(t *testing.T) {
 	cfg := config.CORSConfig{
@@ -97,6 +91,9 @@ func TestCORS_AllowedOrigin_HasAllowHeaders(t *testing.T) {
 			c, _ := gin.CreateTestContext(w)
 			c.Request = httptest.NewRequest(tt.method, "/", nil)
 			c.Request.Header.Set("Origin", "https://allowed.example.com")
+			if tt.method == http.MethodOptions {
+				c.Request.Header.Set("Access-Control-Request-Headers", "X-Creative-Workspace-ID")
+			}
 
 			middleware(c)
 
@@ -105,6 +102,8 @@ func TestCORS_AllowedOrigin_HasAllowHeaders(t *testing.T) {
 				"允许的 origin 应收到 Allow-Headers")
 			assert.Contains(t, w.Header().Get("Access-Control-Allow-Headers"), "X-Admin-UI-Request")
 			assert.Contains(t, w.Header().Get("Access-Control-Allow-Headers"), "X-User-UI-Request")
+			assert.Contains(t, w.Header().Get("Access-Control-Allow-Headers"), "X-Creative-Workspace-ID")
+			assert.Contains(t, w.Header().Get("Access-Control-Allow-Headers"), "Idempotency-Key")
 			assert.NotEmpty(t, w.Header().Get("Access-Control-Allow-Methods"),
 				"允许的 origin 应收到 Allow-Methods")
 			assert.Contains(t, w.Header().Get("Access-Control-Expose-Headers"), "Server-Timing")

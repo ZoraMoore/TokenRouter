@@ -1,0 +1,21 @@
+# 本片段放入 api.scienceedu.me 的 `location /`，与 `proxy_pass` 同层。
+# Edge token 必须与 TLS_FINGERPRINT_AUTHENTICATED_INGRESS_EDGE_TOKEN 相同，
+# 且必须和 observer token 不同。部署时替换占位符；不得把真实 token 提交
+# 到仓库、Nginx access log 或故障工单。
+
+proxy_set_header X-TokenRouter-Ingress-Edge-Token "__REPLACE_WITH_RANDOM_EDGE_TOKEN__";
+proxy_set_header X-TokenRouter-Ingress-Connection-Id $connection;
+proxy_set_header X-TokenRouter-Ingress-Connection-Requests $connection_requests;
+
+# 必须使用 realip 模块保留的 TCP 对端计算 flow_id。Resolved-Client-Addr
+# 单独传递 RealIP 解析后的地址；后端发现它和 TCP 对端不同时必须 fail-close，
+# 防止把 Cloudflare/CDN 到源站的 TLS 指纹误标为最终客户指纹。
+proxy_set_header X-TokenRouter-Ingress-Remote-Addr $realip_remote_addr;
+proxy_set_header X-TokenRouter-Ingress-Remote-Port $realip_remote_port;
+proxy_set_header X-TokenRouter-Ingress-Server-Addr $server_addr;
+proxy_set_header X-TokenRouter-Ingress-Server-Port $server_port;
+proxy_set_header X-TokenRouter-Ingress-Resolved-Client-Addr $remote_addr;
+
+proxy_set_header X-TokenRouter-Ingress-Session-Reused $ssl_session_reused;
+proxy_set_header X-TokenRouter-Ingress-Alpn $ssl_alpn_protocol;
+proxy_set_header X-TokenRouter-Ingress-Http-Protocol $server_protocol;

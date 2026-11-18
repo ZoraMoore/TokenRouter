@@ -3,7 +3,14 @@
     <button
       type="button"
       @click="toggle"
-      :class="['date-picker-trigger', isOpen && 'date-picker-trigger-open']"
+      :aria-expanded="isOpen"
+      aria-haspopup="dialog"
+      :class="[
+        'input input-trigger',
+        // 日期控件文字沿用既有的中性灰(比 .input 默认色略浅),保持现状视觉。
+        'text-gray-700 dark:text-gray-300',
+        isOpen && 'date-picker-trigger-open'
+      ]"
     >
       <span class="date-picker-icon">
         <Icon name="calendar" size="sm" />
@@ -15,76 +22,155 @@
         <Icon
           name="chevronDown"
           size="sm"
-          :class="['transition-transform duration-200', isOpen && 'rotate-180']"
+          :class="['transition-transform duration-normal', isOpen && 'rotate-180']"
+          :animate-on-hover="false"
         />
       </span>
     </button>
 
-    <Transition name="date-picker-dropdown">
-      <div v-if="isOpen" class="date-picker-dropdown" :style="dropdownStyle">
-        <!-- Quick presets -->
-        <div class="date-picker-presets">
-          <button
-            v-for="preset in presets"
-            :key="preset.value"
-            @click="selectPreset(preset)"
-            :class="['date-picker-preset', isPresetActive(preset) && 'date-picker-preset-active']"
-          >
-            {{ t(preset.labelKey) }}
-          </button>
+    <MotionTransition name="dropdown-fade">
+      <div v-if="isOpen" class="date-picker-dropdown" :style="dropdownStyle" role="dialog">
+        <div class="date-picker-body">
+          <!-- 快捷范围：桌面端纵向分组排列，窄屏折成可换行的 chip -->
+          <div class="date-picker-presets">
+            <div v-for="(group, index) in presetGroups" :key="index" class="date-picker-preset-group">
+              <button
+                v-for="preset in group"
+                :key="preset.value"
+                type="button"
+                @click="selectPreset(preset)"
+                :class="['date-picker-preset', isPresetActive(preset) && 'date-picker-preset-active']"
+              >
+                <span class="truncate">{{ t(preset.labelKey) }}</span>
+                <Icon
+                  v-if="isPresetActive(preset)"
+                  name="check"
+                  size="sm"
+                  class="date-picker-preset-check"
+                  :animate-on-hover="false"
+                />
+              </button>
+            </div>
+          </div>
+
+          <!-- 自定义区间：单月日历，先点开始日期再点结束日期 -->
+          <div class="date-picker-calendar">
+            <div class="date-picker-calendar-header">
+              <button
+                type="button"
+                class="date-picker-nav btn-icon-sm"
+                :aria-label="t('dates.previousMonth')"
+                @click="shiftMonth(-1)"
+              >
+                <Icon name="chevronLeft" size="sm" />
+              </button>
+              <span class="date-picker-month">{{ monthLabel }}</span>
+              <button
+                type="button"
+                class="date-picker-nav btn-icon-sm"
+                :aria-label="t('dates.nextMonth')"
+                :disabled="!canGoNextMonth"
+                @click="shiftMonth(1)"
+              >
+                <Icon name="chevronRight" size="sm" />
+              </button>
+            </div>
+
+            <div class="date-picker-grid" @mouseleave="hoverDate = null">
+              <span v-for="weekday in weekdayLabels" :key="weekday" class="date-picker-weekday">
+                {{ weekday }}
+              </span>
+              <div
+                v-for="cell in calendarCells"
+                :key="cell.key"
+                :class="[
+                  'date-picker-day-cell',
+                  cell.inRange && 'date-picker-day-in-range',
+                  cell.isRangeStart && 'date-picker-day-range-start',
+                  cell.isRangeEnd && 'date-picker-day-range-end'
+                ]"
+              >
+                <button
+                  v-if="cell.date"
+                  type="button"
+                  :disabled="cell.disabled"
+                  :aria-label="cell.ariaLabel"
+                  :aria-pressed="cell.isRangeStart || cell.isRangeEnd"
+                  :class="[
+                    'date-picker-day',
+                    (cell.isRangeStart || cell.isRangeEnd) && 'date-picker-day-selected',
+                    cell.isToday && 'date-picker-day-today'
+                  ]"
+                  @click="selectDay(cell.date)"
+                  @mouseenter="hoverDate = cell.date"
+                >
+                  {{ cell.day }}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="date-picker-divider"></div>
-
-        <!-- Custom date range inputs -->
-        <div class="date-picker-custom">
-          <div class="date-picker-field">
-            <label class="date-picker-label">{{ t('dates.startDate') }}</label>
-            <input
-              type="date"
-              :value="dateInputValue(localStartDate)"
-              :max="dateInputValue(localEndDate) || tomorrow"
-              class="date-picker-input"
-              @change="onStartDateInputChange"
-            />
-          </div>
-          <div class="date-picker-separator">
-            <Icon name="arrowRight" size="sm" class="text-gray-400" />
-          </div>
-          <div class="date-picker-field">
-            <label class="date-picker-label">{{ t('dates.endDate') }}</label>
-            <input
-              type="date"
-              :value="dateInputValue(localEndDate)"
-              :min="dateInputValue(localStartDate)"
-              :max="tomorrow"
-              class="date-picker-input"
-              @change="onEndDateInputChange"
-            />
-          </div>
-        </div>
-
-        <!-- Apply button -->
+        <!-- 底栏：左侧显示待应用的区间，右侧取消与应用 -->
         <div class="date-picker-actions">
-          <button @click="apply" class="date-picker-apply">
-            {{ t('dates.apply') }}
-          </button>
+          <div class="date-picker-summary">
+            <template v-if="selectingEnd">
+              <span class="date-picker-summary-value">{{ formatSummaryDate(localStartDate) }}</span>
+              <Icon name="arrowRight" size="xs" class="shrink-0" />
+              <span>{{ t('dates.selectEndDate') }}</span>
+            </template>
+            <template v-else>
+              <span class="date-picker-summary-value">{{ formatSummaryDate(localStartDate) }}</span>
+              <Icon name="arrowRight" size="xs" class="shrink-0" />
+              <span class="date-picker-summary-value">{{ formatSummaryDate(localEndDate) }}</span>
+            </template>
+          </div>
+          <div class="flex shrink-0 items-center gap-2">
+            <button type="button" class="btn btn-secondary btn-sm h-8" @click="cancel">
+              {{ t('common.cancel') }}
+            </button>
+            <button type="button" class="btn btn-primary btn-sm h-8" :disabled="selectingEnd" @click="apply">
+              {{ t('dates.apply') }}
+            </button>
+          </div>
         </div>
       </div>
-    </Transition>
+    </MotionTransition>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useFloatingMotion } from '@/composables/useFloatingMotion'
+import MotionTransition from '@/components/common/MotionTransition.vue'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
+import { getFloatingPanelPosition, type FloatingPanelPosition } from '@/utils/floatingPanel'
 
 interface DatePreset {
   labelKey: string
   value: string
   durationMs?: number
   getRange: () => { start: string; end: string }
+}
+
+interface CalendarCell {
+  key: string
+  date: string | null
+  day: number
+  ariaLabel: string
+  disabled: boolean
+  isToday: boolean
+  inRange: boolean
+  isRangeStart: boolean
+  isRangeEnd: boolean
+}
+
+// 打开弹层时记录的已生效状态，未应用就关闭时据此还原。
+interface RangeSnapshot {
+  start: string
+  end: string
+  preset: string | null
 }
 
 interface Props {
@@ -106,20 +192,35 @@ const { t, locale } = useI18n()
 
 const isOpen = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
-const dropdownLeft = ref(0)
-const dropdownTop = ref(0)
+const dropdownPosition = ref<FloatingPanelPosition | null>(null)
 const localStartDate = ref(props.startDate)
 const localEndDate = ref(props.endDate)
-const activePreset = ref<string | null>('last24Hours')
+const activePreset = ref<string | null>(null)
+const snapshot = ref<RangeSnapshot | null>(null)
 
-const dropdownWidth = 640
+// 日历当前展示月份的 1 日，格式 YYYY-MM-DD。
+const viewMonth = ref('')
+// 已点选开始日期、等待点选结束日期。
+const selectingEnd = ref(false)
+// 等待结束日期时鼠标悬停的日期，用于预览区间。
+const hoverDate = ref<string | null>(null)
+
+const dropdownWidth = 456
 const dropdownMargin = 12
 
-const dropdownStyle = computed(() => ({
-  left: `${dropdownLeft.value}px`,
-  top: `${dropdownTop.value}px`,
-  width: `min(${dropdownWidth}px, calc(100vw - ${dropdownMargin * 2}px))`
-}))
+const dropdownStyle = computed(() => {
+  const position = dropdownPosition.value
+  if (!position) return {}
+  return {
+    left: `${position.left}px`,
+    top: position.top === null ? 'auto' : `${position.top}px`,
+    bottom: position.bottom === null ? 'auto' : `${position.bottom}px`,
+    width: `${position.width}px`,
+    maxHeight: `${position.maxHeight}px`
+  }
+})
+
+const dateLocale = computed(() => locale.value)
 
 const today = computed(() => {
   // Use local timezone to avoid UTC timezone issues
@@ -268,26 +369,165 @@ const presets: DatePreset[] = [
   }
 ]
 
+// 下拉中的展示分组：分钟/小时级、单日、滚动天数、自然月。匹配顺序仍以 presets 为准。
+const presetGroupValues = [
+  ['last15Minutes', 'last30Minutes', 'last24Hours'],
+  ['today', 'yesterday'],
+  ['7days', '14days', '30days'],
+  ['thisMonth', 'lastMonth']
+]
+
+const presetGroups = presetGroupValues.map((values) =>
+  values
+    .map((value) => presets.find((preset) => preset.value === value))
+    .filter((preset): preset is DatePreset => !!preset)
+)
+
+// 弹层打开期间触发器继续显示已生效的范围，点应用后才切换文案。
 const displayValue = computed(() => {
-  if (activePreset.value) {
-    const preset = presets.find((p) => p.value === activePreset.value)
+  const committed = isOpen.value && snapshot.value
+    ? snapshot.value
+    : { start: localStartDate.value, end: localEndDate.value, preset: activePreset.value }
+
+  if (committed.preset) {
+    const preset = presets.find((p) => p.value === committed.preset)
     if (preset) return t(preset.labelKey)
   }
 
-  if (localStartDate.value && localEndDate.value) {
-    if (localStartDate.value === localEndDate.value) {
-      return formatDate(localStartDate.value)
+  if (committed.start && committed.end) {
+    if (committed.start === committed.end) {
+      return formatDate(committed.start)
     }
-    return `${formatDate(localStartDate.value)} - ${formatDate(localEndDate.value)}`
+    return `${formatDate(committed.start)} - ${formatDate(committed.end)}`
   }
 
   return t('dates.selectDateRange')
 })
 
+const parseLocalDate = (dateStr: string): Date => {
+  return new Date(`${dateInputValue(dateStr)}T00:00:00`)
+}
+
 const formatDate = (dateStr: string): string => {
-  const date = new Date(`${dateInputValue(dateStr)}T00:00:00`)
-  const dateLocale = locale.value === 'zh' ? 'zh-CN' : 'en-US'
-  return date.toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })
+  return parseLocalDate(dateStr).toLocaleDateString(dateLocale.value, { month: 'short', day: 'numeric' })
+}
+
+// 底栏摘要带年份；分钟级预设的值含时刻，一并显示到分钟。
+const formatSummaryDate = (value: string): string => {
+  if (!value) return '—'
+  const text = parseLocalDate(value).toLocaleDateString(dateLocale.value, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
+  return value.length > 10 ? `${text} ${value.slice(11, 16)}` : text
+}
+
+const monthLabel = computed(() => {
+  if (!viewMonth.value) return ''
+  return parseLocalDate(viewMonth.value).toLocaleDateString(dateLocale.value, { year: 'numeric', month: 'long' })
+})
+
+// 中文日历以周一开头，英文以周日开头。
+const weekStartsOn = computed(() => (locale.value === 'zh-Hans' ? 1 : 0))
+
+const weekdayLabels = computed(() => {
+  // 2023-01-01 是周日，以它为基准依次生成一周的星期缩写。
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(2023, 0, 1 + ((index + weekStartsOn.value) % 7))
+    return date.toLocaleDateString(dateLocale.value, { weekday: 'narrow' })
+  })
+})
+
+const canGoNextMonth = computed(() => {
+  if (!viewMonth.value) return false
+  const next = parseLocalDate(viewMonth.value)
+  next.setMonth(next.getMonth() + 1)
+  return formatDateToString(next) <= tomorrow.value
+})
+
+// 当前高亮的区间。等待结束日期时按悬停位置预览，起止顺序自动对调。
+const highlightRange = computed(() => {
+  const start = dateInputValue(localStartDate.value)
+  const end = dateInputValue(localEndDate.value)
+  if (selectingEnd.value && hoverDate.value) {
+    return start <= hoverDate.value
+      ? { start, end: hoverDate.value }
+      : { start: hoverDate.value, end: start }
+  }
+  return { start, end }
+})
+
+// 固定生成 6 周 42 格，不同月份切换时面板高度保持不变。
+const calendarCells = computed<CalendarCell[]>(() => {
+  if (!viewMonth.value) return []
+  const first = parseLocalDate(viewMonth.value)
+  const leading = (first.getDay() - weekStartsOn.value + 7) % 7
+  const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate()
+  const { start, end } = highlightRange.value
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const day = index - leading + 1
+    if (day < 1 || day > daysInMonth) {
+      return {
+        key: `blank-${index}`,
+        date: null,
+        day: 0,
+        ariaLabel: '',
+        disabled: true,
+        isToday: false,
+        inRange: false,
+        isRangeStart: false,
+        isRangeEnd: false
+      }
+    }
+    const current = new Date(first.getFullYear(), first.getMonth(), day)
+    const date = formatDateToString(current)
+    const hasRange = !!start && !!end
+    return {
+      key: date,
+      date,
+      day,
+      ariaLabel: current.toLocaleDateString(dateLocale.value, { dateStyle: 'full' }),
+      disabled: date > tomorrow.value,
+      isToday: date === today.value,
+      inRange: hasRange && start !== end && date >= start && date <= end,
+      isRangeStart: hasRange && date === start,
+      isRangeEnd: hasRange && date === end
+    }
+  })
+})
+
+const showMonthOf = (value: string) => {
+  const base = value ? parseLocalDate(value) : new Date()
+  viewMonth.value = formatDateToString(new Date(base.getFullYear(), base.getMonth(), 1))
+}
+
+const shiftMonth = (offset: number) => {
+  const current = parseLocalDate(viewMonth.value)
+  viewMonth.value = formatDateToString(new Date(current.getFullYear(), current.getMonth() + offset, 1))
+}
+
+// 第一次点击确定开始日期，第二次点击确定结束日期；反向点选时自动对调。
+const selectDay = (date: string) => {
+  if (!selectingEnd.value) {
+    localStartDate.value = date
+    localEndDate.value = date
+    activePreset.value = null
+    selectingEnd.value = true
+    return
+  }
+
+  const start = dateInputValue(localStartDate.value)
+  if (date < start) {
+    localStartDate.value = date
+    localEndDate.value = start
+  } else {
+    localEndDate.value = date
+  }
+  selectingEnd.value = false
+  hoverDate.value = null
+  onDateChange()
 }
 
 const isPresetActive = (preset: DatePreset): boolean => {
@@ -305,6 +545,9 @@ const selectPreset = (preset: DatePreset) => {
   localStartDate.value = range.start
   localEndDate.value = range.end
   activePreset.value = preset.value
+  selectingEnd.value = false
+  hoverDate.value = null
+  showMonthOf(range.end)
   if (props.applyOnPreset) {
     apply()
   }
@@ -336,21 +579,42 @@ const onDateChange = () => {
   }
 }
 
-const onStartDateInputChange = (event: Event) => {
-  localStartDate.value = (event.target as HTMLInputElement).value
-  onDateChange()
+const open = () => {
+  snapshot.value = {
+    start: localStartDate.value,
+    end: localEndDate.value,
+    preset: activePreset.value
+  }
+  selectingEnd.value = false
+  hoverDate.value = null
+  showMonthOf(localEndDate.value)
+  isOpen.value = true
+  updateDropdownPosition()
 }
 
-const onEndDateInputChange = (event: Event) => {
-  localEndDate.value = (event.target as HTMLInputElement).value
-  onDateChange()
+// 未点应用就关闭时丢弃本次改动，触发器文案保持已生效的范围。
+const close = () => {
+  if (!isOpen.value) return
+  if (snapshot.value) {
+    localStartDate.value = snapshot.value.start
+    localEndDate.value = snapshot.value.end
+    activePreset.value = snapshot.value.preset
+  }
+  selectingEnd.value = false
+  hoverDate.value = null
+  isOpen.value = false
 }
 
 const toggle = () => {
-  isOpen.value = !isOpen.value
   if (isOpen.value) {
-    updateDropdownPosition()
+    close()
+  } else {
+    open()
   }
+}
+
+const cancel = () => {
+  close()
 }
 
 const apply = () => {
@@ -364,25 +628,31 @@ const apply = () => {
   isOpen.value = false
 }
 
-// 根据触发按钮位置计算弹层坐标，避免靠右或窄屏时被视口裁切。
+// 触发器在视口右半侧时右缘对齐，否则左缘对齐；空间不足时由公共定位函数翻转和夹取。
 const updateDropdownPosition = () => {
   const trigger = containerRef.value?.getBoundingClientRect()
   if (!trigger) return
-  const maxLeft = Math.max(dropdownMargin, window.innerWidth - dropdownWidth - dropdownMargin)
-  const preferredLeft = trigger.left
-  dropdownLeft.value = Math.min(Math.max(dropdownMargin, preferredLeft), maxLeft)
-  dropdownTop.value = trigger.bottom + 8
+  const triggerCenter = trigger.left + trigger.width / 2
+  dropdownPosition.value = getFloatingPanelPosition(trigger, window.innerWidth, window.innerHeight, {
+    viewportPadding: dropdownMargin,
+    maxWidth: dropdownWidth,
+    maxHeightRatio: 0.85,
+    align: triggerCenter > window.innerWidth / 2 ? 'right' : 'left',
+    pinLeftOnMobile: false
+  })
 }
+
+useFloatingMotion(containerRef, () => isOpen.value, close, updateDropdownPosition)
 
 const handleClickOutside = (event: MouseEvent) => {
   if (containerRef.value && !containerRef.value.contains(event.target as Node)) {
-    isOpen.value = false
+    close()
   }
 }
 
 const handleEscape = (event: KeyboardEvent) => {
   if (event.key === 'Escape' && isOpen.value) {
-    isOpen.value = false
+    close()
   }
 }
 
@@ -391,6 +661,9 @@ const handleViewportChange = () => {
     updateDropdownPosition()
   }
 }
+
+// 首次渲染前匹配初始范围的快捷项，触发器直接显示对应文案。
+onDateChange()
 
 // Sync local state with props
 watch(
@@ -414,8 +687,6 @@ onMounted(() => {
   document.addEventListener('keydown', handleEscape)
   window.addEventListener('resize', handleViewportChange)
   window.addEventListener('scroll', handleViewportChange, true)
-  // Initialize active preset detection
-  onDateChange()
 })
 
 onUnmounted(() => {
@@ -427,21 +698,10 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.date-picker-trigger {
-  /* 日期控件的结构边框使用中性灰，选中的快捷日期仍保留品牌蓝。 */
-  @apply flex items-center gap-2;
-  @apply min-h-11 rounded-control px-4 py-2.5 text-sm;
-  @apply bg-white dark:bg-dark-950;
-  @apply border border-primary-900/10 dark:border-dark-600;
-  @apply text-gray-700 dark:text-gray-300;
-  @apply transition-all duration-200;
-  @apply focus:border-primary-900/10 focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:border-primary-500 dark:focus:ring-primary-500/30;
-  @apply hover:border-black/20 dark:hover:border-primary-500;
-  @apply cursor-pointer;
-}
-
+/* 基线配方已与 .input 同源(模板 input input-trigger 组合),这里只保留展开态增量。
+   展开态描边与 Select 一致，品牌色只用于选中的日期和快捷范围。 */
 .date-picker-trigger-open {
-  @apply border-primary-900/10 ring-2 ring-black/10 dark:border-primary-500 dark:ring-primary-500/30;
+  @apply border-primary-900/10 ring-2 ring-black/10 dark:border-dark-400 dark:ring-white/6;
 }
 
 .date-picker-icon {
@@ -457,88 +717,137 @@ onUnmounted(() => {
 }
 
 .date-picker-dropdown {
-  @apply fixed z-[100];
+  @apply fixed z-tooltip flex flex-col;
   @apply bg-white dark:bg-dark-900;
-  @apply rounded-control;
+  @apply rounded-surface;
   @apply border border-primary-900/10 dark:border-dark-600;
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
-  @apply overflow-hidden;
-  @apply max-w-[calc(100vw-1.5rem)];
+  @apply overflow-y-auto;
 }
 
+.date-picker-body {
+  @apply flex flex-col sm:flex-row;
+}
+
+/* 窄屏时快捷范围横排换行，sm 起改为左侧纵向列表。 */
 .date-picker-presets {
-  @apply grid grid-cols-2 gap-1 p-2;
+  @apply flex flex-wrap gap-1 p-2;
+  @apply border-b border-primary-900/10 dark:border-dark-600;
+  @apply sm:w-36 sm:shrink-0 sm:flex-col sm:flex-nowrap sm:gap-0 sm:border-b-0 sm:border-r;
+}
+
+.date-picker-preset-group {
+  @apply contents sm:flex sm:flex-col sm:gap-0.5;
+}
+
+.date-picker-preset-group + .date-picker-preset-group {
+  @apply sm:mt-1 sm:border-t sm:border-primary-900/10 sm:pt-1 sm:dark:border-dark-700;
 }
 
 .date-picker-preset {
-  @apply rounded-compact px-3 py-1.5 text-xs font-medium;
-  @apply text-gray-600 dark:text-gray-400;
-  @apply hover:bg-gray-100 dark:hover:bg-dark-800;
-  @apply transition-colors duration-150;
+  @apply flex items-center justify-between gap-2 rounded-control px-2.5 py-1.5 text-left text-sm;
+  @apply text-gray-700 dark:text-gray-300;
+  @apply hover:bg-gray-100 dark:hover:bg-dark-800 dark:hover:text-primary-500;
+  @apply transition-colors duration-fast;
+  @apply max-sm:border max-sm:border-primary-900/10 max-sm:dark:border-dark-600;
 }
 
 .date-picker-preset-active {
-  @apply bg-primary-100 dark:bg-dark-700;
-  @apply text-primary-700 dark:text-primary-300;
+  /* 与 Select 选中项同一配色：浅色灰底品牌字，深色淡品牌青底。 */
+  @apply bg-gray-100 text-primary-700 dark:bg-primary-500/8 dark:text-primary-500 dark:hover:bg-primary-500/8;
+  @apply font-medium;
 }
 
-.date-picker-divider {
-  @apply border-t border-primary-900/10 dark:border-dark-600;
+.date-picker-preset-check {
+  @apply hidden shrink-0 sm:block;
 }
 
-.date-picker-custom {
-  @apply flex items-end gap-2 p-3;
+.date-picker-calendar {
+  @apply min-w-0 flex-1 p-3;
 }
 
-.date-picker-field {
-  @apply flex-1;
+.date-picker-calendar-header {
+  @apply mb-2 flex items-center justify-between;
 }
 
-.date-picker-label {
-  @apply mb-1 block text-xs font-medium text-primary-900/90 dark:text-gray-400;
+.date-picker-month {
+  @apply text-sm font-semibold text-gray-900 dark:text-dark-50;
 }
 
-.date-picker-input {
-  @apply w-full rounded-control px-2 py-1.5 text-sm;
-  @apply bg-gray-50 dark:bg-dark-950;
-  @apply border border-primary-900/10 dark:border-dark-600;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply focus:border-primary-900/10 focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:border-primary-500 dark:focus:ring-primary-500/30;
+.date-picker-nav {
+  @apply text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-dark-300 dark:hover:bg-dark-800 dark:hover:text-dark-50;
+  @apply transition-colors duration-fast;
+  @apply disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent;
 }
 
-.date-picker-input::-webkit-calendar-picker-indicator {
-  @apply cursor-pointer opacity-60 hover:opacity-100;
-  filter: invert(0.5);
+.date-picker-grid {
+  @apply grid grid-cols-7 gap-y-1;
 }
 
-.dark .date-picker-input::-webkit-calendar-picker-indicator {
-  filter: none;
+.date-picker-weekday {
+  @apply flex h-8 items-center justify-center text-xs font-medium text-gray-400 dark:text-dark-400;
 }
 
-.date-picker-separator {
-  @apply flex items-center justify-center pb-1;
+/* 区间底色画在单元格的伪元素上，相邻格子连成一条带；起止格只铺向区间内侧的一半。 */
+.date-picker-day-cell {
+  @apply relative flex h-9 items-center justify-center;
+}
+
+.date-picker-day-cell::before {
+  content: '';
+  @apply absolute inset-y-0 hidden bg-primary-100/70 dark:bg-primary-500/10;
+}
+
+.date-picker-day-in-range::before {
+  @apply left-0 right-0 block;
+}
+
+.date-picker-day-in-range.date-picker-day-range-start::before {
+  @apply left-1/2;
+}
+
+.date-picker-day-in-range.date-picker-day-range-end::before {
+  @apply right-1/2;
+}
+
+.date-picker-day {
+  @apply relative flex h-9 w-9 items-center justify-center rounded-control text-sm tabular-nums;
+  @apply text-gray-700 dark:text-gray-300;
+  @apply hover:bg-gray-100 dark:hover:bg-dark-800;
+  @apply transition-colors duration-fast;
+  @apply disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent dark:disabled:text-dark-600;
+}
+
+.date-picker-day-in-range .date-picker-day {
+  @apply text-primary-800 hover:bg-primary-200/70 dark:text-primary-400 dark:hover:bg-primary-500/15;
+}
+
+/* 今天用底部小圆点标记，不与选中态的实心底色冲突。 */
+.date-picker-day-today::after {
+  content: '';
+  @apply absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary-500;
+}
+
+.date-picker-day.date-picker-day-selected {
+  /* 起止日期与主按钮同色。 */
+  @apply bg-primary-600 font-semibold text-white hover:bg-primary-700;
+  @apply dark:text-white dark:hover:bg-primary-700;
+}
+
+.date-picker-day-selected.date-picker-day-today::after {
+  @apply bg-white;
 }
 
 .date-picker-actions {
-  @apply flex justify-end p-2 pt-0;
+  @apply flex flex-wrap items-center justify-between gap-2 px-3 py-2.5;
+  @apply border-t border-primary-900/10 dark:border-dark-600;
 }
 
-.date-picker-apply {
-  @apply rounded-control px-4 py-1.5 text-sm font-medium;
-  @apply bg-primary-600 text-white;
-  @apply hover:bg-primary-700;
-  @apply transition-colors duration-150;
+.date-picker-summary {
+  @apply flex min-w-0 items-center gap-1.5 text-xs text-gray-500 dark:text-dark-400;
 }
 
-/* Dropdown animation */
-.date-picker-dropdown-enter-active,
-.date-picker-dropdown-leave-active {
-  transition: all 0.2s ease;
-}
-
-.date-picker-dropdown-enter-from,
-.date-picker-dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
+.date-picker-summary-value {
+  @apply truncate font-medium text-gray-700 dark:text-dark-100;
 }
 </style>

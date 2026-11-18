@@ -52,7 +52,7 @@ export const LATENCY_BAR_CLASSES: Record<LatencySeverity, string> = {
   critical: 'bg-red-500',
 }
 
-/** 渐变色条上端（首字档）；与 LATENCY_BAR_TO_CLASSES 组合成上下渐变，避免两段硬切割裂感。 */
+/** 渐变色条上端（首字档），与 LATENCY_BAR_TO_CLASSES 组合成上下连续渐变。 */
 export const LATENCY_BAR_FROM_CLASSES: Record<LatencySeverity, string> = {
   good: 'from-emerald-500',
   warn: 'from-amber-400',

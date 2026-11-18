@@ -155,4 +155,15 @@ describe("groupsModelsList", () => {
 
     expect(getAvailabilityProbeCandidateModels(state)).toEqual(["deepseek-v4-pro"]);
   });
+
+  it("does not restore upstream model names from a saved custom list", () => {
+    const state = hydrateModelsListState({
+      enabled: true,
+      models: ["gemini-3.8-flash-tiered", "gemini-3.8-flash"],
+    }, ["gemini-3.1-pro", "gemini-3.7-flash", "gemini-3.8-flash"]);
+
+    expect(getAvailabilityProbeCandidateModels(state)).toEqual(["gemini-3.8-flash"]);
+    setModelsListCandidates(state, []);
+    expect(getAvailabilityProbeCandidateModels(state)).toEqual([]);
+  });
 });

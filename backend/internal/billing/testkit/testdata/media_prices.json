@@ -1,0 +1,42 @@
+{
+  "grok-imagine-image": {
+    "image_prices": {
+      "1K": 0.02,
+      "2K": 0.02,
+      "4K": 0.02
+    },
+    "source": "test_fixture"
+  },
+  "grok-imagine-image-quality": {
+    "image_prices": {
+      "1K": 0.05,
+      "2K": 0.07,
+      "4K": 0.07
+    },
+    "source": "test_fixture"
+  },
+  "grok-imagine-image-2.0": {
+    "image_prices": {
+      "1K": 0.06,
+      "2K": 0.08,
+      "4K": 0.08
+    },
+    "source": "test_fixture"
+  },
+  "grok-imagine-video": {
+    "video_prices": {
+      "480p": 0.05,
+      "720p": 0.07,
+      "1080p": 0.07
+    },
+    "source": "test_fixture"
+  },
+  "grok-imagine-video-1.5": {
+    "video_prices": {
+      "480p": 0.08,
+      "720p": 0.14,
+      "1080p": 0.25
+    },
+    "source": "test_fixture"
+  }
+}

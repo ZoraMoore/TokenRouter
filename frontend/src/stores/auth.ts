@@ -3,6 +3,7 @@
  * Manages user authentication state, login/logout, token refresh, and token persistence
  */
 
+import { getLocale, setLocale } from '@/i18n'
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { authAPI, isTotp2FARequired, passkeyAPI, type LoginResponse } from '@/api'
@@ -17,7 +18,7 @@ import type {
 const AUTH_TOKEN_KEY = 'auth_token'
 const AUTH_USER_KEY = 'auth_user'
 const REFRESH_TOKEN_KEY = 'refresh_token'
-const TOKEN_EXPIRES_AT_KEY = 'token_expires_at' // 存储过期时间戳而非有效期
+const TOKEN_EXPIRES_AT_KEY = 'token_expires_at' // 存储过期时间戳。
 const PENDING_AUTH_SESSION_KEY = 'pending_auth_session'
 const AUTO_REFRESH_INTERVAL = 60 * 1000 // 60 seconds for user data refresh
 const TOKEN_REFRESH_BUFFER = 120 * 1000 // 120 seconds before expiry to refresh token
@@ -77,11 +78,23 @@ function clearPendingAuthSessionStorage(): void {
 export const useAuthStore = defineStore('auth', () => {
   // ==================== State ====================
 
+  let localeUserID: number | null = null
+
+  // 每次登录同步账户选择，后台资料轮询保持当前切换结果。
+  async function syncUserLocale(value: User): Promise<void> {
+    if (localeUserID === value.id) return
+    localeUserID = value.id
+    try {
+      await setLocale(value.preferred_locale || getLocale(), !value.preferred_locale)
+    } catch {
+      localeUserID = null
+    }
+  }
+
   const user = ref<User | null>(null)
   const token = ref<string | null>(null)
   const refreshTokenValue = ref<string | null>(null)
   const tokenExpiresAt = ref<number | null>(null) // 过期时间戳（毫秒）
-  const runMode = ref<'standard' | 'simple'>('standard')
   const pendingAuthSession = ref<PendingAuthSessionSummary | null>(null)
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let tokenRefreshTimeoutId: ReturnType<typeof setTimeout> | null = null
@@ -96,7 +109,6 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.role === 'admin'
   })
 
-  const isSimpleMode = computed(() => runMode.value === 'simple')
   const hasPendingAuthSession = computed(() => pendingAuthSession.value !== null)
 
   // ==================== Actions ====================
@@ -307,12 +319,9 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem(REFRESH_TOKEN_KEY, response.refresh_token)
     }
 
-    // Extract run_mode if present
-    if (response.user.run_mode) {
-      runMode.value = response.user.run_mode
-    }
-    const { run_mode: _run_mode, ...userData } = response.user
+    const userData = response.user
     user.value = userData
+    void syncUserLocale(userData)
 
     // Persist to localStorage
     localStorage.setItem(AUTH_TOKEN_KEY, response.access_token)
@@ -361,6 +370,7 @@ export const useAuthStore = defineStore('auth', () => {
     stopAutoRefresh()
     stopTokenRefresh()
     token.value = null
+    localeUserID = null
     user.value = null
 
     token.value = newToken
@@ -440,11 +450,9 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const response = await authAPI.getCurrentUser()
-      if (response.data.run_mode) {
-        runMode.value = response.data.run_mode
-      }
-      const { run_mode: _run_mode, ...userData } = response.data
+      const userData = response.data
       user.value = userData
+    void syncUserLocale(userData)
 
       // Update localStorage
       localStorage.setItem(AUTH_USER_KEY, JSON.stringify(userData))
@@ -472,6 +480,7 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null
     refreshTokenValue.value = null
     tokenExpiresAt.value = null
+    localeUserID = null
     user.value = null
     localStorage.removeItem(AUTH_TOKEN_KEY)
     localStorage.removeItem(AUTH_USER_KEY)
@@ -493,13 +502,11 @@ export const useAuthStore = defineStore('auth', () => {
     // State
     user,
     token,
-    runMode: readonly(runMode),
     pendingAuthSession: readonly(pendingAuthSession),
 
     // Computed
     isAuthenticated,
     isAdmin,
-    isSimpleMode,
     hasPendingAuthSession,
 
     // Actions

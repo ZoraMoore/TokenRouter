@@ -17,7 +17,7 @@ trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
 extract_application_environment() {
   file=$1
   awk '
-    $0 == "  sub2api:" {
+    $0 == "  tokenrouter:" {
       in_application = 1
       next
     }

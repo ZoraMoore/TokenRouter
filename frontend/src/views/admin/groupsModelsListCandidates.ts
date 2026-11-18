@@ -1,11 +1,9 @@
-import type { GroupPlatform } from "@/types";
 
 export type ModelsListCandidatesMode = "create" | "edit";
 
 export interface ModelsListCandidatesRequest {
   mode: ModelsListCandidatesMode;
   groupID: number;
-  platform: GroupPlatform;
 }
 
 export interface ModelsListCandidatesTracker {
@@ -33,8 +31,7 @@ export const createModelsListCandidatesTracker = (): ModelsListCandidatesTracker
       const current = currentByMode[request.mode];
       return (
         current?.id === requestID &&
-        current.request.groupID === request.groupID &&
-        current.request.platform === request.platform
+        current.request.groupID === request.groupID
       );
     },
   };

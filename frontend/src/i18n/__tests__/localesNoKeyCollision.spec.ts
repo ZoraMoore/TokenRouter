@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import enAdminAccounts from '../locales/en/admin/accounts'
-import enAdminChannels from '../locales/en/admin/channels'
+import enAdminProviders from '../locales/en/admin/providers'
+import enAdminPricing from '../locales/en/admin/pricing'
 import enAdminOps from '../locales/en/admin/ops'
 import enAdminOverview from '../locales/en/admin/overview'
 import enAdminResources from '../locales/en/admin/resources'
@@ -10,8 +10,8 @@ import enCommon from '../locales/en/common'
 import enDashboard from '../locales/en/dashboard'
 import enLanding from '../locales/en/landing'
 import enMisc from '../locales/en/misc'
-import zhAdminAccounts from '../locales/zh/admin/accounts'
-import zhAdminChannels from '../locales/zh/admin/channels'
+import zhAdminProviders from '../locales/zh/admin/providers'
+import zhAdminPricing from '../locales/zh/admin/pricing'
 import zhAdminOps from '../locales/zh/admin/ops'
 import zhAdminOverview from '../locales/zh/admin/overview'
 import zhAdminResources from '../locales/zh/admin/resources'
@@ -22,7 +22,7 @@ import zhLanding from '../locales/zh/landing'
 import zhMisc from '../locales/zh/misc'
 
 // locales/{zh,en}/index.ts 与 admin/index.ts 使用对象展开聚合各域模块，
-// 展开模块之间若出现同名顶层键会静默覆盖。本测试将该风险固化为显式失败。
+// 展开模块之间若出现同名顶层键会静默覆盖，测试会将重复键报告为失败。
 type Modules = Record<string, Record<string, unknown>>
 
 function collisions(modules: Modules): string[] {
@@ -49,16 +49,16 @@ const roots: Record<string, Modules> = {
 const admins: Record<string, Modules> = {
   zh: {
     overview: zhAdminOverview,
-    channels: zhAdminChannels,
-    accounts: zhAdminAccounts,
+    channels: zhAdminPricing,
+    providers: zhAdminProviders,
     resources: zhAdminResources,
     ops: zhAdminOps,
     settings: zhAdminSettings
   },
   en: {
     overview: enAdminOverview,
-    channels: enAdminChannels,
-    accounts: enAdminAccounts,
+    channels: enAdminPricing,
+    providers: enAdminProviders,
     resources: enAdminResources,
     ops: enAdminOps,
     settings: enAdminSettings
@@ -81,25 +81,62 @@ describe.each(Object.keys(roots))('locale %s spread assembly', (locale) => {
   })
 })
 
-// 账号阈值表单直接读取 admin.accounts.*；这些键若误放进 status，
+// 提供商阈值表单直接读取 admin.providers.*；这些键若误放进 status，
 // vue-i18n 会把键名原样显示在界面上。
-describe('account scheduling threshold locale hierarchy', () => {
+describe('provider scheduling threshold locale hierarchy', () => {
   it.each([
-    ['zh', zhAdminAccounts.accounts],
-    ['en', enAdminAccounts.accounts]
+    ['zh', zhAdminProviders.providers],
+    ['en', enAdminProviders.providers]
   ] as const)('%s keeps threshold form keys outside status', (_locale, messages) => {
     const record = messages as unknown as Record<string, unknown>
     const status = record.status as Record<string, unknown>
     const keys = [
-      'accountSchedulingThresholdOverride',
-      'accountSchedulingThresholdOverrideHint',
-      'accountSchedulingThresholdOverrideValue',
-      'accountSchedulingThresholdOverrideDisabledHint'
+      'providerSchedulingThresholdOverride',
+      'providerSchedulingThresholdOverrideHint',
+      'providerSchedulingThresholdOverrideValue',
+      'providerSchedulingThresholdOverrideDisabledHint'
     ]
 
     for (const key of keys) {
       expect(record).toHaveProperty(key)
       expect(status).not.toHaveProperty(key)
+    }
+  })
+})
+
+// 高级调度诊断返回的设置键必须全部有本地化名称，否则界面会直接显示键路径。
+describe('advanced scheduler diagnostic locale keys', () => {
+  const settingKeys = [
+    'sticky_weighted_enabled',
+    'subscription_priority_enabled',
+    'ewma_error_rate_alpha',
+    'ewma_ttft_alpha',
+    'sticky_escape_enabled',
+    'sticky_escape_ttft_ms',
+    'sticky_escape_error_rate',
+    'lb_top_k',
+    'weight_priority',
+    'weight_load',
+    'weight_queue',
+    'weight_error_rate',
+    'weight_ttft',
+    'weight_reset',
+    'weight_quota_headroom',
+    'weight_previous_response',
+    'weight_session_sticky'
+  ]
+
+  it.each([
+    ['zh', zhAdminProviders.providers],
+    ['en', enAdminProviders.providers]
+  ] as const)('%s translates every diagnostic setting', (_locale, messages) => {
+    const settingNames = (messages as unknown as {
+      advancedSchedulerScore: { settingNames: Record<string, unknown> }
+    }).advancedSchedulerScore.settingNames
+
+    for (const key of settingKeys) {
+      expect(settingNames[key], `${_locale} missing setting name ${key}`).toEqual(expect.any(String))
+      expect(settingNames[key]).not.toBe(`admin.providers.advancedSchedulerScore.settingNames.${key}`)
     }
   })
 })

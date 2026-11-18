@@ -1,16 +1,16 @@
-//go:build unit
-
 package provider
 
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/url"
 	"strings"
 	"testing"
 
-	"github.com/TokenFlux/TokenRouter/internal/payment"
 	"github.com/smartwalle/alipay/v3"
+
+	"github.com/TokenFlux/TokenRouter/internal/payment"
 )
 
 func TestIsTradeNotExist(t *testing.T) {
@@ -70,12 +70,8 @@ func TestNewAlipay(t *testing.T) {
 	// helper to clone and override config fields
 	withOverride := func(overrides map[string]string) map[string]string {
 		cfg := make(map[string]string, len(validConfig))
-		for k, v := range validConfig {
-			cfg[k] = v
-		}
-		for k, v := range overrides {
-			cfg[k] = v
-		}
+		maps.Copy(cfg, validConfig)
+		maps.Copy(cfg, overrides)
 		return cfg
 	}
 
@@ -195,7 +191,7 @@ func TestCreateTradeUsesPagePayForDesktop(t *testing.T) {
 	}
 }
 
-// 当实例配置 paymentMode == "redirect" 时，桌面支付必须跳过 precreate 直接走 page.pay。
+// TestCreateTradeRedirectModeSkipsPrecreate 验证当实例配置 paymentMode == "redirect" 时，桌面支付必须跳过 precreate 直接走 page.pay。
 func TestCreateTradeRedirectModeSkipsPrecreate(t *testing.T) {
 	origPreCreate := alipayTradePreCreate
 	origPagePay := alipayTradePagePay

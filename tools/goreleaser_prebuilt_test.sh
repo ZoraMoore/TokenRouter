@@ -8,16 +8,16 @@ trap 'rm -rf "$temp_dir"' EXIT HUP INT TERM
 
 # 模拟 upload-artifact 下载后丢失可执行位的预构建二进制。
 mkdir -p "$temp_dir/input" "$temp_dir/output"
-printf 'prebuilt-binary\n' > "$temp_dir/input/sub2api_linux_amd64"
-chmod 0644 "$temp_dir/input/sub2api_linux_amd64"
+printf 'prebuilt-binary\n' > "$temp_dir/input/tokenrouter_linux_amd64"
+chmod 0644 "$temp_dir/input/tokenrouter_linux_amd64"
 
 GORELEASER_PREBUILT_DIR="$temp_dir/input" \
 GOOS=linux \
 GOARCH=amd64 \
-  "$adapter" build -tags=embed -ldflags='-s -w' -o "$temp_dir/output/sub2api" ./cmd/server
+  "$adapter" build -tags=embed -ldflags='-s -w' -o "$temp_dir/output/tokenrouter" ./cmd/server
 
-cmp "$temp_dir/input/sub2api_linux_amd64" "$temp_dir/output/sub2api"
-[ -x "$temp_dir/output/sub2api" ] || {
+cmp "$temp_dir/input/tokenrouter_linux_amd64" "$temp_dir/output/tokenrouter"
+[ -x "$temp_dir/output/tokenrouter" ] || {
   printf 'goreleaser prebuilt adapter test failed: output is not executable\n' >&2
   exit 1
 }

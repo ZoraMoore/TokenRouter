@@ -59,11 +59,11 @@ const createDashboardStats = (): DashboardStats => ({
   stats_stale: false,
   total_api_keys: 0,
   active_api_keys: 0,
-  total_accounts: 0,
-  normal_accounts: 0,
-  error_accounts: 0,
-  ratelimit_accounts: 0,
-  overload_accounts: 0,
+  total_providers: 0,
+  normal_providers: 0,
+  error_providers: 0,
+  ratelimit_providers: 0,
+  overload_providers: 0,
   total_requests: 0,
   total_input_tokens: 0,
   total_output_tokens: 0,
@@ -116,6 +116,34 @@ describe('admin DashboardView', () => {
       start_date: '',
       end_date: ''
     })
+  })
+
+  it('数据未返回时显示布局骨架，返回后渲染统计卡', async () => {
+    let resolveSnapshot!: (value: unknown) => void
+    getSnapshotV2.mockImplementationOnce(() => new Promise(resolve => { resolveSnapshot = resolve }))
+    const wrapper = mount(DashboardView, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Icon: true,
+          DateRangePicker: true,
+          Select: true,
+          ModelDistributionChart: true,
+          TokenUsageTrend: true,
+          Line: true
+        }
+      }
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="dashboard-skeleton"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('admin.dashboard.apiKeys')
+
+    resolveSnapshot({ stats: createDashboardStats(), trend: [], models: [] })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="dashboard-skeleton"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('admin.dashboard.apiKeys')
+    wrapper.unmount()
   })
 
   it('uses last 24 hours as default dashboard range', async () => {

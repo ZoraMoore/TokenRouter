@@ -8,7 +8,9 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/TokenFlux/TokenRouter/internal/domain"
+	"github.com/TokenFlux/TokenRouter/internal/protocol"
+	"github.com/TokenFlux/TokenRouter/internal/routing/accessview"
+	"github.com/TokenFlux/TokenRouter/internal/scheduler/policy"
 )
 
 const (
@@ -22,30 +24,20 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldDeletedAt holds the string denoting the deleted_at field in the database.
 	FieldDeletedAt = "deleted_at"
+	// FieldLocalization holds the string denoting the localization field in the database.
+	FieldLocalization = "localization"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
 	// FieldDescription holds the string denoting the description field in the database.
 	FieldDescription = "description"
 	// FieldRateMultiplier holds the string denoting the rate_multiplier field in the database.
 	FieldRateMultiplier = "rate_multiplier"
-	// FieldPeakRateEnabled holds the string denoting the peak_rate_enabled field in the database.
-	FieldPeakRateEnabled = "peak_rate_enabled"
-	// FieldPeakStart holds the string denoting the peak_start field in the database.
-	FieldPeakStart = "peak_start"
-	// FieldPeakEnd holds the string denoting the peak_end field in the database.
-	FieldPeakEnd = "peak_end"
-	// FieldPeakRateMultiplier holds the string denoting the peak_rate_multiplier field in the database.
-	FieldPeakRateMultiplier = "peak_rate_multiplier"
 	// FieldIsExclusive holds the string denoting the is_exclusive field in the database.
 	FieldIsExclusive = "is_exclusive"
-	// FieldIsDefault holds the string denoting the is_default field in the database.
-	FieldIsDefault = "is_default"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldDuplicateOperationID holds the string denoting the duplicate_operation_id field in the database.
 	FieldDuplicateOperationID = "duplicate_operation_id"
-	// FieldPlatform holds the string denoting the platform field in the database.
-	FieldPlatform = "platform"
 	// FieldSchedulerType holds the string denoting the scheduler_type field in the database.
 	FieldSchedulerType = "scheduler_type"
 	// FieldAdvancedSchedulerOverrides holds the string denoting the advanced_scheduler_overrides field in the database.
@@ -56,46 +48,8 @@ const (
 	FieldAllowImageGeneration = "allow_image_generation"
 	// FieldAllowBatchImageGeneration holds the string denoting the allow_batch_image_generation field in the database.
 	FieldAllowBatchImageGeneration = "allow_batch_image_generation"
-	// FieldImageRateIndependent holds the string denoting the image_rate_independent field in the database.
-	FieldImageRateIndependent = "image_rate_independent"
-	// FieldImageRateMultiplier holds the string denoting the image_rate_multiplier field in the database.
-	FieldImageRateMultiplier = "image_rate_multiplier"
-	// FieldImagePrice1k holds the string denoting the image_price_1k field in the database.
-	FieldImagePrice1k = "image_price_1k"
-	// FieldImagePrice2k holds the string denoting the image_price_2k field in the database.
-	FieldImagePrice2k = "image_price_2k"
-	// FieldImagePrice4k holds the string denoting the image_price_4k field in the database.
-	FieldImagePrice4k = "image_price_4k"
-	// FieldBatchImageDiscountMultiplier holds the string denoting the batch_image_discount_multiplier field in the database.
-	FieldBatchImageDiscountMultiplier = "batch_image_discount_multiplier"
-	// FieldBatchImageHoldMultiplier holds the string denoting the batch_image_hold_multiplier field in the database.
-	FieldBatchImageHoldMultiplier = "batch_image_hold_multiplier"
-	// FieldVideoRateIndependent holds the string denoting the video_rate_independent field in the database.
-	FieldVideoRateIndependent = "video_rate_independent"
-	// FieldVideoRateMultiplier holds the string denoting the video_rate_multiplier field in the database.
-	FieldVideoRateMultiplier = "video_rate_multiplier"
-	// FieldVideoPrice480p holds the string denoting the video_price_480p field in the database.
-	FieldVideoPrice480p = "video_price_480p"
-	// FieldVideoPrice720p holds the string denoting the video_price_720p field in the database.
-	FieldVideoPrice720p = "video_price_720p"
-	// FieldVideoPrice1080p holds the string denoting the video_price_1080p field in the database.
-	FieldVideoPrice1080p = "video_price_1080p"
-	// FieldVideoModelPrices holds the string denoting the video_model_prices field in the database.
-	FieldVideoModelPrices = "video_model_prices"
-	// FieldWebSearchPricePerCall holds the string denoting the web_search_price_per_call field in the database.
-	FieldWebSearchPricePerCall = "web_search_price_per_call"
-	// FieldSearchPricePer1k holds the string denoting the search_price_per_1k field in the database.
-	FieldSearchPricePer1k = "search_price_per_1k"
-	// FieldAudioRealtimePricePerMin holds the string denoting the audio_realtime_price_per_min field in the database.
-	FieldAudioRealtimePricePerMin = "audio_realtime_price_per_min"
-	// FieldAudioTtsPricePerMillionChars holds the string denoting the audio_tts_price_per_million_chars field in the database.
-	FieldAudioTtsPricePerMillionChars = "audio_tts_price_per_million_chars"
-	// FieldAudioSttPricePerHour holds the string denoting the audio_stt_price_per_hour field in the database.
-	FieldAudioSttPricePerHour = "audio_stt_price_per_hour"
-	// FieldLongContextPricingEnabled holds the string denoting the long_context_pricing_enabled field in the database.
-	FieldLongContextPricingEnabled = "long_context_pricing_enabled"
-	// FieldModelPricing holds the string denoting the model_pricing field in the database.
-	FieldModelPricing = "model_pricing"
+	// FieldRoutingPolicy holds the string denoting the routing_policy field in the database.
+	FieldRoutingPolicy = "routing_policy"
 	// FieldClaudeCodeOnly holds the string denoting the claude_code_only field in the database.
 	FieldClaudeCodeOnly = "claude_code_only"
 	// FieldFallbackGroupID holds the string denoting the fallback_group_id field in the database.
@@ -116,18 +70,24 @@ const (
 	FieldSortOrder = "sort_order"
 	// FieldAllowMessagesDispatch holds the string denoting the allow_messages_dispatch field in the database.
 	FieldAllowMessagesDispatch = "allow_messages_dispatch"
-	// FieldAllowedClientProtocols holds the string denoting the allowed_client_protocols field in the database.
-	FieldAllowedClientProtocols = "allowed_client_protocols"
+	// FieldAllowedProtocols holds the string denoting the allowed_protocols field in the database.
+	FieldAllowedProtocols = "allowed_protocols"
+	// FieldProtocolFallbacks holds the string denoting the protocol_fallbacks field in the database.
+	FieldProtocolFallbacks = "protocol_fallbacks"
+	// FieldResponsesImagePolicy holds the string denoting the responses_image_policy field in the database.
+	FieldResponsesImagePolicy = "responses_image_policy"
 	// FieldAllowLive holds the string denoting the allow_live field in the database.
 	FieldAllowLive = "allow_live"
+	// FieldOpenaiFastPolicy holds the string denoting the openai_fast_policy field in the database.
+	FieldOpenaiFastPolicy = "openai_fast_policy"
+	// FieldForceOpenaiFast holds the string denoting the force_openai_fast field in the database.
+	FieldForceOpenaiFast = "force_openai_fast"
 	// FieldRequireOauthOnly holds the string denoting the require_oauth_only field in the database.
 	FieldRequireOauthOnly = "require_oauth_only"
 	// FieldRequirePrivacySet holds the string denoting the require_privacy_set field in the database.
 	FieldRequirePrivacySet = "require_privacy_set"
 	// FieldDefaultMappedModel holds the string denoting the default_mapped_model field in the database.
 	FieldDefaultMappedModel = "default_mapped_model"
-	// FieldMessagesDispatchModelConfig holds the string denoting the messages_dispatch_model_config field in the database.
-	FieldMessagesDispatchModelConfig = "messages_dispatch_model_config"
 	// FieldModelsListConfig holds the string denoting the models_list_config field in the database.
 	FieldModelsListConfig = "models_list_config"
 	// FieldAvailabilityProbeConfig holds the string denoting the availability_probe_config field in the database.
@@ -136,10 +96,10 @@ const (
 	FieldRpmLimit = "rpm_limit"
 	// FieldMaxReasoningEffort holds the string denoting the max_reasoning_effort field in the database.
 	FieldMaxReasoningEffort = "max_reasoning_effort"
+	// FieldMaxReasoningEffortOverLimit holds the string denoting the max_reasoning_effort_over_limit field in the database.
+	FieldMaxReasoningEffortOverLimit = "max_reasoning_effort_over_limit"
 	// FieldReasoningEffortMappings holds the string denoting the reasoning_effort_mappings field in the database.
 	FieldReasoningEffortMappings = "reasoning_effort_mappings"
-	// FieldDataSharingEnabled holds the string denoting the data_sharing_enabled field in the database.
-	FieldDataSharingEnabled = "data_sharing_enabled"
 	// FieldSessionIsolationEnabled holds the string denoting the session_isolation_enabled field in the database.
 	FieldSessionIsolationEnabled = "session_isolation_enabled"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
@@ -148,14 +108,14 @@ const (
 	EdgeAPIKeyCompositeGroups = "api_key_composite_groups"
 	// EdgeUsageLogs holds the string denoting the usage_logs edge name in mutations.
 	EdgeUsageLogs = "usage_logs"
-	// EdgeAccounts holds the string denoting the accounts edge name in mutations.
-	EdgeAccounts = "accounts"
+	// EdgeProviders holds the string denoting the providers edge name in mutations.
+	EdgeProviders = "providers"
 	// EdgeAllowedUsers holds the string denoting the allowed_users edge name in mutations.
 	EdgeAllowedUsers = "allowed_users"
 	// EdgeDisabledPublicUsers holds the string denoting the disabled_public_users edge name in mutations.
 	EdgeDisabledPublicUsers = "disabled_public_users"
-	// EdgeAccountGroups holds the string denoting the account_groups edge name in mutations.
-	EdgeAccountGroups = "account_groups"
+	// EdgeProviderGroups holds the string denoting the provider_groups edge name in mutations.
+	EdgeProviderGroups = "provider_groups"
 	// EdgeUserAllowedGroups holds the string denoting the user_allowed_groups edge name in mutations.
 	EdgeUserAllowedGroups = "user_allowed_groups"
 	// EdgeUserDisabledPublicGroups holds the string denoting the user_disabled_public_groups edge name in mutations.
@@ -183,11 +143,11 @@ const (
 	UsageLogsInverseTable = "usage_logs"
 	// UsageLogsColumn is the table column denoting the usage_logs relation/edge.
 	UsageLogsColumn = "group_id"
-	// AccountsTable is the table that holds the accounts relation/edge. The primary key declared below.
-	AccountsTable = "account_groups"
-	// AccountsInverseTable is the table name for the Account entity.
-	// It exists in this package in order to avoid circular dependency with the "account" package.
-	AccountsInverseTable = "accounts"
+	// ProvidersTable is the table that holds the providers relation/edge. The primary key declared below.
+	ProvidersTable = "provider_groups"
+	// ProvidersInverseTable is the table name for the Provider entity.
+	// It exists in this package in order to avoid circular dependency with the "provider" package.
+	ProvidersInverseTable = "providers"
 	// AllowedUsersTable is the table that holds the allowed_users relation/edge. The primary key declared below.
 	AllowedUsersTable = "user_allowed_groups"
 	// AllowedUsersInverseTable is the table name for the User entity.
@@ -198,13 +158,13 @@ const (
 	// DisabledPublicUsersInverseTable is the table name for the User entity.
 	// It exists in this package in order to avoid circular dependency with the "user" package.
 	DisabledPublicUsersInverseTable = "users"
-	// AccountGroupsTable is the table that holds the account_groups relation/edge.
-	AccountGroupsTable = "account_groups"
-	// AccountGroupsInverseTable is the table name for the AccountGroup entity.
-	// It exists in this package in order to avoid circular dependency with the "accountgroup" package.
-	AccountGroupsInverseTable = "account_groups"
-	// AccountGroupsColumn is the table column denoting the account_groups relation/edge.
-	AccountGroupsColumn = "group_id"
+	// ProviderGroupsTable is the table that holds the provider_groups relation/edge.
+	ProviderGroupsTable = "provider_groups"
+	// ProviderGroupsInverseTable is the table name for the ProviderGroup entity.
+	// It exists in this package in order to avoid circular dependency with the "providergroup" package.
+	ProviderGroupsInverseTable = "provider_groups"
+	// ProviderGroupsColumn is the table column denoting the provider_groups relation/edge.
+	ProviderGroupsColumn = "group_id"
 	// UserAllowedGroupsTable is the table that holds the user_allowed_groups relation/edge.
 	UserAllowedGroupsTable = "user_allowed_groups"
 	// UserAllowedGroupsInverseTable is the table name for the UserAllowedGroup entity.
@@ -227,43 +187,19 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldDeletedAt,
+	FieldLocalization,
 	FieldName,
 	FieldDescription,
 	FieldRateMultiplier,
-	FieldPeakRateEnabled,
-	FieldPeakStart,
-	FieldPeakEnd,
-	FieldPeakRateMultiplier,
 	FieldIsExclusive,
-	FieldIsDefault,
 	FieldStatus,
 	FieldDuplicateOperationID,
-	FieldPlatform,
 	FieldSchedulerType,
 	FieldAdvancedSchedulerOverrides,
 	FieldDisplayBrand,
 	FieldAllowImageGeneration,
 	FieldAllowBatchImageGeneration,
-	FieldImageRateIndependent,
-	FieldImageRateMultiplier,
-	FieldImagePrice1k,
-	FieldImagePrice2k,
-	FieldImagePrice4k,
-	FieldBatchImageDiscountMultiplier,
-	FieldBatchImageHoldMultiplier,
-	FieldVideoRateIndependent,
-	FieldVideoRateMultiplier,
-	FieldVideoPrice480p,
-	FieldVideoPrice720p,
-	FieldVideoPrice1080p,
-	FieldVideoModelPrices,
-	FieldWebSearchPricePerCall,
-	FieldSearchPricePer1k,
-	FieldAudioRealtimePricePerMin,
-	FieldAudioTtsPricePerMillionChars,
-	FieldAudioSttPricePerHour,
-	FieldLongContextPricingEnabled,
-	FieldModelPricing,
+	FieldRoutingPolicy,
 	FieldClaudeCodeOnly,
 	FieldFallbackGroupID,
 	FieldFallbackGroupIDOnInvalidRequest,
@@ -274,25 +210,28 @@ var Columns = []string{
 	FieldSupportedModelScopes,
 	FieldSortOrder,
 	FieldAllowMessagesDispatch,
-	FieldAllowedClientProtocols,
+	FieldAllowedProtocols,
+	FieldProtocolFallbacks,
+	FieldResponsesImagePolicy,
 	FieldAllowLive,
+	FieldOpenaiFastPolicy,
+	FieldForceOpenaiFast,
 	FieldRequireOauthOnly,
 	FieldRequirePrivacySet,
 	FieldDefaultMappedModel,
-	FieldMessagesDispatchModelConfig,
 	FieldModelsListConfig,
 	FieldAvailabilityProbeConfig,
 	FieldRpmLimit,
 	FieldMaxReasoningEffort,
+	FieldMaxReasoningEffortOverLimit,
 	FieldReasoningEffortMappings,
-	FieldDataSharingEnabled,
 	FieldSessionIsolationEnabled,
 }
 
 var (
-	// AccountsPrimaryKey and AccountsColumn2 are the table columns denoting the
-	// primary key for the accounts relation (M2M).
-	AccountsPrimaryKey = []string{"account_id", "group_id"}
+	// ProvidersPrimaryKey and ProvidersColumn2 are the table columns denoting the
+	// primary key for the providers relation (M2M).
+	ProvidersPrimaryKey = []string{"provider_id", "group_id"}
 	// AllowedUsersPrimaryKey and AllowedUsersColumn2 are the table columns denoting the
 	// primary key for the allowed_users relation (M2M).
 	AllowedUsersPrimaryKey = []string{"user_id", "group_id"}
@@ -329,38 +268,20 @@ var (
 	NameValidator func(string) error
 	// DefaultRateMultiplier holds the default value on creation for the "rate_multiplier" field.
 	DefaultRateMultiplier float64
-	// DefaultPeakRateEnabled holds the default value on creation for the "peak_rate_enabled" field.
-	DefaultPeakRateEnabled bool
-	// DefaultPeakStart holds the default value on creation for the "peak_start" field.
-	DefaultPeakStart string
-	// PeakStartValidator is a validator for the "peak_start" field. It is called by the builders before save.
-	PeakStartValidator func(string) error
-	// DefaultPeakEnd holds the default value on creation for the "peak_end" field.
-	DefaultPeakEnd string
-	// PeakEndValidator is a validator for the "peak_end" field. It is called by the builders before save.
-	PeakEndValidator func(string) error
-	// DefaultPeakRateMultiplier holds the default value on creation for the "peak_rate_multiplier" field.
-	DefaultPeakRateMultiplier float64
 	// DefaultIsExclusive holds the default value on creation for the "is_exclusive" field.
 	DefaultIsExclusive bool
-	// DefaultIsDefault holds the default value on creation for the "is_default" field.
-	DefaultIsDefault bool
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
 	// DuplicateOperationIDValidator is a validator for the "duplicate_operation_id" field. It is called by the builders before save.
 	DuplicateOperationIDValidator func(string) error
-	// DefaultPlatform holds the default value on creation for the "platform" field.
-	DefaultPlatform string
-	// PlatformValidator is a validator for the "platform" field. It is called by the builders before save.
-	PlatformValidator func(string) error
 	// DefaultSchedulerType holds the default value on creation for the "scheduler_type" field.
 	DefaultSchedulerType string
 	// SchedulerTypeValidator is a validator for the "scheduler_type" field. It is called by the builders before save.
 	SchedulerTypeValidator func(string) error
 	// DefaultAdvancedSchedulerOverrides holds the default value on creation for the "advanced_scheduler_overrides" field.
-	DefaultAdvancedSchedulerOverrides domain.GroupAdvancedSchedulerOverrides
+	DefaultAdvancedSchedulerOverrides policy.GroupAdvancedSchedulerOverrides
 	// DefaultDisplayBrand holds the default value on creation for the "display_brand" field.
 	DefaultDisplayBrand string
 	// DisplayBrandValidator is a validator for the "display_brand" field. It is called by the builders before save.
@@ -369,28 +290,6 @@ var (
 	DefaultAllowImageGeneration bool
 	// DefaultAllowBatchImageGeneration holds the default value on creation for the "allow_batch_image_generation" field.
 	DefaultAllowBatchImageGeneration bool
-	// DefaultImageRateIndependent holds the default value on creation for the "image_rate_independent" field.
-	DefaultImageRateIndependent bool
-	// DefaultImageRateMultiplier holds the default value on creation for the "image_rate_multiplier" field.
-	DefaultImageRateMultiplier float64
-	// DefaultBatchImageDiscountMultiplier holds the default value on creation for the "batch_image_discount_multiplier" field.
-	DefaultBatchImageDiscountMultiplier float64
-	// DefaultBatchImageHoldMultiplier holds the default value on creation for the "batch_image_hold_multiplier" field.
-	DefaultBatchImageHoldMultiplier float64
-	// DefaultVideoRateIndependent holds the default value on creation for the "video_rate_independent" field.
-	DefaultVideoRateIndependent bool
-	// DefaultVideoRateMultiplier holds the default value on creation for the "video_rate_multiplier" field.
-	DefaultVideoRateMultiplier float64
-	// SearchPricePer1kValidator is a validator for the "search_price_per_1k" field. It is called by the builders before save.
-	SearchPricePer1kValidator func(float64) error
-	// AudioRealtimePricePerMinValidator is a validator for the "audio_realtime_price_per_min" field. It is called by the builders before save.
-	AudioRealtimePricePerMinValidator func(float64) error
-	// AudioTtsPricePerMillionCharsValidator is a validator for the "audio_tts_price_per_million_chars" field. It is called by the builders before save.
-	AudioTtsPricePerMillionCharsValidator func(float64) error
-	// AudioSttPricePerHourValidator is a validator for the "audio_stt_price_per_hour" field. It is called by the builders before save.
-	AudioSttPricePerHourValidator func(float64) error
-	// DefaultLongContextPricingEnabled holds the default value on creation for the "long_context_pricing_enabled" field.
-	DefaultLongContextPricingEnabled bool
 	// DefaultClaudeCodeOnly holds the default value on creation for the "claude_code_only" field.
 	DefaultClaudeCodeOnly bool
 	// DefaultModelRoutingEnabled holds the default value on creation for the "model_routing_enabled" field.
@@ -403,10 +302,18 @@ var (
 	DefaultSortOrder int
 	// DefaultAllowMessagesDispatch holds the default value on creation for the "allow_messages_dispatch" field.
 	DefaultAllowMessagesDispatch bool
-	// DefaultAllowedClientProtocols holds the default value on creation for the "allowed_client_protocols" field.
-	DefaultAllowedClientProtocols []domain.GroupClientProtocol
+	// DefaultAllowedProtocols holds the default value on creation for the "allowed_protocols" field.
+	DefaultAllowedProtocols []protocol.ProtocolID
+	// DefaultProtocolFallbacks holds the default value on creation for the "protocol_fallbacks" field.
+	DefaultProtocolFallbacks map[protocol.ProtocolID][]protocol.ProtocolID
+	// DefaultResponsesImagePolicy holds the default value on creation for the "responses_image_policy" field.
+	DefaultResponsesImagePolicy string
 	// DefaultAllowLive holds the default value on creation for the "allow_live" field.
 	DefaultAllowLive bool
+	// DefaultOpenaiFastPolicy holds the default value on creation for the "openai_fast_policy" field.
+	DefaultOpenaiFastPolicy string
+	// DefaultForceOpenaiFast holds the default value on creation for the "force_openai_fast" field.
+	DefaultForceOpenaiFast bool
 	// DefaultRequireOauthOnly holds the default value on creation for the "require_oauth_only" field.
 	DefaultRequireOauthOnly bool
 	// DefaultRequirePrivacySet holds the default value on creation for the "require_privacy_set" field.
@@ -415,22 +322,22 @@ var (
 	DefaultDefaultMappedModel string
 	// DefaultMappedModelValidator is a validator for the "default_mapped_model" field. It is called by the builders before save.
 	DefaultMappedModelValidator func(string) error
-	// DefaultMessagesDispatchModelConfig holds the default value on creation for the "messages_dispatch_model_config" field.
-	DefaultMessagesDispatchModelConfig domain.OpenAIMessagesDispatchModelConfig
 	// DefaultModelsListConfig holds the default value on creation for the "models_list_config" field.
-	DefaultModelsListConfig domain.GroupModelsListConfig
+	DefaultModelsListConfig accessview.GroupModelsListConfig
 	// DefaultAvailabilityProbeConfig holds the default value on creation for the "availability_probe_config" field.
-	DefaultAvailabilityProbeConfig domain.GroupAvailabilityProbeConfig
+	DefaultAvailabilityProbeConfig accessview.GroupAvailabilityProbeConfig
 	// DefaultRpmLimit holds the default value on creation for the "rpm_limit" field.
 	DefaultRpmLimit int
 	// DefaultMaxReasoningEffort holds the default value on creation for the "max_reasoning_effort" field.
 	DefaultMaxReasoningEffort string
 	// MaxReasoningEffortValidator is a validator for the "max_reasoning_effort" field. It is called by the builders before save.
 	MaxReasoningEffortValidator func(string) error
+	// DefaultMaxReasoningEffortOverLimit holds the default value on creation for the "max_reasoning_effort_over_limit" field.
+	DefaultMaxReasoningEffortOverLimit string
+	// MaxReasoningEffortOverLimitValidator is a validator for the "max_reasoning_effort_over_limit" field. It is called by the builders before save.
+	MaxReasoningEffortOverLimitValidator func(string) error
 	// DefaultReasoningEffortMappings holds the default value on creation for the "reasoning_effort_mappings" field.
-	DefaultReasoningEffortMappings []domain.ReasoningEffortMapping
-	// DefaultDataSharingEnabled holds the default value on creation for the "data_sharing_enabled" field.
-	DefaultDataSharingEnabled bool
+	DefaultReasoningEffortMappings []accessview.ReasoningEffortMapping
 	// DefaultSessionIsolationEnabled holds the default value on creation for the "session_isolation_enabled" field.
 	DefaultSessionIsolationEnabled bool
 )
@@ -473,34 +380,9 @@ func ByRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRateMultiplier, opts...).ToFunc()
 }
 
-// ByPeakRateEnabled orders the results by the peak_rate_enabled field.
-func ByPeakRateEnabled(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPeakRateEnabled, opts...).ToFunc()
-}
-
-// ByPeakStart orders the results by the peak_start field.
-func ByPeakStart(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPeakStart, opts...).ToFunc()
-}
-
-// ByPeakEnd orders the results by the peak_end field.
-func ByPeakEnd(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPeakEnd, opts...).ToFunc()
-}
-
-// ByPeakRateMultiplier orders the results by the peak_rate_multiplier field.
-func ByPeakRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPeakRateMultiplier, opts...).ToFunc()
-}
-
 // ByIsExclusive orders the results by the is_exclusive field.
 func ByIsExclusive(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIsExclusive, opts...).ToFunc()
-}
-
-// ByIsDefault orders the results by the is_default field.
-func ByIsDefault(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldIsDefault, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.
@@ -511,11 +393,6 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByDuplicateOperationID orders the results by the duplicate_operation_id field.
 func ByDuplicateOperationID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDuplicateOperationID, opts...).ToFunc()
-}
-
-// ByPlatform orders the results by the platform field.
-func ByPlatform(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPlatform, opts...).ToFunc()
 }
 
 // BySchedulerType orders the results by the scheduler_type field.
@@ -536,96 +413,6 @@ func ByAllowImageGeneration(opts ...sql.OrderTermOption) OrderOption {
 // ByAllowBatchImageGeneration orders the results by the allow_batch_image_generation field.
 func ByAllowBatchImageGeneration(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAllowBatchImageGeneration, opts...).ToFunc()
-}
-
-// ByImageRateIndependent orders the results by the image_rate_independent field.
-func ByImageRateIndependent(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldImageRateIndependent, opts...).ToFunc()
-}
-
-// ByImageRateMultiplier orders the results by the image_rate_multiplier field.
-func ByImageRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldImageRateMultiplier, opts...).ToFunc()
-}
-
-// ByImagePrice1k orders the results by the image_price_1k field.
-func ByImagePrice1k(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldImagePrice1k, opts...).ToFunc()
-}
-
-// ByImagePrice2k orders the results by the image_price_2k field.
-func ByImagePrice2k(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldImagePrice2k, opts...).ToFunc()
-}
-
-// ByImagePrice4k orders the results by the image_price_4k field.
-func ByImagePrice4k(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldImagePrice4k, opts...).ToFunc()
-}
-
-// ByBatchImageDiscountMultiplier orders the results by the batch_image_discount_multiplier field.
-func ByBatchImageDiscountMultiplier(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldBatchImageDiscountMultiplier, opts...).ToFunc()
-}
-
-// ByBatchImageHoldMultiplier orders the results by the batch_image_hold_multiplier field.
-func ByBatchImageHoldMultiplier(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldBatchImageHoldMultiplier, opts...).ToFunc()
-}
-
-// ByVideoRateIndependent orders the results by the video_rate_independent field.
-func ByVideoRateIndependent(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldVideoRateIndependent, opts...).ToFunc()
-}
-
-// ByVideoRateMultiplier orders the results by the video_rate_multiplier field.
-func ByVideoRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldVideoRateMultiplier, opts...).ToFunc()
-}
-
-// ByVideoPrice480p orders the results by the video_price_480p field.
-func ByVideoPrice480p(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldVideoPrice480p, opts...).ToFunc()
-}
-
-// ByVideoPrice720p orders the results by the video_price_720p field.
-func ByVideoPrice720p(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldVideoPrice720p, opts...).ToFunc()
-}
-
-// ByVideoPrice1080p orders the results by the video_price_1080p field.
-func ByVideoPrice1080p(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldVideoPrice1080p, opts...).ToFunc()
-}
-
-// ByWebSearchPricePerCall orders the results by the web_search_price_per_call field.
-func ByWebSearchPricePerCall(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldWebSearchPricePerCall, opts...).ToFunc()
-}
-
-// BySearchPricePer1k orders the results by the search_price_per_1k field.
-func BySearchPricePer1k(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldSearchPricePer1k, opts...).ToFunc()
-}
-
-// ByAudioRealtimePricePerMin orders the results by the audio_realtime_price_per_min field.
-func ByAudioRealtimePricePerMin(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldAudioRealtimePricePerMin, opts...).ToFunc()
-}
-
-// ByAudioTtsPricePerMillionChars orders the results by the audio_tts_price_per_million_chars field.
-func ByAudioTtsPricePerMillionChars(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldAudioTtsPricePerMillionChars, opts...).ToFunc()
-}
-
-// ByAudioSttPricePerHour orders the results by the audio_stt_price_per_hour field.
-func ByAudioSttPricePerHour(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldAudioSttPricePerHour, opts...).ToFunc()
-}
-
-// ByLongContextPricingEnabled orders the results by the long_context_pricing_enabled field.
-func ByLongContextPricingEnabled(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldLongContextPricingEnabled, opts...).ToFunc()
 }
 
 // ByClaudeCodeOnly orders the results by the claude_code_only field.
@@ -668,9 +455,24 @@ func ByAllowMessagesDispatch(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAllowMessagesDispatch, opts...).ToFunc()
 }
 
+// ByResponsesImagePolicy orders the results by the responses_image_policy field.
+func ByResponsesImagePolicy(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResponsesImagePolicy, opts...).ToFunc()
+}
+
 // ByAllowLive orders the results by the allow_live field.
 func ByAllowLive(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAllowLive, opts...).ToFunc()
+}
+
+// ByOpenaiFastPolicy orders the results by the openai_fast_policy field.
+func ByOpenaiFastPolicy(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOpenaiFastPolicy, opts...).ToFunc()
+}
+
+// ByForceOpenaiFast orders the results by the force_openai_fast field.
+func ByForceOpenaiFast(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldForceOpenaiFast, opts...).ToFunc()
 }
 
 // ByRequireOauthOnly orders the results by the require_oauth_only field.
@@ -698,9 +500,9 @@ func ByMaxReasoningEffort(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldMaxReasoningEffort, opts...).ToFunc()
 }
 
-// ByDataSharingEnabled orders the results by the data_sharing_enabled field.
-func ByDataSharingEnabled(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldDataSharingEnabled, opts...).ToFunc()
+// ByMaxReasoningEffortOverLimit orders the results by the max_reasoning_effort_over_limit field.
+func ByMaxReasoningEffortOverLimit(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMaxReasoningEffortOverLimit, opts...).ToFunc()
 }
 
 // BySessionIsolationEnabled orders the results by the session_isolation_enabled field.
@@ -750,17 +552,17 @@ func ByUsageLogs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByAccountsCount orders the results by accounts count.
-func ByAccountsCount(opts ...sql.OrderTermOption) OrderOption {
+// ByProvidersCount orders the results by providers count.
+func ByProvidersCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newAccountsStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newProvidersStep(), opts...)
 	}
 }
 
-// ByAccounts orders the results by accounts terms.
-func ByAccounts(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByProviders orders the results by providers terms.
+func ByProviders(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newAccountsStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newProvidersStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -792,17 +594,17 @@ func ByDisabledPublicUsers(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOpti
 	}
 }
 
-// ByAccountGroupsCount orders the results by account_groups count.
-func ByAccountGroupsCount(opts ...sql.OrderTermOption) OrderOption {
+// ByProviderGroupsCount orders the results by provider_groups count.
+func ByProviderGroupsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newAccountGroupsStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newProviderGroupsStep(), opts...)
 	}
 }
 
-// ByAccountGroups orders the results by account_groups terms.
-func ByAccountGroups(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByProviderGroups orders the results by provider_groups terms.
+func ByProviderGroups(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newAccountGroupsStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newProviderGroupsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -854,11 +656,11 @@ func newUsageLogsStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.O2M, false, UsageLogsTable, UsageLogsColumn),
 	)
 }
-func newAccountsStep() *sqlgraph.Step {
+func newProvidersStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(AccountsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.M2M, true, AccountsTable, AccountsPrimaryKey...),
+		sqlgraph.To(ProvidersInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2M, true, ProvidersTable, ProvidersPrimaryKey...),
 	)
 }
 func newAllowedUsersStep() *sqlgraph.Step {
@@ -875,11 +677,11 @@ func newDisabledPublicUsersStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.M2M, true, DisabledPublicUsersTable, DisabledPublicUsersPrimaryKey...),
 	)
 }
-func newAccountGroupsStep() *sqlgraph.Step {
+func newProviderGroupsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(AccountGroupsInverseTable, AccountGroupsColumn),
-		sqlgraph.Edge(sqlgraph.O2M, true, AccountGroupsTable, AccountGroupsColumn),
+		sqlgraph.To(ProviderGroupsInverseTable, ProviderGroupsColumn),
+		sqlgraph.Edge(sqlgraph.O2M, true, ProviderGroupsTable, ProviderGroupsColumn),
 	)
 }
 func newUserAllowedGroupsStep() *sqlgraph.Step {

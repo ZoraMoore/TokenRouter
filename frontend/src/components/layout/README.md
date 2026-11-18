@@ -1,6 +1,6 @@
 # Layout Components
 
-Vue 3 layout components for the Sub2API frontend, built with Composition API, TypeScript, and TailwindCSS.
+Vue 3 layout components for the TokenRouter frontend, built with Composition API, TypeScript, and TailwindCSS.
 
 ## Components
 
@@ -50,7 +50,7 @@ Navigation sidebar with user and admin sections.
   - Admin Dashboard
   - Users
   - Groups
-  - Accounts
+  - Providers
   - Proxies
   - Redeem Codes
 - Collapsible sidebar with toggle button
@@ -70,9 +70,13 @@ Top header with user info and actions.
 
 - Site branding and mobile menu toggle button
 - User balance display (desktop only)
+- Contact support icon (`HeaderContactSupport.vue`), shown only when contact info is configured: links open in a new tab, plain values are copied on click
 - User dropdown menu with:
-  - Profile link
+  - Account card linking to the profile page
+  - Workspace links (profile, dashboard, usage, API keys, team) and billing links (top-up, subscriptions, orders, redeem, affiliate), filtered by the same feature flags as the sidebar
+  - Admin-only GitHub link and onboarding replay
   - Logout button
+  - Light / dark / system theme switcher (the header theme button is only shown to guests)
 - User avatar with initials
 - Click-outside handling for dropdown
 - Responsive design
@@ -186,7 +190,7 @@ Components use HTML entity icons for simplicity:
 - &#128268; Admin
 - &#128101; Users
 - &#128193; Folder (Groups)
-- &#127760; Globe (Accounts)
+- &#127760; Globe (Providers)
 - &#128260; Network (Proxies)
 - &#127991; Ticket (Redeem Codes)
 

@@ -47,6 +47,18 @@ describe('DataTable', () => {
     localStorage.clear()
   })
 
+  it('uses the shared 1024px desktop breakpoint', () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [{ key: 'name', label: 'Name' }],
+        data: [{ id: 1, name: 'Key' }]
+      }
+    })
+
+    expect(window.matchMedia).toHaveBeenCalledWith('(min-width: 1024px)')
+    wrapper.unmount()
+  })
+
   it('renders paired sort arrows and highlights the active direction', async () => {
     const wrapper = mount(DataTable, {
       props: {
@@ -202,7 +214,7 @@ describe('DataTable', () => {
 
     const exposed = (wrapper.vm as any).virtualizer
     const instance = exposed?.value ?? exposed
-    // getItemKey 必须使用稳定行主键，而非位置索引。
+    // getItemKey 返回稳定的行主键。
     expect(instance.options.getItemKey(0)).toBe(100)
     expect(instance.options.getItemKey(5)).toBe(105)
   })

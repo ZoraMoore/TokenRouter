@@ -49,12 +49,12 @@ describe('OpsErrorDetailModal', () => {
       model: 'gpt-5.6',
       resolved: false,
       request_id: 'rid-1',
-      message: 'All available accounts exhausted',
+      message: 'All available providers exhausted',
       error_body: '{"error":"same"}',
       upstream_error_message: 'provider rate limit exhausted',
       upstream_error_detail: '{"error":"same"}',
       upstream_errors: '[]',
-      account_name: 'account',
+      provider_name: 'provider',
       group_name: 'group',
       is_business_limited: false
     })

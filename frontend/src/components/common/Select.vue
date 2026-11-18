@@ -11,7 +11,9 @@
       :aria-label="ariaLabel ?? 'Select option'"
       :aria-describedby="ariaDescribedby"
       :class="[
-        'select-trigger',
+        'input input-trigger',
+        // 触发器文字色沿用选择器既有的中性灰(比 .input 默认色略浅),保持现状视觉。
+        'text-gray-900 dark:text-gray-100',
         isOpen && 'select-trigger-open',
         error && 'select-trigger-error',
         disabled && 'select-trigger-disabled'
@@ -39,15 +41,16 @@
       <span class="select-icon">
         <Icon
           name="chevronDown"
-          size="md"
-          :class="['transition-transform duration-200', isOpen && 'rotate-180']"
+          size="sm"
+          :class="['transition-transform duration-normal', isOpen && 'rotate-180']"
+          :animate-on-hover="false"
         />
       </span>
     </button>
 
     <!-- Teleport dropdown to body to escape stacking context -->
     <Teleport to="body">
-      <Transition name="select-dropdown">
+      <MotionTransition name="dropdown-fade">
         <div
           v-if="isOpen"
           ref="dropdownRef"
@@ -105,6 +108,7 @@
                   size="sm"
                   class="text-primary-500"
                   :stroke-width="2"
+                  :animate-on-hover="false"
                 />
               </slot>
             </div>
@@ -115,15 +119,19 @@
             </div>
           </div>
         </div>
-      </Transition>
+      </MotionTransition>
     </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useFloatingMotion } from '@/composables/useFloatingMotion'
+import MotionTransition from '@/components/common/MotionTransition.vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
+import { SELECT_PANEL_MAX_HEIGHT, Z_INDEX } from '@/constants/overlay'
+import { FILTER_FIELD_KEY, isSameFilterValue, resolveEmptyValue } from './filterPanel'
 
 const { t } = useI18n()
 
@@ -206,11 +214,12 @@ const dropdownStyle = computed(() => {
   const estimatedWidth = Math.min(Math.max(rect.width, 200), maxDropdownWidth)
   const fallbackLeft = clampDropdownLeft(rect.left, estimatedWidth)
   const style: Record<string, string> = {
+    '--dropdown-shift': dropdownPosition.value === 'top' ? 'var(--motion-shift)' : 'calc(-1 * var(--motion-shift))',
     position: 'fixed',
     left: `${dropdownLeft.value ?? fallbackLeft}px`,
     minWidth: `${rect.width}px`,
     maxWidth: `${maxDropdownWidth}px`,
-    zIndex: '100000020'
+    zIndex: String(Z_INDEX.TELEPORT_DROPDOWN)
   }
 
   if (dropdownPosition.value === 'top') {
@@ -282,6 +291,8 @@ const filteredOptions = computed(() => {
   if (isSearchable.value && searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
     opts = opts.filter((opt) => {
+      // 名称与有效译文共用一次过滤，结果按业务条目去重。
+      if (Array.isArray(opt.search_terms) && opt.search_terms.some((text: string) => text.toLowerCase().includes(query))) return true
       // Match label
       if (getOptionLabel(opt).toLowerCase().includes(query)) return true
       // Also match description if present
@@ -341,7 +352,7 @@ const updateDropdownLeft = () => {
   if (!triggerRect.value) return
   const dropdownWidth = dropdownRef.value?.offsetWidth
     || Math.min(Math.max(triggerRect.value.width, 200), Math.max(200, window.innerWidth - 32))
-  // 按实际菜单宽度回拉，避免窄屏时选项文字被裁到视口外。
+  // 根据菜单实际宽度调整横坐标，使菜单位于视口内。
   dropdownLeft.value = clampDropdownLeft(triggerRect.value.left, dropdownWidth)
 }
 
@@ -352,7 +363,7 @@ const calculateDropdownPosition = () => {
   nextTick(() => {
     if (!dropdownRef.value || !triggerRect.value) return
     updateDropdownLeft()
-    const dropdownHeight = dropdownRef.value.offsetHeight || 240
+    const dropdownHeight = dropdownRef.value.offsetHeight || SELECT_PANEL_MAX_HEIGHT
     const spaceBelow = window.innerHeight - triggerRect.value.bottom
     const spaceAbove = triggerRect.value.top
 
@@ -398,6 +409,9 @@ watch(isOpen, (open) => {
   }
 })
 
+// 折叠父区退出时关闭 portal，展开过程中让定位跟随触发按钮。
+useFloatingMotion(containerRef, () => isOpen.value, () => { isOpen.value = false }, updateTriggerRect)
+
 const selectOption = (option: any) => {
   const value = getOptionValue(option) ?? null
   emit('update:modelValue', value)
@@ -410,6 +424,26 @@ const clearSelection = () => {
   if (props.disabled) return
   emit('update:modelValue', null)
   emit('change', null, null)
+}
+
+// 放在筛选面板字段里时，向字段上报当前选项，用于生成已选条件标签；移除标签即恢复“全部”。
+const filterField = inject(FILTER_FIELD_KEY, null)
+if (filterField) {
+  const emptyValue = computed(() => {
+    const explicit = filterField.emptyValue()
+    if (explicit !== undefined) return explicit
+    return resolveEmptyValue(props.options.length ? getOptionValue(props.options[0]) : null)
+  })
+  filterField.bindControl(computed(() => ({
+    active: !isSameFilterValue(props.modelValue, emptyValue.value),
+    text: selectedLabel.value,
+    clear: () => {
+      const value = (emptyValue.value ?? null) as SelectOption['value']
+      const option = props.options.find((opt) => getOptionValue(opt) === value) ?? null
+      emit('update:modelValue', value)
+      emit('change', value, option as SelectOption | null)
+    },
+  })))
 }
 
 // Keyboards
@@ -487,22 +521,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.select-trigger {
-  @apply flex w-full items-center justify-between gap-2;
-  @apply rounded-control px-4 py-2.5 text-sm;
-  @apply min-h-11;
-  @apply bg-white dark:bg-dark-950;
-  @apply border border-primary-900/10 dark:border-dark-600;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply transition-all duration-200;
-  @apply focus:border-primary-900/10 focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:border-primary-500 dark:focus:ring-primary-500/30;
-  @apply hover:border-black/20 dark:hover:border-primary-500;
-  @apply cursor-pointer;
-}
-
+/* 基线配方(h-9/px-4/py-1.5/边框/焦点环)已与 .input 同源,模板以 input input-trigger 组合;
+   这里只保留展开/错误/禁用三个状态增量。 */
 .select-trigger-open {
-  /* 浅色展开态使用中性灰描边和外圈，避免筛选控件出现蓝色光晕。 */
-  @apply border-primary-900/10 ring-2 ring-black/10 dark:border-primary-500 dark:ring-primary-500/30;
+  /* 展开态使用中性描边和外圈，与输入框焦点保持一致。 */
+  @apply border-primary-900/10 ring-2 ring-black/10 dark:border-dark-400 dark:ring-white/6;
 }
 
 .select-trigger-error {
@@ -523,7 +546,7 @@ onUnmounted(() => {
 
 .select-clear {
   @apply flex flex-shrink-0 cursor-pointer items-center justify-center;
-  @apply rounded text-gray-400 transition-colors;
+  @apply rounded-compact text-gray-400 transition-colors;
   @apply hover:text-gray-600 dark:hover:text-gray-200;
 }
 </style>
@@ -559,19 +582,24 @@ onUnmounted(() => {
   @apply flex items-center justify-between gap-2;
   @apply px-4 py-2.5 text-sm;
   @apply text-gray-700 dark:text-gray-300;
-  @apply cursor-pointer transition-colors duration-150;
-  @apply hover:bg-gray-50 dark:hover:bg-dark-800;
+  @apply cursor-pointer transition-colors duration-fast;
+  @apply hover:bg-gray-50 dark:hover:bg-dark-800 dark:hover:text-primary-500;
   pointer-events: auto !important;
 }
 
 .select-dropdown-portal .select-option-selected {
-  /* 选中项保留品牌文字和勾选，仅将浅色背景中性化。 */
-  @apply bg-gray-100 dark:bg-dark-700;
-  @apply text-primary-700 dark:text-primary-300;
+  /* 深色选中项保留淡品牌色底，文字和勾选使用品牌青。 */
+  @apply bg-gray-100 dark:bg-primary-500/8 dark:hover:bg-primary-500/8;
+  @apply text-primary-700 dark:text-primary-500;
 }
 
 .select-dropdown-portal .select-option-focused {
-  @apply bg-gray-100 dark:bg-dark-800;
+  /* 键盘焦点与 hover 共用弱填充，选中项仍使用自己的底色。 */
+  @apply bg-gray-100 dark:bg-dark-800 dark:text-primary-500;
+}
+
+.select-dropdown-portal .select-option-selected.select-option-focused {
+  @apply dark:bg-primary-500/8;
 }
 
 .select-dropdown-portal .select-option-disabled {
@@ -581,7 +609,7 @@ onUnmounted(() => {
 .select-dropdown-portal .select-option-group {
   @apply cursor-default select-none;
   @apply bg-gray-50 dark:bg-dark-900;
-  @apply text-[11px] font-bold uppercase tracking-wider;
+  @apply text-xs font-bold uppercase tracking-wider;
   @apply text-primary-900/90 dark:text-gray-400;
 }
 
@@ -598,15 +626,4 @@ onUnmounted(() => {
   @apply text-primary-900/90 dark:text-dark-400;
 }
 
-.select-dropdown-enter-active,
-.select-dropdown-leave-active {
-  /* 下拉层会在打开时根据触发器位置更新 left/top，只动画透明度和位移，避免定位值被过渡成侧向飞入。 */
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.select-dropdown-enter-from,
-.select-dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
 </style>

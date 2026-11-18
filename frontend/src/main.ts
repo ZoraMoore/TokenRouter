@@ -2,7 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
-import i18n, { initI18n } from './i18n'
+import i18n, { initI18n, getLocale } from './i18n'
 import { useAppStore } from '@/stores/app'
 import { initTheme } from '@/composables/useTheme'
 import { updateFavicon } from '@/utils/branding'
@@ -11,12 +11,14 @@ import { isIOSDevice } from '@/utils/device'
 import '@fontsource-variable/plus-jakarta-sans'
 import '@fontsource-variable/plus-jakarta-sans/wght-italic.css'
 import '@fontsource-variable/geist-mono'
+// 思源黑体按字符切片，没有苹方的设备才会下载用到的切片。字重上限和 emoji 处理见 postcss.config.js。
+import '@fontsource-variable/noto-sans-sc'
 import './style.css'
 
 function initIOSViewportZoomFix() {
   // iOS Safari 在输入框字号小于 16px 时聚焦会自动放大页面，且失焦后不会恢复。
   // 限制 maximum-scale 可阻止该行为；iOS 10+ 用户仍可双指手动缩放，不影响可访问性。
-  // 仅在 iOS 设备上注入，避免影响 Android Chrome 的手动缩放能力。
+  // iOS 设备注入视口修正，Android Chrome 使用浏览器的手动缩放。
   if (!isIOSDevice()) return
 
   const viewport = document.querySelector('meta[name="viewport"]')
@@ -28,7 +30,7 @@ function initIOSViewportZoomFix() {
 }
 
 async function bootstrap() {
-  // 挂载前先应用主题，避免首屏出现明暗模式闪烁。
+  // 挂载前应用主题，首屏按所选明暗模式渲染。
   initTheme()
   initIOSViewportZoomFix()
 
@@ -42,17 +44,18 @@ async function bootstrap() {
   appStore.initFromInjectedConfig()
 
   // Set document title immediately after config is loaded
-  if (appStore.siteName && appStore.siteName !== 'Sub2API') {
+  if (appStore.siteName && appStore.siteName !== 'TokenRouter') {
     document.title = `${appStore.siteName} - AI API Gateway`
   }
   updateFavicon(appStore.siteLogo)
 
   await initI18n()
+  if (appStore.cachedPublicSettings?.locale !== getLocale()) await appStore.fetchPublicSettings(true)
 
   app.use(router)
   app.use(i18n)
 
-  // 等待路由器完成初始导航后再挂载，避免竞态条件导致的空白渲染
+  // 路由初始导航完成后挂载应用。
   await router.isReady()
   app.mount('#app')
 }

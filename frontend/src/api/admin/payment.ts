@@ -146,7 +146,7 @@ export const adminPaymentAPI = {
     return apiClient.post<RefundResult>(`/admin/payment/orders/${id}/refund`, data)
   },
 
-  /** 查询并收敛待确认退款 */
+  /** 查询待确认退款并更新退款状态。 */
   queryRefund(id: number) {
     return apiClient.post<RefundResult>(`/admin/payment/orders/${id}/refund/query`)
   },

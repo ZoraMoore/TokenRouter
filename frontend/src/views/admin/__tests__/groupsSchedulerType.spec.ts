@@ -10,11 +10,13 @@ const groupsViewSource = readFileSync(
   "utf8",
 );
 
+const settingsSource = readFileSync(resolve(currentDir, "../../../components/admin/group/GroupSettingsForm.vue"), "utf8");
+
 describe("groups scheduler type", () => {
   it("uses the shared Select control and preserves the scheduler mode in both forms", () => {
-    expect(groupsViewSource).toContain('v-model="createForm.scheduler_type"');
-    expect(groupsViewSource).toContain('v-model="editForm.scheduler_type"');
-    expect(groupsViewSource).toContain(':options="schedulerTypeOptions"');
+    expect(settingsSource).toContain('v-model="form.scheduler_type"');
+    expect(groupsViewSource).toContain(':model-value="editForm"');
+    expect(settingsSource).toContain(':options="schedulerOptions"');
     expect(groupsViewSource).toContain('scheduler_type: "basic" as GroupSchedulerType');
     expect(groupsViewSource).toContain('group.scheduler_type ?? "basic"');
     expect(groupsViewSource).toContain('advanced_scheduler_overrides');

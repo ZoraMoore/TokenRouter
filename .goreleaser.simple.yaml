@@ -1,17 +1,17 @@
 # 简化版 GoReleaser 配置 - 仅发布 x86_64 GHCR 镜像
 version: 2
 
-project_name: sub2api
+project_name: tokenrouter
 
 before:
   hooks:
     - go mod tidy -C backend
 
 builds:
-  - id: sub2api
+  - id: tokenrouter
     dir: backend
     main: ./cmd/server
-    binary: sub2api
+    binary: tokenrouter
     flags:
       - -tags=embed
     env:
@@ -49,7 +49,6 @@ dockers:
     use: buildx
     extra_files:
       - deploy/docker-entrypoint.sh
-      - backend/resources
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.version={{ .Version }}"
@@ -69,7 +68,6 @@ release:
   # 跳过上传二进制包
   skip_upload: true
   header: |
-    > AI API Gateway Platform - 将 AI 订阅配额分发和管理
     > ⚡ Simple Release: 仅包含 x86_64 GHCR 镜像
 
     {{ .Env.TAG_MESSAGE }}

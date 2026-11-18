@@ -14,7 +14,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/TokenFlux/TokenRouter/ent/batchimagejob"
 	"github.com/TokenFlux/TokenRouter/ent/predicate"
-	"github.com/TokenFlux/TokenRouter/internal/domain"
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 // BatchImageJobUpdate is the builder for updating BatchImageJob entities.
@@ -132,30 +132,30 @@ func (_u *BatchImageJobUpdate) ClearAPIKeyID() *BatchImageJobUpdate {
 	return _u
 }
 
-// SetAccountID sets the "account_id" field.
-func (_u *BatchImageJobUpdate) SetAccountID(v int64) *BatchImageJobUpdate {
-	_u.mutation.ResetAccountID()
-	_u.mutation.SetAccountID(v)
+// SetProviderID sets the "provider_id" field.
+func (_u *BatchImageJobUpdate) SetProviderID(v int64) *BatchImageJobUpdate {
+	_u.mutation.ResetProviderID()
+	_u.mutation.SetProviderID(v)
 	return _u
 }
 
-// SetNillableAccountID sets the "account_id" field if the given value is not nil.
-func (_u *BatchImageJobUpdate) SetNillableAccountID(v *int64) *BatchImageJobUpdate {
+// SetNillableProviderID sets the "provider_id" field if the given value is not nil.
+func (_u *BatchImageJobUpdate) SetNillableProviderID(v *int64) *BatchImageJobUpdate {
 	if v != nil {
-		_u.SetAccountID(*v)
+		_u.SetProviderID(*v)
 	}
 	return _u
 }
 
-// AddAccountID adds value to the "account_id" field.
-func (_u *BatchImageJobUpdate) AddAccountID(v int64) *BatchImageJobUpdate {
-	_u.mutation.AddAccountID(v)
+// AddProviderID adds value to the "provider_id" field.
+func (_u *BatchImageJobUpdate) AddProviderID(v int64) *BatchImageJobUpdate {
+	_u.mutation.AddProviderID(v)
 	return _u
 }
 
-// ClearAccountID clears the value of the "account_id" field.
-func (_u *BatchImageJobUpdate) ClearAccountID() *BatchImageJobUpdate {
-	_u.mutation.ClearAccountID()
+// ClearProviderID clears the value of the "provider_id" field.
+func (_u *BatchImageJobUpdate) ClearProviderID() *BatchImageJobUpdate {
+	_u.mutation.ClearProviderID()
 	return _u
 }
 
@@ -200,16 +200,16 @@ func (_u *BatchImageJobUpdate) ClearPreferredSubscriptionID() *BatchImageJobUpda
 	return _u
 }
 
-// SetProvider sets the "provider" field.
-func (_u *BatchImageJobUpdate) SetProvider(v string) *BatchImageJobUpdate {
-	_u.mutation.SetProvider(v)
+// SetPlatform sets the "platform" field.
+func (_u *BatchImageJobUpdate) SetPlatform(v string) *BatchImageJobUpdate {
+	_u.mutation.SetPlatform(v)
 	return _u
 }
 
-// SetNillableProvider sets the "provider" field if the given value is not nil.
-func (_u *BatchImageJobUpdate) SetNillableProvider(v *string) *BatchImageJobUpdate {
+// SetNillablePlatform sets the "platform" field if the given value is not nil.
+func (_u *BatchImageJobUpdate) SetNillablePlatform(v *string) *BatchImageJobUpdate {
 	if v != nil {
-		_u.SetProvider(*v)
+		_u.SetPlatform(*v)
 	}
 	return _u
 }
@@ -537,13 +537,13 @@ func (_u *BatchImageJobUpdate) AddBalanceHoldAmount(v float64) *BatchImageJobUpd
 }
 
 // SetSubscriptionHoldAllocations sets the "subscription_hold_allocations" field.
-func (_u *BatchImageJobUpdate) SetSubscriptionHoldAllocations(v []domain.BillingAllocation) *BatchImageJobUpdate {
+func (_u *BatchImageJobUpdate) SetSubscriptionHoldAllocations(v []billing.BillingAllocation) *BatchImageJobUpdate {
 	_u.mutation.SetSubscriptionHoldAllocations(v)
 	return _u
 }
 
 // AppendSubscriptionHoldAllocations appends value to the "subscription_hold_allocations" field.
-func (_u *BatchImageJobUpdate) AppendSubscriptionHoldAllocations(v []domain.BillingAllocation) *BatchImageJobUpdate {
+func (_u *BatchImageJobUpdate) AppendSubscriptionHoldAllocations(v []billing.BillingAllocation) *BatchImageJobUpdate {
 	_u.mutation.AppendSubscriptionHoldAllocations(v)
 	return _u
 }
@@ -1028,9 +1028,9 @@ func (_u *BatchImageJobUpdate) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "BatchImageJob.billing_mode": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.Provider(); ok {
-		if err := batchimagejob.ProviderValidator(v); err != nil {
-			return &ValidationError{Name: "provider", err: fmt.Errorf(`ent: validator failed for field "BatchImageJob.provider": %w`, err)}
+	if v, ok := _u.mutation.Platform(); ok {
+		if err := batchimagejob.PlatformValidator(v); err != nil {
+			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "BatchImageJob.platform": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Model(); ok {
@@ -1151,14 +1151,14 @@ func (_u *BatchImageJobUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if _u.mutation.APIKeyIDCleared() {
 		_spec.ClearField(batchimagejob.FieldAPIKeyID, field.TypeInt64)
 	}
-	if value, ok := _u.mutation.AccountID(); ok {
-		_spec.SetField(batchimagejob.FieldAccountID, field.TypeInt64, value)
+	if value, ok := _u.mutation.ProviderID(); ok {
+		_spec.SetField(batchimagejob.FieldProviderID, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedAccountID(); ok {
-		_spec.AddField(batchimagejob.FieldAccountID, field.TypeInt64, value)
+	if value, ok := _u.mutation.AddedProviderID(); ok {
+		_spec.AddField(batchimagejob.FieldProviderID, field.TypeInt64, value)
 	}
-	if _u.mutation.AccountIDCleared() {
-		_spec.ClearField(batchimagejob.FieldAccountID, field.TypeInt64)
+	if _u.mutation.ProviderIDCleared() {
+		_spec.ClearField(batchimagejob.FieldProviderID, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.BillingMode(); ok {
 		_spec.SetField(batchimagejob.FieldBillingMode, field.TypeString, value)
@@ -1172,8 +1172,8 @@ func (_u *BatchImageJobUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if _u.mutation.PreferredSubscriptionIDCleared() {
 		_spec.ClearField(batchimagejob.FieldPreferredSubscriptionID, field.TypeInt64)
 	}
-	if value, ok := _u.mutation.Provider(); ok {
-		_spec.SetField(batchimagejob.FieldProvider, field.TypeString, value)
+	if value, ok := _u.mutation.Platform(); ok {
+		_spec.SetField(batchimagejob.FieldPlatform, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Model(); ok {
 		_spec.SetField(batchimagejob.FieldModel, field.TypeString, value)
@@ -1524,30 +1524,30 @@ func (_u *BatchImageJobUpdateOne) ClearAPIKeyID() *BatchImageJobUpdateOne {
 	return _u
 }
 
-// SetAccountID sets the "account_id" field.
-func (_u *BatchImageJobUpdateOne) SetAccountID(v int64) *BatchImageJobUpdateOne {
-	_u.mutation.ResetAccountID()
-	_u.mutation.SetAccountID(v)
+// SetProviderID sets the "provider_id" field.
+func (_u *BatchImageJobUpdateOne) SetProviderID(v int64) *BatchImageJobUpdateOne {
+	_u.mutation.ResetProviderID()
+	_u.mutation.SetProviderID(v)
 	return _u
 }
 
-// SetNillableAccountID sets the "account_id" field if the given value is not nil.
-func (_u *BatchImageJobUpdateOne) SetNillableAccountID(v *int64) *BatchImageJobUpdateOne {
+// SetNillableProviderID sets the "provider_id" field if the given value is not nil.
+func (_u *BatchImageJobUpdateOne) SetNillableProviderID(v *int64) *BatchImageJobUpdateOne {
 	if v != nil {
-		_u.SetAccountID(*v)
+		_u.SetProviderID(*v)
 	}
 	return _u
 }
 
-// AddAccountID adds value to the "account_id" field.
-func (_u *BatchImageJobUpdateOne) AddAccountID(v int64) *BatchImageJobUpdateOne {
-	_u.mutation.AddAccountID(v)
+// AddProviderID adds value to the "provider_id" field.
+func (_u *BatchImageJobUpdateOne) AddProviderID(v int64) *BatchImageJobUpdateOne {
+	_u.mutation.AddProviderID(v)
 	return _u
 }
 
-// ClearAccountID clears the value of the "account_id" field.
-func (_u *BatchImageJobUpdateOne) ClearAccountID() *BatchImageJobUpdateOne {
-	_u.mutation.ClearAccountID()
+// ClearProviderID clears the value of the "provider_id" field.
+func (_u *BatchImageJobUpdateOne) ClearProviderID() *BatchImageJobUpdateOne {
+	_u.mutation.ClearProviderID()
 	return _u
 }
 
@@ -1592,16 +1592,16 @@ func (_u *BatchImageJobUpdateOne) ClearPreferredSubscriptionID() *BatchImageJobU
 	return _u
 }
 
-// SetProvider sets the "provider" field.
-func (_u *BatchImageJobUpdateOne) SetProvider(v string) *BatchImageJobUpdateOne {
-	_u.mutation.SetProvider(v)
+// SetPlatform sets the "platform" field.
+func (_u *BatchImageJobUpdateOne) SetPlatform(v string) *BatchImageJobUpdateOne {
+	_u.mutation.SetPlatform(v)
 	return _u
 }
 
-// SetNillableProvider sets the "provider" field if the given value is not nil.
-func (_u *BatchImageJobUpdateOne) SetNillableProvider(v *string) *BatchImageJobUpdateOne {
+// SetNillablePlatform sets the "platform" field if the given value is not nil.
+func (_u *BatchImageJobUpdateOne) SetNillablePlatform(v *string) *BatchImageJobUpdateOne {
 	if v != nil {
-		_u.SetProvider(*v)
+		_u.SetPlatform(*v)
 	}
 	return _u
 }
@@ -1929,13 +1929,13 @@ func (_u *BatchImageJobUpdateOne) AddBalanceHoldAmount(v float64) *BatchImageJob
 }
 
 // SetSubscriptionHoldAllocations sets the "subscription_hold_allocations" field.
-func (_u *BatchImageJobUpdateOne) SetSubscriptionHoldAllocations(v []domain.BillingAllocation) *BatchImageJobUpdateOne {
+func (_u *BatchImageJobUpdateOne) SetSubscriptionHoldAllocations(v []billing.BillingAllocation) *BatchImageJobUpdateOne {
 	_u.mutation.SetSubscriptionHoldAllocations(v)
 	return _u
 }
 
 // AppendSubscriptionHoldAllocations appends value to the "subscription_hold_allocations" field.
-func (_u *BatchImageJobUpdateOne) AppendSubscriptionHoldAllocations(v []domain.BillingAllocation) *BatchImageJobUpdateOne {
+func (_u *BatchImageJobUpdateOne) AppendSubscriptionHoldAllocations(v []billing.BillingAllocation) *BatchImageJobUpdateOne {
 	_u.mutation.AppendSubscriptionHoldAllocations(v)
 	return _u
 }
@@ -2433,9 +2433,9 @@ func (_u *BatchImageJobUpdateOne) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "BatchImageJob.billing_mode": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.Provider(); ok {
-		if err := batchimagejob.ProviderValidator(v); err != nil {
-			return &ValidationError{Name: "provider", err: fmt.Errorf(`ent: validator failed for field "BatchImageJob.provider": %w`, err)}
+	if v, ok := _u.mutation.Platform(); ok {
+		if err := batchimagejob.PlatformValidator(v); err != nil {
+			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "BatchImageJob.platform": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Model(); ok {
@@ -2573,14 +2573,14 @@ func (_u *BatchImageJobUpdateOne) sqlSave(ctx context.Context) (_node *BatchImag
 	if _u.mutation.APIKeyIDCleared() {
 		_spec.ClearField(batchimagejob.FieldAPIKeyID, field.TypeInt64)
 	}
-	if value, ok := _u.mutation.AccountID(); ok {
-		_spec.SetField(batchimagejob.FieldAccountID, field.TypeInt64, value)
+	if value, ok := _u.mutation.ProviderID(); ok {
+		_spec.SetField(batchimagejob.FieldProviderID, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.AddedAccountID(); ok {
-		_spec.AddField(batchimagejob.FieldAccountID, field.TypeInt64, value)
+	if value, ok := _u.mutation.AddedProviderID(); ok {
+		_spec.AddField(batchimagejob.FieldProviderID, field.TypeInt64, value)
 	}
-	if _u.mutation.AccountIDCleared() {
-		_spec.ClearField(batchimagejob.FieldAccountID, field.TypeInt64)
+	if _u.mutation.ProviderIDCleared() {
+		_spec.ClearField(batchimagejob.FieldProviderID, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.BillingMode(); ok {
 		_spec.SetField(batchimagejob.FieldBillingMode, field.TypeString, value)
@@ -2594,8 +2594,8 @@ func (_u *BatchImageJobUpdateOne) sqlSave(ctx context.Context) (_node *BatchImag
 	if _u.mutation.PreferredSubscriptionIDCleared() {
 		_spec.ClearField(batchimagejob.FieldPreferredSubscriptionID, field.TypeInt64)
 	}
-	if value, ok := _u.mutation.Provider(); ok {
-		_spec.SetField(batchimagejob.FieldProvider, field.TypeString, value)
+	if value, ok := _u.mutation.Platform(); ok {
+		_spec.SetField(batchimagejob.FieldPlatform, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Model(); ok {
 		_spec.SetField(batchimagejob.FieldModel, field.TypeString, value)

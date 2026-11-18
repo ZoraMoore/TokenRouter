@@ -10,14 +10,14 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/TokenFlux/TokenRouter/ent/account"
 	"github.com/TokenFlux/TokenRouter/ent/apikey"
 	"github.com/TokenFlux/TokenRouter/ent/group"
+	"github.com/TokenFlux/TokenRouter/ent/provider"
 	"github.com/TokenFlux/TokenRouter/ent/team"
 	"github.com/TokenFlux/TokenRouter/ent/usagelog"
 	"github.com/TokenFlux/TokenRouter/ent/user"
 	"github.com/TokenFlux/TokenRouter/ent/usersubscription"
-	"github.com/TokenFlux/TokenRouter/internal/domain"
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 // UsageLog is the model entity for the UsageLog schema.
@@ -33,8 +33,12 @@ type UsageLog struct {
 	TeamID *int64 `json:"team_id,omitempty"`
 	// APIKeyID holds the value of the "api_key_id" field.
 	APIKeyID int64 `json:"api_key_id,omitempty"`
-	// AccountID holds the value of the "account_id" field.
-	AccountID int64 `json:"account_id,omitempty"`
+	// ProviderID holds the value of the "provider_id" field.
+	ProviderID int64 `json:"provider_id,omitempty"`
+	// Platform holds the value of the "platform" field.
+	Platform string `json:"platform,omitempty"`
+	// BillingKey holds the value of the "billing_key" field.
+	BillingKey *string `json:"billing_key,omitempty"`
 	// RequestID holds the value of the "request_id" field.
 	RequestID string `json:"request_id,omitempty"`
 	// Model holds the value of the "model" field.
@@ -43,8 +47,12 @@ type UsageLog struct {
 	RequestedModel *string `json:"requested_model,omitempty"`
 	// UpstreamModel holds the value of the "upstream_model" field.
 	UpstreamModel *string `json:"upstream_model,omitempty"`
-	// 渠道 ID
-	ChannelID *int64 `json:"channel_id,omitempty"`
+	// UpstreamResponseModel holds the value of the "upstream_response_model" field.
+	UpstreamResponseModel *string `json:"upstream_response_model,omitempty"`
+	// UpstreamModelMismatch holds the value of the "upstream_model_mismatch" field.
+	UpstreamModelMismatch *bool `json:"upstream_model_mismatch,omitempty"`
+	// 共享价格配置 ID
+	PricingConfigID *int64 `json:"pricing_config_id,omitempty"`
 	// 模型映射链
 	ModelMappingChain *string `json:"model_mapping_chain,omitempty"`
 	// 计费层级标签
@@ -84,13 +92,13 @@ type UsageLog struct {
 	// BalanceAmountUsd holds the value of the "balance_amount_usd" field.
 	BalanceAmountUsd float64 `json:"balance_amount_usd,omitempty"`
 	// BillingAllocations holds the value of the "billing_allocations" field.
-	BillingAllocations []domain.BillingAllocation `json:"billing_allocations,omitempty"`
+	BillingAllocations []billing.BillingAllocation `json:"billing_allocations,omitempty"`
 	// RateMultiplier holds the value of the "rate_multiplier" field.
 	RateMultiplier float64 `json:"rate_multiplier,omitempty"`
 	// 该请求是否因长上下文规则实际增加费用
 	LongContextBillingApplied bool `json:"long_context_billing_applied,omitempty"`
-	// AccountRateMultiplier holds the value of the "account_rate_multiplier" field.
-	AccountRateMultiplier *float64 `json:"account_rate_multiplier,omitempty"`
+	// ProviderRateMultiplier holds the value of the "provider_rate_multiplier" field.
+	ProviderRateMultiplier *float64 `json:"provider_rate_multiplier,omitempty"`
 	// BillingType holds the value of the "billing_type" field.
 	BillingType int8 `json:"billing_type,omitempty"`
 	// Stream holds the value of the "stream" field.
@@ -137,8 +145,8 @@ type UsageLogEdges struct {
 	User *User `json:"user,omitempty"`
 	// APIKey holds the value of the api_key edge.
 	APIKey *APIKey `json:"api_key,omitempty"`
-	// Account holds the value of the account edge.
-	Account *Account `json:"account,omitempty"`
+	// Provider holds the value of the provider edge.
+	Provider *Provider `json:"provider,omitempty"`
 	// Group holds the value of the group edge.
 	Group *Group `json:"group,omitempty"`
 	// Subscription holds the value of the subscription edge.
@@ -172,15 +180,15 @@ func (e UsageLogEdges) APIKeyOrErr() (*APIKey, error) {
 	return nil, &NotLoadedError{edge: "api_key"}
 }
 
-// AccountOrErr returns the Account value or an error if the edge
+// ProviderOrErr returns the Provider value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
-func (e UsageLogEdges) AccountOrErr() (*Account, error) {
-	if e.Account != nil {
-		return e.Account, nil
+func (e UsageLogEdges) ProviderOrErr() (*Provider, error) {
+	if e.Provider != nil {
+		return e.Provider, nil
 	} else if e.loadedTypes[2] {
-		return nil, &NotFoundError{label: account.Label}
+		return nil, &NotFoundError{label: provider.Label}
 	}
-	return nil, &NotLoadedError{edge: "account"}
+	return nil, &NotLoadedError{edge: "provider"}
 }
 
 // GroupOrErr returns the Group value or an error if the edge
@@ -223,13 +231,13 @@ func (*UsageLog) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case usagelog.FieldBillingAllocations, usagelog.FieldImageSizeBreakdown:
 			values[i] = new([]byte)
-		case usagelog.FieldLongContextBillingApplied, usagelog.FieldStream, usagelog.FieldCacheTTLOverridden:
+		case usagelog.FieldUpstreamModelMismatch, usagelog.FieldLongContextBillingApplied, usagelog.FieldStream, usagelog.FieldCacheTTLOverridden:
 			values[i] = new(sql.NullBool)
-		case usagelog.FieldInputCost, usagelog.FieldOutputCost, usagelog.FieldCacheCreationCost, usagelog.FieldCacheReadCost, usagelog.FieldTotalCost, usagelog.FieldActualCost, usagelog.FieldSubscriptionAmountUsd, usagelog.FieldBalanceAmountUsd, usagelog.FieldRateMultiplier, usagelog.FieldAccountRateMultiplier:
+		case usagelog.FieldInputCost, usagelog.FieldOutputCost, usagelog.FieldCacheCreationCost, usagelog.FieldCacheReadCost, usagelog.FieldTotalCost, usagelog.FieldActualCost, usagelog.FieldSubscriptionAmountUsd, usagelog.FieldBalanceAmountUsd, usagelog.FieldRateMultiplier, usagelog.FieldProviderRateMultiplier:
 			values[i] = new(sql.NullFloat64)
-		case usagelog.FieldID, usagelog.FieldUserID, usagelog.FieldBillingUserID, usagelog.FieldTeamID, usagelog.FieldAPIKeyID, usagelog.FieldAccountID, usagelog.FieldChannelID, usagelog.FieldGroupID, usagelog.FieldSubscriptionID, usagelog.FieldInputTokens, usagelog.FieldOutputTokens, usagelog.FieldCacheCreationTokens, usagelog.FieldCacheReadTokens, usagelog.FieldCacheCreation5mTokens, usagelog.FieldCacheCreation1hTokens, usagelog.FieldBillingType, usagelog.FieldDurationMs, usagelog.FieldFirstTokenMs, usagelog.FieldImageCount, usagelog.FieldVideoCount, usagelog.FieldVideoDurationSeconds:
+		case usagelog.FieldID, usagelog.FieldUserID, usagelog.FieldBillingUserID, usagelog.FieldTeamID, usagelog.FieldAPIKeyID, usagelog.FieldProviderID, usagelog.FieldPricingConfigID, usagelog.FieldGroupID, usagelog.FieldSubscriptionID, usagelog.FieldInputTokens, usagelog.FieldOutputTokens, usagelog.FieldCacheCreationTokens, usagelog.FieldCacheReadTokens, usagelog.FieldCacheCreation5mTokens, usagelog.FieldCacheCreation1hTokens, usagelog.FieldBillingType, usagelog.FieldDurationMs, usagelog.FieldFirstTokenMs, usagelog.FieldImageCount, usagelog.FieldVideoCount, usagelog.FieldVideoDurationSeconds:
 			values[i] = new(sql.NullInt64)
-		case usagelog.FieldRequestID, usagelog.FieldModel, usagelog.FieldRequestedModel, usagelog.FieldUpstreamModel, usagelog.FieldModelMappingChain, usagelog.FieldBillingTier, usagelog.FieldBillingMode, usagelog.FieldUserAgent, usagelog.FieldIPAddress, usagelog.FieldImageSize, usagelog.FieldImageInputSize, usagelog.FieldImageOutputSize, usagelog.FieldImageSizeSource, usagelog.FieldVideoResolution:
+		case usagelog.FieldPlatform, usagelog.FieldBillingKey, usagelog.FieldRequestID, usagelog.FieldModel, usagelog.FieldRequestedModel, usagelog.FieldUpstreamModel, usagelog.FieldUpstreamResponseModel, usagelog.FieldModelMappingChain, usagelog.FieldBillingTier, usagelog.FieldBillingMode, usagelog.FieldUserAgent, usagelog.FieldIPAddress, usagelog.FieldImageSize, usagelog.FieldImageInputSize, usagelog.FieldImageOutputSize, usagelog.FieldImageSizeSource, usagelog.FieldVideoResolution:
 			values[i] = new(sql.NullString)
 		case usagelog.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -279,11 +287,24 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.APIKeyID = value.Int64
 			}
-		case usagelog.FieldAccountID:
+		case usagelog.FieldProviderID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field account_id", values[i])
+				return fmt.Errorf("unexpected type %T for field provider_id", values[i])
 			} else if value.Valid {
-				_m.AccountID = value.Int64
+				_m.ProviderID = value.Int64
+			}
+		case usagelog.FieldPlatform:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field platform", values[i])
+			} else if value.Valid {
+				_m.Platform = value.String
+			}
+		case usagelog.FieldBillingKey:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field billing_key", values[i])
+			} else if value.Valid {
+				_m.BillingKey = new(string)
+				*_m.BillingKey = value.String
 			}
 		case usagelog.FieldRequestID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -311,12 +332,26 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 				_m.UpstreamModel = new(string)
 				*_m.UpstreamModel = value.String
 			}
-		case usagelog.FieldChannelID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field channel_id", values[i])
+		case usagelog.FieldUpstreamResponseModel:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_response_model", values[i])
 			} else if value.Valid {
-				_m.ChannelID = new(int64)
-				*_m.ChannelID = value.Int64
+				_m.UpstreamResponseModel = new(string)
+				*_m.UpstreamResponseModel = value.String
+			}
+		case usagelog.FieldUpstreamModelMismatch:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_model_mismatch", values[i])
+			} else if value.Valid {
+				_m.UpstreamModelMismatch = new(bool)
+				*_m.UpstreamModelMismatch = value.Bool
+			}
+		case usagelog.FieldPricingConfigID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field pricing_config_id", values[i])
+			} else if value.Valid {
+				_m.PricingConfigID = new(int64)
+				*_m.PricingConfigID = value.Int64
 			}
 		case usagelog.FieldModelMappingChain:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -457,12 +492,12 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.LongContextBillingApplied = value.Bool
 			}
-		case usagelog.FieldAccountRateMultiplier:
+		case usagelog.FieldProviderRateMultiplier:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
-				return fmt.Errorf("unexpected type %T for field account_rate_multiplier", values[i])
+				return fmt.Errorf("unexpected type %T for field provider_rate_multiplier", values[i])
 			} else if value.Valid {
-				_m.AccountRateMultiplier = new(float64)
-				*_m.AccountRateMultiplier = value.Float64
+				_m.ProviderRateMultiplier = new(float64)
+				*_m.ProviderRateMultiplier = value.Float64
 			}
 		case usagelog.FieldBillingType:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -601,9 +636,9 @@ func (_m *UsageLog) QueryAPIKey() *APIKeyQuery {
 	return NewUsageLogClient(_m.config).QueryAPIKey(_m)
 }
 
-// QueryAccount queries the "account" edge of the UsageLog entity.
-func (_m *UsageLog) QueryAccount() *AccountQuery {
-	return NewUsageLogClient(_m.config).QueryAccount(_m)
+// QueryProvider queries the "provider" edge of the UsageLog entity.
+func (_m *UsageLog) QueryProvider() *ProviderQuery {
+	return NewUsageLogClient(_m.config).QueryProvider(_m)
 }
 
 // QueryGroup queries the "group" edge of the UsageLog entity.
@@ -658,8 +693,16 @@ func (_m *UsageLog) String() string {
 	builder.WriteString("api_key_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.APIKeyID))
 	builder.WriteString(", ")
-	builder.WriteString("account_id=")
-	builder.WriteString(fmt.Sprintf("%v", _m.AccountID))
+	builder.WriteString("provider_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ProviderID))
+	builder.WriteString(", ")
+	builder.WriteString("platform=")
+	builder.WriteString(_m.Platform)
+	builder.WriteString(", ")
+	if v := _m.BillingKey; v != nil {
+		builder.WriteString("billing_key=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("request_id=")
 	builder.WriteString(_m.RequestID)
@@ -677,8 +720,18 @@ func (_m *UsageLog) String() string {
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
-	if v := _m.ChannelID; v != nil {
-		builder.WriteString("channel_id=")
+	if v := _m.UpstreamResponseModel; v != nil {
+		builder.WriteString("upstream_response_model=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.UpstreamModelMismatch; v != nil {
+		builder.WriteString("upstream_model_mismatch=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.PricingConfigID; v != nil {
+		builder.WriteString("pricing_config_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
@@ -758,8 +811,8 @@ func (_m *UsageLog) String() string {
 	builder.WriteString("long_context_billing_applied=")
 	builder.WriteString(fmt.Sprintf("%v", _m.LongContextBillingApplied))
 	builder.WriteString(", ")
-	if v := _m.AccountRateMultiplier; v != nil {
-		builder.WriteString("account_rate_multiplier=")
+	if v := _m.ProviderRateMultiplier; v != nil {
+		builder.WriteString("provider_rate_multiplier=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")

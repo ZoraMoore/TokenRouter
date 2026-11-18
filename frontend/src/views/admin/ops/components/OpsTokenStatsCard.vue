@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
+import { TABLE_DESKTOP_MEDIA_QUERY } from '@/constants/layout'
 import { useI18n } from 'vue-i18n'
 import Select from '@/components/common/Select.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -11,7 +12,7 @@ import { formatNumber } from '@/utils/format'
 interface Props {
   platformFilter?: string
   groupIdFilter?: number | null
-  groups?: Array<{ id: number; name: string; platform: string }>
+  groups?: Array<{ id: number; name: string }>
 }
 
 interface Emits {
@@ -29,8 +30,8 @@ const emit = defineEmits<Emits>()
 
 const { t } = useI18n()
 
-// 与 DataTable 一致：< 768px 切换为卡片视图，避免宽表在移动端被截断。
-const isDesktopViewport = useMediaQuery('(min-width: 768px)')
+// Token 统计在宽度小于 1024px 时使用卡片视图。
+const isDesktopViewport = useMediaQuery(TABLE_DESKTOP_MEDIA_QUERY)
 
 const loading = ref(false)
 const errorMessage = ref('')
@@ -59,9 +60,7 @@ const timeRangeOptions = computed(() => [
 ])
 
 const groupOptions = computed(() => {
-  const filtered = props.platformFilter
-    ? props.groups.filter((group) => group.platform === props.platformFilter)
-    : props.groups
+  const filtered = props.groups
   return [
     { value: null, label: t('common.all') },
     ...filtered.map((group) => ({ value: group.id, label: group.name }))
@@ -230,7 +229,7 @@ function onNextPage() {
         </template>
         <button
           type="button"
-          class="btn btn-secondary btn-sm h-9 w-9 p-0"
+          class="btn btn-secondary btn-icon"
           :aria-label="t('common.refresh')"
           :title="t('common.refresh')"
           :disabled="loading"
@@ -242,7 +241,7 @@ function onNextPage() {
       </div>
     </div>
 
-    <div v-if="errorMessage" class="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400">
+    <div v-if="errorMessage" class="mb-4 rounded-control bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400">
       {{ errorMessage }}
     </div>
 
@@ -257,8 +256,8 @@ function onNextPage() {
     />
 
     <div v-else class="space-y-3">
-      <div class="overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
-        <div class="max-h-[420px] overflow-auto">
+      <div class="overflow-hidden rounded-surface border border-gray-200 dark:border-dark-700">
+        <div class="max-h-panel overflow-auto">
           <div v-if="!isDesktopViewport" class="divide-y divide-gray-100 dark:divide-dark-800">
             <div v-for="row in items" :key="row.model" class="space-y-2 p-3">
               <div class="break-all text-xs font-medium text-gray-900 dark:text-gray-100">{{ row.model }}</div>

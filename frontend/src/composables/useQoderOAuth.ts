@@ -69,7 +69,7 @@ export function useQoderOAuth() {
       error.value =
         err.response?.data?.detail ||
         err.message ||
-        t('admin.accounts.oauth.qoder.failedToGenerateUrl')
+        t('admin.providers.oauth.qoder.failedToGenerateUrl')
       appStore.showError(error.value)
       return false
     } finally {
@@ -86,7 +86,7 @@ export function useQoderOAuth() {
     state: string
   }): Promise<QoderTokenInfo | null> => {
     if (!params.sessionId || !params.state) {
-      error.value = t('admin.accounts.oauth.qoder.missingExchangeParams')
+      error.value = t('admin.providers.oauth.qoder.missingExchangeParams')
       return null
     }
 
@@ -112,7 +112,7 @@ export function useQoderOAuth() {
       error.value =
         err.response?.data?.detail ||
         err.message ||
-        t('admin.accounts.oauth.qoder.failedToExchangeCode')
+        t('admin.providers.oauth.qoder.failedToExchangeCode')
       appStore.showError(error.value)
       return null
     } finally {
@@ -127,7 +127,7 @@ export function useQoderOAuth() {
     state: string
   }): Promise<QoderPollResponse | null> => {
     if (!params.sessionId || !params.state) {
-      error.value = t('admin.accounts.oauth.qoder.missingExchangeParams')
+      error.value = t('admin.providers.oauth.qoder.missingExchangeParams')
       return null
     }
 
@@ -149,7 +149,7 @@ export function useQoderOAuth() {
       error.value =
         err.response?.data?.detail ||
         err.message ||
-        t('admin.accounts.oauth.qoder.failedToExchangeCode')
+        t('admin.providers.oauth.qoder.failedToExchangeCode')
       appStore.showError(error.value)
       return null
     } finally {

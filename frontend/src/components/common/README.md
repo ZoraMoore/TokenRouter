@@ -16,6 +16,7 @@ A generic data table component with sorting, loading states, and custom cell ren
 - `defaultSortKey?: string` - Default sort key (only used if no persisted sort state)
 - `defaultSortOrder?: 'asc' | 'desc'` - Default sort order (default: `asc`)
 - `sortStorageKey?: string` - Persist sort state (key + order) to localStorage
+- `columnOrderStorageKey?: string` - Enable header drag handles and persist column order under a stable, table-specific key. Left/right arrow keys also move a focused handle. Selection and action columns keep their positions; hidden columns retain their saved order.
 - `rowKey?: string | (row: any) => string | number` - Row key field or resolver (defaults to `row.id`, falls back to index)
 
 **Slots:**
@@ -73,47 +74,46 @@ Pagination component with page numbers, navigation, and page size selector.
 
 ---
 
-### Modal.vue
+### BaseDialog.vue
 
-Modal dialog with customizable size and close behavior.
+通用弹窗提供标题、内容和页脚插槽，并管理焦点与关闭后的清理。
 
-**Props:**
+属性：
 
-- `show: boolean` - Control modal visibility
-- `title: string` - Modal title
-- `size?: 'sm' | 'md' | 'lg' | 'xl' | 'full'` - Modal size (default: 'md')
-- `closeOnEscape?: boolean` - Close on Escape key (default: true)
-- `closeOnClickOutside?: boolean` - Close on backdrop click (default: true)
+- `show: boolean`：控制弹窗显示。
+- `title: string`：弹窗标题。
+- `width?: 'narrow' | 'normal' | 'wide' | 'extra-wide' | 'full'`：宽度档位，默认为 `normal`。
+- `closeOnEscape?: boolean`：按 Escape 触发关闭，默认开启。
+- `closeOnClickOutside?: boolean`：点击遮罩触发关闭，默认关闭。
 
-**Events:**
+事件：
 
-- `close` - Emitted when modal should close
+- `close`：调用方收到事件后关闭弹窗。
+- `after-leave`：关闭动画完成。
 
-**Slots:**
+插槽：
 
-- `default` - Modal body content
-- `footer` - Modal footer content
+- `default`：弹窗正文。
+- `footer`：页脚操作。
 
-**Usage:**
+用法：
 
 ```vue
-<Modal :show="showModal" title="Edit User" size="lg" @close="showModal = false">
+<BaseDialog :show="showDialog" title="Edit User" width="wide" @close="showDialog = false">
   <form @submit.prevent="saveUser">
-    <!-- Form content -->
+    <!-- 用户资料表单 -->
   </form>
 
   <template #footer>
-    <button @click="showModal = false">Cancel</button>
+    <button @click="showDialog = false">Cancel</button>
     <button @click="saveUser">Save</button>
   </template>
-</Modal>
+</BaseDialog>
 ```
-
----
 
 ### ConfirmDialog.vue
 
-Confirmation dialog built on top of Modal component.
+ConfirmDialog 使用 BaseDialog 显示确认内容和操作按钮。
 
 **Props:**
 
@@ -142,27 +142,6 @@ Confirmation dialog built on top of Modal component.
   @confirm="deleteUser"
   @cancel="showDeleteConfirm = false"
 />
-```
-
----
-
-### StatCard.vue
-
-Statistics card component for displaying metrics with optional change indicators.
-
-**Props:**
-
-- `title: string` - Card title
-- `value: number | string` - Main value to display
-- `icon?: Component` - Icon component
-- `change?: number` - Percentage change value
-- `changeType?: 'up' | 'down' | 'neutral'` - Change direction (default: 'neutral')
-- `formatValue?: (value) => string` - Custom value formatter
-
-**Usage:**
-
-```vue
-<StatCard title="Total Users" :value="1234" :icon="UserIcon" :change="12.5" change-type="up" />
 ```
 
 ---
@@ -199,23 +178,6 @@ appStore.addToast({
 
 ---
 
-### LoadingSpinner.vue
-
-Simple animated loading spinner.
-
-**Props:**
-
-- `size?: 'sm' | 'md' | 'lg' | 'xl'` - Spinner size (default: 'md')
-- `color?: 'primary' | 'secondary' | 'white' | 'gray'` - Spinner color (default: 'primary')
-
-**Usage:**
-
-```vue
-<LoadingSpinner size="lg" color="primary" />
-```
-
----
-
 ### EmptyState.vue
 
 Empty state placeholder with icon, message, and optional action button.
@@ -245,18 +207,67 @@ Empty state placeholder with icon, message, and optional action button.
 />
 ```
 
-## Import
+---
 
-You can import components individually:
+### RuleListEditor.vue
 
-```typescript
-import { DataTable, Pagination, Modal } from '@/components/common'
+Shell for lists edited one row at a time: a header with title, hint and add button, a dashed empty state, and per-row move and delete buttons. It does not own the data. The parent performs every change in response to its events.
+
+**Props:**
+
+- `items: T[]` - Rows to render
+- `itemKey?: (item, index) => string | number` - Row key (defaults to object identity; primitive rows fall back to the index)
+- `title?: string` / `hint?: string` - Header text
+- `titleStyle?: 'label' | 'section'` - Form label style or group-section heading style (default: `label`)
+- `addLabel?: string` - Add button text (default: `common.add`)
+- `addPlacement?: 'header' | 'footer'` - Add button position (default: `header`; use `footer` when there is no title)
+- `addDisabled?: boolean` - Disable the add button on its own
+- `removeLabel?: string` - Delete button label (default: `common.delete`)
+- `emptyText?: string` - Empty state text; omit it to hide the empty state
+- `min?: number` / `max?: number` - Row count limits; delete is disabled at `min`, add at `max`
+- `disabled?: boolean` - Disable every action
+- `removable?: boolean` - Show the delete button (default: true)
+- `reorderable?: boolean` - Show move up/down buttons
+- `variant?: 'line' | 'card'` - Rows separated by dividers, or bordered cards (default: `line`)
+- `itemLabel?: (index) => string` - Row heading such as "Rule #1"
+- `animated?: boolean` - List enter/leave motion (default: true; turn it off when keys are indexes)
+- `error?: string` - List-level error shown as an alert
+- `testId?: string` - Prefix for `data-testid` hooks: `-add`, `-row`, `-remove-{i}`, `-move-up-{i}`, `-move-down-{i}`
+
+**Events:** `add`, `remove(index)`, `move(from, to)`
+
+**Slots:** `row({ item, index })`, `header-actions`, `header-extra`, `footer`
+
+Clicking the add button focuses the first input of the new row. Rows appended by presets or imports do not take focus.
+
+---
+
+### ModelMappingEditor.vue
+
+Source → target mapping rows built on `RuleListEditor`. `v-model` is an array of `{ from, to }` (`ModelMappingRow` in `@/utils/modelMappingRules`). Typing edits the row object in place and emits a new array; adding and removing also emit `add(row)` and `remove(row, index)`.
+
+Validation is opt-in. Compute issues with `validateModelMappingRows(rows, options)`, translate them, and pass the result as `fieldErrors`.
+
+```vue
+<ModelMappingEditor
+  v-model="rows"
+  :title="t('keys.modelRedirect.label')"
+  :add-label="t('keys.modelRedirect.addRule')"
+  :empty-text="t('keys.modelRedirect.empty')"
+  :source-label="t('keys.modelRedirect.source')"
+  :target-label="t('keys.modelRedirect.target')"
+  :field-errors="fieldErrors"
+/>
 ```
 
-Or import specific components:
+## Import
+
+组件按文件路径导入：
 
 ```typescript
 import DataTable from '@/components/common/DataTable.vue'
+import Pagination from '@/components/common/Pagination.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 ```
 
 ## Features

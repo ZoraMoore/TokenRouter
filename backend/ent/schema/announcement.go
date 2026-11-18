@@ -3,8 +3,6 @@ package schema
 import (
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/domain"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
@@ -12,11 +10,13 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	"github.com/TokenFlux/TokenRouter/internal/site"
 )
 
 // Announcement holds the schema definition for the Announcement entity.
 //
-// 删除策略：硬删除（已读记录通过外键级联删除）
+// 删除策略：硬删除（已读记录通过外键级联删除）。
 type Announcement struct {
 	ent.Schema
 }
@@ -29,6 +29,7 @@ func (Announcement) Annotations() []schema.Annotation {
 
 func (Announcement) Fields() []ent.Field {
 	return []ent.Field{
+		field.JSON("localization", site.AnnouncementLocalization{}).Optional().SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 		field.String("title").
 			MaxLen(200).
 			NotEmpty().
@@ -39,13 +40,13 @@ func (Announcement) Fields() []ent.Field {
 			Comment("公告内容（支持 Markdown）"),
 		field.String("status").
 			MaxLen(20).
-			Default(domain.AnnouncementStatusDraft).
+			Default(site.AnnouncementStatusDraft).
 			Comment("状态: draft, active, archived"),
 		field.String("notify_mode").
 			MaxLen(20).
-			Default(domain.AnnouncementNotifyModeSilent).
+			Default(site.AnnouncementNotifyModeSilent).
 			Comment("通知模式: silent(仅铃铛), popup(弹窗提醒)"),
-		field.JSON("targeting", domain.AnnouncementTargeting{}).
+		field.JSON("targeting", site.AnnouncementTargeting{}).
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
 			Comment("展示条件（JSON 规则）"),

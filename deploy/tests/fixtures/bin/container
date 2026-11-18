@@ -33,18 +33,20 @@ inspect_resource() {
     local resource_type=$1
     local resource_name=$2
     local label_value="apple-container"
+    local label_key="org.tokenrouter.stack"
+    if [[ "${resource_name}" == sub2api-* ]]; then label_key="org.sub2api.stack"; fi
     local address="192.168.65.4/24"
 
     if [[ -e "${STATE_DIR}/unowned/${resource_type}/${resource_name}" ]]; then
         label_value="other"
     fi
     case "${resource_name}" in
-        sub2api-apple-postgres) address="192.168.65.2/24" ;;
-        sub2api-apple-redis) address="192.168.65.3/24" ;;
+        tokenrouter-apple-postgres|sub2api-apple-postgres) address="192.168.65.2/24" ;;
+        tokenrouter-apple-redis|sub2api-apple-redis) address="192.168.65.3/24" ;;
     esac
 
-    printf '[{"configuration":{"labels":{"org.sub2api.stack":"%s"}},"status":{"networks":[{"ipv4Address":"%s"}]}}]\n' \
-        "${label_value}" "${address}"
+    printf '[{"configuration":{"labels":{"%s":"%s"}},"status":{"networks":[{"ipv4Address":"%s"}]}}]\n' \
+        "${label_key}" "${label_value}" "${address}"
 }
 
 command=${1-}

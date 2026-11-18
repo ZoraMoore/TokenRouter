@@ -1,6 +1,6 @@
 # 外部支付管理 API 集成
 
-本文档用于对接外部支付系统（如 `sub2apipay`）与 TokenRouter 的管理 API。其他操作手册见 [指南目录](../index.md)，稳定接口边界见 [HTTP 接口 Project Doc](../../interfaces/http_api.md)。
+本文档用于对接外部支付系统（如 `sub2apipay`）与 TokenRouter 的管理 API。其他操作手册见 [指南目录](../index.md)，接口规则见 [HTTP 接口 Project Doc](../../interfaces/http_api.md)。
 
 ## 目标
 
@@ -29,7 +29,7 @@
 
 `POST /api/v1/admin/redeem-codes/create-and-redeem`
 
-该接口原子完成“创建兑换码并兑换到指定用户”。
+这个接口原子地完成"创建兑换码，并兑换给指定用户"。
 
 请求头：
 
@@ -48,7 +48,7 @@
 }
 ```
 
-幂等语义：
+幂等规则：
 
 - 同一 `code` 且 `used_by` 一致：返回 `200`
 - 同一 `code` 但 `used_by` 不一致：返回 `409`
@@ -125,7 +125,7 @@ TokenRouter 打开 `purchase_subscription_url` 或用户侧自定义页面 ifram
 https://pay.example.com/pay?user_id=123&token=<jwt>&theme=light&lang=zh&ui_mode=embedded&src_host=https%3A%2F%2Frouter.example.com&src_url=https%3A%2F%2Frouter.example.com%2Fpurchase
 ```
 
-`token` 是用户 Bearer 凭据。只允许把购买页或自定义页面配置为受信任的 HTTPS 来源；接收方不得记录、转发或通过第三方分析脚本暴露该参数。
+`token` 是用户的 Bearer 凭据。购买页和自定义页面只配置成受信任的 HTTPS 来源；接收方把这个参数当作密钥处理，不写日志、不转发，也不交给第三方分析脚本。
 
 ## 失败处理建议
 
@@ -133,7 +133,7 @@ https://pay.example.com/pay?user_id=123&token=<jwt>&theme=light&lang=zh&ui_mode=
 - 回调验签成功后立即标记支付成功。
 - 支付成功但充值失败的订单应允许后续重试。
 - 同一笔充值因超时或网络错误重试时，保持相同 `code`、请求体和 `Idempotency-Key`。
-- 只有发起一笔语义不同的新操作时才生成新的 `Idempotency-Key`。
+- 只有发起一笔内容不同的新操作时，才生成新的 `Idempotency-Key`。
 
 ## `doc_url` 配置建议
 

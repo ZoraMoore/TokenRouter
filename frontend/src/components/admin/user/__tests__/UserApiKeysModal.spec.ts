@@ -41,7 +41,7 @@ vi.mock('vue-i18n', async () => {
 
 import UserApiKeysModal from '../UserApiKeysModal.vue'
 
-// 构造弹窗测试所需的最小 API Key 数据，避免各用例重复无关字段。
+// 创建弹窗测试共用的最小 API Key 数据。
 const createApiKey = (overrides: Partial<ApiKey> = {}): ApiKey => ({
   id: 1,
   user_id: 99,

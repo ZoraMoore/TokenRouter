@@ -11,7 +11,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/TokenFlux/TokenRouter/ent/batchimagejob"
-	"github.com/TokenFlux/TokenRouter/internal/domain"
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 // BatchImageJob is the model entity for the BatchImageJob schema.
@@ -29,14 +29,14 @@ type BatchImageJob struct {
 	TeamID *int64 `json:"team_id,omitempty"`
 	// APIKeyID holds the value of the "api_key_id" field.
 	APIKeyID *int64 `json:"api_key_id,omitempty"`
-	// AccountID holds the value of the "account_id" field.
-	AccountID *int64 `json:"account_id,omitempty"`
+	// ProviderID holds the value of the "provider_id" field.
+	ProviderID *int64 `json:"provider_id,omitempty"`
 	// BillingMode holds the value of the "billing_mode" field.
 	BillingMode string `json:"billing_mode,omitempty"`
 	// PreferredSubscriptionID holds the value of the "preferred_subscription_id" field.
 	PreferredSubscriptionID *int64 `json:"preferred_subscription_id,omitempty"`
-	// Provider holds the value of the "provider" field.
-	Provider string `json:"provider,omitempty"`
+	// Platform holds the value of the "platform" field.
+	Platform string `json:"platform,omitempty"`
 	// Model holds the value of the "model" field.
 	Model string `json:"model,omitempty"`
 	// TaskName holds the value of the "task_name" field.
@@ -70,7 +70,7 @@ type BatchImageJob struct {
 	// BalanceHoldAmount holds the value of the "balance_hold_amount" field.
 	BalanceHoldAmount float64 `json:"balance_hold_amount,omitempty"`
 	// SubscriptionHoldAllocations holds the value of the "subscription_hold_allocations" field.
-	SubscriptionHoldAllocations []domain.BillingAllocation `json:"subscription_hold_allocations,omitempty"`
+	SubscriptionHoldAllocations []billing.BillingAllocation `json:"subscription_hold_allocations,omitempty"`
 	// SubscriptionRateMultiplier holds the value of the "subscription_rate_multiplier" field.
 	SubscriptionRateMultiplier float64 `json:"subscription_rate_multiplier,omitempty"`
 	// BalanceRateMultiplier holds the value of the "balance_rate_multiplier" field.
@@ -133,9 +133,9 @@ func (*BatchImageJob) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case batchimagejob.FieldEstimatedCost, batchimagejob.FieldHoldAmount, batchimagejob.FieldActualCost, batchimagejob.FieldBalanceHoldAmount, batchimagejob.FieldSubscriptionRateMultiplier, batchimagejob.FieldBalanceRateMultiplier:
 			values[i] = new(sql.NullFloat64)
-		case batchimagejob.FieldID, batchimagejob.FieldUserID, batchimagejob.FieldBillingUserID, batchimagejob.FieldTeamID, batchimagejob.FieldAPIKeyID, batchimagejob.FieldAccountID, batchimagejob.FieldPreferredSubscriptionID, batchimagejob.FieldItemCount, batchimagejob.FieldSuccessCount, batchimagejob.FieldFailCount, batchimagejob.FieldCancelledCount, batchimagejob.FieldRetryCount, batchimagejob.FieldVersion:
+		case batchimagejob.FieldID, batchimagejob.FieldUserID, batchimagejob.FieldBillingUserID, batchimagejob.FieldTeamID, batchimagejob.FieldAPIKeyID, batchimagejob.FieldProviderID, batchimagejob.FieldPreferredSubscriptionID, batchimagejob.FieldItemCount, batchimagejob.FieldSuccessCount, batchimagejob.FieldFailCount, batchimagejob.FieldCancelledCount, batchimagejob.FieldRetryCount, batchimagejob.FieldVersion:
 			values[i] = new(sql.NullInt64)
-		case batchimagejob.FieldBatchID, batchimagejob.FieldBillingMode, batchimagejob.FieldProvider, batchimagejob.FieldModel, batchimagejob.FieldTaskName, batchimagejob.FieldStatus, batchimagejob.FieldProviderJobName, batchimagejob.FieldProviderInputRef, batchimagejob.FieldProviderOutputRef, batchimagejob.FieldGcsInputURI, batchimagejob.FieldGcsOutputURI, batchimagejob.FieldCurrency, batchimagejob.FieldHoldID, batchimagejob.FieldIdempotencyKey, batchimagejob.FieldRequestHash, batchimagejob.FieldManifestHash, batchimagejob.FieldLastErrorCode, batchimagejob.FieldLastErrorMessage:
+		case batchimagejob.FieldBatchID, batchimagejob.FieldBillingMode, batchimagejob.FieldPlatform, batchimagejob.FieldModel, batchimagejob.FieldTaskName, batchimagejob.FieldStatus, batchimagejob.FieldProviderJobName, batchimagejob.FieldProviderInputRef, batchimagejob.FieldProviderOutputRef, batchimagejob.FieldGcsInputURI, batchimagejob.FieldGcsOutputURI, batchimagejob.FieldCurrency, batchimagejob.FieldHoldID, batchimagejob.FieldIdempotencyKey, batchimagejob.FieldRequestHash, batchimagejob.FieldManifestHash, batchimagejob.FieldLastErrorCode, batchimagejob.FieldLastErrorMessage:
 			values[i] = new(sql.NullString)
 		case batchimagejob.FieldOutputExpiresAt, batchimagejob.FieldInputDeletedAt, batchimagejob.FieldOutputDeletedAt, batchimagejob.FieldDownloadedAt, batchimagejob.FieldUserDeletedAt, batchimagejob.FieldCreatedAt, batchimagejob.FieldUpdatedAt, batchimagejob.FieldSubmittedAt, batchimagejob.FieldStartedAt, batchimagejob.FieldFinishedAt, batchimagejob.FieldSettledAt:
 			values[i] = new(sql.NullTime)
@@ -192,12 +192,12 @@ func (_m *BatchImageJob) assignValues(columns []string, values []any) error {
 				_m.APIKeyID = new(int64)
 				*_m.APIKeyID = value.Int64
 			}
-		case batchimagejob.FieldAccountID:
+		case batchimagejob.FieldProviderID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field account_id", values[i])
+				return fmt.Errorf("unexpected type %T for field provider_id", values[i])
 			} else if value.Valid {
-				_m.AccountID = new(int64)
-				*_m.AccountID = value.Int64
+				_m.ProviderID = new(int64)
+				*_m.ProviderID = value.Int64
 			}
 		case batchimagejob.FieldBillingMode:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -212,11 +212,11 @@ func (_m *BatchImageJob) assignValues(columns []string, values []any) error {
 				_m.PreferredSubscriptionID = new(int64)
 				*_m.PreferredSubscriptionID = value.Int64
 			}
-		case batchimagejob.FieldProvider:
+		case batchimagejob.FieldPlatform:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field provider", values[i])
+				return fmt.Errorf("unexpected type %T for field platform", values[i])
 			} else if value.Valid {
-				_m.Provider = value.String
+				_m.Platform = value.String
 			}
 		case batchimagejob.FieldModel:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -543,8 +543,8 @@ func (_m *BatchImageJob) String() string {
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
-	if v := _m.AccountID; v != nil {
-		builder.WriteString("account_id=")
+	if v := _m.ProviderID; v != nil {
+		builder.WriteString("provider_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
@@ -556,8 +556,8 @@ func (_m *BatchImageJob) String() string {
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
-	builder.WriteString("provider=")
-	builder.WriteString(_m.Provider)
+	builder.WriteString("platform=")
+	builder.WriteString(_m.Platform)
 	builder.WriteString(", ")
 	builder.WriteString("model=")
 	builder.WriteString(_m.Model)

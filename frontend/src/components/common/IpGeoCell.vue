@@ -9,12 +9,8 @@
     </button>
   </div>
 
-  <div
-    v-else-if="entry.status === 'loading'"
-    class="mt-0.5 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500"
-  >
-    <Icon name="refresh" size="xs" class="animate-spin" />
-    {{ t('usage.ipGeo.fetching') }}
+  <div v-else-if="entry.status === 'loading'" class="mt-1" role="status" :aria-label="t('common.loading')" aria-busy="true" data-loading-skeleton>
+    <Skeleton :width="96" :height="12" />
   </div>
 
   <div v-else-if="entry.status === 'success'" class="mt-0.5 flex items-center gap-1 text-xs">
@@ -52,6 +48,7 @@
 </template>
 
 <script setup lang="ts">
+import Skeleton from '@/components/common/Skeleton.vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'

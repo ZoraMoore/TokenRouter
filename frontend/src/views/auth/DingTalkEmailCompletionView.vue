@@ -112,7 +112,7 @@ async function handleCreateAccount(payload: PendingOAuthCreateAccountPayload) {
 
     accountActionError.value = t('auth.loginFailed')
   } catch (e: unknown) {
-    // 全局"开放注册"关闭且未开启钉钉企业模式豁免时，引导用户去绑定已有账户而非死路
+    // 全局“开放注册”关闭且未开启钉钉企业模式豁免时，引导用户绑定已有账户。
     const err = e as { response?: { data?: { reason?: string } } }
     if (err.response?.data?.reason === 'REGISTRATION_DISABLED') {
       appStore.showInfo(t('auth.dingtalk.registrationDisabledRedirectToBind'))

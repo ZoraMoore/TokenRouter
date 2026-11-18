@@ -363,6 +363,48 @@ func (_u *APIKeyUpdate) ClearExpiresAt() *APIKeyUpdate {
 	return _u
 }
 
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (_u *APIKeyUpdate) SetConcurrencyLimit(v int) *APIKeyUpdate {
+	_u.mutation.ResetConcurrencyLimit()
+	_u.mutation.SetConcurrencyLimit(v)
+	return _u
+}
+
+// SetNillableConcurrencyLimit sets the "concurrency_limit" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableConcurrencyLimit(v *int) *APIKeyUpdate {
+	if v != nil {
+		_u.SetConcurrencyLimit(*v)
+	}
+	return _u
+}
+
+// AddConcurrencyLimit adds value to the "concurrency_limit" field.
+func (_u *APIKeyUpdate) AddConcurrencyLimit(v int) *APIKeyUpdate {
+	_u.mutation.AddConcurrencyLimit(v)
+	return _u
+}
+
+// SetRpmLimit sets the "rpm_limit" field.
+func (_u *APIKeyUpdate) SetRpmLimit(v int) *APIKeyUpdate {
+	_u.mutation.ResetRpmLimit()
+	_u.mutation.SetRpmLimit(v)
+	return _u
+}
+
+// SetNillableRpmLimit sets the "rpm_limit" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableRpmLimit(v *int) *APIKeyUpdate {
+	if v != nil {
+		_u.SetRpmLimit(*v)
+	}
+	return _u
+}
+
+// AddRpmLimit adds value to the "rpm_limit" field.
+func (_u *APIKeyUpdate) AddRpmLimit(v int) *APIKeyUpdate {
+	_u.mutation.AddRpmLimit(v)
+	return _u
+}
+
 // SetRateLimit5h sets the "rate_limit_5h" field.
 func (_u *APIKeyUpdate) SetRateLimit5h(v float64) *APIKeyUpdate {
 	_u.mutation.ResetRateLimit5h()
@@ -549,85 +591,37 @@ func (_u *APIKeyUpdate) ClearWindow7dStart() *APIKeyUpdate {
 	return _u
 }
 
-// SetDataSharingNoticeVersion sets the "data_sharing_notice_version" field.
-func (_u *APIKeyUpdate) SetDataSharingNoticeVersion(v int) *APIKeyUpdate {
-	_u.mutation.ResetDataSharingNoticeVersion()
-	_u.mutation.SetDataSharingNoticeVersion(v)
+// SetFallbackWhenGroupUnavailable sets the "fallback_when_group_unavailable" field.
+func (_u *APIKeyUpdate) SetFallbackWhenGroupUnavailable(v bool) *APIKeyUpdate {
+	_u.mutation.SetFallbackWhenGroupUnavailable(v)
 	return _u
 }
 
-// SetNillableDataSharingNoticeVersion sets the "data_sharing_notice_version" field if the given value is not nil.
-func (_u *APIKeyUpdate) SetNillableDataSharingNoticeVersion(v *int) *APIKeyUpdate {
+// SetNillableFallbackWhenGroupUnavailable sets the "fallback_when_group_unavailable" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableFallbackWhenGroupUnavailable(v *bool) *APIKeyUpdate {
 	if v != nil {
-		_u.SetDataSharingNoticeVersion(*v)
+		_u.SetFallbackWhenGroupUnavailable(*v)
 	}
 	return _u
 }
 
-// AddDataSharingNoticeVersion adds value to the "data_sharing_notice_version" field.
-func (_u *APIKeyUpdate) AddDataSharingNoticeVersion(v int) *APIKeyUpdate {
-	_u.mutation.AddDataSharingNoticeVersion(v)
+// SetManagedBy sets the "managed_by" field.
+func (_u *APIKeyUpdate) SetManagedBy(v string) *APIKeyUpdate {
+	_u.mutation.SetManagedBy(v)
 	return _u
 }
 
-// SetDataSharingConfirmedGroupID sets the "data_sharing_confirmed_group_id" field.
-func (_u *APIKeyUpdate) SetDataSharingConfirmedGroupID(v int64) *APIKeyUpdate {
-	_u.mutation.ResetDataSharingConfirmedGroupID()
-	_u.mutation.SetDataSharingConfirmedGroupID(v)
-	return _u
-}
-
-// SetNillableDataSharingConfirmedGroupID sets the "data_sharing_confirmed_group_id" field if the given value is not nil.
-func (_u *APIKeyUpdate) SetNillableDataSharingConfirmedGroupID(v *int64) *APIKeyUpdate {
+// SetNillableManagedBy sets the "managed_by" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableManagedBy(v *string) *APIKeyUpdate {
 	if v != nil {
-		_u.SetDataSharingConfirmedGroupID(*v)
+		_u.SetManagedBy(*v)
 	}
 	return _u
 }
 
-// AddDataSharingConfirmedGroupID adds value to the "data_sharing_confirmed_group_id" field.
-func (_u *APIKeyUpdate) AddDataSharingConfirmedGroupID(v int64) *APIKeyUpdate {
-	_u.mutation.AddDataSharingConfirmedGroupID(v)
-	return _u
-}
-
-// ClearDataSharingConfirmedGroupID clears the value of the "data_sharing_confirmed_group_id" field.
-func (_u *APIKeyUpdate) ClearDataSharingConfirmedGroupID() *APIKeyUpdate {
-	_u.mutation.ClearDataSharingConfirmedGroupID()
-	return _u
-}
-
-// SetDataSharingConfirmedAt sets the "data_sharing_confirmed_at" field.
-func (_u *APIKeyUpdate) SetDataSharingConfirmedAt(v time.Time) *APIKeyUpdate {
-	_u.mutation.SetDataSharingConfirmedAt(v)
-	return _u
-}
-
-// SetNillableDataSharingConfirmedAt sets the "data_sharing_confirmed_at" field if the given value is not nil.
-func (_u *APIKeyUpdate) SetNillableDataSharingConfirmedAt(v *time.Time) *APIKeyUpdate {
-	if v != nil {
-		_u.SetDataSharingConfirmedAt(*v)
-	}
-	return _u
-}
-
-// ClearDataSharingConfirmedAt clears the value of the "data_sharing_confirmed_at" field.
-func (_u *APIKeyUpdate) ClearDataSharingConfirmedAt() *APIKeyUpdate {
-	_u.mutation.ClearDataSharingConfirmedAt()
-	return _u
-}
-
-// SetFallbackToDefaultGroupWhenUnavailable sets the "fallback_to_default_group_when_unavailable" field.
-func (_u *APIKeyUpdate) SetFallbackToDefaultGroupWhenUnavailable(v bool) *APIKeyUpdate {
-	_u.mutation.SetFallbackToDefaultGroupWhenUnavailable(v)
-	return _u
-}
-
-// SetNillableFallbackToDefaultGroupWhenUnavailable sets the "fallback_to_default_group_when_unavailable" field if the given value is not nil.
-func (_u *APIKeyUpdate) SetNillableFallbackToDefaultGroupWhenUnavailable(v *bool) *APIKeyUpdate {
-	if v != nil {
-		_u.SetFallbackToDefaultGroupWhenUnavailable(*v)
-	}
+// ClearManagedBy clears the value of the "managed_by" field.
+func (_u *APIKeyUpdate) ClearManagedBy() *APIKeyUpdate {
+	_u.mutation.ClearManagedBy()
 	return _u
 }
 
@@ -810,6 +804,21 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ConcurrencyLimit(); ok {
+		if err := apikey.ConcurrencyLimitValidator(v); err != nil {
+			return &ValidationError{Name: "concurrency_limit", err: fmt.Errorf(`ent: validator failed for field "APIKey.concurrency_limit": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RpmLimit(); ok {
+		if err := apikey.RpmLimitValidator(v); err != nil {
+			return &ValidationError{Name: "rpm_limit", err: fmt.Errorf(`ent: validator failed for field "APIKey.rpm_limit": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ManagedBy(); ok {
+		if err := apikey.ManagedByValidator(v); err != nil {
+			return &ValidationError{Name: "managed_by", err: fmt.Errorf(`ent: validator failed for field "APIKey.managed_by": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
@@ -916,6 +925,18 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.ExpiresAtCleared() {
 		_spec.ClearField(apikey.FieldExpiresAt, field.TypeTime)
 	}
+	if value, ok := _u.mutation.ConcurrencyLimit(); ok {
+		_spec.SetField(apikey.FieldConcurrencyLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedConcurrencyLimit(); ok {
+		_spec.AddField(apikey.FieldConcurrencyLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.RpmLimit(); ok {
+		_spec.SetField(apikey.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRpmLimit(); ok {
+		_spec.AddField(apikey.FieldRpmLimit, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.RateLimit5h(); ok {
 		_spec.SetField(apikey.FieldRateLimit5h, field.TypeFloat64, value)
 	}
@@ -970,29 +991,14 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.Window7dStartCleared() {
 		_spec.ClearField(apikey.FieldWindow7dStart, field.TypeTime)
 	}
-	if value, ok := _u.mutation.DataSharingNoticeVersion(); ok {
-		_spec.SetField(apikey.FieldDataSharingNoticeVersion, field.TypeInt, value)
+	if value, ok := _u.mutation.FallbackWhenGroupUnavailable(); ok {
+		_spec.SetField(apikey.FieldFallbackWhenGroupUnavailable, field.TypeBool, value)
 	}
-	if value, ok := _u.mutation.AddedDataSharingNoticeVersion(); ok {
-		_spec.AddField(apikey.FieldDataSharingNoticeVersion, field.TypeInt, value)
+	if value, ok := _u.mutation.ManagedBy(); ok {
+		_spec.SetField(apikey.FieldManagedBy, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.DataSharingConfirmedGroupID(); ok {
-		_spec.SetField(apikey.FieldDataSharingConfirmedGroupID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedDataSharingConfirmedGroupID(); ok {
-		_spec.AddField(apikey.FieldDataSharingConfirmedGroupID, field.TypeInt64, value)
-	}
-	if _u.mutation.DataSharingConfirmedGroupIDCleared() {
-		_spec.ClearField(apikey.FieldDataSharingConfirmedGroupID, field.TypeInt64)
-	}
-	if value, ok := _u.mutation.DataSharingConfirmedAt(); ok {
-		_spec.SetField(apikey.FieldDataSharingConfirmedAt, field.TypeTime, value)
-	}
-	if _u.mutation.DataSharingConfirmedAtCleared() {
-		_spec.ClearField(apikey.FieldDataSharingConfirmedAt, field.TypeTime)
-	}
-	if value, ok := _u.mutation.FallbackToDefaultGroupWhenUnavailable(); ok {
-		_spec.SetField(apikey.FieldFallbackToDefaultGroupWhenUnavailable, field.TypeBool, value)
+	if _u.mutation.ManagedByCleared() {
+		_spec.ClearField(apikey.FieldManagedBy, field.TypeString)
 	}
 	if _u.mutation.UserCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -1520,6 +1526,48 @@ func (_u *APIKeyUpdateOne) ClearExpiresAt() *APIKeyUpdateOne {
 	return _u
 }
 
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (_u *APIKeyUpdateOne) SetConcurrencyLimit(v int) *APIKeyUpdateOne {
+	_u.mutation.ResetConcurrencyLimit()
+	_u.mutation.SetConcurrencyLimit(v)
+	return _u
+}
+
+// SetNillableConcurrencyLimit sets the "concurrency_limit" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableConcurrencyLimit(v *int) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetConcurrencyLimit(*v)
+	}
+	return _u
+}
+
+// AddConcurrencyLimit adds value to the "concurrency_limit" field.
+func (_u *APIKeyUpdateOne) AddConcurrencyLimit(v int) *APIKeyUpdateOne {
+	_u.mutation.AddConcurrencyLimit(v)
+	return _u
+}
+
+// SetRpmLimit sets the "rpm_limit" field.
+func (_u *APIKeyUpdateOne) SetRpmLimit(v int) *APIKeyUpdateOne {
+	_u.mutation.ResetRpmLimit()
+	_u.mutation.SetRpmLimit(v)
+	return _u
+}
+
+// SetNillableRpmLimit sets the "rpm_limit" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableRpmLimit(v *int) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetRpmLimit(*v)
+	}
+	return _u
+}
+
+// AddRpmLimit adds value to the "rpm_limit" field.
+func (_u *APIKeyUpdateOne) AddRpmLimit(v int) *APIKeyUpdateOne {
+	_u.mutation.AddRpmLimit(v)
+	return _u
+}
+
 // SetRateLimit5h sets the "rate_limit_5h" field.
 func (_u *APIKeyUpdateOne) SetRateLimit5h(v float64) *APIKeyUpdateOne {
 	_u.mutation.ResetRateLimit5h()
@@ -1706,85 +1754,37 @@ func (_u *APIKeyUpdateOne) ClearWindow7dStart() *APIKeyUpdateOne {
 	return _u
 }
 
-// SetDataSharingNoticeVersion sets the "data_sharing_notice_version" field.
-func (_u *APIKeyUpdateOne) SetDataSharingNoticeVersion(v int) *APIKeyUpdateOne {
-	_u.mutation.ResetDataSharingNoticeVersion()
-	_u.mutation.SetDataSharingNoticeVersion(v)
+// SetFallbackWhenGroupUnavailable sets the "fallback_when_group_unavailable" field.
+func (_u *APIKeyUpdateOne) SetFallbackWhenGroupUnavailable(v bool) *APIKeyUpdateOne {
+	_u.mutation.SetFallbackWhenGroupUnavailable(v)
 	return _u
 }
 
-// SetNillableDataSharingNoticeVersion sets the "data_sharing_notice_version" field if the given value is not nil.
-func (_u *APIKeyUpdateOne) SetNillableDataSharingNoticeVersion(v *int) *APIKeyUpdateOne {
+// SetNillableFallbackWhenGroupUnavailable sets the "fallback_when_group_unavailable" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableFallbackWhenGroupUnavailable(v *bool) *APIKeyUpdateOne {
 	if v != nil {
-		_u.SetDataSharingNoticeVersion(*v)
+		_u.SetFallbackWhenGroupUnavailable(*v)
 	}
 	return _u
 }
 
-// AddDataSharingNoticeVersion adds value to the "data_sharing_notice_version" field.
-func (_u *APIKeyUpdateOne) AddDataSharingNoticeVersion(v int) *APIKeyUpdateOne {
-	_u.mutation.AddDataSharingNoticeVersion(v)
+// SetManagedBy sets the "managed_by" field.
+func (_u *APIKeyUpdateOne) SetManagedBy(v string) *APIKeyUpdateOne {
+	_u.mutation.SetManagedBy(v)
 	return _u
 }
 
-// SetDataSharingConfirmedGroupID sets the "data_sharing_confirmed_group_id" field.
-func (_u *APIKeyUpdateOne) SetDataSharingConfirmedGroupID(v int64) *APIKeyUpdateOne {
-	_u.mutation.ResetDataSharingConfirmedGroupID()
-	_u.mutation.SetDataSharingConfirmedGroupID(v)
-	return _u
-}
-
-// SetNillableDataSharingConfirmedGroupID sets the "data_sharing_confirmed_group_id" field if the given value is not nil.
-func (_u *APIKeyUpdateOne) SetNillableDataSharingConfirmedGroupID(v *int64) *APIKeyUpdateOne {
+// SetNillableManagedBy sets the "managed_by" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableManagedBy(v *string) *APIKeyUpdateOne {
 	if v != nil {
-		_u.SetDataSharingConfirmedGroupID(*v)
+		_u.SetManagedBy(*v)
 	}
 	return _u
 }
 
-// AddDataSharingConfirmedGroupID adds value to the "data_sharing_confirmed_group_id" field.
-func (_u *APIKeyUpdateOne) AddDataSharingConfirmedGroupID(v int64) *APIKeyUpdateOne {
-	_u.mutation.AddDataSharingConfirmedGroupID(v)
-	return _u
-}
-
-// ClearDataSharingConfirmedGroupID clears the value of the "data_sharing_confirmed_group_id" field.
-func (_u *APIKeyUpdateOne) ClearDataSharingConfirmedGroupID() *APIKeyUpdateOne {
-	_u.mutation.ClearDataSharingConfirmedGroupID()
-	return _u
-}
-
-// SetDataSharingConfirmedAt sets the "data_sharing_confirmed_at" field.
-func (_u *APIKeyUpdateOne) SetDataSharingConfirmedAt(v time.Time) *APIKeyUpdateOne {
-	_u.mutation.SetDataSharingConfirmedAt(v)
-	return _u
-}
-
-// SetNillableDataSharingConfirmedAt sets the "data_sharing_confirmed_at" field if the given value is not nil.
-func (_u *APIKeyUpdateOne) SetNillableDataSharingConfirmedAt(v *time.Time) *APIKeyUpdateOne {
-	if v != nil {
-		_u.SetDataSharingConfirmedAt(*v)
-	}
-	return _u
-}
-
-// ClearDataSharingConfirmedAt clears the value of the "data_sharing_confirmed_at" field.
-func (_u *APIKeyUpdateOne) ClearDataSharingConfirmedAt() *APIKeyUpdateOne {
-	_u.mutation.ClearDataSharingConfirmedAt()
-	return _u
-}
-
-// SetFallbackToDefaultGroupWhenUnavailable sets the "fallback_to_default_group_when_unavailable" field.
-func (_u *APIKeyUpdateOne) SetFallbackToDefaultGroupWhenUnavailable(v bool) *APIKeyUpdateOne {
-	_u.mutation.SetFallbackToDefaultGroupWhenUnavailable(v)
-	return _u
-}
-
-// SetNillableFallbackToDefaultGroupWhenUnavailable sets the "fallback_to_default_group_when_unavailable" field if the given value is not nil.
-func (_u *APIKeyUpdateOne) SetNillableFallbackToDefaultGroupWhenUnavailable(v *bool) *APIKeyUpdateOne {
-	if v != nil {
-		_u.SetFallbackToDefaultGroupWhenUnavailable(*v)
-	}
+// ClearManagedBy clears the value of the "managed_by" field.
+func (_u *APIKeyUpdateOne) ClearManagedBy() *APIKeyUpdateOne {
+	_u.mutation.ClearManagedBy()
 	return _u
 }
 
@@ -1980,6 +1980,21 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ConcurrencyLimit(); ok {
+		if err := apikey.ConcurrencyLimitValidator(v); err != nil {
+			return &ValidationError{Name: "concurrency_limit", err: fmt.Errorf(`ent: validator failed for field "APIKey.concurrency_limit": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RpmLimit(); ok {
+		if err := apikey.RpmLimitValidator(v); err != nil {
+			return &ValidationError{Name: "rpm_limit", err: fmt.Errorf(`ent: validator failed for field "APIKey.rpm_limit": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ManagedBy(); ok {
+		if err := apikey.ManagedByValidator(v); err != nil {
+			return &ValidationError{Name: "managed_by", err: fmt.Errorf(`ent: validator failed for field "APIKey.managed_by": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
@@ -2103,6 +2118,18 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	if _u.mutation.ExpiresAtCleared() {
 		_spec.ClearField(apikey.FieldExpiresAt, field.TypeTime)
 	}
+	if value, ok := _u.mutation.ConcurrencyLimit(); ok {
+		_spec.SetField(apikey.FieldConcurrencyLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedConcurrencyLimit(); ok {
+		_spec.AddField(apikey.FieldConcurrencyLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.RpmLimit(); ok {
+		_spec.SetField(apikey.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRpmLimit(); ok {
+		_spec.AddField(apikey.FieldRpmLimit, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.RateLimit5h(); ok {
 		_spec.SetField(apikey.FieldRateLimit5h, field.TypeFloat64, value)
 	}
@@ -2157,29 +2184,14 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	if _u.mutation.Window7dStartCleared() {
 		_spec.ClearField(apikey.FieldWindow7dStart, field.TypeTime)
 	}
-	if value, ok := _u.mutation.DataSharingNoticeVersion(); ok {
-		_spec.SetField(apikey.FieldDataSharingNoticeVersion, field.TypeInt, value)
+	if value, ok := _u.mutation.FallbackWhenGroupUnavailable(); ok {
+		_spec.SetField(apikey.FieldFallbackWhenGroupUnavailable, field.TypeBool, value)
 	}
-	if value, ok := _u.mutation.AddedDataSharingNoticeVersion(); ok {
-		_spec.AddField(apikey.FieldDataSharingNoticeVersion, field.TypeInt, value)
+	if value, ok := _u.mutation.ManagedBy(); ok {
+		_spec.SetField(apikey.FieldManagedBy, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.DataSharingConfirmedGroupID(); ok {
-		_spec.SetField(apikey.FieldDataSharingConfirmedGroupID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedDataSharingConfirmedGroupID(); ok {
-		_spec.AddField(apikey.FieldDataSharingConfirmedGroupID, field.TypeInt64, value)
-	}
-	if _u.mutation.DataSharingConfirmedGroupIDCleared() {
-		_spec.ClearField(apikey.FieldDataSharingConfirmedGroupID, field.TypeInt64)
-	}
-	if value, ok := _u.mutation.DataSharingConfirmedAt(); ok {
-		_spec.SetField(apikey.FieldDataSharingConfirmedAt, field.TypeTime, value)
-	}
-	if _u.mutation.DataSharingConfirmedAtCleared() {
-		_spec.ClearField(apikey.FieldDataSharingConfirmedAt, field.TypeTime)
-	}
-	if value, ok := _u.mutation.FallbackToDefaultGroupWhenUnavailable(); ok {
-		_spec.SetField(apikey.FieldFallbackToDefaultGroupWhenUnavailable, field.TypeBool, value)
+	if _u.mutation.ManagedByCleared() {
+		_spec.ClearField(apikey.FieldManagedBy, field.TypeString)
 	}
 	if _u.mutation.UserCleared() {
 		edge := &sqlgraph.EdgeSpec{

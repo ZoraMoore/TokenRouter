@@ -204,6 +204,7 @@ describe('OpsTokenStatsCard', () => {
       { value: null, label: 'common.all' },
       { value: 7, label: 'Anthropic 主分组' },
       { value: 8, label: 'Anthropic 备用分组' },
+      { value: 9, label: '其他平台' },
     ])
 
     await groupSelect.vm.$emit('update:modelValue', 8)
@@ -247,7 +248,7 @@ describe('OpsTokenStatsCard', () => {
     })
     await flushPromises()
 
-    expect(wrapper.find('.max-h-\\[420px\\]').exists()).toBe(true)
+    expect(wrapper.find('.max-h-panel').exists()).toBe(true)
   })
 
   it('接口异常时显示错误提示', async () => {

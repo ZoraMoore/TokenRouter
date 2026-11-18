@@ -1,0 +1,90 @@
+//go:build integration
+
+package postgres
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/TokenFlux/TokenRouter/internal/infra/postgres"
+	"github.com/TokenFlux/TokenRouter/internal/routing"
+	"github.com/TokenFlux/TokenRouter/internal/testutil/postgrescontainer"
+	"github.com/TokenFlux/TokenRouter/migrations"
+)
+
+// TestModelAttributeBatchLookup 验证真实数据库中的共享、停用和未关联分组。
+func TestModelAttributeBatchLookup(t *testing.T) {
+	db := postgrescontainer.New(t)
+	ctx := context.Background()
+	ids := make([]int64, 4)
+	for i := range ids {
+		require.NoError(t, db.QueryRowContext(ctx, `INSERT INTO groups(name) VALUES ($1) RETURNING id`, fmt.Sprintf("attribute-batch-%d", i)).Scan(&ids[i]))
+	}
+	store := NewModelAttributeStore(db)
+	active := &routing.ModelAttributeConfig{Name: "shared", Status: "active", GroupIDs: ids[:2], Rules: []routing.ModelAttributeRule{}}
+	inactive := &routing.ModelAttributeConfig{Name: "disabled", Status: "disabled", GroupIDs: ids[2:3], Rules: []routing.ModelAttributeRule{}}
+	require.NoError(t, store.Save(ctx, active))
+	require.NoError(t, store.Save(ctx, inactive))
+	result, err := store.ForGroups(ctx, ids)
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	require.Equal(t, active.ID, result[ids[0]].ID)
+	require.Same(t, result[ids[0]], result[ids[1]])
+	subset, err := store.ForGroups(ctx, ids[:1])
+	require.NoError(t, err)
+	require.Len(t, subset, 1)
+	active.Status = "disabled"
+	require.NoError(t, store.Save(ctx, active))
+	result, err = store.ForGroups(ctx, ids)
+	require.NoError(t, err)
+	require.Empty(t, result)
+}
+
+func TestModelAttributeMigrationAndConcurrentAssociation(t *testing.T) {
+	db := postgrescontainer.New(t)
+	ctx := context.Background()
+	require.NoError(t, postgres.ApplyMigrations(ctx, db, migrations.FS))
+	var groupID int64
+	require.NoError(t, db.QueryRowContext(ctx, `INSERT INTO groups(name) VALUES ('attribute-test') RETURNING id`).Scan(&groupID))
+	store := NewModelAttributeStore(db)
+	var wg sync.WaitGroup
+	errors := make(chan error, 2)
+	for _, name := range []string{"first", "second"} {
+		wg.Go(func() {
+			value := &routing.ModelAttributeConfig{Name: name, Status: "active", Rules: []routing.ModelAttributeRule{}, GroupIDs: []int64{groupID}}
+			errors <- store.Save(ctx, value)
+		})
+	}
+	wg.Wait()
+	close(errors)
+	successes, conflicts := 0, 0
+	for err := range errors {
+		if err == nil {
+			successes++
+		} else {
+			require.ErrorIs(t, err, routing.ErrAttributeConfigConflict)
+			conflicts++
+		}
+	}
+	require.Equal(t, 1, successes)
+	require.Equal(t, 1, conflicts)
+	rows, err := store.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	value, err := store.ForGroup(ctx, groupID)
+	require.NoError(t, err)
+	require.NotNil(t, value)
+	value.Status = "disabled"
+	require.NoError(t, store.Save(ctx, value))
+	inactive, err := store.ForGroup(ctx, groupID)
+	require.NoError(t, err)
+	require.Nil(t, inactive)
+	require.NoError(t, store.Delete(ctx, value.ID))
+	var count int
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM model_attribute_config_groups WHERE group_id=$1`, groupID).Scan(&count))
+	require.Zero(t, count)
+}

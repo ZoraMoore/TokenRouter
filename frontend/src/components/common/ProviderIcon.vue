@@ -6,6 +6,7 @@
     viewBox="0 0 24 24"
     xmlns="http://www.w3.org/2000/svg"
     class="provider-icon"
+    :class="!color && brandInfo.key === 'openai' ? 'text-black dark:text-white' : undefined"
     fill="currentColor"
     fill-rule="evenodd"
     aria-hidden="true"

@@ -1,5 +1,3 @@
-//go:build unit
-
 package provider
 
 import (
@@ -9,16 +7,18 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"maps"
 	"net/url"
 	"strings"
 	"testing"
 
-	"github.com/TokenFlux/TokenRouter/internal/payment"
 	"github.com/wechatpay-apiv3/wechatpay-go/core"
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments"
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments/h5"
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments/jsapi"
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments/native"
+
+	"github.com/TokenFlux/TokenRouter/internal/payment"
 )
 
 // generateTestKeyPair returns a fresh RSA 2048 key pair as PEM strings.
@@ -222,12 +222,8 @@ func TestNewWxpay(t *testing.T) {
 	// helper to clone and override config fields
 	withOverride := func(overrides map[string]string) map[string]string {
 		cfg := make(map[string]string, len(validConfig))
-		for k, v := range validConfig {
-			cfg[k] = v
-		}
-		for k, v := range overrides {
-			cfg[k] = v
-		}
+		maps.Copy(cfg, validConfig)
+		maps.Copy(cfg, overrides)
 		return cfg
 	}
 
@@ -595,8 +591,8 @@ func TestCreatePaymentMobileH5IncludesConfiguredSceneInfo(t *testing.T) {
 		if got := wxSV(req.SceneInfo.H5Info.Type); got != wxpayH5Type {
 			t.Fatalf("scene_info.h5_info.type = %q, want %q", got, wxpayH5Type)
 		}
-		if got := wxSV(req.SceneInfo.H5Info.AppName); got != "Sub2API" {
-			t.Fatalf("scene_info.h5_info.app_name = %q, want %q", got, "Sub2API")
+		if got := wxSV(req.SceneInfo.H5Info.AppName); got != "TokenRouter" {
+			t.Fatalf("scene_info.h5_info.app_name = %q, want %q", got, "TokenRouter")
 		}
 		if got := wxSV(req.SceneInfo.H5Info.AppUrl); got != "https://app.example.com" {
 			t.Fatalf("scene_info.h5_info.app_url = %q, want %q", got, "https://app.example.com")
@@ -610,7 +606,7 @@ func TestCreatePaymentMobileH5IncludesConfiguredSceneInfo(t *testing.T) {
 		config: map[string]string{
 			"appId":     "wx123",
 			"mchId":     "mch123",
-			"h5AppName": "Sub2API",
+			"h5AppName": "TokenRouter",
 			"h5AppUrl":  "https://app.example.com",
 		},
 		coreClient: &core.Client{},

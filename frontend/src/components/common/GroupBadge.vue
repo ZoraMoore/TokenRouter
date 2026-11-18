@@ -1,16 +1,15 @@
 <template>
   <span
     :class="[
-      'inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium transition-colors',
+      'inline-flex items-center gap-1.5 rounded-compact px-2 py-0.5 text-xs font-medium transition-colors',
       badgeClass
     ]"
   >
-    <!-- 分组 platform 是上游平台；有展示品牌时优先按品牌渲染图标和配色。 -->
+    <!-- 分组使用管理员配置的展示品牌。 -->
     <ProviderIcon v-if="brandName" :brand="brandName" size="14px" />
-    <PlatformIcon v-else-if="platform" :platform="platform" size="sm" />
-    <!-- Group name -->
-    <span class="truncate">{{ name }}</span>
-    <!-- Right side label -->
+    <!-- 分组名和右侧标签都加 self-baseline。徽章的基线取自分组名，移动卡片的标签和它对齐。
+         右侧标签有上下内边距，比分组名高，两者按基线对齐后文字在同一高度。 -->
+    <span class="self-baseline truncate">{{ name }}</span>
     <span v-if="showLabel" :class="labelClass">
       <template v-if="hasCustomRate">
         <!-- 原倍率删除线 + 专属倍率高亮 -->
@@ -30,15 +29,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { GroupPlatform } from '@/types'
 import { currentServerTimezoneLabel, formatPeakRateWindow } from '@/utils/peak-rate'
-import PlatformIcon from './PlatformIcon.vue'
 import ProviderIcon from './ProviderIcon.vue'
 import { resolveProviderBrand } from '@/utils/providerBrand'
 
 interface Props {
   name: string
-  platform?: GroupPlatform
   displayBrand?: string | null
   rateMultiplier?: number
   userRateMultiplier?: number | null // 用户专属倍率
@@ -111,7 +107,7 @@ const labelText = computed(() => {
 
 // Label style based on type and days remaining
 const labelClass = computed(() => {
-  const base = 'px-1.5 py-0.5 rounded text-[10px] font-semibold'
+  const base = 'self-baseline px-1.5 py-0.5 rounded-compact text-xs font-semibold'
 
   if (props.daysRemaining === null || props.daysRemaining === undefined) {
     return `${base} bg-black/10 dark:bg-white/10`
@@ -124,65 +120,18 @@ const labelClass = computed(() => {
     return `${base} bg-amber-200/80 text-amber-800 dark:bg-amber-800/50 dark:text-amber-300`
   }
 
-  if (props.platform === 'anthropic') {
-    return `${base} bg-orange-200/60 text-orange-800 dark:bg-orange-800/40 dark:text-orange-300`
-  }
-  if (props.platform === 'openai') {
-    return `${base} bg-emerald-200/60 text-emerald-800 dark:bg-emerald-800/40 dark:text-emerald-300`
-  }
-  if (props.platform === 'gemini') {
-    return `${base} bg-blue-200/60 text-blue-800 dark:bg-blue-800/40 dark:text-blue-300`
-  }
-  if (props.platform === 'antigravity') {
-    return `${base} bg-purple-200/60 text-purple-800 dark:bg-purple-800/40 dark:text-purple-300`
-  }
-  if (props.platform === 'grok') {
-    return `${base} bg-zinc-300/70 text-zinc-800 dark:bg-zinc-700/60 dark:text-zinc-200`
-  }
-  if (props.platform === 'kimi') {
-    return `${base} bg-pink-200/60 text-pink-800 dark:bg-pink-800/40 dark:text-pink-300`
-  }
-  if (props.platform === 'zhipu') {
-    return `${base} bg-indigo-200/60 text-indigo-800 dark:bg-indigo-800/40 dark:text-indigo-300`
-  }
-  if (props.platform === 'deepseek') {
-    return `${base} bg-teal-200/60 text-teal-800 dark:bg-teal-800/40 dark:text-teal-300`
-  }
   return `${base} bg-violet-200/60 text-violet-800 dark:bg-violet-800/40 dark:text-violet-300`
 })
 
 const peakRateClass = computed(() => {
-  return 'px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+  return 'self-baseline px-1.5 py-0.5 rounded-compact text-xs font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
 })
 
 const badgeClass = computed(() => {
   if (brandName.value) {
     return `ring-1 ring-inset ${resolveProviderBrand(brandName.value).badgeClass}`
   }
-  if (props.platform === 'anthropic') {
-    return 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
-  }
-  if (props.platform === 'openai') {
-    return 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-  }
-  if (props.platform === 'gemini') {
-    return 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-400'
-  }
-  if (props.platform === 'antigravity') {
-    return 'bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-900/20 dark:text-fuchsia-400'
-  }
-  if (props.platform === 'grok') {
-    return 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'
-  }
-  if (props.platform === 'kimi') {
-    return 'bg-pink-50 text-pink-700 dark:bg-pink-900/20 dark:text-pink-400'
-  }
-  if (props.platform === 'zhipu') {
-    return 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400'
-  }
-  if (props.platform === 'deepseek') {
-    return 'bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-400'
-  }
-  return 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400'
+  // 未指定品牌时，与复合分组共用中性配色，并用内描边明确徽章边缘。
+  return 'ring-1 ring-inset bg-gray-100 text-gray-900 ring-gray-200 dark:bg-dark-800 dark:text-dark-50 dark:ring-dark-600'
 })
 </script>

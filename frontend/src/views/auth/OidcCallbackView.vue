@@ -14,7 +14,7 @@
         </p>
       </div>
 
-      <transition name="fade">
+      <MotionTransition name="fade-slow">
         <div
           v-if="
             needsInvitation ||
@@ -28,7 +28,7 @@
         >
           <div
             v-if="adoptionRequired && (suggestedDisplayName || suggestedAvatarUrl)"
-            class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-800/60"
+            class="rounded-surface border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-800/60"
           >
             <div class="space-y-3">
               <div class="space-y-1">
@@ -42,7 +42,7 @@
 
               <label
                 v-if="suggestedDisplayName"
-                class="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-dark-600 dark:bg-dark-900/50"
+                class="flex items-start gap-3 rounded-surface border border-gray-200 bg-white p-3 text-sm dark:border-dark-600 dark:bg-dark-900/50"
               >
                 <input v-model="adoptDisplayName" type="checkbox" class="mt-1 h-4 w-4" />
                 <span class="space-y-1">
@@ -57,7 +57,7 @@
 
               <label
                 v-if="suggestedAvatarUrl"
-                class="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-dark-600 dark:bg-dark-900/50"
+                class="flex items-start gap-3 rounded-surface border border-gray-200 bg-white p-3 text-sm dark:border-dark-600 dark:bg-dark-900/50"
               >
                 <input v-model="adoptAvatar" type="checkbox" class="mt-1 h-4 w-4" />
                 <img
@@ -114,7 +114,7 @@
           </template>
 
           <template v-else-if="needsChooser">
-            <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-800/60">
+            <div class="rounded-surface border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-800/60">
               <div class="space-y-4">
                 <div class="space-y-1">
                   <p class="text-sm font-medium text-gray-900 dark:text-white">
@@ -238,12 +238,14 @@
             </div>
           </template>
         </div>
-      </transition>
+      </MotionTransition>
     </div>
   </AuthLayout>
 </template>
 
 <script setup lang="ts">
+import MotionTransition from '@/components/common/MotionTransition.vue'
+import { useLocaleRefresh } from '@/composables/useLocaleRefresh'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -299,7 +301,7 @@ const bindLoginPassword = ref('')
 const legacyPendingOAuthToken = ref('')
 const accountActionError = ref('')
 const canReturnToCreateAccount = ref(false)
-const bindSuccessMessage = t('profile.authBindings.bindSuccess')
+const bindSuccessMessage = computed(() => t('profile.authBindings.bindSuccess'))
 const needsTotpChallenge = ref(false)
 const totpTempToken = ref('')
 const totpCode = ref('')
@@ -400,6 +402,8 @@ function sanitizeRedirectPath(path: string | null | undefined): string {
   if (path.includes('\n') || path.includes('\r')) return '/dashboard'
   return path
 }
+
+useLocaleRefresh(loadProviderName)
 
 async function loadProviderName() {
   try {
@@ -599,7 +603,7 @@ async function finalizeCompletion(completion: PendingOAuthExchangeResponse, redi
     const bindRedirect = sanitizeRedirectPath(completion.redirect || '/profile')
     clearPendingAuthSession()
     clearAllAffiliateCodes()
-    appStore.showSuccess(bindSuccessMessage)
+    appStore.showSuccess(bindSuccessMessage.value)
     await router.replace(bindRedirect)
     return
   }
@@ -852,14 +856,4 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: all 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
 </style>

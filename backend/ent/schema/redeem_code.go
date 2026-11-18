@@ -3,8 +3,6 @@ package schema
 import (
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/domain"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
@@ -12,12 +10,14 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 // RedeemCode holds the schema definition for the RedeemCode entity.
 //
 // 删除策略：硬删除
-// RedeemCode 使用硬删除而非软删除，原因如下：
+// RedeemCode 使用硬删除：
 //   - 兑换码具有一次性使用特性，删除后无需保留历史记录
 //   - 已使用的兑换码通过 status 和 used_at 字段追踪，无需依赖软删除
 //   - 减少数据库存储压力和查询复杂度
@@ -35,19 +35,23 @@ func (RedeemCode) Annotations() []schema.Annotation {
 
 func (RedeemCode) Fields() []ent.Field {
 	return []ent.Field{
+		// 兑换码最多 32 个 Unicode 字符，与 API 的长度校验一致。
 		field.String("code").
-			MaxLen(32).
+			MaxRuneLen(32).
 			NotEmpty().
 			Unique(),
 		field.String("type").
 			MaxLen(20).
-			Default(domain.RedeemTypeBalance),
+			Default(billing.RedeemTypeBalance),
 		field.Float("value").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0),
 		field.String("status").
 			MaxLen(20).
-			Default(domain.StatusUnused),
+			Default(billing.StatusUnused),
+		// 领取前检查用户是否有成功付款记录。
+		field.Bool("requires_payment").
+			Default(false),
 		field.Int("max_uses").
 			Default(1),
 		field.Int("used_count").

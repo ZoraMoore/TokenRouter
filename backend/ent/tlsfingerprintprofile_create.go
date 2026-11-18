@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/TokenFlux/TokenRouter/ent/tlsfingerprintprofile"
+	"github.com/TokenFlux/TokenRouter/internal/egress"
 )
 
 // TLSFingerprintProfileCreate is the builder for creating a TLSFingerprintProfile entity.
@@ -108,6 +109,12 @@ func (_c *TLSFingerprintProfileCreate) SetSignatureAlgorithms(v []uint16) *TLSFi
 	return _c
 }
 
+// SetSignatureAlgorithmsCert sets the "signature_algorithms_cert" field.
+func (_c *TLSFingerprintProfileCreate) SetSignatureAlgorithmsCert(v []uint16) *TLSFingerprintProfileCreate {
+	_c.mutation.SetSignatureAlgorithmsCert(v)
+	return _c
+}
+
 // SetAlpnProtocols sets the "alpn_protocols" field.
 func (_c *TLSFingerprintProfileCreate) SetAlpnProtocols(v []string) *TLSFingerprintProfileCreate {
 	_c.mutation.SetAlpnProtocols(v)
@@ -135,6 +142,20 @@ func (_c *TLSFingerprintProfileCreate) SetPskModes(v []uint16) *TLSFingerprintPr
 // SetExtensions sets the "extensions" field.
 func (_c *TLSFingerprintProfileCreate) SetExtensions(v []uint16) *TLSFingerprintProfileCreate {
 	_c.mutation.SetExtensions(v)
+	return _c
+}
+
+// SetVerification sets the "verification" field.
+func (_c *TLSFingerprintProfileCreate) SetVerification(v egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileCreate {
+	_c.mutation.SetVerification(v)
+	return _c
+}
+
+// SetNillableVerification sets the "verification" field if the given value is not nil.
+func (_c *TLSFingerprintProfileCreate) SetNillableVerification(v *egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileCreate {
+	if v != nil {
+		_c.SetVerification(*v)
+	}
 	return _c
 }
 
@@ -185,6 +206,10 @@ func (_c *TLSFingerprintProfileCreate) defaults() {
 		v := tlsfingerprintprofile.DefaultEnableGrease
 		_c.mutation.SetEnableGrease(v)
 	}
+	if _, ok := _c.mutation.Verification(); !ok {
+		v := tlsfingerprintprofile.DefaultVerification
+		_c.mutation.SetVerification(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -205,6 +230,9 @@ func (_c *TLSFingerprintProfileCreate) check() error {
 	}
 	if _, ok := _c.mutation.EnableGrease(); !ok {
 		return &ValidationError{Name: "enable_grease", err: errors.New(`ent: missing required field "TLSFingerprintProfile.enable_grease"`)}
+	}
+	if _, ok := _c.mutation.Verification(); !ok {
+		return &ValidationError{Name: "verification", err: errors.New(`ent: missing required field "TLSFingerprintProfile.verification"`)}
 	}
 	return nil
 }
@@ -269,6 +297,10 @@ func (_c *TLSFingerprintProfileCreate) createSpec() (*TLSFingerprintProfile, *sq
 		_spec.SetField(tlsfingerprintprofile.FieldSignatureAlgorithms, field.TypeJSON, value)
 		_node.SignatureAlgorithms = value
 	}
+	if value, ok := _c.mutation.SignatureAlgorithmsCert(); ok {
+		_spec.SetField(tlsfingerprintprofile.FieldSignatureAlgorithmsCert, field.TypeJSON, value)
+		_node.SignatureAlgorithmsCert = value
+	}
 	if value, ok := _c.mutation.AlpnProtocols(); ok {
 		_spec.SetField(tlsfingerprintprofile.FieldAlpnProtocols, field.TypeJSON, value)
 		_node.AlpnProtocols = value
@@ -288,6 +320,10 @@ func (_c *TLSFingerprintProfileCreate) createSpec() (*TLSFingerprintProfile, *sq
 	if value, ok := _c.mutation.Extensions(); ok {
 		_spec.SetField(tlsfingerprintprofile.FieldExtensions, field.TypeJSON, value)
 		_node.Extensions = value
+	}
+	if value, ok := _c.mutation.Verification(); ok {
+		_spec.SetField(tlsfingerprintprofile.FieldVerification, field.TypeJSON, value)
+		_node.Verification = value
 	}
 	return _node, _spec
 }
@@ -467,6 +503,24 @@ func (u *TLSFingerprintProfileUpsert) ClearSignatureAlgorithms() *TLSFingerprint
 	return u
 }
 
+// SetSignatureAlgorithmsCert sets the "signature_algorithms_cert" field.
+func (u *TLSFingerprintProfileUpsert) SetSignatureAlgorithmsCert(v []uint16) *TLSFingerprintProfileUpsert {
+	u.Set(tlsfingerprintprofile.FieldSignatureAlgorithmsCert, v)
+	return u
+}
+
+// UpdateSignatureAlgorithmsCert sets the "signature_algorithms_cert" field to the value that was provided on create.
+func (u *TLSFingerprintProfileUpsert) UpdateSignatureAlgorithmsCert() *TLSFingerprintProfileUpsert {
+	u.SetExcluded(tlsfingerprintprofile.FieldSignatureAlgorithmsCert)
+	return u
+}
+
+// ClearSignatureAlgorithmsCert clears the value of the "signature_algorithms_cert" field.
+func (u *TLSFingerprintProfileUpsert) ClearSignatureAlgorithmsCert() *TLSFingerprintProfileUpsert {
+	u.SetNull(tlsfingerprintprofile.FieldSignatureAlgorithmsCert)
+	return u
+}
+
 // SetAlpnProtocols sets the "alpn_protocols" field.
 func (u *TLSFingerprintProfileUpsert) SetAlpnProtocols(v []string) *TLSFingerprintProfileUpsert {
 	u.Set(tlsfingerprintprofile.FieldAlpnProtocols, v)
@@ -554,6 +608,18 @@ func (u *TLSFingerprintProfileUpsert) UpdateExtensions() *TLSFingerprintProfileU
 // ClearExtensions clears the value of the "extensions" field.
 func (u *TLSFingerprintProfileUpsert) ClearExtensions() *TLSFingerprintProfileUpsert {
 	u.SetNull(tlsfingerprintprofile.FieldExtensions)
+	return u
+}
+
+// SetVerification sets the "verification" field.
+func (u *TLSFingerprintProfileUpsert) SetVerification(v egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileUpsert {
+	u.Set(tlsfingerprintprofile.FieldVerification, v)
+	return u
+}
+
+// UpdateVerification sets the "verification" field to the value that was provided on create.
+func (u *TLSFingerprintProfileUpsert) UpdateVerification() *TLSFingerprintProfileUpsert {
+	u.SetExcluded(tlsfingerprintprofile.FieldVerification)
 	return u
 }
 
@@ -749,6 +815,27 @@ func (u *TLSFingerprintProfileUpsertOne) ClearSignatureAlgorithms() *TLSFingerpr
 	})
 }
 
+// SetSignatureAlgorithmsCert sets the "signature_algorithms_cert" field.
+func (u *TLSFingerprintProfileUpsertOne) SetSignatureAlgorithmsCert(v []uint16) *TLSFingerprintProfileUpsertOne {
+	return u.Update(func(s *TLSFingerprintProfileUpsert) {
+		s.SetSignatureAlgorithmsCert(v)
+	})
+}
+
+// UpdateSignatureAlgorithmsCert sets the "signature_algorithms_cert" field to the value that was provided on create.
+func (u *TLSFingerprintProfileUpsertOne) UpdateSignatureAlgorithmsCert() *TLSFingerprintProfileUpsertOne {
+	return u.Update(func(s *TLSFingerprintProfileUpsert) {
+		s.UpdateSignatureAlgorithmsCert()
+	})
+}
+
+// ClearSignatureAlgorithmsCert clears the value of the "signature_algorithms_cert" field.
+func (u *TLSFingerprintProfileUpsertOne) ClearSignatureAlgorithmsCert() *TLSFingerprintProfileUpsertOne {
+	return u.Update(func(s *TLSFingerprintProfileUpsert) {
+		s.ClearSignatureAlgorithmsCert()
+	})
+}
+
 // SetAlpnProtocols sets the "alpn_protocols" field.
 func (u *TLSFingerprintProfileUpsertOne) SetAlpnProtocols(v []string) *TLSFingerprintProfileUpsertOne {
 	return u.Update(func(s *TLSFingerprintProfileUpsert) {
@@ -851,6 +938,20 @@ func (u *TLSFingerprintProfileUpsertOne) UpdateExtensions() *TLSFingerprintProfi
 func (u *TLSFingerprintProfileUpsertOne) ClearExtensions() *TLSFingerprintProfileUpsertOne {
 	return u.Update(func(s *TLSFingerprintProfileUpsert) {
 		s.ClearExtensions()
+	})
+}
+
+// SetVerification sets the "verification" field.
+func (u *TLSFingerprintProfileUpsertOne) SetVerification(v egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileUpsertOne {
+	return u.Update(func(s *TLSFingerprintProfileUpsert) {
+		s.SetVerification(v)
+	})
+}
+
+// UpdateVerification sets the "verification" field to the value that was provided on create.
+func (u *TLSFingerprintProfileUpsertOne) UpdateVerification() *TLSFingerprintProfileUpsertOne {
+	return u.Update(func(s *TLSFingerprintProfileUpsert) {
+		s.UpdateVerification()
 	})
 }
 
@@ -1212,6 +1313,27 @@ func (u *TLSFingerprintProfileUpsertBulk) ClearSignatureAlgorithms() *TLSFingerp
 	})
 }
 
+// SetSignatureAlgorithmsCert sets the "signature_algorithms_cert" field.
+func (u *TLSFingerprintProfileUpsertBulk) SetSignatureAlgorithmsCert(v []uint16) *TLSFingerprintProfileUpsertBulk {
+	return u.Update(func(s *TLSFingerprintProfileUpsert) {
+		s.SetSignatureAlgorithmsCert(v)
+	})
+}
+
+// UpdateSignatureAlgorithmsCert sets the "signature_algorithms_cert" field to the value that was provided on create.
+func (u *TLSFingerprintProfileUpsertBulk) UpdateSignatureAlgorithmsCert() *TLSFingerprintProfileUpsertBulk {
+	return u.Update(func(s *TLSFingerprintProfileUpsert) {
+		s.UpdateSignatureAlgorithmsCert()
+	})
+}
+
+// ClearSignatureAlgorithmsCert clears the value of the "signature_algorithms_cert" field.
+func (u *TLSFingerprintProfileUpsertBulk) ClearSignatureAlgorithmsCert() *TLSFingerprintProfileUpsertBulk {
+	return u.Update(func(s *TLSFingerprintProfileUpsert) {
+		s.ClearSignatureAlgorithmsCert()
+	})
+}
+
 // SetAlpnProtocols sets the "alpn_protocols" field.
 func (u *TLSFingerprintProfileUpsertBulk) SetAlpnProtocols(v []string) *TLSFingerprintProfileUpsertBulk {
 	return u.Update(func(s *TLSFingerprintProfileUpsert) {
@@ -1314,6 +1436,20 @@ func (u *TLSFingerprintProfileUpsertBulk) UpdateExtensions() *TLSFingerprintProf
 func (u *TLSFingerprintProfileUpsertBulk) ClearExtensions() *TLSFingerprintProfileUpsertBulk {
 	return u.Update(func(s *TLSFingerprintProfileUpsert) {
 		s.ClearExtensions()
+	})
+}
+
+// SetVerification sets the "verification" field.
+func (u *TLSFingerprintProfileUpsertBulk) SetVerification(v egress.TLSFingerprintProfileVerification) *TLSFingerprintProfileUpsertBulk {
+	return u.Update(func(s *TLSFingerprintProfileUpsert) {
+		s.SetVerification(v)
+	})
+}
+
+// UpdateVerification sets the "verification" field to the value that was provided on create.
+func (u *TLSFingerprintProfileUpsertBulk) UpdateVerification() *TLSFingerprintProfileUpsertBulk {
+	return u.Update(func(s *TLSFingerprintProfileUpsert) {
+		s.UpdateVerification()
 	})
 }
 

@@ -14,7 +14,7 @@
         :key="provider"
         type="button"
         :disabled="disabled"
-        class="btn btn-secondary h-12 w-full justify-center gap-2"
+        class="btn btn-secondary w-full justify-center gap-2"
         @click="startLogin(provider)"
       >
         <GitHubMark v-if="provider === 'github'" class="h-5 w-5 text-gray-800 dark:text-gray-100" />
@@ -40,6 +40,7 @@ const EMAIL_OAUTH_PENDING_PROVIDER_KEY = 'email_oauth_pending_provider'
 const props = withDefaults(defineProps<{
   disabled?: boolean
   affCode?: string
+  promoCode?: string
   githubEnabled?: boolean
   googleEnabled?: boolean
   showDivider?: boolean
@@ -82,6 +83,10 @@ function startLogin(provider: EmailOAuthProvider): void {
   const params: Record<string, string> = { redirect: redirectTo }
   if (affiliateCode) {
     params.aff_code = affiliateCode
+  }
+  const promoCode = props.promoCode?.trim()
+  if (promoCode) {
+    params.promo_code = promoCode
   }
   emit('start', { provider, params })
 }

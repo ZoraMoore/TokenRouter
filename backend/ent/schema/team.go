@@ -3,8 +3,6 @@ package schema
 import (
 	"fmt"
 
-	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
@@ -12,6 +10,8 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
 )
 
 // Team 定义由唯一所有者承担费用的单层团队。
@@ -28,7 +28,7 @@ func (Team) Mixin() []ent.Mixin {
 }
 
 func (Team) Fields() []ent.Field {
-	// 团队默认限额只作为新成员加入时的快照，不追溯覆盖已有成员。
+	// 新成员加入时复制团队默认限额，已有成员使用各自保存的限额。
 	validateDefaultLimit := func(value float64) error {
 		if value < 0 {
 			return fmt.Errorf("团队成员默认限额不能为负数")

@@ -15,8 +15,6 @@ import (
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/TokenFlux/TokenRouter/ent/account"
-	"github.com/TokenFlux/TokenRouter/ent/accountgroup"
 	"github.com/TokenFlux/TokenRouter/ent/announcement"
 	"github.com/TokenFlux/TokenRouter/ent/announcementread"
 	"github.com/TokenFlux/TokenRouter/ent/apikey"
@@ -26,7 +24,9 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/batchimageevent"
 	"github.com/TokenFlux/TokenRouter/ent/batchimageitem"
 	"github.com/TokenFlux/TokenRouter/ent/batchimagejob"
-	"github.com/TokenFlux/TokenRouter/ent/datasharesession"
+	"github.com/TokenFlux/TokenRouter/ent/creativerun"
+	"github.com/TokenFlux/TokenRouter/ent/creativerunoutbox"
+	"github.com/TokenFlux/TokenRouter/ent/creativerunoutput"
 	"github.com/TokenFlux/TokenRouter/ent/errorpassthroughrule"
 	"github.com/TokenFlux/TokenRouter/ent/group"
 	"github.com/TokenFlux/TokenRouter/ent/idempotencyrecord"
@@ -37,6 +37,8 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/pendingauthsession"
 	"github.com/TokenFlux/TokenRouter/ent/promocode"
 	"github.com/TokenFlux/TokenRouter/ent/promocodeusage"
+	"github.com/TokenFlux/TokenRouter/ent/provider"
+	"github.com/TokenFlux/TokenRouter/ent/providergroup"
 	"github.com/TokenFlux/TokenRouter/ent/proxy"
 	"github.com/TokenFlux/TokenRouter/ent/redeemcode"
 	"github.com/TokenFlux/TokenRouter/ent/redeemcodeusage"
@@ -56,7 +58,6 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/userattributedefinition"
 	"github.com/TokenFlux/TokenRouter/ent/userattributevalue"
 	"github.com/TokenFlux/TokenRouter/ent/userdisabledpublicgroup"
-	"github.com/TokenFlux/TokenRouter/ent/userplatformquota"
 	"github.com/TokenFlux/TokenRouter/ent/usersubscription"
 
 	stdsql "database/sql"
@@ -71,10 +72,6 @@ type Client struct {
 	APIKey *APIKeyClient
 	// APIKeyCompositeGroup is the client for interacting with the APIKeyCompositeGroup builders.
 	APIKeyCompositeGroup *APIKeyCompositeGroupClient
-	// Account is the client for interacting with the Account builders.
-	Account *AccountClient
-	// AccountGroup is the client for interacting with the AccountGroup builders.
-	AccountGroup *AccountGroupClient
 	// Announcement is the client for interacting with the Announcement builders.
 	Announcement *AnnouncementClient
 	// AnnouncementRead is the client for interacting with the AnnouncementRead builders.
@@ -89,8 +86,12 @@ type Client struct {
 	BatchImageItem *BatchImageItemClient
 	// BatchImageJob is the client for interacting with the BatchImageJob builders.
 	BatchImageJob *BatchImageJobClient
-	// DataShareSession is the client for interacting with the DataShareSession builders.
-	DataShareSession *DataShareSessionClient
+	// CreativeRun is the client for interacting with the CreativeRun builders.
+	CreativeRun *CreativeRunClient
+	// CreativeRunOutbox is the client for interacting with the CreativeRunOutbox builders.
+	CreativeRunOutbox *CreativeRunOutboxClient
+	// CreativeRunOutput is the client for interacting with the CreativeRunOutput builders.
+	CreativeRunOutput *CreativeRunOutputClient
 	// ErrorPassthroughRule is the client for interacting with the ErrorPassthroughRule builders.
 	ErrorPassthroughRule *ErrorPassthroughRuleClient
 	// Group is the client for interacting with the Group builders.
@@ -111,6 +112,10 @@ type Client struct {
 	PromoCode *PromoCodeClient
 	// PromoCodeUsage is the client for interacting with the PromoCodeUsage builders.
 	PromoCodeUsage *PromoCodeUsageClient
+	// Provider is the client for interacting with the Provider builders.
+	Provider *ProviderClient
+	// ProviderGroup is the client for interacting with the ProviderGroup builders.
+	ProviderGroup *ProviderGroupClient
 	// Proxy is the client for interacting with the Proxy builders.
 	Proxy *ProxyClient
 	// RedeemCode is the client for interacting with the RedeemCode builders.
@@ -149,8 +154,6 @@ type Client struct {
 	UserAttributeValue *UserAttributeValueClient
 	// UserDisabledPublicGroup is the client for interacting with the UserDisabledPublicGroup builders.
 	UserDisabledPublicGroup *UserDisabledPublicGroupClient
-	// UserPlatformQuota is the client for interacting with the UserPlatformQuota builders.
-	UserPlatformQuota *UserPlatformQuotaClient
 	// UserSubscription is the client for interacting with the UserSubscription builders.
 	UserSubscription *UserSubscriptionClient
 }
@@ -166,8 +169,6 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.APIKey = NewAPIKeyClient(c.config)
 	c.APIKeyCompositeGroup = NewAPIKeyCompositeGroupClient(c.config)
-	c.Account = NewAccountClient(c.config)
-	c.AccountGroup = NewAccountGroupClient(c.config)
 	c.Announcement = NewAnnouncementClient(c.config)
 	c.AnnouncementRead = NewAnnouncementReadClient(c.config)
 	c.AuthIdentity = NewAuthIdentityClient(c.config)
@@ -175,7 +176,9 @@ func (c *Client) init() {
 	c.BatchImageEvent = NewBatchImageEventClient(c.config)
 	c.BatchImageItem = NewBatchImageItemClient(c.config)
 	c.BatchImageJob = NewBatchImageJobClient(c.config)
-	c.DataShareSession = NewDataShareSessionClient(c.config)
+	c.CreativeRun = NewCreativeRunClient(c.config)
+	c.CreativeRunOutbox = NewCreativeRunOutboxClient(c.config)
+	c.CreativeRunOutput = NewCreativeRunOutputClient(c.config)
 	c.ErrorPassthroughRule = NewErrorPassthroughRuleClient(c.config)
 	c.Group = NewGroupClient(c.config)
 	c.IdempotencyRecord = NewIdempotencyRecordClient(c.config)
@@ -186,6 +189,8 @@ func (c *Client) init() {
 	c.PendingAuthSession = NewPendingAuthSessionClient(c.config)
 	c.PromoCode = NewPromoCodeClient(c.config)
 	c.PromoCodeUsage = NewPromoCodeUsageClient(c.config)
+	c.Provider = NewProviderClient(c.config)
+	c.ProviderGroup = NewProviderGroupClient(c.config)
 	c.Proxy = NewProxyClient(c.config)
 	c.RedeemCode = NewRedeemCodeClient(c.config)
 	c.RedeemCodeUsage = NewRedeemCodeUsageClient(c.config)
@@ -205,7 +210,6 @@ func (c *Client) init() {
 	c.UserAttributeDefinition = NewUserAttributeDefinitionClient(c.config)
 	c.UserAttributeValue = NewUserAttributeValueClient(c.config)
 	c.UserDisabledPublicGroup = NewUserDisabledPublicGroupClient(c.config)
-	c.UserPlatformQuota = NewUserPlatformQuotaClient(c.config)
 	c.UserSubscription = NewUserSubscriptionClient(c.config)
 }
 
@@ -301,8 +305,6 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		config:                   cfg,
 		APIKey:                   NewAPIKeyClient(cfg),
 		APIKeyCompositeGroup:     NewAPIKeyCompositeGroupClient(cfg),
-		Account:                  NewAccountClient(cfg),
-		AccountGroup:             NewAccountGroupClient(cfg),
 		Announcement:             NewAnnouncementClient(cfg),
 		AnnouncementRead:         NewAnnouncementReadClient(cfg),
 		AuthIdentity:             NewAuthIdentityClient(cfg),
@@ -310,7 +312,9 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		BatchImageEvent:          NewBatchImageEventClient(cfg),
 		BatchImageItem:           NewBatchImageItemClient(cfg),
 		BatchImageJob:            NewBatchImageJobClient(cfg),
-		DataShareSession:         NewDataShareSessionClient(cfg),
+		CreativeRun:              NewCreativeRunClient(cfg),
+		CreativeRunOutbox:        NewCreativeRunOutboxClient(cfg),
+		CreativeRunOutput:        NewCreativeRunOutputClient(cfg),
 		ErrorPassthroughRule:     NewErrorPassthroughRuleClient(cfg),
 		Group:                    NewGroupClient(cfg),
 		IdempotencyRecord:        NewIdempotencyRecordClient(cfg),
@@ -321,6 +325,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		PendingAuthSession:       NewPendingAuthSessionClient(cfg),
 		PromoCode:                NewPromoCodeClient(cfg),
 		PromoCodeUsage:           NewPromoCodeUsageClient(cfg),
+		Provider:                 NewProviderClient(cfg),
+		ProviderGroup:            NewProviderGroupClient(cfg),
 		Proxy:                    NewProxyClient(cfg),
 		RedeemCode:               NewRedeemCodeClient(cfg),
 		RedeemCodeUsage:          NewRedeemCodeUsageClient(cfg),
@@ -340,7 +346,6 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		UserAttributeDefinition:  NewUserAttributeDefinitionClient(cfg),
 		UserAttributeValue:       NewUserAttributeValueClient(cfg),
 		UserDisabledPublicGroup:  NewUserDisabledPublicGroupClient(cfg),
-		UserPlatformQuota:        NewUserPlatformQuotaClient(cfg),
 		UserSubscription:         NewUserSubscriptionClient(cfg),
 	}, nil
 }
@@ -363,8 +368,6 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		config:                   cfg,
 		APIKey:                   NewAPIKeyClient(cfg),
 		APIKeyCompositeGroup:     NewAPIKeyCompositeGroupClient(cfg),
-		Account:                  NewAccountClient(cfg),
-		AccountGroup:             NewAccountGroupClient(cfg),
 		Announcement:             NewAnnouncementClient(cfg),
 		AnnouncementRead:         NewAnnouncementReadClient(cfg),
 		AuthIdentity:             NewAuthIdentityClient(cfg),
@@ -372,7 +375,9 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		BatchImageEvent:          NewBatchImageEventClient(cfg),
 		BatchImageItem:           NewBatchImageItemClient(cfg),
 		BatchImageJob:            NewBatchImageJobClient(cfg),
-		DataShareSession:         NewDataShareSessionClient(cfg),
+		CreativeRun:              NewCreativeRunClient(cfg),
+		CreativeRunOutbox:        NewCreativeRunOutboxClient(cfg),
+		CreativeRunOutput:        NewCreativeRunOutputClient(cfg),
 		ErrorPassthroughRule:     NewErrorPassthroughRuleClient(cfg),
 		Group:                    NewGroupClient(cfg),
 		IdempotencyRecord:        NewIdempotencyRecordClient(cfg),
@@ -383,6 +388,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		PendingAuthSession:       NewPendingAuthSessionClient(cfg),
 		PromoCode:                NewPromoCodeClient(cfg),
 		PromoCodeUsage:           NewPromoCodeUsageClient(cfg),
+		Provider:                 NewProviderClient(cfg),
+		ProviderGroup:            NewProviderGroupClient(cfg),
 		Proxy:                    NewProxyClient(cfg),
 		RedeemCode:               NewRedeemCodeClient(cfg),
 		RedeemCodeUsage:          NewRedeemCodeUsageClient(cfg),
@@ -402,7 +409,6 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		UserAttributeDefinition:  NewUserAttributeDefinitionClient(cfg),
 		UserAttributeValue:       NewUserAttributeValueClient(cfg),
 		UserDisabledPublicGroup:  NewUserDisabledPublicGroupClient(cfg),
-		UserPlatformQuota:        NewUserPlatformQuotaClient(cfg),
 		UserSubscription:         NewUserSubscriptionClient(cfg),
 	}, nil
 }
@@ -433,17 +439,18 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.APIKey, c.APIKeyCompositeGroup, c.Account, c.AccountGroup, c.Announcement,
-		c.AnnouncementRead, c.AuthIdentity, c.AuthIdentityChannel, c.BatchImageEvent,
-		c.BatchImageItem, c.BatchImageJob, c.DataShareSession, c.ErrorPassthroughRule,
-		c.Group, c.IdempotencyRecord, c.IdentityAdoptionDecision, c.PaymentAuditLog,
-		c.PaymentOrder, c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode,
-		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.RedeemCodeUsage, c.SecuritySecret,
-		c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile, c.TLSFingerprintRouter,
-		c.Team, c.TeamInvitation, c.TeamMembership, c.TeamOwnershipTransfer,
-		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
-		c.UserAttributeDefinition, c.UserAttributeValue, c.UserDisabledPublicGroup,
-		c.UserPlatformQuota, c.UserSubscription,
+		c.APIKey, c.APIKeyCompositeGroup, c.Announcement, c.AnnouncementRead,
+		c.AuthIdentity, c.AuthIdentityChannel, c.BatchImageEvent, c.BatchImageItem,
+		c.BatchImageJob, c.CreativeRun, c.CreativeRunOutbox, c.CreativeRunOutput,
+		c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
+		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
+		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
+		c.Provider, c.ProviderGroup, c.Proxy, c.RedeemCode, c.RedeemCodeUsage,
+		c.SecuritySecret, c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile,
+		c.TLSFingerprintRouter, c.Team, c.TeamInvitation, c.TeamMembership,
+		c.TeamOwnershipTransfer, c.UsageCleanupTask, c.UsageLog, c.User,
+		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
+		c.UserDisabledPublicGroup, c.UserSubscription,
 	} {
 		n.Use(hooks...)
 	}
@@ -453,17 +460,18 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.APIKey, c.APIKeyCompositeGroup, c.Account, c.AccountGroup, c.Announcement,
-		c.AnnouncementRead, c.AuthIdentity, c.AuthIdentityChannel, c.BatchImageEvent,
-		c.BatchImageItem, c.BatchImageJob, c.DataShareSession, c.ErrorPassthroughRule,
-		c.Group, c.IdempotencyRecord, c.IdentityAdoptionDecision, c.PaymentAuditLog,
-		c.PaymentOrder, c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode,
-		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.RedeemCodeUsage, c.SecuritySecret,
-		c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile, c.TLSFingerprintRouter,
-		c.Team, c.TeamInvitation, c.TeamMembership, c.TeamOwnershipTransfer,
-		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
-		c.UserAttributeDefinition, c.UserAttributeValue, c.UserDisabledPublicGroup,
-		c.UserPlatformQuota, c.UserSubscription,
+		c.APIKey, c.APIKeyCompositeGroup, c.Announcement, c.AnnouncementRead,
+		c.AuthIdentity, c.AuthIdentityChannel, c.BatchImageEvent, c.BatchImageItem,
+		c.BatchImageJob, c.CreativeRun, c.CreativeRunOutbox, c.CreativeRunOutput,
+		c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
+		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
+		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
+		c.Provider, c.ProviderGroup, c.Proxy, c.RedeemCode, c.RedeemCodeUsage,
+		c.SecuritySecret, c.Setting, c.SubscriptionPlan, c.TLSFingerprintProfile,
+		c.TLSFingerprintRouter, c.Team, c.TeamInvitation, c.TeamMembership,
+		c.TeamOwnershipTransfer, c.UsageCleanupTask, c.UsageLog, c.User,
+		c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
+		c.UserDisabledPublicGroup, c.UserSubscription,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -476,10 +484,6 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.APIKey.mutate(ctx, m)
 	case *APIKeyCompositeGroupMutation:
 		return c.APIKeyCompositeGroup.mutate(ctx, m)
-	case *AccountMutation:
-		return c.Account.mutate(ctx, m)
-	case *AccountGroupMutation:
-		return c.AccountGroup.mutate(ctx, m)
 	case *AnnouncementMutation:
 		return c.Announcement.mutate(ctx, m)
 	case *AnnouncementReadMutation:
@@ -494,8 +498,12 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.BatchImageItem.mutate(ctx, m)
 	case *BatchImageJobMutation:
 		return c.BatchImageJob.mutate(ctx, m)
-	case *DataShareSessionMutation:
-		return c.DataShareSession.mutate(ctx, m)
+	case *CreativeRunMutation:
+		return c.CreativeRun.mutate(ctx, m)
+	case *CreativeRunOutboxMutation:
+		return c.CreativeRunOutbox.mutate(ctx, m)
+	case *CreativeRunOutputMutation:
+		return c.CreativeRunOutput.mutate(ctx, m)
 	case *ErrorPassthroughRuleMutation:
 		return c.ErrorPassthroughRule.mutate(ctx, m)
 	case *GroupMutation:
@@ -516,6 +524,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.PromoCode.mutate(ctx, m)
 	case *PromoCodeUsageMutation:
 		return c.PromoCodeUsage.mutate(ctx, m)
+	case *ProviderMutation:
+		return c.Provider.mutate(ctx, m)
+	case *ProviderGroupMutation:
+		return c.ProviderGroup.mutate(ctx, m)
 	case *ProxyMutation:
 		return c.Proxy.mutate(ctx, m)
 	case *RedeemCodeMutation:
@@ -554,8 +566,6 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.UserAttributeValue.mutate(ctx, m)
 	case *UserDisabledPublicGroupMutation:
 		return c.UserDisabledPublicGroup.mutate(ctx, m)
-	case *UserPlatformQuotaMutation:
-		return c.UserPlatformQuota.mutate(ctx, m)
 	case *UserSubscriptionMutation:
 		return c.UserSubscription.mutate(ctx, m)
 	default:
@@ -940,353 +950,6 @@ func (c *APIKeyCompositeGroupClient) mutate(ctx context.Context, m *APIKeyCompos
 		return (&APIKeyCompositeGroupDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown APIKeyCompositeGroup mutation op: %q", m.Op())
-	}
-}
-
-// AccountClient is a client for the Account schema.
-type AccountClient struct {
-	config
-}
-
-// NewAccountClient returns a client for the Account from the given config.
-func NewAccountClient(c config) *AccountClient {
-	return &AccountClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `account.Hooks(f(g(h())))`.
-func (c *AccountClient) Use(hooks ...Hook) {
-	c.hooks.Account = append(c.hooks.Account, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `account.Intercept(f(g(h())))`.
-func (c *AccountClient) Intercept(interceptors ...Interceptor) {
-	c.inters.Account = append(c.inters.Account, interceptors...)
-}
-
-// Create returns a builder for creating a Account entity.
-func (c *AccountClient) Create() *AccountCreate {
-	mutation := newAccountMutation(c.config, OpCreate)
-	return &AccountCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of Account entities.
-func (c *AccountClient) CreateBulk(builders ...*AccountCreate) *AccountCreateBulk {
-	return &AccountCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *AccountClient) MapCreateBulk(slice any, setFunc func(*AccountCreate, int)) *AccountCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &AccountCreateBulk{err: fmt.Errorf("calling to AccountClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*AccountCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &AccountCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for Account.
-func (c *AccountClient) Update() *AccountUpdate {
-	mutation := newAccountMutation(c.config, OpUpdate)
-	return &AccountUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *AccountClient) UpdateOne(_m *Account) *AccountUpdateOne {
-	mutation := newAccountMutation(c.config, OpUpdateOne, withAccount(_m))
-	return &AccountUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *AccountClient) UpdateOneID(id int64) *AccountUpdateOne {
-	mutation := newAccountMutation(c.config, OpUpdateOne, withAccountID(id))
-	return &AccountUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for Account.
-func (c *AccountClient) Delete() *AccountDelete {
-	mutation := newAccountMutation(c.config, OpDelete)
-	return &AccountDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *AccountClient) DeleteOne(_m *Account) *AccountDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *AccountClient) DeleteOneID(id int64) *AccountDeleteOne {
-	builder := c.Delete().Where(account.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &AccountDeleteOne{builder}
-}
-
-// Query returns a query builder for Account.
-func (c *AccountClient) Query() *AccountQuery {
-	return &AccountQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeAccount},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a Account entity by its id.
-func (c *AccountClient) Get(ctx context.Context, id int64) (*Account, error) {
-	return c.Query().Where(account.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *AccountClient) GetX(ctx context.Context, id int64) *Account {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// QueryGroups queries the groups edge of a Account.
-func (c *AccountClient) QueryGroups(_m *Account) *GroupQuery {
-	query := (&GroupClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(account.Table, account.FieldID, id),
-			sqlgraph.To(group.Table, group.FieldID),
-			sqlgraph.Edge(sqlgraph.M2M, false, account.GroupsTable, account.GroupsPrimaryKey...),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryProxy queries the proxy edge of a Account.
-func (c *AccountClient) QueryProxy(_m *Account) *ProxyQuery {
-	query := (&ProxyClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(account.Table, account.FieldID, id),
-			sqlgraph.To(proxy.Table, proxy.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, false, account.ProxyTable, account.ProxyColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryParent queries the parent edge of a Account.
-func (c *AccountClient) QueryParent(_m *Account) *AccountQuery {
-	query := (&AccountClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(account.Table, account.FieldID, id),
-			sqlgraph.To(account.Table, account.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, account.ParentTable, account.ParentColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryChildren queries the children edge of a Account.
-func (c *AccountClient) QueryChildren(_m *Account) *AccountQuery {
-	query := (&AccountClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(account.Table, account.FieldID, id),
-			sqlgraph.To(account.Table, account.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, account.ChildrenTable, account.ChildrenColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryUsageLogs queries the usage_logs edge of a Account.
-func (c *AccountClient) QueryUsageLogs(_m *Account) *UsageLogQuery {
-	query := (&UsageLogClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(account.Table, account.FieldID, id),
-			sqlgraph.To(usagelog.Table, usagelog.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, account.UsageLogsTable, account.UsageLogsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryAccountGroups queries the account_groups edge of a Account.
-func (c *AccountClient) QueryAccountGroups(_m *Account) *AccountGroupQuery {
-	query := (&AccountGroupClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(account.Table, account.FieldID, id),
-			sqlgraph.To(accountgroup.Table, accountgroup.AccountColumn),
-			sqlgraph.Edge(sqlgraph.O2M, true, account.AccountGroupsTable, account.AccountGroupsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// Hooks returns the client hooks.
-func (c *AccountClient) Hooks() []Hook {
-	hooks := c.hooks.Account
-	return append(hooks[:len(hooks):len(hooks)], account.Hooks[:]...)
-}
-
-// Interceptors returns the client interceptors.
-func (c *AccountClient) Interceptors() []Interceptor {
-	inters := c.inters.Account
-	return append(inters[:len(inters):len(inters)], account.Interceptors[:]...)
-}
-
-func (c *AccountClient) mutate(ctx context.Context, m *AccountMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&AccountCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&AccountUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&AccountUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&AccountDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown Account mutation op: %q", m.Op())
-	}
-}
-
-// AccountGroupClient is a client for the AccountGroup schema.
-type AccountGroupClient struct {
-	config
-}
-
-// NewAccountGroupClient returns a client for the AccountGroup from the given config.
-func NewAccountGroupClient(c config) *AccountGroupClient {
-	return &AccountGroupClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `accountgroup.Hooks(f(g(h())))`.
-func (c *AccountGroupClient) Use(hooks ...Hook) {
-	c.hooks.AccountGroup = append(c.hooks.AccountGroup, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `accountgroup.Intercept(f(g(h())))`.
-func (c *AccountGroupClient) Intercept(interceptors ...Interceptor) {
-	c.inters.AccountGroup = append(c.inters.AccountGroup, interceptors...)
-}
-
-// Create returns a builder for creating a AccountGroup entity.
-func (c *AccountGroupClient) Create() *AccountGroupCreate {
-	mutation := newAccountGroupMutation(c.config, OpCreate)
-	return &AccountGroupCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of AccountGroup entities.
-func (c *AccountGroupClient) CreateBulk(builders ...*AccountGroupCreate) *AccountGroupCreateBulk {
-	return &AccountGroupCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *AccountGroupClient) MapCreateBulk(slice any, setFunc func(*AccountGroupCreate, int)) *AccountGroupCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &AccountGroupCreateBulk{err: fmt.Errorf("calling to AccountGroupClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*AccountGroupCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &AccountGroupCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for AccountGroup.
-func (c *AccountGroupClient) Update() *AccountGroupUpdate {
-	mutation := newAccountGroupMutation(c.config, OpUpdate)
-	return &AccountGroupUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *AccountGroupClient) UpdateOne(_m *AccountGroup) *AccountGroupUpdateOne {
-	mutation := newAccountGroupMutation(c.config, OpUpdateOne)
-	mutation.account = &_m.AccountID
-	mutation.group = &_m.GroupID
-	return &AccountGroupUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for AccountGroup.
-func (c *AccountGroupClient) Delete() *AccountGroupDelete {
-	mutation := newAccountGroupMutation(c.config, OpDelete)
-	return &AccountGroupDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Query returns a query builder for AccountGroup.
-func (c *AccountGroupClient) Query() *AccountGroupQuery {
-	return &AccountGroupQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeAccountGroup},
-		inters: c.Interceptors(),
-	}
-}
-
-// QueryAccount queries the account edge of a AccountGroup.
-func (c *AccountGroupClient) QueryAccount(_m *AccountGroup) *AccountQuery {
-	return c.Query().
-		Where(accountgroup.AccountID(_m.AccountID), accountgroup.GroupID(_m.GroupID)).
-		QueryAccount()
-}
-
-// QueryGroup queries the group edge of a AccountGroup.
-func (c *AccountGroupClient) QueryGroup(_m *AccountGroup) *GroupQuery {
-	return c.Query().
-		Where(accountgroup.AccountID(_m.AccountID), accountgroup.GroupID(_m.GroupID)).
-		QueryGroup()
-}
-
-// Hooks returns the client hooks.
-func (c *AccountGroupClient) Hooks() []Hook {
-	return c.hooks.AccountGroup
-}
-
-// Interceptors returns the client interceptors.
-func (c *AccountGroupClient) Interceptors() []Interceptor {
-	return c.inters.AccountGroup
-}
-
-func (c *AccountGroupClient) mutate(ctx context.Context, m *AccountGroupMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&AccountGroupCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&AccountGroupUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&AccountGroupUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&AccountGroupDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown AccountGroup mutation op: %q", m.Op())
 	}
 }
 
@@ -2333,107 +1996,107 @@ func (c *BatchImageJobClient) mutate(ctx context.Context, m *BatchImageJobMutati
 	}
 }
 
-// DataShareSessionClient is a client for the DataShareSession schema.
-type DataShareSessionClient struct {
+// CreativeRunClient is a client for the CreativeRun schema.
+type CreativeRunClient struct {
 	config
 }
 
-// NewDataShareSessionClient returns a client for the DataShareSession from the given config.
-func NewDataShareSessionClient(c config) *DataShareSessionClient {
-	return &DataShareSessionClient{config: c}
+// NewCreativeRunClient returns a client for the CreativeRun from the given config.
+func NewCreativeRunClient(c config) *CreativeRunClient {
+	return &CreativeRunClient{config: c}
 }
 
 // Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `datasharesession.Hooks(f(g(h())))`.
-func (c *DataShareSessionClient) Use(hooks ...Hook) {
-	c.hooks.DataShareSession = append(c.hooks.DataShareSession, hooks...)
+// A call to `Use(f, g, h)` equals to `creativerun.Hooks(f(g(h())))`.
+func (c *CreativeRunClient) Use(hooks ...Hook) {
+	c.hooks.CreativeRun = append(c.hooks.CreativeRun, hooks...)
 }
 
 // Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `datasharesession.Intercept(f(g(h())))`.
-func (c *DataShareSessionClient) Intercept(interceptors ...Interceptor) {
-	c.inters.DataShareSession = append(c.inters.DataShareSession, interceptors...)
+// A call to `Intercept(f, g, h)` equals to `creativerun.Intercept(f(g(h())))`.
+func (c *CreativeRunClient) Intercept(interceptors ...Interceptor) {
+	c.inters.CreativeRun = append(c.inters.CreativeRun, interceptors...)
 }
 
-// Create returns a builder for creating a DataShareSession entity.
-func (c *DataShareSessionClient) Create() *DataShareSessionCreate {
-	mutation := newDataShareSessionMutation(c.config, OpCreate)
-	return &DataShareSessionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Create returns a builder for creating a CreativeRun entity.
+func (c *CreativeRunClient) Create() *CreativeRunCreate {
+	mutation := newCreativeRunMutation(c.config, OpCreate)
+	return &CreativeRunCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// CreateBulk returns a builder for creating a bulk of DataShareSession entities.
-func (c *DataShareSessionClient) CreateBulk(builders ...*DataShareSessionCreate) *DataShareSessionCreateBulk {
-	return &DataShareSessionCreateBulk{config: c.config, builders: builders}
+// CreateBulk returns a builder for creating a bulk of CreativeRun entities.
+func (c *CreativeRunClient) CreateBulk(builders ...*CreativeRunCreate) *CreativeRunCreateBulk {
+	return &CreativeRunCreateBulk{config: c.config, builders: builders}
 }
 
 // MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
 // a builder and applies setFunc on it.
-func (c *DataShareSessionClient) MapCreateBulk(slice any, setFunc func(*DataShareSessionCreate, int)) *DataShareSessionCreateBulk {
+func (c *CreativeRunClient) MapCreateBulk(slice any, setFunc func(*CreativeRunCreate, int)) *CreativeRunCreateBulk {
 	rv := reflect.ValueOf(slice)
 	if rv.Kind() != reflect.Slice {
-		return &DataShareSessionCreateBulk{err: fmt.Errorf("calling to DataShareSessionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+		return &CreativeRunCreateBulk{err: fmt.Errorf("calling to CreativeRunClient.MapCreateBulk with wrong type %T, need slice", slice)}
 	}
-	builders := make([]*DataShareSessionCreate, rv.Len())
+	builders := make([]*CreativeRunCreate, rv.Len())
 	for i := 0; i < rv.Len(); i++ {
 		builders[i] = c.Create()
 		setFunc(builders[i], i)
 	}
-	return &DataShareSessionCreateBulk{config: c.config, builders: builders}
+	return &CreativeRunCreateBulk{config: c.config, builders: builders}
 }
 
-// Update returns an update builder for DataShareSession.
-func (c *DataShareSessionClient) Update() *DataShareSessionUpdate {
-	mutation := newDataShareSessionMutation(c.config, OpUpdate)
-	return &DataShareSessionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Update returns an update builder for CreativeRun.
+func (c *CreativeRunClient) Update() *CreativeRunUpdate {
+	mutation := newCreativeRunMutation(c.config, OpUpdate)
+	return &CreativeRunUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // UpdateOne returns an update builder for the given entity.
-func (c *DataShareSessionClient) UpdateOne(_m *DataShareSession) *DataShareSessionUpdateOne {
-	mutation := newDataShareSessionMutation(c.config, OpUpdateOne, withDataShareSession(_m))
-	return &DataShareSessionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+func (c *CreativeRunClient) UpdateOne(_m *CreativeRun) *CreativeRunUpdateOne {
+	mutation := newCreativeRunMutation(c.config, OpUpdateOne, withCreativeRun(_m))
+	return &CreativeRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // UpdateOneID returns an update builder for the given id.
-func (c *DataShareSessionClient) UpdateOneID(id int64) *DataShareSessionUpdateOne {
-	mutation := newDataShareSessionMutation(c.config, OpUpdateOne, withDataShareSessionID(id))
-	return &DataShareSessionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+func (c *CreativeRunClient) UpdateOneID(id int64) *CreativeRunUpdateOne {
+	mutation := newCreativeRunMutation(c.config, OpUpdateOne, withCreativeRunID(id))
+	return &CreativeRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// Delete returns a delete builder for DataShareSession.
-func (c *DataShareSessionClient) Delete() *DataShareSessionDelete {
-	mutation := newDataShareSessionMutation(c.config, OpDelete)
-	return &DataShareSessionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Delete returns a delete builder for CreativeRun.
+func (c *CreativeRunClient) Delete() *CreativeRunDelete {
+	mutation := newCreativeRunMutation(c.config, OpDelete)
+	return &CreativeRunDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // DeleteOne returns a builder for deleting the given entity.
-func (c *DataShareSessionClient) DeleteOne(_m *DataShareSession) *DataShareSessionDeleteOne {
+func (c *CreativeRunClient) DeleteOne(_m *CreativeRun) *CreativeRunDeleteOne {
 	return c.DeleteOneID(_m.ID)
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *DataShareSessionClient) DeleteOneID(id int64) *DataShareSessionDeleteOne {
-	builder := c.Delete().Where(datasharesession.ID(id))
+func (c *CreativeRunClient) DeleteOneID(id int64) *CreativeRunDeleteOne {
+	builder := c.Delete().Where(creativerun.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
-	return &DataShareSessionDeleteOne{builder}
+	return &CreativeRunDeleteOne{builder}
 }
 
-// Query returns a query builder for DataShareSession.
-func (c *DataShareSessionClient) Query() *DataShareSessionQuery {
-	return &DataShareSessionQuery{
+// Query returns a query builder for CreativeRun.
+func (c *CreativeRunClient) Query() *CreativeRunQuery {
+	return &CreativeRunQuery{
 		config: c.config,
-		ctx:    &QueryContext{Type: TypeDataShareSession},
+		ctx:    &QueryContext{Type: TypeCreativeRun},
 		inters: c.Interceptors(),
 	}
 }
 
-// Get returns a DataShareSession entity by its id.
-func (c *DataShareSessionClient) Get(ctx context.Context, id int64) (*DataShareSession, error) {
-	return c.Query().Where(datasharesession.ID(id)).Only(ctx)
+// Get returns a CreativeRun entity by its id.
+func (c *CreativeRunClient) Get(ctx context.Context, id int64) (*CreativeRun, error) {
+	return c.Query().Where(creativerun.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.
-func (c *DataShareSessionClient) GetX(ctx context.Context, id int64) *DataShareSession {
+func (c *CreativeRunClient) GetX(ctx context.Context, id int64) *CreativeRun {
 	obj, err := c.Get(ctx, id)
 	if err != nil {
 		panic(err)
@@ -2442,27 +2105,293 @@ func (c *DataShareSessionClient) GetX(ctx context.Context, id int64) *DataShareS
 }
 
 // Hooks returns the client hooks.
-func (c *DataShareSessionClient) Hooks() []Hook {
-	return c.hooks.DataShareSession
+func (c *CreativeRunClient) Hooks() []Hook {
+	return c.hooks.CreativeRun
 }
 
 // Interceptors returns the client interceptors.
-func (c *DataShareSessionClient) Interceptors() []Interceptor {
-	return c.inters.DataShareSession
+func (c *CreativeRunClient) Interceptors() []Interceptor {
+	return c.inters.CreativeRun
 }
 
-func (c *DataShareSessionClient) mutate(ctx context.Context, m *DataShareSessionMutation) (Value, error) {
+func (c *CreativeRunClient) mutate(ctx context.Context, m *CreativeRunMutation) (Value, error) {
 	switch m.Op() {
 	case OpCreate:
-		return (&DataShareSessionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&CreativeRunCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpUpdate:
-		return (&DataShareSessionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&CreativeRunUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpUpdateOne:
-		return (&DataShareSessionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&CreativeRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpDelete, OpDeleteOne:
-		return (&DataShareSessionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+		return (&CreativeRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
-		return nil, fmt.Errorf("ent: unknown DataShareSession mutation op: %q", m.Op())
+		return nil, fmt.Errorf("ent: unknown CreativeRun mutation op: %q", m.Op())
+	}
+}
+
+// CreativeRunOutboxClient is a client for the CreativeRunOutbox schema.
+type CreativeRunOutboxClient struct {
+	config
+}
+
+// NewCreativeRunOutboxClient returns a client for the CreativeRunOutbox from the given config.
+func NewCreativeRunOutboxClient(c config) *CreativeRunOutboxClient {
+	return &CreativeRunOutboxClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `creativerunoutbox.Hooks(f(g(h())))`.
+func (c *CreativeRunOutboxClient) Use(hooks ...Hook) {
+	c.hooks.CreativeRunOutbox = append(c.hooks.CreativeRunOutbox, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `creativerunoutbox.Intercept(f(g(h())))`.
+func (c *CreativeRunOutboxClient) Intercept(interceptors ...Interceptor) {
+	c.inters.CreativeRunOutbox = append(c.inters.CreativeRunOutbox, interceptors...)
+}
+
+// Create returns a builder for creating a CreativeRunOutbox entity.
+func (c *CreativeRunOutboxClient) Create() *CreativeRunOutboxCreate {
+	mutation := newCreativeRunOutboxMutation(c.config, OpCreate)
+	return &CreativeRunOutboxCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of CreativeRunOutbox entities.
+func (c *CreativeRunOutboxClient) CreateBulk(builders ...*CreativeRunOutboxCreate) *CreativeRunOutboxCreateBulk {
+	return &CreativeRunOutboxCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CreativeRunOutboxClient) MapCreateBulk(slice any, setFunc func(*CreativeRunOutboxCreate, int)) *CreativeRunOutboxCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CreativeRunOutboxCreateBulk{err: fmt.Errorf("calling to CreativeRunOutboxClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CreativeRunOutboxCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &CreativeRunOutboxCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for CreativeRunOutbox.
+func (c *CreativeRunOutboxClient) Update() *CreativeRunOutboxUpdate {
+	mutation := newCreativeRunOutboxMutation(c.config, OpUpdate)
+	return &CreativeRunOutboxUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *CreativeRunOutboxClient) UpdateOne(_m *CreativeRunOutbox) *CreativeRunOutboxUpdateOne {
+	mutation := newCreativeRunOutboxMutation(c.config, OpUpdateOne, withCreativeRunOutbox(_m))
+	return &CreativeRunOutboxUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *CreativeRunOutboxClient) UpdateOneID(id int64) *CreativeRunOutboxUpdateOne {
+	mutation := newCreativeRunOutboxMutation(c.config, OpUpdateOne, withCreativeRunOutboxID(id))
+	return &CreativeRunOutboxUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for CreativeRunOutbox.
+func (c *CreativeRunOutboxClient) Delete() *CreativeRunOutboxDelete {
+	mutation := newCreativeRunOutboxMutation(c.config, OpDelete)
+	return &CreativeRunOutboxDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *CreativeRunOutboxClient) DeleteOne(_m *CreativeRunOutbox) *CreativeRunOutboxDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *CreativeRunOutboxClient) DeleteOneID(id int64) *CreativeRunOutboxDeleteOne {
+	builder := c.Delete().Where(creativerunoutbox.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &CreativeRunOutboxDeleteOne{builder}
+}
+
+// Query returns a query builder for CreativeRunOutbox.
+func (c *CreativeRunOutboxClient) Query() *CreativeRunOutboxQuery {
+	return &CreativeRunOutboxQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeCreativeRunOutbox},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a CreativeRunOutbox entity by its id.
+func (c *CreativeRunOutboxClient) Get(ctx context.Context, id int64) (*CreativeRunOutbox, error) {
+	return c.Query().Where(creativerunoutbox.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *CreativeRunOutboxClient) GetX(ctx context.Context, id int64) *CreativeRunOutbox {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *CreativeRunOutboxClient) Hooks() []Hook {
+	return c.hooks.CreativeRunOutbox
+}
+
+// Interceptors returns the client interceptors.
+func (c *CreativeRunOutboxClient) Interceptors() []Interceptor {
+	return c.inters.CreativeRunOutbox
+}
+
+func (c *CreativeRunOutboxClient) mutate(ctx context.Context, m *CreativeRunOutboxMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&CreativeRunOutboxCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&CreativeRunOutboxUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&CreativeRunOutboxUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&CreativeRunOutboxDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown CreativeRunOutbox mutation op: %q", m.Op())
+	}
+}
+
+// CreativeRunOutputClient is a client for the CreativeRunOutput schema.
+type CreativeRunOutputClient struct {
+	config
+}
+
+// NewCreativeRunOutputClient returns a client for the CreativeRunOutput from the given config.
+func NewCreativeRunOutputClient(c config) *CreativeRunOutputClient {
+	return &CreativeRunOutputClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `creativerunoutput.Hooks(f(g(h())))`.
+func (c *CreativeRunOutputClient) Use(hooks ...Hook) {
+	c.hooks.CreativeRunOutput = append(c.hooks.CreativeRunOutput, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `creativerunoutput.Intercept(f(g(h())))`.
+func (c *CreativeRunOutputClient) Intercept(interceptors ...Interceptor) {
+	c.inters.CreativeRunOutput = append(c.inters.CreativeRunOutput, interceptors...)
+}
+
+// Create returns a builder for creating a CreativeRunOutput entity.
+func (c *CreativeRunOutputClient) Create() *CreativeRunOutputCreate {
+	mutation := newCreativeRunOutputMutation(c.config, OpCreate)
+	return &CreativeRunOutputCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of CreativeRunOutput entities.
+func (c *CreativeRunOutputClient) CreateBulk(builders ...*CreativeRunOutputCreate) *CreativeRunOutputCreateBulk {
+	return &CreativeRunOutputCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CreativeRunOutputClient) MapCreateBulk(slice any, setFunc func(*CreativeRunOutputCreate, int)) *CreativeRunOutputCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CreativeRunOutputCreateBulk{err: fmt.Errorf("calling to CreativeRunOutputClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CreativeRunOutputCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &CreativeRunOutputCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for CreativeRunOutput.
+func (c *CreativeRunOutputClient) Update() *CreativeRunOutputUpdate {
+	mutation := newCreativeRunOutputMutation(c.config, OpUpdate)
+	return &CreativeRunOutputUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *CreativeRunOutputClient) UpdateOne(_m *CreativeRunOutput) *CreativeRunOutputUpdateOne {
+	mutation := newCreativeRunOutputMutation(c.config, OpUpdateOne, withCreativeRunOutput(_m))
+	return &CreativeRunOutputUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *CreativeRunOutputClient) UpdateOneID(id int64) *CreativeRunOutputUpdateOne {
+	mutation := newCreativeRunOutputMutation(c.config, OpUpdateOne, withCreativeRunOutputID(id))
+	return &CreativeRunOutputUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for CreativeRunOutput.
+func (c *CreativeRunOutputClient) Delete() *CreativeRunOutputDelete {
+	mutation := newCreativeRunOutputMutation(c.config, OpDelete)
+	return &CreativeRunOutputDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *CreativeRunOutputClient) DeleteOne(_m *CreativeRunOutput) *CreativeRunOutputDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *CreativeRunOutputClient) DeleteOneID(id int64) *CreativeRunOutputDeleteOne {
+	builder := c.Delete().Where(creativerunoutput.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &CreativeRunOutputDeleteOne{builder}
+}
+
+// Query returns a query builder for CreativeRunOutput.
+func (c *CreativeRunOutputClient) Query() *CreativeRunOutputQuery {
+	return &CreativeRunOutputQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeCreativeRunOutput},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a CreativeRunOutput entity by its id.
+func (c *CreativeRunOutputClient) Get(ctx context.Context, id int64) (*CreativeRunOutput, error) {
+	return c.Query().Where(creativerunoutput.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *CreativeRunOutputClient) GetX(ctx context.Context, id int64) *CreativeRunOutput {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *CreativeRunOutputClient) Hooks() []Hook {
+	return c.hooks.CreativeRunOutput
+}
+
+// Interceptors returns the client interceptors.
+func (c *CreativeRunOutputClient) Interceptors() []Interceptor {
+	return c.inters.CreativeRunOutput
+}
+
+func (c *CreativeRunOutputClient) mutate(ctx context.Context, m *CreativeRunOutputMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&CreativeRunOutputCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&CreativeRunOutputUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&CreativeRunOutputUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&CreativeRunOutputDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown CreativeRunOutput mutation op: %q", m.Op())
 	}
 }
 
@@ -2755,15 +2684,15 @@ func (c *GroupClient) QueryUsageLogs(_m *Group) *UsageLogQuery {
 	return query
 }
 
-// QueryAccounts queries the accounts edge of a Group.
-func (c *GroupClient) QueryAccounts(_m *Group) *AccountQuery {
-	query := (&AccountClient{config: c.config}).Query()
+// QueryProviders queries the providers edge of a Group.
+func (c *GroupClient) QueryProviders(_m *Group) *ProviderQuery {
+	query := (&ProviderClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(group.Table, group.FieldID, id),
-			sqlgraph.To(account.Table, account.FieldID),
-			sqlgraph.Edge(sqlgraph.M2M, true, group.AccountsTable, group.AccountsPrimaryKey...),
+			sqlgraph.To(provider.Table, provider.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, true, group.ProvidersTable, group.ProvidersPrimaryKey...),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -2803,15 +2732,15 @@ func (c *GroupClient) QueryDisabledPublicUsers(_m *Group) *UserQuery {
 	return query
 }
 
-// QueryAccountGroups queries the account_groups edge of a Group.
-func (c *GroupClient) QueryAccountGroups(_m *Group) *AccountGroupQuery {
-	query := (&AccountGroupClient{config: c.config}).Query()
+// QueryProviderGroups queries the provider_groups edge of a Group.
+func (c *GroupClient) QueryProviderGroups(_m *Group) *ProviderGroupQuery {
+	query := (&ProviderGroupClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(group.Table, group.FieldID, id),
-			sqlgraph.To(accountgroup.Table, accountgroup.GroupColumn),
-			sqlgraph.Edge(sqlgraph.O2M, true, group.AccountGroupsTable, group.AccountGroupsColumn),
+			sqlgraph.To(providergroup.Table, providergroup.GroupColumn),
+			sqlgraph.Edge(sqlgraph.O2M, true, group.ProviderGroupsTable, group.ProviderGroupsColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -4070,6 +3999,353 @@ func (c *PromoCodeUsageClient) mutate(ctx context.Context, m *PromoCodeUsageMuta
 	}
 }
 
+// ProviderClient is a client for the Provider schema.
+type ProviderClient struct {
+	config
+}
+
+// NewProviderClient returns a client for the Provider from the given config.
+func NewProviderClient(c config) *ProviderClient {
+	return &ProviderClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `provider.Hooks(f(g(h())))`.
+func (c *ProviderClient) Use(hooks ...Hook) {
+	c.hooks.Provider = append(c.hooks.Provider, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `provider.Intercept(f(g(h())))`.
+func (c *ProviderClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Provider = append(c.inters.Provider, interceptors...)
+}
+
+// Create returns a builder for creating a Provider entity.
+func (c *ProviderClient) Create() *ProviderCreate {
+	mutation := newProviderMutation(c.config, OpCreate)
+	return &ProviderCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Provider entities.
+func (c *ProviderClient) CreateBulk(builders ...*ProviderCreate) *ProviderCreateBulk {
+	return &ProviderCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ProviderClient) MapCreateBulk(slice any, setFunc func(*ProviderCreate, int)) *ProviderCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ProviderCreateBulk{err: fmt.Errorf("calling to ProviderClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ProviderCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ProviderCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Provider.
+func (c *ProviderClient) Update() *ProviderUpdate {
+	mutation := newProviderMutation(c.config, OpUpdate)
+	return &ProviderUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ProviderClient) UpdateOne(_m *Provider) *ProviderUpdateOne {
+	mutation := newProviderMutation(c.config, OpUpdateOne, withProvider(_m))
+	return &ProviderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ProviderClient) UpdateOneID(id int64) *ProviderUpdateOne {
+	mutation := newProviderMutation(c.config, OpUpdateOne, withProviderID(id))
+	return &ProviderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Provider.
+func (c *ProviderClient) Delete() *ProviderDelete {
+	mutation := newProviderMutation(c.config, OpDelete)
+	return &ProviderDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ProviderClient) DeleteOne(_m *Provider) *ProviderDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ProviderClient) DeleteOneID(id int64) *ProviderDeleteOne {
+	builder := c.Delete().Where(provider.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ProviderDeleteOne{builder}
+}
+
+// Query returns a query builder for Provider.
+func (c *ProviderClient) Query() *ProviderQuery {
+	return &ProviderQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeProvider},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Provider entity by its id.
+func (c *ProviderClient) Get(ctx context.Context, id int64) (*Provider, error) {
+	return c.Query().Where(provider.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ProviderClient) GetX(ctx context.Context, id int64) *Provider {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryGroups queries the groups edge of a Provider.
+func (c *ProviderClient) QueryGroups(_m *Provider) *GroupQuery {
+	query := (&GroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(provider.Table, provider.FieldID, id),
+			sqlgraph.To(group.Table, group.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, false, provider.GroupsTable, provider.GroupsPrimaryKey...),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryProxy queries the proxy edge of a Provider.
+func (c *ProviderClient) QueryProxy(_m *Provider) *ProxyQuery {
+	query := (&ProxyClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(provider.Table, provider.FieldID, id),
+			sqlgraph.To(proxy.Table, proxy.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, provider.ProxyTable, provider.ProxyColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryParent queries the parent edge of a Provider.
+func (c *ProviderClient) QueryParent(_m *Provider) *ProviderQuery {
+	query := (&ProviderClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(provider.Table, provider.FieldID, id),
+			sqlgraph.To(provider.Table, provider.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, provider.ParentTable, provider.ParentColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryChildren queries the children edge of a Provider.
+func (c *ProviderClient) QueryChildren(_m *Provider) *ProviderQuery {
+	query := (&ProviderClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(provider.Table, provider.FieldID, id),
+			sqlgraph.To(provider.Table, provider.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, provider.ChildrenTable, provider.ChildrenColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryUsageLogs queries the usage_logs edge of a Provider.
+func (c *ProviderClient) QueryUsageLogs(_m *Provider) *UsageLogQuery {
+	query := (&UsageLogClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(provider.Table, provider.FieldID, id),
+			sqlgraph.To(usagelog.Table, usagelog.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, provider.UsageLogsTable, provider.UsageLogsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryProviderGroups queries the provider_groups edge of a Provider.
+func (c *ProviderClient) QueryProviderGroups(_m *Provider) *ProviderGroupQuery {
+	query := (&ProviderGroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(provider.Table, provider.FieldID, id),
+			sqlgraph.To(providergroup.Table, providergroup.ProviderColumn),
+			sqlgraph.Edge(sqlgraph.O2M, true, provider.ProviderGroupsTable, provider.ProviderGroupsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ProviderClient) Hooks() []Hook {
+	hooks := c.hooks.Provider
+	return append(hooks[:len(hooks):len(hooks)], provider.Hooks[:]...)
+}
+
+// Interceptors returns the client interceptors.
+func (c *ProviderClient) Interceptors() []Interceptor {
+	inters := c.inters.Provider
+	return append(inters[:len(inters):len(inters)], provider.Interceptors[:]...)
+}
+
+func (c *ProviderClient) mutate(ctx context.Context, m *ProviderMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ProviderCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ProviderUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ProviderUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ProviderDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Provider mutation op: %q", m.Op())
+	}
+}
+
+// ProviderGroupClient is a client for the ProviderGroup schema.
+type ProviderGroupClient struct {
+	config
+}
+
+// NewProviderGroupClient returns a client for the ProviderGroup from the given config.
+func NewProviderGroupClient(c config) *ProviderGroupClient {
+	return &ProviderGroupClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `providergroup.Hooks(f(g(h())))`.
+func (c *ProviderGroupClient) Use(hooks ...Hook) {
+	c.hooks.ProviderGroup = append(c.hooks.ProviderGroup, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `providergroup.Intercept(f(g(h())))`.
+func (c *ProviderGroupClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ProviderGroup = append(c.inters.ProviderGroup, interceptors...)
+}
+
+// Create returns a builder for creating a ProviderGroup entity.
+func (c *ProviderGroupClient) Create() *ProviderGroupCreate {
+	mutation := newProviderGroupMutation(c.config, OpCreate)
+	return &ProviderGroupCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ProviderGroup entities.
+func (c *ProviderGroupClient) CreateBulk(builders ...*ProviderGroupCreate) *ProviderGroupCreateBulk {
+	return &ProviderGroupCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ProviderGroupClient) MapCreateBulk(slice any, setFunc func(*ProviderGroupCreate, int)) *ProviderGroupCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ProviderGroupCreateBulk{err: fmt.Errorf("calling to ProviderGroupClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ProviderGroupCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ProviderGroupCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ProviderGroup.
+func (c *ProviderGroupClient) Update() *ProviderGroupUpdate {
+	mutation := newProviderGroupMutation(c.config, OpUpdate)
+	return &ProviderGroupUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ProviderGroupClient) UpdateOne(_m *ProviderGroup) *ProviderGroupUpdateOne {
+	mutation := newProviderGroupMutation(c.config, OpUpdateOne)
+	mutation.provider = &_m.ProviderID
+	mutation.group = &_m.GroupID
+	return &ProviderGroupUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ProviderGroup.
+func (c *ProviderGroupClient) Delete() *ProviderGroupDelete {
+	mutation := newProviderGroupMutation(c.config, OpDelete)
+	return &ProviderGroupDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Query returns a query builder for ProviderGroup.
+func (c *ProviderGroupClient) Query() *ProviderGroupQuery {
+	return &ProviderGroupQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeProviderGroup},
+		inters: c.Interceptors(),
+	}
+}
+
+// QueryProvider queries the provider edge of a ProviderGroup.
+func (c *ProviderGroupClient) QueryProvider(_m *ProviderGroup) *ProviderQuery {
+	return c.Query().
+		Where(providergroup.ProviderID(_m.ProviderID), providergroup.GroupID(_m.GroupID)).
+		QueryProvider()
+}
+
+// QueryGroup queries the group edge of a ProviderGroup.
+func (c *ProviderGroupClient) QueryGroup(_m *ProviderGroup) *GroupQuery {
+	return c.Query().
+		Where(providergroup.ProviderID(_m.ProviderID), providergroup.GroupID(_m.GroupID)).
+		QueryGroup()
+}
+
+// Hooks returns the client hooks.
+func (c *ProviderGroupClient) Hooks() []Hook {
+	return c.hooks.ProviderGroup
+}
+
+// Interceptors returns the client interceptors.
+func (c *ProviderGroupClient) Interceptors() []Interceptor {
+	return c.inters.ProviderGroup
+}
+
+func (c *ProviderGroupClient) mutate(ctx context.Context, m *ProviderGroupMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ProviderGroupCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ProviderGroupUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ProviderGroupUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ProviderGroupDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ProviderGroup mutation op: %q", m.Op())
+	}
+}
+
 // ProxyClient is a client for the Proxy schema.
 type ProxyClient struct {
 	config
@@ -4178,15 +4454,15 @@ func (c *ProxyClient) GetX(ctx context.Context, id int64) *Proxy {
 	return obj
 }
 
-// QueryAccounts queries the accounts edge of a Proxy.
-func (c *ProxyClient) QueryAccounts(_m *Proxy) *AccountQuery {
-	query := (&AccountClient{config: c.config}).Query()
+// QueryProviders queries the providers edge of a Proxy.
+func (c *ProxyClient) QueryProviders(_m *Proxy) *ProviderQuery {
+	query := (&ProviderClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(proxy.Table, proxy.FieldID, id),
-			sqlgraph.To(account.Table, account.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, true, proxy.AccountsTable, proxy.AccountsColumn),
+			sqlgraph.To(provider.Table, provider.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, true, proxy.ProvidersTable, proxy.ProvidersColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -6231,15 +6507,15 @@ func (c *UsageLogClient) QueryAPIKey(_m *UsageLog) *APIKeyQuery {
 	return query
 }
 
-// QueryAccount queries the account edge of a UsageLog.
-func (c *UsageLogClient) QueryAccount(_m *UsageLog) *AccountQuery {
-	query := (&AccountClient{config: c.config}).Query()
+// QueryProvider queries the provider edge of a UsageLog.
+func (c *UsageLogClient) QueryProvider(_m *UsageLog) *ProviderQuery {
+	query := (&ProviderClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(usagelog.Table, usagelog.FieldID, id),
-			sqlgraph.To(account.Table, account.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, usagelog.AccountTable, usagelog.AccountColumn),
+			sqlgraph.To(provider.Table, provider.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, usagelog.ProviderTable, usagelog.ProviderColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -6645,22 +6921,6 @@ func (c *UserClient) QueryPendingAuthSessions(_m *User) *PendingAuthSessionQuery
 			sqlgraph.From(user.Table, user.FieldID, id),
 			sqlgraph.To(pendingauthsession.Table, pendingauthsession.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.PendingAuthSessionsTable, user.PendingAuthSessionsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryPlatformQuotas queries the platform_quotas edge of a User.
-func (c *UserClient) QueryPlatformQuotas(_m *User) *UserPlatformQuotaQuery {
-	query := (&UserPlatformQuotaClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(user.Table, user.FieldID, id),
-			sqlgraph.To(userplatformquota.Table, userplatformquota.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.PlatformQuotasTable, user.PlatformQuotasColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -7291,157 +7551,6 @@ func (c *UserDisabledPublicGroupClient) mutate(ctx context.Context, m *UserDisab
 	}
 }
 
-// UserPlatformQuotaClient is a client for the UserPlatformQuota schema.
-type UserPlatformQuotaClient struct {
-	config
-}
-
-// NewUserPlatformQuotaClient returns a client for the UserPlatformQuota from the given config.
-func NewUserPlatformQuotaClient(c config) *UserPlatformQuotaClient {
-	return &UserPlatformQuotaClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `userplatformquota.Hooks(f(g(h())))`.
-func (c *UserPlatformQuotaClient) Use(hooks ...Hook) {
-	c.hooks.UserPlatformQuota = append(c.hooks.UserPlatformQuota, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `userplatformquota.Intercept(f(g(h())))`.
-func (c *UserPlatformQuotaClient) Intercept(interceptors ...Interceptor) {
-	c.inters.UserPlatformQuota = append(c.inters.UserPlatformQuota, interceptors...)
-}
-
-// Create returns a builder for creating a UserPlatformQuota entity.
-func (c *UserPlatformQuotaClient) Create() *UserPlatformQuotaCreate {
-	mutation := newUserPlatformQuotaMutation(c.config, OpCreate)
-	return &UserPlatformQuotaCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of UserPlatformQuota entities.
-func (c *UserPlatformQuotaClient) CreateBulk(builders ...*UserPlatformQuotaCreate) *UserPlatformQuotaCreateBulk {
-	return &UserPlatformQuotaCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *UserPlatformQuotaClient) MapCreateBulk(slice any, setFunc func(*UserPlatformQuotaCreate, int)) *UserPlatformQuotaCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &UserPlatformQuotaCreateBulk{err: fmt.Errorf("calling to UserPlatformQuotaClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*UserPlatformQuotaCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &UserPlatformQuotaCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for UserPlatformQuota.
-func (c *UserPlatformQuotaClient) Update() *UserPlatformQuotaUpdate {
-	mutation := newUserPlatformQuotaMutation(c.config, OpUpdate)
-	return &UserPlatformQuotaUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *UserPlatformQuotaClient) UpdateOne(_m *UserPlatformQuota) *UserPlatformQuotaUpdateOne {
-	mutation := newUserPlatformQuotaMutation(c.config, OpUpdateOne, withUserPlatformQuota(_m))
-	return &UserPlatformQuotaUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *UserPlatformQuotaClient) UpdateOneID(id int64) *UserPlatformQuotaUpdateOne {
-	mutation := newUserPlatformQuotaMutation(c.config, OpUpdateOne, withUserPlatformQuotaID(id))
-	return &UserPlatformQuotaUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for UserPlatformQuota.
-func (c *UserPlatformQuotaClient) Delete() *UserPlatformQuotaDelete {
-	mutation := newUserPlatformQuotaMutation(c.config, OpDelete)
-	return &UserPlatformQuotaDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *UserPlatformQuotaClient) DeleteOne(_m *UserPlatformQuota) *UserPlatformQuotaDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *UserPlatformQuotaClient) DeleteOneID(id int64) *UserPlatformQuotaDeleteOne {
-	builder := c.Delete().Where(userplatformquota.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &UserPlatformQuotaDeleteOne{builder}
-}
-
-// Query returns a query builder for UserPlatformQuota.
-func (c *UserPlatformQuotaClient) Query() *UserPlatformQuotaQuery {
-	return &UserPlatformQuotaQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeUserPlatformQuota},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a UserPlatformQuota entity by its id.
-func (c *UserPlatformQuotaClient) Get(ctx context.Context, id int64) (*UserPlatformQuota, error) {
-	return c.Query().Where(userplatformquota.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *UserPlatformQuotaClient) GetX(ctx context.Context, id int64) *UserPlatformQuota {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// QueryUser queries the user edge of a UserPlatformQuota.
-func (c *UserPlatformQuotaClient) QueryUser(_m *UserPlatformQuota) *UserQuery {
-	query := (&UserClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(userplatformquota.Table, userplatformquota.FieldID, id),
-			sqlgraph.To(user.Table, user.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, userplatformquota.UserTable, userplatformquota.UserColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// Hooks returns the client hooks.
-func (c *UserPlatformQuotaClient) Hooks() []Hook {
-	hooks := c.hooks.UserPlatformQuota
-	return append(hooks[:len(hooks):len(hooks)], userplatformquota.Hooks[:]...)
-}
-
-// Interceptors returns the client interceptors.
-func (c *UserPlatformQuotaClient) Interceptors() []Interceptor {
-	inters := c.inters.UserPlatformQuota
-	return append(inters[:len(inters):len(inters)], userplatformquota.Interceptors[:]...)
-}
-
-func (c *UserPlatformQuotaClient) mutate(ctx context.Context, m *UserPlatformQuotaMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&UserPlatformQuotaCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&UserPlatformQuotaUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&UserPlatformQuotaUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&UserPlatformQuotaDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown UserPlatformQuota mutation op: %q", m.Op())
-	}
-}
-
 // UserSubscriptionClient is a client for the UserSubscription schema.
 type UserSubscriptionClient struct {
 	config
@@ -7644,28 +7753,28 @@ func (c *UserSubscriptionClient) mutate(ctx context.Context, m *UserSubscription
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		APIKey, APIKeyCompositeGroup, Account, AccountGroup, Announcement,
-		AnnouncementRead, AuthIdentity, AuthIdentityChannel, BatchImageEvent,
-		BatchImageItem, BatchImageJob, DataShareSession, ErrorPassthroughRule, Group,
+		APIKey, APIKeyCompositeGroup, Announcement, AnnouncementRead, AuthIdentity,
+		AuthIdentityChannel, BatchImageEvent, BatchImageItem, BatchImageJob,
+		CreativeRun, CreativeRunOutbox, CreativeRunOutput, ErrorPassthroughRule, Group,
 		IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
-		PaymentProviderInstance, PendingAuthSession, PromoCode, PromoCodeUsage, Proxy,
-		RedeemCode, RedeemCodeUsage, SecuritySecret, Setting, SubscriptionPlan,
-		TLSFingerprintProfile, TLSFingerprintRouter, Team, TeamInvitation,
-		TeamMembership, TeamOwnershipTransfer, UsageCleanupTask, UsageLog, User,
-		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserDisabledPublicGroup, UserPlatformQuota, UserSubscription []ent.Hook
+		PaymentProviderInstance, PendingAuthSession, PromoCode, PromoCodeUsage,
+		Provider, ProviderGroup, Proxy, RedeemCode, RedeemCodeUsage, SecuritySecret,
+		Setting, SubscriptionPlan, TLSFingerprintProfile, TLSFingerprintRouter, Team,
+		TeamInvitation, TeamMembership, TeamOwnershipTransfer, UsageCleanupTask,
+		UsageLog, User, UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
+		UserDisabledPublicGroup, UserSubscription []ent.Hook
 	}
 	inters struct {
-		APIKey, APIKeyCompositeGroup, Account, AccountGroup, Announcement,
-		AnnouncementRead, AuthIdentity, AuthIdentityChannel, BatchImageEvent,
-		BatchImageItem, BatchImageJob, DataShareSession, ErrorPassthroughRule, Group,
+		APIKey, APIKeyCompositeGroup, Announcement, AnnouncementRead, AuthIdentity,
+		AuthIdentityChannel, BatchImageEvent, BatchImageItem, BatchImageJob,
+		CreativeRun, CreativeRunOutbox, CreativeRunOutput, ErrorPassthroughRule, Group,
 		IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
-		PaymentProviderInstance, PendingAuthSession, PromoCode, PromoCodeUsage, Proxy,
-		RedeemCode, RedeemCodeUsage, SecuritySecret, Setting, SubscriptionPlan,
-		TLSFingerprintProfile, TLSFingerprintRouter, Team, TeamInvitation,
-		TeamMembership, TeamOwnershipTransfer, UsageCleanupTask, UsageLog, User,
-		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserDisabledPublicGroup, UserPlatformQuota, UserSubscription []ent.Interceptor
+		PaymentProviderInstance, PendingAuthSession, PromoCode, PromoCodeUsage,
+		Provider, ProviderGroup, Proxy, RedeemCode, RedeemCodeUsage, SecuritySecret,
+		Setting, SubscriptionPlan, TLSFingerprintProfile, TLSFingerprintRouter, Team,
+		TeamInvitation, TeamMembership, TeamOwnershipTransfer, UsageCleanupTask,
+		UsageLog, User, UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
+		UserDisabledPublicGroup, UserSubscription []ent.Interceptor
 	}
 )
 

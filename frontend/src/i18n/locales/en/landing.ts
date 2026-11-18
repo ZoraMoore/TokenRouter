@@ -39,12 +39,12 @@ batchImageGuide: {
           desc: 'Paying for multiple AI subscriptions that add up every month'
         },
         complex: {
-          title: 'Account Chaos',
-          desc: 'Managing scattered accounts and API keys across different platforms'
+          title: 'Provider Chaos',
+          desc: 'Managing scattered providers and API keys across different platforms'
         },
         unstable: {
           title: 'Service Interruptions',
-          desc: 'Single accounts hitting rate limits and disrupting your workflow'
+          desc: 'Single providers hitting rate limits and disrupting your workflow'
         },
         noControl: {
           title: 'No Usage Control',
@@ -60,8 +60,8 @@ batchImageGuide: {
     features: {
       unifiedGateway: 'One-Click Access',
       unifiedGatewayDesc: 'Get a single API key to call all connected AI models. No separate applications needed.',
-      multiAccount: 'Always Reliable',
-      multiAccountDesc: 'Smart routing across multiple upstream accounts with automatic failover. Say goodbye to errors.',
+      multiProvider: 'Always Reliable',
+      multiProviderDesc: 'Smart routing across multiple upstream providers with automatic failover. Say goodbye to errors.',
       balanceQuota: 'Pay What You Use',
       balanceQuotaDesc: 'Usage-based billing with quota limits. Full visibility into team consumption.',
       dataPolicies: 'Custom Data Policies',
@@ -91,14 +91,14 @@ batchImageGuide: {
           us: 'Switch between models freely'
         },
         management: {
-          feature: 'Account Management',
+          feature: 'Provider Management',
           official: 'Manage each service separately',
           us: 'Unified key, one dashboard'
         },
         stability: {
           feature: 'Stability',
-          official: 'Single account rate limits',
-          us: 'Multi-account pool, auto-failover'
+          official: 'Single provider rate limits',
+          us: 'Multi-provider pool, auto-failover'
         },
         control: {
           feature: 'Usage Control',
@@ -121,6 +121,10 @@ batchImageGuide: {
       unavailable: 'Model data is temporarily unavailable',
       groups: 'service groups',
       modelCount: 'Models'
+    },
+    featured: {
+      byProvider: 'by {provider}',
+      discountOff: 'Up to {percent}% off'
     },
     stats: {
       todayTokens: 'Today Total Tokens',
@@ -244,8 +248,8 @@ batchImageGuide: {
   },
 // Setup Wizard
   setup: {
-    title: 'Sub2API Setup',
-    description: 'Configure your Sub2API instance',
+    title: 'TokenRouter Setup',
+    description: 'Configure your TokenRouter instance',
     database: {
       title: 'Database Configuration',
       description: 'Connect to your PostgreSQL database',

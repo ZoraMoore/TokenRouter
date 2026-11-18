@@ -1,11 +1,13 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 
 import UserTokenRanking from '../UserTokenRanking.vue'
 
 const getUserBreakdown = vi.fn()
 
-vi.mock('@/api/admin/dashboard', () => ({
+vi.mock('@/api/admin/dashboard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/admin/dashboard')>()),
   getUserBreakdown: (...args: unknown[]) => getUserBreakdown(...args),
 }))
 
@@ -38,13 +40,29 @@ const mountRanking = (props: Record<string, unknown> = {}) =>
       filters: {},
       ...props,
     },
-    global: { stubs: { Select: true, LoadingSpinner: true } },
+    global: { plugins: [createPinia()], stubs: { Select: true } },
   })
+
+const originalConfig = window.__APP_CONFIG__
 
 describe('UserTokenRanking', () => {
   beforeEach(() => {
     getUserBreakdown.mockReset()
     getUserBreakdown.mockResolvedValue({ users: [item(1, 100), item(2, 50)] })
+  })
+
+  afterEach(() => {
+    window.__APP_CONFIG__ = originalConfig
+  })
+
+  it('消费列用配置的余额符号显示用户实际扣费', async () => {
+    window.__APP_CONFIG__ = { ...originalConfig, balance_unit_symbol: '🍥' }
+    const wrapper = mountRanking()
+    await flushPromises()
+
+    const costCell = wrapper.findAll('tbody tr')[0].findAll('td').at(-1)!
+    expect(costCell.text()).toBe('🍥0.5000')
+    wrapper.unmount()
   })
 
   it('loads on mount with shared filters and emits select-user with id + email on row click', async () => {
@@ -77,5 +95,38 @@ describe('UserTokenRanking', () => {
 
     expect(getUserBreakdown).toHaveBeenCalledTimes(2)
     expect(getUserBreakdown).toHaveBeenLastCalledWith(expect.objectContaining({ user_id: 9 }))
+  })
+
+  it('等待数据时保留表头和列数，完成后恢复可点击的数据行', async () => {
+    let finish!: (value: { users: ReturnType<typeof item>[] }) => void
+    getUserBreakdown.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const wrapper = mountRanking()
+    await flushPromises()
+
+    const headerCount = wrapper.findAll('thead th').length
+    expect(wrapper.get('table').attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('tbody').attributes('aria-label')).toBe('common.loading')
+    expect(wrapper.findAll('tbody tr')).toHaveLength(5)
+    expect(wrapper.findAll('tbody tr')[0].findAll('td')).toHaveLength(headerCount)
+    expect(wrapper.text()).not.toContain('admin.dashboard.noDataAvailable')
+
+    finish({ users: [item(1, 100)] })
+    await flushPromises()
+    expect(wrapper.find('[data-loading-skeleton]').exists()).toBe(false)
+    expect(wrapper.get('table').attributes('aria-busy')).toBe('false')
+    await wrapper.get('tbody tr').trigger('click')
+    expect(wrapper.emitted('select-user')).toEqual([[1, 'u1@test.com']])
+    wrapper.unmount()
+  })
+
+  it.each(['empty', 'error'])('请求以 %s 结束时退出骨架并显示原有空态', async (result) => {
+    if (result === 'empty') getUserBreakdown.mockResolvedValue({ users: [] })
+    else getUserBreakdown.mockRejectedValue(new Error('request failed'))
+    const wrapper = mountRanking()
+    await flushPromises()
+
+    expect(wrapper.find('[data-loading-skeleton]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('admin.dashboard.noDataAvailable')
+    wrapper.unmount()
   })
 })

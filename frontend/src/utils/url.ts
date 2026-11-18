@@ -24,8 +24,7 @@ export function sanitizeUrl(value: string, options: SanitizeOptions = {}): strin
     return trimmed
   }
 
-  // 只接受绝对 URL，不使用 base URL 来避免相对路径被解析为当前域名
-  // 检查是否以 http:// 或 https:// 开头
+  // 接受以 http:// 或 https:// 开头的绝对 URL。
   if (!trimmed.match(/^https?:\/\//i)) {
     return ''
   }

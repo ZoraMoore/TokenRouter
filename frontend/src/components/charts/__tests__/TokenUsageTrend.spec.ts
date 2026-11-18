@@ -62,11 +62,16 @@ describe('TokenUsageTrend', () => {
     })
 
     const chartData = JSON.parse(wrapper.find('.chart-data').text())
+    const options = (wrapper.vm as any).$?.setupState.lineOptions
+    expect(options.plugins.tooltip.enabled).toBe(false)
+    expect(options.plugins.tooltip.external).toBeTypeOf('function')
     const hitRateDataset = chartData.datasets.find(
       (ds: any) => ds.label === 'Cached Input %'
     )
     // 命中率 = 1500 / (500 + 1500 + 0) * 100 = 75%
     expect(hitRateDataset.data[0]).toBe(75)
+    // 缓存命中率曲线使用实线。
+    expect(hitRateDataset.borderDash).toBeUndefined()
   })
 
   it('returns 0 hit rate when all prompt tokens are zero', () => {
@@ -155,14 +160,14 @@ describe('TokenUsageTrend', () => {
     })
 
     expect(JSON.parse(wrapper.find('.chart-options').text()).plugins.legend.labels.color).toBe(
-      '#E4E4E7'
+      '#DEE0E2'
     )
 
     setTheme(false)
     await wrapper.vm.$nextTick()
 
     const lightOptions = JSON.parse(wrapper.find('.chart-options').text())
-    // 浅色主题下使用深色文字，避免图例和坐标轴融入白色背景。
+    // 浅色主题的图例和坐标轴使用深色文字。
     expect(lightOptions.plugins.legend.labels.color).toBe('#3F3F46')
     expect(lightOptions.scales.x.ticks.color).toBe('#3F3F46')
     expect(lightOptions.scales.y.ticks.color).toBe('#3F3F46')

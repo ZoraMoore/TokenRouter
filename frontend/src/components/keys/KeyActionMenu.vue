@@ -1,33 +1,47 @@
 <template>
   <Teleport to="body">
-    <div v-if="show && apiKey && position">
-      <div class="fixed inset-0 z-[9998]" @click="emit('close')"></div>
-      <div
-        class="fixed z-[9999] w-48 overflow-hidden rounded-control bg-white shadow-lg ring-1 ring-black/5 dark:bg-dark-800 dark:ring-white/10"
-        :style="{ top: `${position.top}px`, left: `${position.left}px` }"
-        @click.stop
-      >
-        <div class="py-1">
-          <button type="button" class="menu-item" @click="emitAction('use')">
-            <Icon name="terminal" size="sm" class="text-gray-400" :stroke-width="2" />
-            {{ t('keys.useKey') }}
-          </button>
-          <button v-if="allowImport" type="button" class="menu-item" @click="emitAction('import')">
-            <Icon name="upload" size="sm" class="text-blue-500" :stroke-width="2" />
-            {{ t('keys.importToCcSwitch') }}
-          </button>
-          <div class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
-          <button type="button" class="menu-item text-red-600 dark:text-red-400" @click="emitAction('delete')">
-            <Icon name="trash" size="sm" :stroke-width="2" />
-            {{ t('common.delete') }}
-          </button>
+
+      <div v-if="show && apiKey && position" class="fixed inset-0 z-menu-overlay" aria-hidden="true" @click="emit('close')"></div>
+      <MotionTransition name="dropdown-fade">
+        <div
+          v-if="show && apiKey && position"
+          :id="`key-action-menu-${apiKey.id}`"
+          class="action-menu w-48 overflow-hidden"
+          :style="{ top: `${position.top}px`, left: `${position.left}px` }"
+          role="menu"
+          :aria-label="t('common.actions')"
+          @click.stop
+        >
+          <div class="py-1">
+            <button type="button" class="dropdown-item" role="menuitem" @click="emitAction('use')">
+              <Icon name="terminal" size="sm" class="text-emerald-500" :stroke-width="2" />
+              {{ t('keys.useKey') }}
+            </button>
+            <button type="button" class="dropdown-item" role="menuitem" @click="emitAction('import-tf')">
+              <Icon name="upload" size="sm" class="text-blue-500" :stroke-width="2" />
+              {{ t('keys.importToTf') }}
+            </button>
+            <button v-if="allowImport" type="button" class="dropdown-item" role="menuitem" @click="emitAction('import')">
+              <Icon name="upload" size="sm" class="text-violet-500" :stroke-width="2" />
+              {{ t('keys.importToCcSwitch') }}
+            </button>
+            <div class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
+            <button type="button" class="dropdown-item" role="menuitem" @click="emitAction('rotate')">
+              <Icon name="refresh" size="sm" class="text-primary-500" :stroke-width="2" />
+              {{ t('keys.rotateKey') }}
+            </button>
+            <button type="button" class="dropdown-item text-red-600 dark:text-red-400" role="menuitem" @click="emitAction('delete')">
+              <Icon name="trash" size="sm" class="text-red-500 dark:text-red-400" :stroke-width="2" />
+              {{ t('common.delete') }}
+            </button>
+          </div>
         </div>
-      </div>
-    </div>
+      </MotionTransition>
   </Teleport>
 </template>
 
 <script setup lang="ts">
+import MotionTransition from '@/components/common/MotionTransition.vue'
 import { onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
@@ -43,17 +57,21 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'close'): void
   (event: 'use', apiKey: ApiKey): void
+  (event: 'import-tf', apiKey: ApiKey): void
   (event: 'import', apiKey: ApiKey): void
+  (event: 'rotate', apiKey: ApiKey): void
   (event: 'delete', apiKey: ApiKey): void
 }>()
 
 const { t } = useI18n()
 
 // 菜单动作先传递当前 Key，再关闭浮层，确保后续弹窗不被透明遮罩拦截。
-const emitAction = (event: 'use' | 'import' | 'delete') => {
+const emitAction = (event: 'use' | 'import-tf' | 'import' | 'rotate' | 'delete') => {
   if (!props.apiKey) return
   if (event === 'use') emit('use', props.apiKey)
+  else if (event === 'import-tf') emit('import-tf', props.apiKey)
   else if (event === 'import') emit('import', props.apiKey)
+  else if (event === 'rotate') emit('rotate', props.apiKey)
   else emit('delete', props.apiKey)
   emit('close')
 }
@@ -73,9 +91,3 @@ watch(
 
 onUnmounted(() => window.removeEventListener('keydown', handleEscape))
 </script>
-
-<style scoped>
-.menu-item {
-  @apply flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700;
-}
-</style>

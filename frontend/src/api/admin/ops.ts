@@ -4,26 +4,61 @@
  * - Dashboard overview (raw path)
  */
 
-import { apiClient, buildGatewayUrl } from '../client'
+import { apiClient } from '../client'
 import type { PaginatedResponse } from '@/types'
 
 export interface OpsRequestOptions {
   signal?: AbortSignal
 }
 
-export type OpsUpstreamErrorEvent = {
-  at_unix_ms?: number
-  platform?: string
-  account_id?: number
-  account_name?: string
-  upstream_status_code?: number
-  upstream_request_id?: string
-  kind?: string
-  message?: string
-  detail?: string
+export interface OpsDiskUsage {
+  role: 'system' | 'data'
+  mount_point: string
+  total_mb: number
+  used_mb: number
+  available_mb: number
+  usage_percent: number
+}
+
+export interface OpsDiskSnapshot {
+  total_mb: number
+  used_mb: number
+  available_mb: number
+  disks: OpsDiskUsage[]
+}
+
+export interface OpsResourceUsage {
+  cpu_cores: number
+  cpu_usage_percent?: number | null
+  memory_used_mb?: number | null
+  memory_total_mb?: number | null
+  memory_usage_percent?: number | null
+  host_cpu_cores: number
+  host_cpu_usage_percent?: number | null
+  host_memory_used_mb?: number | null
+  host_memory_total_mb?: number | null
+  host_memory_usage_percent?: number | null
+  disks?: OpsDiskSnapshot | null
+}
+
+export interface OpsNodeResources extends OpsResourceUsage {
+  node_id: string
+  name: string
+  sampled_at: string
+  online: boolean
+}
+
+export interface OpsClusterResources {
+  total_nodes: number
+  online_nodes: number
+  complete: boolean
+  summary: OpsResourceUsage
+  nodes: OpsNodeResources[]
 }
 
 export interface OpsDashboardOverview {
+  cluster_resources?: OpsClusterResources | null
+  disks?: OpsDiskSnapshot
   start_time: string
   end_time: string
   platform: string
@@ -124,7 +159,7 @@ export interface OpsRequestDetail {
 
   user_id?: number | null
   api_key_id?: number | null
-  account_id?: number | null
+  provider_id?: number | null
   group_id?: number | null
 
   stream?: boolean
@@ -143,7 +178,7 @@ export interface OpsRequestDetailsParams {
 
   user_id?: number
   api_key_id?: number
-  account_id?: number
+  provider_id?: number
 
   model?: string
   request_id?: string
@@ -282,7 +317,7 @@ export interface OpsSystemMetricsSnapshot {
 
   goroutine_count?: number | null
   concurrency_queue_depth?: number | null
-  account_switch_count?: number | null
+  provider_switch_count?: number | null
 }
 
 export interface OpsJobHeartbeat {
@@ -307,16 +342,15 @@ export interface PlatformConcurrencyInfo {
 export interface GroupConcurrencyInfo {
   group_id: number
   group_name: string
-  platform: string
   current_in_use: number
   max_capacity: number
   load_percentage: number
   waiting_in_queue: number
 }
 
-export interface AccountConcurrencyInfo {
-  account_id: number
-  account_name?: string
+export interface ProviderConcurrencyInfo {
+  provider_id: number
+  provider_name?: string
   platform: string
   group_id: number
   group_name: string
@@ -330,7 +364,7 @@ export interface OpsConcurrencyStatsResponse {
   enabled: boolean
   platform: Record<string, PlatformConcurrencyInfo>
   group: Record<string, GroupConcurrencyInfo>
-  account: Record<string, AccountConcurrencyInfo>
+  provider: Record<string, ProviderConcurrencyInfo>
   timestamp?: string
 }
 
@@ -370,7 +404,7 @@ export async function getUserConcurrencyStats(): Promise<OpsUserConcurrencyStats
 
 export interface PlatformAvailability {
   platform: string
-  total_accounts: number
+  total_providers: number
   available_count: number
   rate_limit_count: number
   error_count: number
@@ -379,16 +413,15 @@ export interface PlatformAvailability {
 export interface GroupAvailability {
   group_id: number
   group_name: string
-  platform: string
-  total_accounts: number
+  total_providers: number
   available_count: number
   rate_limit_count: number
   error_count: number
 }
 
-export interface AccountAvailability {
-  account_id: number
-  account_name: string
+export interface ProviderAvailability {
+  provider_id: number
+  provider_name: string
   platform: string
   group_id: number
   group_name: string
@@ -404,15 +437,15 @@ export interface AccountAvailability {
   error_message?: string
 }
 
-export interface OpsAccountAvailabilityStatsResponse {
+export interface OpsProviderAvailabilityStatsResponse {
   enabled: boolean
   platform: Record<string, PlatformAvailability>
   group: Record<string, GroupAvailability>
-  account: Record<string, AccountAvailability>
+  provider: Record<string, ProviderAvailability>
   timestamp?: string
 }
 
-export async function getAccountAvailabilityStats(platform?: string, groupId?: number | null): Promise<OpsAccountAvailabilityStatsResponse> {
+export async function getProviderAvailabilityStats(platform?: string, groupId?: number | null): Promise<OpsProviderAvailabilityStatsResponse> {
   const params: Record<string, any> = {}
   if (platform) {
     params.platform = platform
@@ -420,7 +453,7 @@ export async function getAccountAvailabilityStats(platform?: string, groupId?: n
   if (typeof groupId === 'number' && groupId > 0) {
     params.group_id = groupId
   }
-  const { data } = await apiClient.get<OpsAccountAvailabilityStatsResponse>('/admin/ops/account-availability', { params })
+  const { data } = await apiClient.get<OpsProviderAvailabilityStatsResponse>('/admin/ops/provider-availability', { params })
   return data
 }
 
@@ -463,228 +496,10 @@ export async function getRealtimeTrafficSummary(
   return data
 }
 
-/**
- * Subscribe to realtime QPS updates via WebSocket.
- *
- * Note: browsers cannot set Authorization headers for WebSockets.
- * We authenticate via Sec-WebSocket-Protocol using a prefixed token item:
- *   ["sub2api-admin", "jwt.<token>"]
- */
-export interface SubscribeQPSOptions {
-  token?: string | null
-  onOpen?: () => void
-  onClose?: (event: CloseEvent) => void
-  onError?: (event: Event) => void
-  /**
-   * Called when the server closes with an application close code that indicates
-   * reconnecting is not useful (e.g. feature flag disabled).
-   */
-  onFatalClose?: (event: CloseEvent) => void
-  /**
-   * More granular status updates for UI (connecting/reconnecting/offline/etc).
-   */
-  onStatusChange?: (status: OpsWSStatus) => void
-  /**
-   * Called when a reconnect is scheduled (helps display "retry in Xs").
-   */
-  onReconnectScheduled?: (info: { attempt: number, delayMs: number }) => void
-  wsBaseUrl?: string
-  /**
-   * Maximum reconnect attempts. Defaults to Infinity to keep the dashboard live.
-   * Set to 0 to disable reconnect.
-   */
-  maxReconnectAttempts?: number
-  reconnectBaseDelayMs?: number
-  reconnectMaxDelayMs?: number
-  /**
-   * Stale connection detection (heartbeat-by-observation).
-   * If no messages are received within this window, the socket is closed to trigger a reconnect.
-   * Set to 0 to disable.
-   */
-  staleTimeoutMs?: number
-  /**
-   * How often to check staleness. Only used when `staleTimeoutMs > 0`.
-   */
-  staleCheckIntervalMs?: number
-}
-
-export type OpsWSStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline' | 'closed'
-
-export const OPS_WS_CLOSE_CODES = {
-  REALTIME_DISABLED: 4001
-} as const
-
-const OPS_WS_BASE_PROTOCOL = 'sub2api-admin'
-
-export function subscribeQPS(onMessage: (data: any) => void, options: SubscribeQPSOptions = {}): () => void {
-  let ws: WebSocket | null = null
-  let reconnectAttempts = 0
-  const maxReconnectAttempts = Number.isFinite(options.maxReconnectAttempts as number)
-    ? (options.maxReconnectAttempts as number)
-    : Infinity
-  const baseDelayMs = options.reconnectBaseDelayMs ?? 1000
-  const maxDelayMs = options.reconnectMaxDelayMs ?? 30000
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  let shouldReconnect = true
-  let isConnecting = false
-  let hasConnectedOnce = false
-  let lastMessageAt = 0
-  const staleTimeoutMs = options.staleTimeoutMs ?? 120_000
-  const staleCheckIntervalMs = options.staleCheckIntervalMs ?? 30_000
-  let staleTimer: ReturnType<typeof setInterval> | null = null
-
-  const setStatus = (status: OpsWSStatus) => {
-    options.onStatusChange?.(status)
-  }
-
-  const clearReconnectTimer = () => {
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
-  }
-
-  const clearStaleTimer = () => {
-    if (staleTimer) {
-      clearInterval(staleTimer)
-      staleTimer = null
-    }
-  }
-
-  const startStaleTimer = () => {
-    clearStaleTimer()
-    if (!staleTimeoutMs || staleTimeoutMs <= 0) return
-    staleTimer = setInterval(() => {
-      if (!shouldReconnect) return
-      if (!ws || ws.readyState !== WebSocket.OPEN) return
-      if (!lastMessageAt) return
-      const ageMs = Date.now() - lastMessageAt
-      if (ageMs > staleTimeoutMs) {
-        // Treat as a half-open connection; closing triggers the normal reconnect path.
-        ws.close()
-      }
-    }, staleCheckIntervalMs)
-  }
-
-  const scheduleReconnect = () => {
-    if (!shouldReconnect) return
-    if (hasConnectedOnce && reconnectAttempts >= maxReconnectAttempts) return
-
-    // If we're offline, wait for the browser to come back online.
-    if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) {
-      setStatus('offline')
-      return
-    }
-
-    const expDelay = baseDelayMs * Math.pow(2, reconnectAttempts)
-    const delay = Math.min(expDelay, maxDelayMs)
-    const jitter = Math.floor(Math.random() * 250)
-    clearReconnectTimer()
-    reconnectTimer = setTimeout(() => {
-      reconnectAttempts++
-      connect()
-    }, delay + jitter)
-    options.onReconnectScheduled?.({ attempt: reconnectAttempts + 1, delayMs: delay + jitter })
-  }
-
-  const handleOnline = () => {
-    if (!shouldReconnect) return
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
-    connect()
-  }
-
-  const handleOffline = () => {
-    setStatus('offline')
-  }
-
-  const connect = () => {
-    if (!shouldReconnect) return
-    if (isConnecting) return
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
-    if (hasConnectedOnce && reconnectAttempts >= maxReconnectAttempts) return
-
-    isConnecting = true
-    setStatus(hasConnectedOnce ? 'reconnecting' : 'connecting')
-    const wsBaseUrl = options.wsBaseUrl || import.meta.env.VITE_WS_BASE_URL
-    const wsURL = wsBaseUrl
-      ? new URL(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${wsBaseUrl}/api/v1/admin/ops/ws/qps`)
-      : new URL(buildGatewayUrl('/api/v1/admin/ops/ws/qps').replace(/^http/, 'ws'))
-
-    // Do NOT put admin JWT in the URL query string (it can leak via access logs, proxies, etc).
-    // Browsers cannot set Authorization headers for WebSockets, so we pass the token via
-    // Sec-WebSocket-Protocol (subprotocol list): ["sub2api-admin", "jwt.<token>"].
-    const rawToken = String(options.token ?? localStorage.getItem('auth_token') ?? '').trim()
-    const protocols: string[] = [OPS_WS_BASE_PROTOCOL]
-    if (rawToken) protocols.push(`jwt.${rawToken}`)
-
-    ws = new WebSocket(wsURL.toString(), protocols)
-
-    ws.onopen = () => {
-      reconnectAttempts = 0
-      isConnecting = false
-      hasConnectedOnce = true
-      clearReconnectTimer()
-      lastMessageAt = Date.now()
-      startStaleTimer()
-      setStatus('connected')
-      options.onOpen?.()
-    }
-
-    ws.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data)
-        lastMessageAt = Date.now()
-        onMessage(data)
-      } catch (err) {
-        console.warn('[OpsWS] Failed to parse message:', err)
-      }
-    }
-
-    ws.onerror = (error) => {
-      console.error('[OpsWS] Connection error:', error)
-      options.onError?.(error)
-    }
-
-    ws.onclose = (event) => {
-      isConnecting = false
-      options.onClose?.(event)
-      clearStaleTimer()
-      ws = null
-
-      // If the server explicitly tells us to stop reconnecting, honor it.
-      if (event && typeof event.code === 'number' && event.code === OPS_WS_CLOSE_CODES.REALTIME_DISABLED) {
-        shouldReconnect = false
-        clearReconnectTimer()
-        setStatus('closed')
-        options.onFatalClose?.(event)
-        return
-      }
-
-      scheduleReconnect()
-    }
-  }
-
-  window.addEventListener('online', handleOnline)
-  window.addEventListener('offline', handleOffline)
-  connect()
-
-  return () => {
-    shouldReconnect = false
-    window.removeEventListener('online', handleOnline)
-    window.removeEventListener('offline', handleOffline)
-    clearReconnectTimer()
-    clearStaleTimer()
-    if (ws) ws.close()
-    ws = null
-    setStatus('closed')
-  }
-}
-
 export type OpsSeverity = string
 export type OpsPhase = string
 
 export type AlertSeverity = 'critical' | 'warning' | 'info'
-export type ThresholdMode = 'count' | 'percentage' | 'both'
 export type MetricType =
   | 'success_rate'
   | 'error_rate'
@@ -693,13 +508,13 @@ export type MetricType =
   | 'memory_usage_percent'
   | 'disk_usage_percent'
   | 'concurrency_queue_depth'
-  | 'group_available_accounts'
+  | 'group_available_providers'
   | 'group_available_ratio'
   | 'group_rate_limit_ratio'
-  | 'account_rate_limited_count'
-  | 'account_error_count'
-  | 'account_error_ratio'
-  | 'overload_account_count'
+  | 'provider_rate_limited_count'
+  | 'provider_error_count'
+  | 'provider_error_ratio'
+  | 'overload_provider_count'
 export type Operator = '>' | '>=' | '<' | '<=' | '==' | '!='
 
 export interface AlertRule {
@@ -756,9 +571,9 @@ export interface EmailNotificationConfig {
     error_digest_enabled: boolean
     error_digest_schedule: string
     error_digest_min_count: number
-    account_health_enabled: boolean
-    account_health_schedule: string
-    account_health_error_rate_threshold: number
+    provider_health_enabled: boolean
+    provider_health_schedule: string
+    provider_health_error_rate_threshold: number
   }
 }
 
@@ -792,17 +607,17 @@ export interface OpsAlertRuntimeSettings {
   thresholds: OpsMetricThresholds // 指标阈值配置
 }
 
-export interface OpsOpenAIAccountQuotaAutoPauseSettings {
+export interface OpsOpenAIProviderQuotaAutoPauseSettings {
   default_threshold_5h: number // 0~1，0 表示不启用全局默认 5h 阈值
   default_threshold_7d: number // 0~1，0 表示不启用全局默认 7d 阈值
 }
 
 export interface OpsAdvancedSettings {
   data_retention: OpsDataRetentionSettings
-  openai_account_quota_auto_pause: OpsOpenAIAccountQuotaAutoPauseSettings
+  openai_provider_quota_auto_pause: OpsOpenAIProviderQuotaAutoPauseSettings
   ignore_count_tokens_errors: boolean
   ignore_context_canceled: boolean
-  ignore_no_available_accounts: boolean
+  ignore_no_available_providers: boolean
   ignore_invalid_api_key_errors: boolean
   ignore_insufficient_balance_errors: boolean
   ignored_status_codes: number[]
@@ -846,7 +661,7 @@ export interface OpsSystemLog {
   client_request_id?: string
   user_id?: number | null
   api_key_id?: number | null
-  account_id?: number | null
+  provider_id?: number | null
   platform?: string
   model?: string
   extra?: Record<string, any>
@@ -867,7 +682,7 @@ export interface OpsSystemLogQuery {
   client_request_id?: string
   user_id?: number | null
   api_key_id?: number | null
-  account_id?: number | null
+  provider_id?: number | null
   platform?: string
   model?: string
   q?: string
@@ -883,7 +698,7 @@ export interface OpsSystemLogCleanupRequest {
   client_request_id?: string
   user_id?: number | null
   api_key_id?: number | null
-  account_id?: number | null
+  provider_id?: number | null
   platform?: string
   model?: string
   q?: string
@@ -928,8 +743,8 @@ export interface OpsErrorLog {
   // 关联 api_key 名称（后端 LEFT JOIN api_keys；软删保留 name，故已删 key 仍有原名）。
   api_key_name?: string
   api_key_deleted?: boolean
-  account_id?: number | null
-  account_name: string
+  provider_id?: number | null
+  provider_name: string
   group_id?: number | null
   group_name: string
 
@@ -1084,6 +899,7 @@ export async function getTokenStats(
 export type OpsErrorListView = 'errors' | 'excluded' | 'all'
 
 export type OpsErrorListQueryParams = {
+ request_id?: string
   page?: number
   page_size?: number
   time_range?: string
@@ -1091,7 +907,7 @@ export type OpsErrorListQueryParams = {
   end_time?: string
   platform?: string
   group_id?: number | null
-  account_id?: number | null
+  provider_id?: number | null
   user_id?: number
   api_key_id?: number
   // 模型过滤：后端以 COALESCE(requested_model, model) 精确匹配（admin 路径）。
@@ -1120,15 +936,6 @@ export async function listErrorLogs(params: OpsErrorListQueryParams): Promise<Op
   return data
 }
 
-export async function getErrorLogDetail(id: number): Promise<OpsErrorDetail> {
-  const { data } = await apiClient.get<OpsErrorDetail>(`/admin/ops/errors/${id}`)
-  return data
-}
-
-export async function updateErrorResolved(errorId: number, resolved: boolean): Promise<void> {
-  await apiClient.put(`/admin/ops/errors/${errorId}/resolve`, { resolved })
-}
-
 // New split endpoints
 export async function listRequestErrors(params: OpsErrorListQueryParams): Promise<OpsErrorLogsResponse> {
   const { data } = await apiClient.get<OpsErrorLogsResponse>('/admin/ops/request-errors', { params })
@@ -1148,14 +955,6 @@ export async function getRequestErrorDetail(id: number): Promise<OpsErrorDetail>
 export async function getUpstreamErrorDetail(id: number): Promise<OpsErrorDetail> {
   const { data } = await apiClient.get<OpsErrorDetail>(`/admin/ops/upstream-errors/${id}`)
   return data
-}
-
-export async function updateRequestErrorResolved(errorId: number, resolved: boolean): Promise<void> {
-  await apiClient.put(`/admin/ops/request-errors/${errorId}/resolve`, { resolved })
-}
-
-export async function updateUpstreamErrorResolved(errorId: number, resolved: boolean): Promise<void> {
-  await apiClient.put(`/admin/ops/upstream-errors/${errorId}/resolve`, { resolved })
 }
 
 export async function listRequestErrorUpstreamErrors(
@@ -1317,22 +1116,17 @@ export const opsAPI = {
   getTokenStats,
   getConcurrencyStats,
   getUserConcurrencyStats,
-  getAccountAvailabilityStats,
+  getProviderAvailabilityStats,
   getRealtimeTrafficSummary,
-  subscribeQPS,
 
   // Legacy unified endpoints
   listErrorLogs,
-  getErrorLogDetail,
-  updateErrorResolved,
 
   // New split endpoints
   listRequestErrors,
   listUpstreamErrors,
   getRequestErrorDetail,
   getUpstreamErrorDetail,
-  updateRequestErrorResolved,
-  updateUpstreamErrorResolved,
   listRequestErrorUpstreamErrors,
 
   listRequestDetails,

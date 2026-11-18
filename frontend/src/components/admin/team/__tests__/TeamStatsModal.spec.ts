@@ -67,7 +67,6 @@ describe('TeamStatsModal', () => {
             template: '<section v-if="show"><slot /><slot name="footer" /></section>',
           },
           BalanceAmount: { props: ['amount'], template: '<span>{{ amount }}</span>' },
-          LoadingSpinner: true,
           TeamMemberUsageCharts: {
             props: ['series', 'loading'],
             template: '<div data-test="member-series">{{ series.map(item => item.label).join(",") }}</div>',

@@ -14,7 +14,7 @@ const messages: Record<string, string> = {
   'usage.cacheCreationTokensLabel': 'Cache Creation',
   'usage.cacheReadTokensLabel': 'Cache Read',
   'usage.totalCost': 'Total Cost',
-  'usage.accountCost': 'Cost',
+  'usage.providerCost': 'Cost',
   'usage.standardCost': 'Standard',
   'usage.avgDuration': 'Avg Duration',
 }
@@ -46,7 +46,7 @@ const stats = {
   total_tokens: 184,
   total_cost: 0.001,
   total_actual_cost: 0.001,
-  total_account_cost: 0.001,
+  total_provider_cost: 0.001,
   average_duration_ms: 250,
 }
 
@@ -71,5 +71,26 @@ describe('UsageStatsCards', () => {
     expect(text).toContain('12')
     expect(text).toContain('Cache Read')
     expect(text).toContain('22')
+  })
+
+  it('keeps the cache tooltip out of the layout while it is hidden', () => {
+    const wrapper = mount(UsageStatsCards, {
+      props: {
+        stats,
+      },
+      global: {
+        stubs: {
+          BalanceIcon: true,
+          Icon: true,
+        },
+      },
+    })
+
+    const tooltip = wrapper.findAll('span').find((el) => el.classes().includes('group-hover:block'))
+
+    expect(tooltip).toBeDefined()
+    // `opacity-0` 仅隐藏视觉内容，固定宽度仍会撑开窄屏；`hidden` 会把提示框移出布局流。
+    expect(tooltip?.classes()).toContain('hidden')
+    expect(tooltip?.classes()).not.toContain('opacity-0')
   })
 })

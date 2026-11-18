@@ -6,8 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/pkg/servertiming"
 	"github.com/gin-gonic/gin"
+
+	"github.com/TokenFlux/TokenRouter/internal/identity/httpapi/authctx"
+	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry/timing"
 )
 
 const (
@@ -38,8 +40,8 @@ func ServerTiming(enabled bool) gin.HandlerFunc {
 			return
 		}
 
-		collector := servertiming.New(time.Now())
-		c.Request = c.Request.WithContext(servertiming.WithCollector(c.Request.Context(), collector))
+		collector := timing.New(time.Now())
+		c.Request = c.Request.WithContext(timing.WithCollector(c.Request.Context(), collector))
 		writer := &serverTimingResponseWriter{
 			ResponseWriter: c.Writer,
 			context:        c,
@@ -80,7 +82,7 @@ func (w *serverTimingResponseWriter) finalize() {
 	}
 	w.once.Do(func() {
 		if value := ServerTimingHeaderValue(w.context); value != "" {
-			w.ResponseWriter.Header().Set(servertiming.HeaderName, value)
+			w.ResponseWriter.Header().Set(timing.HeaderName, value)
 		}
 	})
 }
@@ -92,14 +94,14 @@ func ServerTimingHeaderValue(c *gin.Context) string {
 	if c == nil || c.Request == nil {
 		return ""
 	}
-	role, ok := GetUserRoleFromContext(c)
+	role, ok := authctx.GetUserRoleFromContext(c)
 	if !ok || role == "" {
 		return ""
 	}
 	if role != "admin" && !isUserTimingPath(c.Request.URL.Path) {
 		return ""
 	}
-	return servertiming.HeaderValue(c.Request.Context(), time.Now(), responseCacheStatus(c.Writer.Header()))
+	return timing.HeaderValue(c.Request.Context(), time.Now(), responseCacheStatus(c.Writer.Header()))
 }
 
 // ServerTimingResponseHeader 构造 WebSocket 升级所需的额外响应头。
@@ -108,7 +110,7 @@ func ServerTimingResponseHeader(c *gin.Context) http.Header {
 	if value == "" {
 		return nil
 	}
-	return http.Header{servertiming.HeaderName: []string{value}}
+	return http.Header{timing.HeaderName: []string{value}}
 }
 
 func shouldCollectServerTiming(c *gin.Context) bool {
@@ -119,7 +121,7 @@ func isAdminUIRequest(c *gin.Context) bool {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		return false
 	}
-	if strings.TrimSpace(c.GetHeader(servertiming.AdminUIHeader)) == "1" {
+	if strings.TrimSpace(c.GetHeader(timing.AdminUIHeader)) == "1" {
 		return true
 	}
 	path := strings.TrimSpace(c.Request.URL.Path)
@@ -130,7 +132,7 @@ func isUserUIRequest(c *gin.Context) bool {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		return false
 	}
-	if strings.TrimSpace(c.GetHeader(servertiming.UserUIHeader)) == "1" {
+	if strings.TrimSpace(c.GetHeader(timing.UserUIHeader)) == "1" {
 		return true
 	}
 	return isUserTimingPath(c.Request.URL.Path)
@@ -163,9 +165,6 @@ func isUserTimingPath(path string) bool {
 		return true
 	case rest == "/keys", strings.HasPrefix(rest, "/keys/"):
 		return true
-	case rest == "/data-sharing", strings.HasPrefix(rest, "/data-sharing/"):
-		// 公开下载仅依赖签名票据，不属于认证用户 API。
-		return rest != "/data-sharing/export/download"
 	case rest == "/groups/available", rest == "/groups/rates":
 		return true
 	case rest == "/channels/available":

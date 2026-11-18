@@ -14,7 +14,7 @@ export interface ApiKeyGroupFilterLabels {
   disabled: string
 }
 
-// 分区标题行使用负数哨兵值，避免和真实分组 ID 冲突。
+// 分区标题使用负数 ID，分组使用后端返回的 ID。
 // Select.vue 会用 `${typeof value}:${String(value ?? '')}` 生成 :key，
 // 使用不同数字可避免多个 null 标题行产生重复的 "object:" key。
 const HEADER_EXCLUSIVE = -1
@@ -26,11 +26,10 @@ const HEADER_DISABLED = -3
  *
  * 启用分组按专属 / 公开分区，每个非空分区前放一个禁用的标题行。
  * 禁用分组集中放到最后的“已禁用”分区，便于管理员筛选 Key 仍绑定在禁用分组上的用户。
- * 当前 fork 的订阅套餐不再挂载 group_id，因此这里不引入 upstream 的 subscription_type 分区。
+ * 订阅套餐与 group_id 独立，选项按分组的专属、公开和禁用状态分区。
  * 空分区不渲染标题；最前面的“全部”选项（value 为 null）用于清除筛选。
  *
- * 分区标题行使用负数哨兵值而不是 null，
- * 这样 Vue 的 v-for :key 会生成不同字符串，避免重复 key 告警。
+ * 分区标题行使用不同的负数哨兵值，Vue 的 v-for :key 因此能区分各标题行。
  */
 export function buildApiKeyGroupFilterOptions(
   groups: AdminGroup[],

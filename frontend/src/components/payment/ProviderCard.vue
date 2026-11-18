@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      'group relative rounded-lg border transition-all',
+      'group relative rounded-control border transition',
       enabled ? 'border-gray-200 dark:border-dark-600' : 'border-gray-200 bg-gray-50 opacity-50 dark:border-dark-700 dark:bg-dark-800/50',
       updating && 'opacity-75',
     ]"
@@ -14,7 +14,7 @@
       <!-- Left: icon + name + key badge + type badges -->
       <div class="flex items-center gap-3">
         <div :class="[
-          'rounded-md p-1.5',
+          'rounded-control p-1.5',
           provider.enabled && enabled ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-dark-700',
         ]">
           <Icon
@@ -35,10 +35,10 @@
             :disabled="updating"
             @click.stop="emit('toggleType', pt.value)"
             :class="[
-              'rounded px-2 py-0.5 text-xs font-medium transition-all',
+              'rounded-compact px-2 py-0.5 text-xs font-medium transition',
               updating ? 'cursor-wait opacity-60' : '',
               isSelected(pt.value)
-                ? 'bg-primary-500 text-white'
+                ? 'bg-primary-50 text-primary-700 dark:bg-primary-500/8 dark:text-primary-500'
                 : 'bg-gray-100 text-gray-400 dark:bg-dark-700 dark:text-gray-500',
             ]"
           >{{ pt.label }}</button>
@@ -51,11 +51,11 @@
         <ToggleSwitch :label="t('admin.settings.payment.refundEnabled')" :checked="provider.refund_enabled" :disabled="updating" @toggle="emit('toggleField', 'refund_enabled')" />
         <ToggleSwitch v-if="provider.refund_enabled" :label="t('admin.settings.payment.allowUserRefund')" :checked="provider.allow_user_refund" :disabled="updating" @toggle="emit('toggleField', 'allow_user_refund')" />
         <div class="flex items-center gap-2 border-l border-gray-200 pl-3 dark:border-dark-600">
-          <button type="button" @click="emit('edit')" class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400">
+          <button type="button" @click="emit('edit')" class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-500/8 dark:hover:text-primary-500">
             <Icon name="edit" size="sm" />
             <span class="text-xs">{{ t('common.edit') }}</span>
           </button>
-          <button type="button" @click="emit('delete')" class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400">
+          <button type="button" @click="emit('delete')" class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400">
             <Icon name="trash" size="sm" />
             <span class="text-xs">{{ t('common.delete') }}</span>
           </button>
@@ -108,12 +108,12 @@ const modeLabel = computed(() => {
 })
 
 const selectedTypes = computed(() => {
-  // 兼容旧接口或脏数据返回 null，避免 includes 在渲染阶段抛错。
+  // 接口返回 null 时按空数组处理，供渲染调用 includes。
   return Array.isArray(props.provider.supported_types) ? props.provider.supported_types : []
 })
 
 const displayTypes = computed(() => {
-  // Stripe Checkout 的具体支付方式由 Stripe Dashboard 控制，旧 supported_types 只做后端兼容，不再展示成可切换按钮。
+  // Stripe Checkout 的支付方式由 Stripe Dashboard 控制，supported_types 用于兼容后端数据。
   if (props.provider.provider_key === 'stripe') {
     return []
   }

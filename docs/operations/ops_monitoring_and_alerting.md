@@ -1,49 +1,79 @@
 # 运维监控与告警
 
-本文描述 Ops 信号采集、实时视图、告警评估、邮件报告和健康诊断。它是[可观测性与数据生命周期](observability_and_data_lifecycle.md)的详细专题，不拥有 Usage 结算、预聚合实现或备份内容策略。
+本文描述 Ops 的信号采集、实时视图、告警评估、邮件报告、健康诊断和发布查询。它是[可观测性与数据生命周期](observability_and_data_lifecycle.md)下的详细文档；Usage 的结算、预聚合的实现和备份的内容策略，见各自的文档。
 
 ## 章节导航
 
-- [信号流水线](#信号流水线)：修改指标、错误或系统日志采集时读取。
+- [信号流水线](#信号流水线)：修改指标、错误或系统日志的采集时读取。
 - [实时与历史查询](#实时与历史查询)：修改 dashboard、WebSocket 或查询模式时读取。
 - [告警评估](#告警评估)：修改规则、持续时间、静默或通知时读取。
 - [计划报告](#计划报告)：修改日报、周报或健康摘要时读取。
-- [健康与失效语义](#健康与失效语义)：排查空面板、漏报或后台任务故障时读取。
+- [健康与失效](#健康与失效)：排查面板为空、漏报或后台任务故障时读取。
+- [发布查询与维护命令](#ops_release_and_maintenance)：检查版本、回退候选或清理历史的入口拒绝时读取。
 
 <a id="ops_signal_pipeline"></a>
 ## 信号流水线
 
-Ops 面同时接收请求错误、独立上游 attempt 错误、入口准入拒绝、系统日志、并发、账号可用性、实时流量和系统指标。每类信号有独立 repository/队列，不能用一个表的计数代替另一类：最终客户端失败可能包含多个上游错误，一次本地拒绝也可能没有任何上游 attempt。
+`ops` 负责观测规则和运行实例；`ops/postgres` 执行业务表的查询，`ops/rediscache` 提供锁和缓存，`ops/provider` 读取主机、cgroup、连接池和发布信息，`ops/httpapi` 负责管理和实时协议。采样核心只读取提供商、身份、并发和认证的健康数据。
 
-`OpsMetricsCollector` 在 Ops 和 monitoring 开关启用时周期采集数据库、Redis、主机/容器、账号负载和运行时指标。多实例通过 Redis leader lock，必要路径可用 PostgreSQL advisory lock，确保一个周期只持久化一次；运行结果写 job heartbeat、耗时和错误。
+Ops 同时接收请求错误、单独的上游 attempt 错误、入口准入拒绝、系统日志、并发、提供商可用性、实时流量和系统指标。每类信号有自己的 repository 和队列，一类的计数不能代替另一类：一次最终的客户端失败，可能对应多个上游错误；一次本地拒绝，也可能根本没有上游 attempt。
 
-系统日志 sink 与 request/error capture 使用有界队列。拥塞时按各自策略丢弃或降级，并累计 dropped/health 计数；它们不得反压网关核心转发。系统日志落库失败会执行 2 秒起、60 秒封顶的指数退避，退避窗口内的批次计入 dropped 而不访问数据库，成功后立即清除失败状态。敏感字段在进入存储前清理，request ID、平台、Group、账号和 endpoint 用于关联。
+`OpsMetricsCollector` 在 Ops 和 monitoring 开关都开启时，周期采集数据库、Redis、主机和容器、提供商负载和运行时的指标。多实例通过 Redis leader lock 选出执行者，必要的路径使用 PostgreSQL advisory lock，保证每个周期只持久化一次；运行结果写入 job heartbeat、耗时和错误。
+
+系统日志 sink 和请求、错误的采集，使用相互独立的有界队列。审计和系统日志 sink 重复调用 Start 时，由各自的屏障合并，Stop 之后无法重新打开；系统日志的退避和健康计数只有一份。队列拥塞时，按各自的策略丢弃或降级，并累计 dropped 和健康计数；它们不会反过来拖慢网关的核心转发。系统日志写库失败时，执行从 2 秒开始、上限 60 秒的指数退避，退避期间的批次计入 dropped，不访问数据库，成功后立即清除失败状态。敏感字段在写入存储之前清理，request ID、平台、分组、提供商和 endpoint 用于关联。
 
 ## 实时与历史查询
 
-管理员 Ops API 提供 concurrency、user concurrency、account availability、realtime traffic、错误/上游错误/请求详情、入口拒绝、系统日志和 dashboard snapshot/trend/histogram/token stats。错误列表与详情弹窗必须共享当前时间范围；自定义范围使用同一组 `start_time` / `end_time` 半开区间，任一边界缺失时统一回退到 `1h`，不能把字面量 `custom` 传给后端。QPS WebSocket 用于短窗口实时展示，仍需管理员鉴权，不能视为长期审计源。
+管理员的 Ops API 提供：concurrency、user concurrency、provider availability、realtime traffic、错误、上游错误和请求详情、入口拒绝、系统日志，以及 dashboard 的 snapshot、trend、histogram 和 token stats。概览、错误列表和请求明细弹窗，共用当前的时间范围；自定义范围使用同一组 `start_time` 和 `end_time` 半开区间，请求明细的窗口标签显示对应的起止日期和时间；已经选了自定义模式时，再修改起止时间也会刷新数据。
 
-历史 dashboard 查询可按配置使用原始表或预聚合，并在覆盖不足时回退。聚合、水位和回填由[使用记录与运维预聚合](pre_aggregation.md)拥有。页面空数据需区分 monitoring 关闭、过滤条件、采集丢弃、聚合覆盖、查询超时和确实无流量。
+起止时间缺任何一个时，回退到 `1h`，字面量 `custom` 不会传给后端。QPS WebSocket 用于短窗口的实时展示，同样需要管理员鉴权，它不是长期的审计数据源。Ops 持有按需的采样、连接计数和三十秒空闲停止；HTTP 适配层负责 Origin 和可信代理的判断、管理员认证、帧、关闭码和写超时。连接断开不代表停止等待已经完成。
+
+平台筛选根据提供商或请求记录里的平台。实时的分组指标，汇总组内符合筛选条件的提供商，不返回分组的平台；同一个提供商可以计入多个分组。历史的成功记录和错误记录，都读取保存时的平台快照，没有选中提供商的错误归到 `unknown`，不会根据当前的分组或提供商反推。
+
+历史 dashboard 的查询，可以按配置使用原始表或预聚合，覆盖不足时回退到原始表。聚合、水位和回填见[使用记录与运维预聚合](pre_aggregation.md)。页面为空时，要区分：monitoring 关闭、过滤条件、采集丢弃、聚合覆盖不足、查询超时，还是确实没有流量。
+
+磁盘容量卡读取当前服务器的系统盘与 `/mnt/data` 数据盘，展示总容量、已用量、可用量和每块盘的明细。同一设备的绑定挂载合并统计。`overview.disks` 在概览查询时采集，历史 `system_metrics.disk_*` 继续记录根分区，磁盘告警使用该历史指标。
+
+### 多节点资源容量
+
+配置稳定的 `ops.node_id` 后，每个实例每十五秒独立读取整机 CPU、物理内存、磁盘及应用 cgroup 额度，将快照写入共享 Redis 的 `ops:node:resources:v1:<node_id>`。节点资源采样通过采集器生命周期启动和停止，监控开关关闭时停止上报。快照保留二十四小时，超过六十秒未更新或时间超前超过五秒的节点显示离线。
+
+管理员概览的 `cluster_resources` 返回配置中的全部节点、最后采样时间和在线节点汇总。CPU 使用率按节点核心数加权，内存和磁盘容量相加。应用 CPU 和内存额度与整机容量分别展示；磁盘先在每台主机内去重，再按节点汇总。缺少任一在线节点的某项指标时，该项汇总为未知值。离线节点保留最后采样信息，实时使用量与在线汇总排除这些旧数据。
+
+前端的服务器资源区域展示整机汇总、应用额度和节点明细。未配置节点标识的单机部署继续显示已有资源卡。历史 `system_metrics`、业务统计和告警规则使用各自的采集流程。部署配置见[多节点部署与应用更新](deployment_and_migrations.md#multi_node_deployment)。
+
+Docker 部署时，将宿主机系统盘与数据盘的路径分别只读挂载到 `/host-disks/system` 和 `/host-disks/data`。`deploy/docker-compose.disk-monitor.yml` 提供可叠加的 Compose 配置，`OPS_SYSTEM_DISK_PATH` 和 `OPS_DATA_DISK_PATH` 可以选择对应文件系统中的目录。默认路径是 `/opt/sub2api/disk-monitor` 和 `/mnt/data/disk-monitor`，Compose 创建这两个空目录并只读挂载。启用前需要确认 `/mnt/data` 已挂载数据盘。普通进程使用 `/` 和 `/mnt/data`，数据盘路径不存在时展示系统盘。采集失败时页面显示根分区快照和明细不可用提示。
 
 ## 告警评估
 
-告警规则包含 enabled、metric type、operator、threshold、window、sustained minutes、scope/filter 和通知动作。评估器按运行设置周期执行，使用 leader lock 避免多实例重复事件；连续 breach 达到持续要求后创建或更新 active event，恢复后关闭/标记 resolved。
+告警规则包括 enabled、metric type、operator、threshold、window、sustained minutes、scope 和 filter，以及通知动作。评估器按运行设置周期执行，用 leader lock 避免多实例产生重复的事件；连续超过阈值的时间达到持续要求后，创建或更新 active 的事件，恢复后关闭，或标记为 resolved。
 
-静默记录只抑制匹配范围和时间内的通知/事件动作，不删除原始指标。管理员可以确认、解决事件和配置邮件通知。邮件有全局/运行时限流，发送失败进入 heartbeat/日志，不能把事件标成已经送达。
+静默记录只在匹配的范围和时间内，抑制通知和事件动作，原始指标不受影响。管理员可以确认、解决事件，并配置邮件通知。邮件有全局和运行时的限流；发送失败时写进 heartbeat 和日志，事件不会被标成已送达。
 
-最终错误透传规则的 `skip_monitoring` 只跳过指定客户端错误的常规监控记录，不能跳过系统健康、访问、计费或安全审计。详见[网关错误响应策略](../interfaces/gateway_error_policy.md)。
+最终错误透传规则的 `skip_monitoring`，只跳过指定客户端错误的常规监控记录；系统健康、访问、计费和安全审计的记录照常写入。详见[网关错误响应策略](../interfaces/gateway_error_policy.md)。
 
 ## 计划报告
 
-计划报告支持日报、周报、错误摘要和账号健康。Cron 使用分钟级五字段表达式，时区来自应用配置；每分钟调度器只执行已到期报告，并用分布式锁和 last-run key 防止重复发送。
+计划报告支持日报、周报、错误摘要和提供商健康。Cron 使用分钟级的五字段表达式，时区取应用配置；每分钟的调度器只执行已经到期的报告，并用分布式锁和 last-run key 防止重复发送。
 
-报告收件人、启用项、错误最小计数和账号错误率阈值来自数据库运行设置。生成失败或邮件失败写任务 heartbeat；报告是观测摘要，不应作为扣费、SLA 赔付或账号自动恢复的唯一事实。
+报告的收件人、启用项、错误的最小计数和提供商错误率的阈值，来自数据库的运行设置。邮件报告配置的写入，严格校验结构字段：旧的 `report.account_health_*` 返回 400，要使用 `report.provider_health_*` 保存。生成失败或邮件失败时，写入任务的 heartbeat。报告只是观测摘要，扣费、SLA 赔付和提供商自动恢复，都不能只以它为依据。
 
-## 健康与失效语义
+Ops 的构造和启动分开，app 在完成全部绑定后，才启动采样、聚合、告警、报告和清理。停止时等待当前的采样、聚合和 cron 作业结束；清理器还等待之前 Reload 留下的在途 cron。单次的局部超时不代表停止已经完成，最终的退出受应用总的清理预算约束，详见[启动与关闭](../architecture/system_architecture.md#startup_and_shutdown)。
 
-- Ops hard switch 关闭采集/查询和后台评估，但不能关闭网关转发、认证或计费。
-- 观察 collector/evaluator/report/aggregation/cleanup 各自 heartbeat、leader lock、最近耗时和错误，不能只检查进程存活。
-- 规则与运行设置通过数据库持久化和运行时快照传播；更新后检查多实例版本，不以单个管理 API 成功代表全部实例已刷新。
-- Retention/cleanup 只删除观测数据；告警、报告或面板缺历史不影响资金账本，但会降低诊断完整性。
+告警和报告的业务触发、收件人和变量由 Ops 确定，app 直接交给 notification 实例（只有一个）。通知模块只负责模板、偏好、投递和 SMTP，不回读指标，也不重新判断告警；报告的摘要占位符使用通知纯叶子包定义的格式，实际的变量由 Ops 提供。投递失败不会引起资金或处置的回滚，详见[通知与邮件投递](../domains/notification_delivery.md)。
 
-相关文档：[可观测性与数据生命周期](observability_and_data_lifecycle.md)、[使用记录与运维预聚合](pre_aggregation.md)、[账号维护](account_maintenance.md)。
+## 健康与失效
+
+- 关闭 Ops 硬开关时，采集、查询和后台评估都停止，网关的转发、认证和计费照常进行。
+- 分别观察 collector、evaluator、report、aggregation 和 cleanup 各自的 heartbeat、leader lock、最近一次的耗时和错误；只检查进程是否存活是不够的。
+- 规则和运行设置通过数据库持久化，并以运行时快照传播；更新后，检查多个实例上的版本，一次管理 API 调用成功，不代表所有实例都已经刷新。
+- Retention 和 cleanup 只删除观测数据；告警、报告或面板缺少历史数据，不影响资金账本，但会降低诊断的完整性。
+
+<a id="ops_release_and_maintenance"></a>
+## 发布查询与维护命令
+
+发布查询由 Ops 的 ReleaseQuery 和 GitHub provider 提供，负责版本比较、回退候选的过滤，结果缓存二十分钟；GitHub Token 的可信范围和重定向规则见[部署指南](../guides/deployment/index.md#升级)。下载校验和二进制替换由 Ops 的技术适配层执行；`ops/maintenance` 负责更新和回退、系统操作锁和重启请求的编排。实际的进程退出，由 `app/lifecycle`（只有一处）执行。
+
+`cleanup-ingress-reject-logs` 用精简版 bootstrap 装配 Ops 的分类和清理能力，不启动完整的 worker。它默认 dry-run，参数是 `--before`、`--batch-size`、`--execute`，分类版本是 `ingress-reject-v1`；它只清理匹配的分析事件。
+
+相关文档：[可观测性与数据生命周期](observability_and_data_lifecycle.md)、[使用记录与运维预聚合](pre_aggregation.md)、[提供商维护](provider_maintenance.md)。

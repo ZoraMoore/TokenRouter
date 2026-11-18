@@ -53,39 +53,17 @@ export function formatNumber(num: number | null | undefined): string {
 }
 
 /**
- * 格式化货币金额
- * @param amount 金额
- * @param currency 货币代码，默认 USD
- * @returns 格式化后的字符串，如 "$1.25"
- */
-export function formatCurrency(amount: number | null | undefined, currency: string = 'USD'): string {
-  if (amount === null || amount === undefined) return '$0.00'
-
-  const locale = getLocale()
-
-  // For very small amounts, show more decimals
-  const fractionDigits = amount > 0 && amount < 0.01 ? 6 : 2
-
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: currency,
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits
-  }).format(amount)
-}
-
-/**
  * 格式化字节大小
  * @param bytes 字节数
  * @param decimals 小数位数
  * @returns 格式化后的字符串，如 "1.5 MB"
  */
 export function formatBytes(bytes: number, decimals: number = 2): string {
-  if (bytes === 0) return '0 Bytes'
+  if (bytes === 0) return '0 B'
 
   const k = 1024
   const dm = decimals < 0 ? 0 : decimals
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
 
   const i = Math.floor(Math.log(bytes) / Math.log(k))
 
@@ -201,9 +179,63 @@ export function formatDateTimeLocalInput(timestampSeconds: number | null): strin
  */
 export function parseDateTimeLocalInput(value: string): number | null {
   if (!value) return null
-  const date = new Date(value)
-  if (isNaN(date.getTime())) return null
-  return Math.floor(date.getTime() / 1000)
+
+  // datetime-local intentionally has no timezone. Parse its components explicitly
+  // so malformed values or timezone-bearing strings are not reinterpreted by Date.parse.
+  const match = /^(\d{4,})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/.exec(value)
+  if (!match) return null
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const hours = Number(match[4])
+  const minutes = Number(match[5])
+  const seconds = match[6] ? Number(match[6]) : 0
+  const milliseconds = match[7]
+    ? Number(match[7].slice(0, 3).padEnd(3, '0'))
+    : 0
+
+  if (
+    !Number.isSafeInteger(year) ||
+    year < 1 ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    hours > 23 ||
+    minutes > 59 ||
+    seconds > 59
+  ) {
+    return null
+  }
+
+  const date = new Date(0)
+  date.setFullYear(year, month - 1, day)
+  date.setHours(hours, minutes, seconds, milliseconds)
+
+  // Date setters normalize calendar overflows (for example, February 30). Keep
+  // the platform's existing DST disambiguation for otherwise valid local times.
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null
+  }
+
+  const timestamp = date.getTime()
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : null
+}
+
+/**
+ * 获取浏览器当前使用的 IANA 时区
+ */
+export function getBrowserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
 }
 
 /**
@@ -237,6 +269,33 @@ export function formatReasoningEffort(effort: string | null | undefined): string
   }
 }
 
+// reasoning_effort 允许 x-high 等兼容写法，比较时统一去掉分隔符。
+export function reasoningEffortValuesEqual(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean {
+  const normalize = (value: string | null | undefined) =>
+    (value ?? '').toString().trim().toLowerCase().replace(/[-_\s]/g, '')
+  const a = normalize(left)
+  const b = normalize(right)
+  return a !== '' && a === b
+}
+
+// 导出时合并请求档位与实际转发档位；两者不同才显示箭头，历史记录只保留旧值。
+export function formatReasoningEffortMapping(
+  requested: string | null | undefined,
+  forwarded: string | null | undefined,
+): string {
+  const requestedLabel = formatReasoningEffort(requested)
+  const forwardedLabel = formatReasoningEffort(forwarded)
+  if (requestedLabel === '-' && forwardedLabel === '-') return '-'
+  if (requestedLabel === '-' || reasoningEffortValuesEqual(requested, forwarded)) {
+    return forwardedLabel === '-' ? requestedLabel : forwardedLabel
+  }
+  if (forwardedLabel === '-') return requestedLabel
+  return `${requestedLabel} → ${forwardedLabel}`
+}
+
 /**
  * 格式化时间（显示时分秒）
  * @param date 日期字符串或 Date 对象
@@ -257,28 +316,32 @@ export function formatTime(date: string | Date | null | undefined): string {
  * @returns 格式化后的字符串，如 "12,345"
  */
 export function formatNumberLocaleString(num: number): string {
-  return num.toLocaleString()
+  return num.toLocaleString(getLocale())
 }
 
 /**
- * 格式化金额（固定小数位，不带货币符号）
- * @param amount 金额
- * @param fractionDigits 小数位数，默认 4
- * @returns 格式化后的字符串，如 "1.2345"
- */
-export function formatCostFixed(amount: number, fractionDigits: number = 4): string {
-  return amount.toFixed(fractionDigits)
-}
-
-/**
- * 格式化 token 数量（>=1M 显示为 M，>=1K 显示为 K，保留 1 位小数）
+ * 格式化 token 数量（小于 1K 四舍五入为整数，K/M 保留 1 位小数）。
  * @param tokens token 数量
  * @returns 格式化后的字符串，如 "950", "1.2K", "3.5M"
  */
 export function formatTokensK(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
   if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}K`
-  return tokens.toString()
+  return Math.round(tokens).toString()
+}
+
+/**
+ * 格式化 token 数量（K/M/B 两位小数，小于 1000 用千分位）
+ * 图表刻度与分布表共用此函数;与 formatTokensK(一位小数、无 B 档)语义不同,不要混用。
+ * @param value token 数量,null/undefined 归一为 "0"
+ * @returns 格式化后的字符串，如 "950", "1.50K", "3.25M", "1.20B"
+ */
+export function formatTokens(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '0'
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`
+  return value.toLocaleString(getLocale())
 }
 
 /**
@@ -344,23 +407,4 @@ export function formatCountdownWithSuffix(targetDate: string | Date | null | und
   const countdown = formatCountdown(targetDate)
   if (!countdown) return null
   return i18n.global.t('common.time.countdown.withSuffix', { time: countdown })
-}
-
-/**
- * 格式化为相对时间 + 具体时间组合
- * @param date 日期字符串或 Date 对象
- * @returns 组合时间字符串，如 "5 天前 · 2026-01-27 15:25"
- */
-export function formatRelativeWithDateTime(date: string | Date | null | undefined): string {
-  if (!date) return ''
-
-  const relativeTime = formatRelativeTime(date)
-  const dateTime = formatDateTime(date)
-
-  // 如果是 "从未" 或空字符串，只返回相对时间
-  if (!dateTime || relativeTime === i18n.global.t('common.time.never')) {
-    return relativeTime
-  }
-
-  return `${relativeTime} · ${dateTime}`
 }

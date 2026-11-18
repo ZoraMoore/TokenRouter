@@ -1,0 +1,79 @@
+<template>
+  <!-- 放在页面标题行；窄屏时标题行换行，宽度按页面内边距封顶，控件在内部继续换行 -->
+  <div class="flex max-w-[calc(100vw-2rem)] flex-wrap items-center gap-2 md:max-w-[calc(100vw-3rem)]">
+    <FilterDropdown :active-count="activeCount" :columns="3" @reset="resetFilters">
+      <FilterField :label="t('usage.apiKeyFilter')">
+        <Select v-model="filters.api_key_id" :options="apiKeyOptions" searchable data-testid="usage-filter-api-key" @change="applyFilters" />
+      </FilterField>
+      <FilterField :label="t('usage.model')">
+        <Select v-model="filters.model" :options="modelOptions" searchable data-testid="usage-filter-model" @change="applyFilters" />
+      </FilterField>
+      <FilterField :label="t('admin.usage.group')">
+        <Select v-model="filters.group_id" :options="groupOptions" searchable data-testid="usage-filter-group" @change="applyFilters" />
+      </FilterField>
+      <FilterField :label="t('usage.type')">
+        <Select v-model="filters.request_type" :options="requestTypeOptions" data-testid="usage-filter-request-type" @change="applyFilters" />
+      </FilterField>
+      <FilterField :label="t('admin.usage.billingType')">
+        <Select v-model="filters.billing_type" :options="billingTypeOptions" data-testid="usage-filter-billing-type" @change="applyFilters" />
+      </FilterField>
+      <FilterField :label="t('admin.usage.billingMode')">
+        <Select v-model="filters.billing_mode" :options="billingModeOptions" data-testid="usage-filter-billing-mode" @change="applyFilters" />
+      </FilterField>
+      <FilterField :label="t('usage.compactionFilter')">
+        <Select v-model="filters.native_compaction_v2" :options="compactionOptions" data-testid="usage-filter-compaction" @change="applyFilters" />
+      </FilterField>
+    </FilterDropdown>
+    <button
+      type="button"
+      class="btn btn-secondary shrink-0 btn-icon"
+      :disabled="refreshing"
+      :title="t('common.refresh')"
+      :aria-label="t('common.refresh')"
+      data-testid="usage-refresh"
+      @click="emit('refresh')"
+    >
+      <Icon name="refresh" size="sm" :class="refreshing ? 'animate-spin' : ''" />
+    </button>
+    <DateRangePicker
+      :start-date="pickerStart"
+      :end-date="pickerEnd"
+      @change="selectCustomRange"
+    />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import FilterDropdown from '@/components/common/FilterDropdown.vue'
+import FilterField from '@/components/common/FilterField.vue'
+import Select from '@/components/common/Select.vue'
+import Icon from '@/components/icons/Icon.vue'
+import { injectUsageChartState } from './usageChartState'
+
+// 刷新范围覆盖整个仪表盘，由页面统一处理。
+defineProps<{ refreshing?: boolean }>()
+const emit = defineEmits<{ (event: 'refresh'): void }>()
+
+const { t } = useI18n()
+const {
+  pickerStart,
+  pickerEnd,
+  filterState,
+  applyFilters,
+  resetFilters,
+  selectCustomRange,
+} = injectUsageChartState()
+const {
+  filters,
+  activeCount,
+  apiKeyOptions,
+  modelOptions,
+  groupOptions,
+  requestTypeOptions,
+  billingTypeOptions,
+  billingModeOptions,
+  compactionOptions,
+} = filterState
+</script>

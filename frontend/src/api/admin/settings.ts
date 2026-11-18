@@ -1,9 +1,11 @@
+import type { LocalizedUpdate } from '@/i18n/content';
 /**
  * 管理员系统设置接口。
  * 负责后台系统设置的读取与保存。
  */
 
 import { apiClient } from "../client";
+import type { CreativeOperation } from "../creative";
 import type {
   CustomEndpoint,
   CustomMenuItem,
@@ -18,6 +20,29 @@ export interface PaymentMethodFeeConfig {
   fee_rate: number;
 }
 
+/** 创作台全局生图模型白名单项。 */
+export interface CreativeModelSetting {
+  group_id: number;
+  model: string;
+  operations: CreativeOperation[];
+}
+
+/** 管理员配置创作台模型时可选择的候选项。 */
+export interface CreativeModelCandidate {
+  group_id: number;
+  group_name: string;
+  platform: string;
+  model: string;
+  operations: CreativeOperation[];
+}
+
+/** 创作台任务 worker 池状态快照。 */
+export interface CreativeWorkerStatus {
+  running: boolean;
+  worker_count: number;
+  busy_workers: number;
+}
+
 export interface DefaultSubscriptionSetting {
   plan_id: number;
 }
@@ -28,28 +53,12 @@ type DefaultSubscriptionInput = Partial<DefaultSubscriptionSetting> & {
   group_id?: number | null;
 };
 
-// ── 平台限额类型 ──────────────────────────────────────────────────
-export type PlatformType = "anthropic" | "openai" | "gemini" | "antigravity" | "qoder" | "grok" | "kimi" | "zhipu" | "deepseek"
-export type QuotaWindowType = "daily" | "weekly" | "monthly"
-
-/** 单平台三档限额；null = 不限制，undefined = 未填（等价 null） */
-export interface PlatformQuotaLimits {
-  daily:   number | null
-  weekly:  number | null
-  monthly: number | null
-}
-
-/** 全平台默认限额 map（key = PlatformType） */
-export type DefaultPlatformQuotasMap = Partial<Record<PlatformType, PlatformQuotaLimits>>
-
-const PLATFORMS: PlatformType[] = ["anthropic", "openai", "gemini", "antigravity", "qoder", "grok", "kimi", "zhipu", "deepseek"]
-
 export type SchedulingThresholdPlatformType = "openai" | "anthropic" | "grok" | "kimi" | "zhipu"
 
-export type AccountSchedulingThresholdsMap = Record<SchedulingThresholdPlatformType, number>
+export type ProviderSchedulingThresholdsMap = Record<SchedulingThresholdPlatformType, number>
 
-// 与后端 AllowedSchedulingThresholdPlatforms 保持一致（deepseek 为余额型，
-// 走余额检测而非用量阈值）。
+// 平台列表与后端 AllowedSchedulingThresholdPlatforms 一致。
+// deepseek 通过余额检测判断可调度状态。
 export const SCHEDULING_THRESHOLD_PLATFORMS: SchedulingThresholdPlatformType[] = [
   "openai",
   "anthropic",
@@ -59,10 +68,10 @@ export const SCHEDULING_THRESHOLD_PLATFORMS: SchedulingThresholdPlatformType[] =
 ]
 
 /** 将各平台自动停调阈值归一化到 1 到 100，100 表示关闭。 */
-export function normalizeAccountSchedulingThresholdsMap(
+export function normalizeProviderSchedulingThresholdsMap(
   input?: Partial<Record<SchedulingThresholdPlatformType, number>> | null,
-): AccountSchedulingThresholdsMap {
-  const result = {} as AccountSchedulingThresholdsMap
+): ProviderSchedulingThresholdsMap {
+  const result = {} as ProviderSchedulingThresholdsMap
   for (const platform of SCHEDULING_THRESHOLD_PLATFORMS) {
     const value = input?.[platform]
     result[platform] = typeof value === "number" && Number.isFinite(value)
@@ -73,35 +82,10 @@ export function normalizeAccountSchedulingThresholdsMap(
 }
 
 /** 保存前清洗各平台自动停调阈值。 */
-export function sanitizeAccountSchedulingThresholdsMap(
+export function sanitizeProviderSchedulingThresholdsMap(
   input?: Partial<Record<SchedulingThresholdPlatformType, number>> | null,
-): AccountSchedulingThresholdsMap {
-  return normalizeAccountSchedulingThresholdsMap(input)
-}
-
-/** 归一化为全平台 × 3 窗口（缺失填 null），供模板非空绑定 */
-export function normalizePlatformQuotasMap(input?: DefaultPlatformQuotasMap | null): DefaultPlatformQuotasMap {
-  const result: DefaultPlatformQuotasMap = {}
-  for (const p of PLATFORMS) {
-    const src = input?.[p]
-    result[p] = {
-      daily:   typeof src?.daily === "number" ? src.daily : null,
-      weekly:  typeof src?.weekly === "number" ? src.weekly : null,
-      monthly: typeof src?.monthly === "number" ? src.monthly : null,
-    }
-  }
-  return result
-}
-
-/** 提交前清洗：非有限数/负数/空字符串 → null（保留 0 = 显式禁用），返回全平台嵌套 map */
-export function sanitizePlatformQuotasMap(input?: DefaultPlatformQuotasMap | null): DefaultPlatformQuotasMap {
-  const clean = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null)
-  const result: DefaultPlatformQuotasMap = {}
-  for (const p of PLATFORMS) {
-    const src = input?.[p]
-    result[p] = { daily: clean(src?.daily), weekly: clean(src?.weekly), monthly: clean(src?.monthly) }
-  }
-  return result
+): ProviderSchedulingThresholdsMap {
+  return normalizeProviderSchedulingThresholdsMap(input)
 }
 
 export type AuthSourceType =
@@ -119,8 +103,6 @@ export interface AuthSourceDefaultsValue {
   subscriptions: DefaultSubscriptionSetting[];
   grant_on_signup: boolean;
   grant_on_first_bind: boolean;
-  // 平台限额覆盖（key = PlatformType）
-  platform_quotas: DefaultPlatformQuotasMap;
 }
 
 export type AuthSourceDefaultsState = Record<
@@ -165,12 +147,6 @@ export interface PaymentVisibleMethodSourceOption {
   labelEn: string;
 }
 
-export interface WeChatConnectModeOption {
-  value: WeChatConnectMode;
-  labelZh: string;
-  labelEn: string;
-}
-
 const AUTH_SOURCE_TYPES: AuthSourceType[] = [
   "email",
   "linuxdo",
@@ -188,7 +164,6 @@ const DEFAULT_AUTH_SOURCE_DEFAULTS: AuthSourceDefaultsValue = {
   subscriptions: [],
   grant_on_signup: false,
   grant_on_first_bind: false,
-  platform_quotas: normalizePlatformQuotasMap(),
 };
 const PAYMENT_VISIBLE_METHOD_SOURCE_OPTIONS: Record<
   PaymentVisibleMethod,
@@ -243,19 +218,6 @@ const PAYMENT_VISIBLE_METHOD_SOURCE_ALIASES: Record<
     easypay: "easypay_wxpay",
   },
 };
-const WECHAT_CONNECT_MODE_OPTIONS: WeChatConnectModeOption[] = [
-  { value: "open", labelZh: "PC 应用", labelEn: "PC App" },
-  {
-    value: "mp",
-    labelZh: "公众号",
-    labelEn: "Official Account",
-  },
-  {
-    value: "mobile",
-    labelZh: "移动应用",
-    labelEn: "Mobile App",
-  },
-];
 const WECHAT_CONNECT_MODE_ALIASES: Record<string, WeChatConnectMode> = {
   open: "open",
   open_platform: "open",
@@ -311,7 +273,6 @@ export function buildAuthSourceDefaultsState(
         raw[`auth_source_default_${source}_grant_on_signup`] === true,
       grant_on_first_bind:
         raw[`auth_source_default_${source}_grant_on_first_bind`] === true,
-      platform_quotas: normalizePlatformQuotasMap(raw[`auth_source_default_${source}_platform_quotas`] as DefaultPlatformQuotasMap | undefined),
     };
     return acc;
   }, {} as AuthSourceDefaultsState);
@@ -340,7 +301,6 @@ export function appendAuthSourceDefaultsToUpdateRequest(
       current.grant_on_signup;
     target[`auth_source_default_${source}_grant_on_first_bind`] =
       current.grant_on_first_bind;
-    target[`auth_source_default_${source}_platform_quotas`] = sanitizePlatformQuotasMap(current.platform_quotas)
   }
 
   return payload;
@@ -362,10 +322,6 @@ export function normalizePaymentVisibleMethodSource(
   if (!normalized) return "";
 
   return PAYMENT_VISIBLE_METHOD_SOURCE_ALIASES[method][normalized] ?? "";
-}
-
-export function getWeChatConnectModeOptions(): WeChatConnectModeOption[] {
-  return WECHAT_CONNECT_MODE_OPTIONS;
 }
 
 export function normalizeWeChatConnectMode(source: unknown): WeChatConnectMode {
@@ -431,13 +387,41 @@ export function deriveWeChatConnectStoredMode(
 /**
  * System settings interface
  */
+/** Responses WS 的有效运行参数及可清除覆盖值。 */
+export interface ResponsesWSParameters {
+  max_conns_per_provider: number;
+  min_idle_per_provider: number;
+  max_idle_per_provider: number;
+  dynamic_max_conns_by_provider_concurrency_enabled: boolean;
+  oauth_max_conns_factor: number;
+  apikey_max_conns_factor: number;
+  queue_limit_per_conn: number;
+  pool_target_utilization: number;
+  prewarm_cooldown_ms: number;
+  client_first_message_timeout_seconds: number;
+  ingress_inter_turn_idle_timeout_seconds: number;
+  max_ingress_connections_per_api_key: number;
+  client_read_limit_bytes: number;
+  http_bridge_threshold_bytes: number;
+  dial_timeout_seconds: number;
+  read_timeout_seconds: number;
+  write_timeout_seconds: number;
+  ingress_previous_response_recovery_enabled: boolean;
+  sticky_session_ttl_seconds: number;
+  sticky_response_id_ttl_seconds: number;
+}
+export type ResponsesWSOverrides = { [K in keyof ResponsesWSParameters]?: ResponsesWSParameters[K] | null };
+
 export interface SystemSettings {
+ responses_ws: ResponsesWSOverrides;
+ responses_ws_effective: ResponsesWSParameters;
   // Registration settings
   registration_enabled: boolean;
   email_verify_enabled: boolean;
   registration_email_suffix_whitelist: string[];
   registration_email_normalization: boolean;
   registration_email_domain_quota_enabled: boolean;
+  user_email_change_enabled: boolean; // 是否允许已有邮箱的用户换绑主邮箱
   promo_code_enabled: boolean;
   password_reset_enabled: boolean;
   frontend_url: string;
@@ -507,24 +491,13 @@ export interface SystemSettings {
   auth_source_default_google_grant_on_first_bind?: boolean;
   force_email_on_third_party_signup?: boolean;
   // ── 平台限额（嵌套 JSON，系统层 + 7 auth-source 层）────────────────────────────────
-  default_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_email_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_linuxdo_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_oidc_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_wechat_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_github_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_google_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_dingtalk_platform_quotas?: DefaultPlatformQuotasMap;
   // OEM settings
+  localized_settings: Record<string, LocalizedUpdate<string>>;
+  site_texts: Record<string, LocalizedUpdate<string>>;
+  default_locale: string;
   site_name: string;
   site_logo: string;
   site_subtitle: string;
-  site_name_zh: string;
-  site_name_en: string;
-  site_title_zh: string;
-  site_title_en: string;
-  site_subtitle_zh: string;
-  site_subtitle_en: string;
   api_base_url: string;
   contact_info: string;
   doc_url: string;
@@ -543,6 +516,7 @@ export interface SystemSettings {
   custom_endpoints: CustomEndpoint[];
   footer_links: FooterLinkGroup[];
   footer_text: string;
+  home_featured_models: string[];
   // SMTP settings
   smtp_host: string;
   smtp_port: number;
@@ -654,11 +628,10 @@ export interface SystemSettings {
   fallback_model_gemini: string;
   fallback_model_antigravity: string;
   grok_default_text_model: string;
-  grok_cross_client_model_map_enabled: boolean;
   grok_default_base_url_mode: string;
 
-  // 各平台账号自动暂停阈值，100 表示禁用。
-  account_scheduling_thresholds: AccountSchedulingThresholdsMap;
+  // 各平台提供商自动暂停阈值，100 表示禁用。
+  provider_scheduling_thresholds: ProviderSchedulingThresholdsMap;
 
   // Identity patch configuration (Claude -> Gemini)
   enable_identity_patch: boolean;
@@ -674,9 +647,9 @@ export interface SystemSettings {
   max_claude_code_version: string;
 
   // 分组隔离
-  allow_ungrouped_key_scheduling: boolean;
 
   // Gateway forwarding behavior
+  openai_ttft_mode: string;
   enable_fingerprint_unification: boolean;
   enable_metadata_passthrough: boolean;
   enable_cch_signing: boolean;
@@ -696,7 +669,9 @@ export interface SystemSettings {
   payment_enabled: boolean;
   // 页面功能开关
   team_enabled: boolean;
-  data_sharing_enabled: boolean;
+  creative_enabled: boolean;
+  creative_model_settings: CreativeModelSetting[];
+  creative_worker_count: number;
   risk_control_enabled: boolean;
   cyber_session_block_enabled: boolean;
   cyber_session_block_ttl_seconds: number;
@@ -727,9 +702,14 @@ export interface SystemSettings {
   payment_visible_method_wxpay_source?: string;
   payment_visible_method_alipay_enabled?: boolean;
   payment_visible_method_wxpay_enabled?: boolean;
-  openai_account_quota_auto_pause?: OpenAIQuotaAutoPauseSettings;
+  openai_provider_quota_auto_pause?: OpenAIQuotaAutoPauseSettings;
   advanced_scheduler_sticky_weighted_enabled?: boolean;
   advanced_scheduler_subscription_priority_enabled?: boolean;
+  advanced_scheduler_ewma_error_rate_alpha?: string;
+  advanced_scheduler_ewma_ttft_alpha?: string;
+  advanced_scheduler_sticky_escape_enabled?: boolean;
+  advanced_scheduler_sticky_escape_ttft_ms?: string;
+  advanced_scheduler_sticky_escape_error_rate?: string;
   advanced_scheduler_lb_top_k?: string;
   advanced_scheduler_weight_priority?: string;
   advanced_scheduler_weight_load?: string;
@@ -750,14 +730,19 @@ export interface SystemSettings {
   advanced_scheduler_effective_weight_quota_headroom?: string;
   advanced_scheduler_effective_weight_previous_response?: string;
   advanced_scheduler_effective_weight_session_sticky?: string;
+  advanced_scheduler_effective_ewma_error_rate_alpha?: string;
+  advanced_scheduler_effective_ewma_ttft_alpha?: string;
+  advanced_scheduler_effective_sticky_escape_enabled?: boolean;
+  advanced_scheduler_effective_sticky_escape_ttft_ms?: string;
+  advanced_scheduler_effective_sticky_escape_error_rate?: string;
 
-  // 余额、订阅到期与账号限额通知
+  // 余额、订阅到期与提供商限额通知
   balance_low_notify_enabled: boolean;
   balance_low_notify_threshold: number;
   balance_low_notify_recharge_url: string;
   subscription_expiry_notify_enabled: boolean;
-  account_quota_notify_enabled: boolean;
-  account_quota_notify_emails: NotifyEmailEntry[];
+  provider_quota_notify_enabled: boolean;
+  provider_quota_notify_emails: NotifyEmailEntry[];
   // OpenAI fast/flex 策略
   openai_fast_policy_settings?: OpenAIFastPolicySettings;
 
@@ -766,11 +751,13 @@ export interface SystemSettings {
 }
 
 export interface UpdateSettingsRequest {
+ responses_ws?: ResponsesWSOverrides | null;
   registration_enabled?: boolean;
   email_verify_enabled?: boolean;
   registration_email_suffix_whitelist?: string[];
   registration_email_normalization?: boolean;
   registration_email_domain_quota_enabled?: boolean;
+  user_email_change_enabled?: boolean; // 是否允许已有邮箱的用户换绑主邮箱
   promo_code_enabled?: boolean;
   password_reset_enabled?: boolean;
   frontend_url?: string;
@@ -838,23 +825,12 @@ export interface UpdateSettingsRequest {
   auth_source_default_google_grant_on_first_bind?: boolean;
   force_email_on_third_party_signup?: boolean;
   // ── 平台限额（嵌套 JSON，系统层 + 7 auth-source 层）────────────────────────────────
-  default_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_email_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_linuxdo_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_oidc_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_wechat_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_github_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_google_platform_quotas?: DefaultPlatformQuotasMap;
-  auth_source_default_dingtalk_platform_quotas?: DefaultPlatformQuotasMap;
+  localized_settings?: Record<string, LocalizedUpdate<string>>;
+  site_texts?: Record<string, LocalizedUpdate<string>>;
+  default_locale?: string;
   site_name?: string;
   site_logo?: string;
   site_subtitle?: string;
-  site_name_zh?: string;
-  site_name_en?: string;
-  site_title_zh?: string;
-  site_title_en?: string;
-  site_subtitle_zh?: string;
-  site_subtitle_en?: string;
   api_base_url?: string;
   contact_info?: string;
   doc_url?: string;
@@ -873,6 +849,8 @@ export interface UpdateSettingsRequest {
   custom_endpoints?: CustomEndpoint[];
   footer_links?: FooterLinkGroup[];
   footer_text?: string;
+  home_featured_models?: string[];
+  creative_model_settings?: CreativeModelSetting[];
   smtp_host?: string;
   smtp_port?: number;
   smtp_username?: string;
@@ -972,9 +950,8 @@ export interface UpdateSettingsRequest {
   fallback_model_gemini?: string;
   fallback_model_antigravity?: string;
   grok_default_text_model?: string;
-  grok_cross_client_model_map_enabled?: boolean;
   grok_default_base_url_mode?: string;
-  account_scheduling_thresholds?: AccountSchedulingThresholdsMap;
+  provider_scheduling_thresholds?: ProviderSchedulingThresholdsMap;
   enable_identity_patch?: boolean;
   identity_patch_prompt?: string;
   ops_monitoring_enabled?: boolean;
@@ -982,7 +959,7 @@ export interface UpdateSettingsRequest {
   ops_metrics_interval_seconds?: number;
   min_claude_code_version?: string;
   max_claude_code_version?: string;
-  allow_ungrouped_key_scheduling?: boolean;
+  openai_ttft_mode?: string;
   enable_fingerprint_unification?: boolean;
   enable_metadata_passthrough?: boolean;
   enable_cch_signing?: boolean;
@@ -1000,7 +977,8 @@ export interface UpdateSettingsRequest {
   payment_enabled?: boolean;
   // 页面功能开关
   team_enabled?: boolean;
-  data_sharing_enabled?: boolean;
+  creative_enabled?: boolean;
+  creative_worker_count?: number;
   risk_control_enabled?: boolean;
   cyber_session_block_enabled?: boolean;
   cyber_session_block_ttl_seconds?: number;
@@ -1031,9 +1009,14 @@ export interface UpdateSettingsRequest {
   payment_visible_method_wxpay_source?: string;
   payment_visible_method_alipay_enabled?: boolean;
   payment_visible_method_wxpay_enabled?: boolean;
-  openai_account_quota_auto_pause?: OpenAIQuotaAutoPauseSettings;
+  openai_provider_quota_auto_pause?: OpenAIQuotaAutoPauseSettings;
   advanced_scheduler_sticky_weighted_enabled?: boolean;
   advanced_scheduler_subscription_priority_enabled?: boolean;
+  advanced_scheduler_ewma_error_rate_alpha?: string;
+  advanced_scheduler_ewma_ttft_alpha?: string;
+  advanced_scheduler_sticky_escape_enabled?: boolean;
+  advanced_scheduler_sticky_escape_ttft_ms?: string;
+  advanced_scheduler_sticky_escape_error_rate?: string;
   advanced_scheduler_lb_top_k?: string;
   advanced_scheduler_weight_priority?: string;
   advanced_scheduler_weight_load?: string;
@@ -1044,13 +1027,13 @@ export interface UpdateSettingsRequest {
   advanced_scheduler_weight_quota_headroom?: string;
   advanced_scheduler_weight_previous_response?: string;
   advanced_scheduler_weight_session_sticky?: string;
-  // 余额、订阅到期与账号限额通知
+  // 余额、订阅到期与提供商限额通知
   balance_low_notify_enabled?: boolean;
   balance_low_notify_threshold?: number;
   balance_low_notify_recharge_url?: string;
   subscription_expiry_notify_enabled?: boolean;
-  account_quota_notify_enabled?: boolean;
-  account_quota_notify_emails?: NotifyEmailEntry[];
+  provider_quota_notify_enabled?: boolean;
+  provider_quota_notify_emails?: NotifyEmailEntry[];
   // OpenAI fast/flex 策略
   openai_fast_policy_settings?: OpenAIFastPolicySettings;
 
@@ -1063,6 +1046,22 @@ export interface UpdateSettingsRequest {
  */
 export async function getSettings(): Promise<SystemSettings> {
   const { data } = await apiClient.get<SystemSettings>("/admin/settings");
+  return data;
+}
+
+/** 获取不受当前用户分组权限限制的创作台模型候选。 */
+export async function getCreativeModelCandidates(): Promise<CreativeModelCandidate[]> {
+  const { data } = await apiClient.get<CreativeModelCandidate[]>(
+    "/admin/settings/creative-model-candidates",
+  );
+  return Array.isArray(data) ? data : [];
+}
+
+/** 获取创作台任务 worker 池状态快照，用于展示当前 worker 使用情况。 */
+export async function getCreativeWorkerStatus(): Promise<CreativeWorkerStatus> {
+  const { data } = await apiClient.get<CreativeWorkerStatus>(
+    "/admin/settings/creative-worker-status",
+  );
   return data;
 }
 
@@ -1335,40 +1334,6 @@ export async function updateOpenAI403CooldownSettings(
   return data
 }
 
-// ==================== OpenAI OAuth Import Defaults ====================
-
-export interface OpenAIOAuthImportAccountDefaults {
-  notes?: string | null
-  concurrency?: number | null
-  priority?: number | null
-  rate_multiplier?: number | null
-  expires_at?: number | null
-  auto_pause_on_expired?: boolean | null
-}
-
-export interface OpenAIOAuthImportDefaults {
-  account?: OpenAIOAuthImportAccountDefaults
-  credentials?: Record<string, unknown>
-  extra?: Record<string, unknown>
-}
-
-export async function getOpenAIOAuthImportDefaults(): Promise<OpenAIOAuthImportDefaults> {
-  const { data } = await apiClient.get<OpenAIOAuthImportDefaults>(
-    '/admin/settings/openai-oauth-import-defaults'
-  )
-  return data
-}
-
-export async function updateOpenAIOAuthImportDefaults(
-  defaults: OpenAIOAuthImportDefaults
-): Promise<OpenAIOAuthImportDefaults> {
-  const { data } = await apiClient.put<OpenAIOAuthImportDefaults>(
-    '/admin/settings/openai-oauth-import-defaults',
-    defaults
-  )
-  return data
-}
-
 // ==================== 429 Rate Limit Cooldown Settings ====================
 
 export interface RateLimit429CooldownSettings {
@@ -1509,13 +1474,13 @@ export async function updateRectifierSettings(
  * Matches backend dto.OpenAIFastPolicyRule.
  */
 export interface OpenAIFastPolicyRule {
-  service_tier: "all" | "priority" | "flex";
-  action: "pass" | "filter" | "block" | "force_priority";
+  service_tier: "all" | "priority" | "flex" | "ultrafast";
+  action: "pass" | "filter" | "block" | "force_priority" | "force_ultrafast";
   scope: "all" | "oauth" | "apikey" | "bedrock";
   user_ids?: number[];
   error_message?: string;
   model_whitelist?: string[];
-  fallback_action?: "pass" | "filter" | "block" | "force_priority";
+  fallback_action?: "pass" | "filter" | "block" | "force_priority" | "force_ultrafast";
   fallback_error_message?: string;
 }
 
@@ -1704,6 +1669,8 @@ export async function backfillPreAggregation(days: number): Promise<{ status: st
 
 export const settingsAPI = {
   getSettings,
+  getCreativeModelCandidates,
+  getCreativeWorkerStatus,
   updateSettings,
   testSmtpConnection,
   sendTestEmail,
@@ -1719,8 +1686,6 @@ export const settingsAPI = {
   updateOverloadCooldownSettings,
   getOpenAI403CooldownSettings,
   updateOpenAI403CooldownSettings,
-  getOpenAIOAuthImportDefaults,
-  updateOpenAIOAuthImportDefaults,
   getRateLimit429CooldownSettings,
   updateRateLimit429CooldownSettings,
   getPanelRateLimitSettings,

@@ -1,6 +1,6 @@
 <template>
   <AppLayout>
-    <div class="space-y-6">
+    <div class="space-y-4">
       <UsageStatsCards :stats="usageStats" />
       <!-- Charts Section -->
       <div class="space-y-4">
@@ -22,7 +22,8 @@
             </div>
           </div>
         </div>
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <!-- 按请求 ID 筛选时只看统计卡和表格，分布图和趋势图隐藏 -->
+        <div v-if="!filters.request_id" class="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <ModelDistributionChart
             v-model:source="modelDistributionSource"
             v-model:metric="modelDistributionMetric"
@@ -40,13 +41,14 @@
             v-model:metric="groupDistributionMetric"
             :group-stats="groupStats"
             :loading="chartsLoading"
+            chart-type="bar"
             :show-metric-toggle="true"
             :start-date="startDate"
             :end-date="endDate"
             :filters="breakdownFilters"
           />
         </div>
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div v-if="!filters.request_id" class="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <EndpointDistributionChart
             v-model:source="endpointDistributionSource"
             v-model:metric="endpointDistributionMetric"
@@ -54,6 +56,7 @@
             :upstream-endpoint-stats="upstreamEndpointStats"
             :endpoint-path-stats="endpointPathStats"
             :loading="endpointStatsLoading"
+            chart-type="bar"
             :show-source-toggle="true"
             :show-metric-toggle="true"
             :title="t('usage.endpointDistribution')"
@@ -72,7 +75,7 @@
             :key="tab.key"
             type="button"
             data-testid="usage-detail-tab"
-            class="-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4"
+            class="-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-3 py-1.5 text-sm font-medium transition-colors sm:px-4"
             :class="activeTab === tab.key
               ? 'border-primary-500 text-primary-600 dark:text-primary-400'
               : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-dark-500 dark:hover:text-gray-200'"
@@ -95,40 +98,46 @@
               <button
                 type="button"
                 @click="showColumnDropdown = !showColumnDropdown"
-                class="btn btn-secondary h-11 w-11 shrink-0 p-0"
+                class="btn btn-secondary shrink-0 btn-icon"
                 :aria-label="t('admin.users.columnSettings')"
                 :title="t('admin.users.columnSettings')"
               >
                 <Icon name="grid" size="sm" />
                 <span class="hidden">{{ t('admin.users.columnSettings') }}</span>
               </button>
-              <div
-                v-if="showColumnDropdown"
-                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800"
-              >
-                <button
-                  v-for="col in currentToggleableColumns"
-                  :key="col.key"
-                  @click="toggleCurrentColumn(col.key)"
-                  class="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+              <MotionTransition name="dropdown-fade">
+                <div
+                  v-if="showColumnDropdown" :inert="!(showColumnDropdown) || undefined"
+                  class="dropdown right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto"
                 >
-                  <span>{{ col.label }}</span>
-                  <Icon
-                    v-if="isCurrentColumnVisible(col.key)"
-                    name="check"
-                    size="sm"
-                    class="text-primary-500"
-                    :stroke-width="2"
-                  />
-                </button>
-              </div>
+                  <button
+                    v-for="col in currentToggleableColumns"
+                    :key="col.key"
+                    @click="toggleCurrentColumn(col.key)"
+                    class="dropdown-item justify-between"
+                  >
+                    <span>{{ col.label }}</span>
+                    <Icon
+                      v-if="isCurrentColumnVisible(col.key)"
+                      name="check"
+                      size="sm"
+                      class="text-primary-500"
+                      :stroke-width="2"
+                      :animate-on-hover="false"
+                    />
+                  </button>
+                </div>
+              </MotionTransition>
             </div>
           </template>
         </UsageFilters>
       </div>
 
-      <div v-show="activeTab === 'usage'" class="space-y-4" data-testid="admin-usage-table-section">
+      <!-- 表格与分页共用外框，底部分隔线和圆角由卡片统一收口。 -->
+      <div v-show="activeTab === 'usage'" v-content-reveal="activeTab === 'usage'" class="card overflow-hidden" data-testid="admin-usage-table-section">
         <UsageTable
+          flat
+          column-order-storage-key="admin-usage-column-order"
           :data="usageLogs"
           :loading="loading"
           :columns="visibleColumns"
@@ -143,7 +152,7 @@
         <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
       </div>
 
-      <div v-show="activeTab === 'errors'" data-testid="admin-usage-errors-section">
+      <div v-show="activeTab === 'errors'" v-content-reveal="activeTab === 'errors'" data-testid="admin-usage-errors-section">
         <OpsErrorLogTable
           :rows="errRows" :total="errTotal" :loading="errLoading"
           :page="errPage" :page-size="errPageSize"
@@ -189,6 +198,9 @@
 </template>
 
 <script setup lang="ts">
+import MotionTransition from '@/components/common/MotionTransition.vue'
+import { vContentReveal } from '@/directives/contentReveal'
+
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { saveAs } from 'file-saver'
@@ -197,6 +209,7 @@ import { useAppStore } from '@/stores/app'; import { adminAPI } from '@/api/admi
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
+import { calculateUsageTps } from '@/utils/usageTps'
 import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination from '@/components/common/Pagination.vue'; import Select from '@/components/common/Select.vue'; import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageExportProgress from '@/components/admin/usage/UsageExportProgress.vue'
@@ -234,10 +247,16 @@ const endpointDistributionSource = ref<EndpointSource>('inbound')
 const inboundEndpointStats = ref<EndpointStat[]>([])
 const upstreamEndpointStats = ref<EndpointStat[]>([])
 const endpointPathStats = ref<EndpointStat[]>([])
-const endpointStatsLoading = ref(false)
+const inboundEndpointLoading = ref(false)
+const rawEndpointLoading = ref(false)
+const endpointStatsLoading = computed(() => endpointDistributionSource.value === 'inbound' ? inboundEndpointLoading.value : rawEndpointLoading.value)
+const loadedRawEndpoints = reactive({ upstream: false, path: false })
+let endpointReqSeq = 0
+let endpointAbortController: AbortController | null = null
 let abortController: AbortController | null = null; let exportAbortController: AbortController | null = null
 let chartReqSeq = 0
 let statsReqSeq = 0
+let statsAbortController: AbortController | null = null
 let modelStatsReqSeq = 0
 const exportProgress = reactive({ show: false, progress: 0, current: 0, total: 0, estimatedTime: '' })
 const cleanupDialogVisible = ref(false)
@@ -249,10 +268,11 @@ const breakdownFilters = computed(() => {
   const f: Record<string, any> = {}
   if (filters.value.user_id) f.user_id = filters.value.user_id
   if (filters.value.api_key_id) f.api_key_id = filters.value.api_key_id
-  if (filters.value.account_id) f.account_id = filters.value.account_id
+  if (filters.value.provider_id) f.provider_id = filters.value.provider_id
   if (filters.value.group_id) f.group_id = filters.value.group_id
   if (filters.value.team_id) f.team_id = filters.value.team_id
   if (filters.value.request_type != null) f.request_type = filters.value.request_type
+  if (filters.value.native_compaction_v2 != null) f.native_compaction_v2 = filters.value.native_compaction_v2
   if (filters.value.billing_type != null) f.billing_type = filters.value.billing_type
   return f
 })
@@ -308,7 +328,9 @@ const getGranularityForRange = (start: string, end: string): 'day' | 'hour' => {
 }
 const defaultRange = getLast24HoursRangeDates()
 const startDate = ref(defaultRange.start); const endDate = ref(defaultRange.end)
-const filters = ref<AdminUsageQueryParams>({ user_id: undefined, model: undefined, group_id: undefined, request_type: undefined, billing_type: null, start_date: startDate.value, end_date: endDate.value })
+// 按请求 ID 查询时不带日期范围，保留期内的记录都能查到。
+const requestDateParams = () => filters.value.request_id ? { start_date: undefined, end_date: undefined } : {}
+const filters = ref<AdminUsageQueryParams>({ user_id: undefined, model: undefined, group_id: undefined, request_type: undefined, billing_type: null, native_compaction_v2: null, start_date: startDate.value, end_date: endDate.value })
 const pagination = reactive({ page: 1, page_size: getPersistedPageSize(), total: 0 })
 const sortState = reactive({
   sort_by: 'created_at',
@@ -393,6 +415,7 @@ const buildUsageListParams = (
     page_size: pageSize,
     exact_total: exactTotal,
     ...filters.value,
+    ...requestDateParams(),
     stream: legacyStream === null ? undefined : legacyStream,
     sort_by: sortState.sort_by,
     sort_order: sortState.sort_order
@@ -409,30 +432,65 @@ const loadLogs = async () => {
     if(!c.signal.aborted) { usageLogs.value = res.items; pagination.total = res.total }
   } catch (error: any) { if(error?.name !== 'AbortError') console.error('Failed to load usage logs:', error) } finally { if(abortController === c) loading.value = false }
 }
-const loadStats = async (force = false) => {
-  const seq = ++statsReqSeq
-  endpointStatsLoading.value = true
+// 摘要默认读取入站端点，原始端点图随当前选项加载。
+const statsParams = (source: EndpointSource, force: boolean) => {
+  const requestType = filters.value.request_type
+  const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
+  return {
+    ...filters.value,
+    ...requestDateParams(),
+    stream: legacyStream === null ? undefined : legacyStream,
+    endpoint_source: source,
+    ...(force ? { nocache: 1 } : {}),
+  }
+}
+
+const loadEndpointStats = async (source: EndpointSource, force = false) => {
+  endpointAbortController?.abort()
+  const seq = ++endpointReqSeq
+  if (source === 'inbound' || (!force && loadedRawEndpoints[source])) {
+    rawEndpointLoading.value = false
+    return
+  }
+  const controller = new AbortController()
+  endpointAbortController = controller
+  rawEndpointLoading.value = true
   try {
-    const requestType = filters.value.request_type
-    const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
-    const s = await adminAPI.usage.getStats({
-      ...filters.value,
-      stream: legacyStream === null ? undefined : legacyStream,
-      ...(force ? { nocache: 1 } : {}),
-    })
+    const response = await adminAPI.usage.getStats(statsParams(source, force), { signal: controller.signal })
+    if (seq !== endpointReqSeq || controller.signal.aborted) return
+    if (source === 'upstream') upstreamEndpointStats.value = response.upstream_endpoints || []
+    else endpointPathStats.value = response.endpoint_paths || []
+    loadedRawEndpoints[source] = true
+  } catch (error) {
+    if (seq !== endpointReqSeq || controller.signal.aborted) return
+    console.error('加载端点统计失败:', error)
+  } finally {
+    if (seq === endpointReqSeq) rawEndpointLoading.value = false
+  }
+}
+
+const loadStats = async (force = false) => {
+  statsAbortController?.abort()
+  const controller = new AbortController()
+  statsAbortController = controller
+  const seq = ++statsReqSeq
+  loadedRawEndpoints.upstream = false
+  loadedRawEndpoints.path = false
+  upstreamEndpointStats.value = []
+  endpointPathStats.value = []
+  void loadEndpointStats(endpointDistributionSource.value, force)
+  inboundEndpointLoading.value = true
+  try {
+    const response = await adminAPI.usage.getStats(statsParams('inbound', force), { signal: controller.signal })
     if (seq !== statsReqSeq) return
-    usageStats.value = s
-    inboundEndpointStats.value = s.endpoints || []
-    upstreamEndpointStats.value = s.upstream_endpoints || []
-    endpointPathStats.value = s.endpoint_paths || []
+    usageStats.value = response
+    inboundEndpointStats.value = response.endpoints || []
   } catch (error) {
     if (seq !== statsReqSeq) return
-    console.error('Failed to load usage stats:', error)
+    console.error('加载用量统计失败:', error)
     inboundEndpointStats.value = []
-    upstreamEndpointStats.value = []
-    endpointPathStats.value = []
   } finally {
-    if (seq === statsReqSeq) endpointStatsLoading.value = false
+    if (seq === statsReqSeq) inboundEndpointLoading.value = false
   }
 }
 
@@ -459,12 +517,13 @@ const loadModelStats = async (source: ModelDistributionSource, force = false) =>
       user_id: filters.value.user_id,
       model: filters.value.model,
       api_key_id: filters.value.api_key_id,
-      account_id: filters.value.account_id,
+      provider_id: filters.value.provider_id,
       group_id: filters.value.group_id,
       team_id: filters.value.team_id,
       request_type: requestType,
       stream: legacyStream === null ? undefined : legacyStream,
       billing_type: filters.value.billing_type,
+      native_compaction_v2: filters.value.native_compaction_v2,
     }
 
     const response = await adminAPI.dashboard.getModelStats({ ...baseParams, model_source: source })
@@ -497,6 +556,7 @@ const loadModelStats = async (source: ModelDistributionSource, force = false) =>
 }
 
 const loadChartData = async () => {
+  if (filters.value.request_id) return
   const seq = ++chartReqSeq
   chartsLoading.value = true
   try {
@@ -509,12 +569,13 @@ const loadChartData = async () => {
       user_id: filters.value.user_id,
       model: filters.value.model,
       api_key_id: filters.value.api_key_id,
-      account_id: filters.value.account_id,
+      provider_id: filters.value.provider_id,
       group_id: filters.value.group_id,
       team_id: filters.value.team_id,
       request_type: requestType,
       stream: legacyStream === null ? undefined : legacyStream,
       billing_type: filters.value.billing_type,
+      native_compaction_v2: filters.value.native_compaction_v2,
       include_stats: false,
       include_trend: true,
       include_model_stats: false,
@@ -553,7 +614,7 @@ const resetFilters = () => {
   const range = getLast24HoursRangeDates()
   startDate.value = range.start
   endDate.value = range.end
-  filters.value = { start_date: startDate.value, end_date: endDate.value, request_type: undefined, billing_type: null, billing_mode: undefined }
+  filters.value = { start_date: startDate.value, end_date: endDate.value, request_type: undefined, billing_type: null, native_compaction_v2: null, billing_mode: undefined }
   granularity.value = getGranularityForRange(startDate.value, endDate.value)
   applyFilters()
 }
@@ -586,7 +647,7 @@ const formatDetailedTimingForExport = (row: AdminUsageLog): string => {
   const timing = row.detailed_timing
   if (!timing) return ''
   const stages: Array<[string, number | null | undefined]> = [
-    ['slot', timing.account_slot_acquired_ms],
+    ['slot', timing.provider_slot_acquired_ms],
     ['get_conn', timing.upstream_get_conn_ms],
     ['got_conn', timing.upstream_got_conn_ms],
     ['write', timing.upstream_wrote_request_ms],
@@ -611,18 +672,19 @@ const exportToExcel = async () => {
     const XLSX = await import('xlsx')
     const headers = [
       t('usage.time'), t('admin.usage.user'), t('usage.apiKeyFilter'),
-      t('admin.usage.account'), t('usage.model'), t('usage.upstreamModel'), t('usage.reasoningEffort'), t('admin.usage.group'),
+      t('admin.usage.provider'), t('usage.model'), t('usage.upstreamModel'), t('usage.upstreamResponseModel'), t('usage.upstreamModelMismatch'), t('usage.requestedReasoningEffort'), t('usage.reasoningEffort'), t('admin.usage.group'),
       t('usage.inboundEndpoint'), t('usage.upstreamEndpoint'),
       t('usage.type'),
       t('admin.usage.inputTokens'), t('admin.usage.outputTokens'),
       t('admin.usage.cacheReadTokens'), t('admin.usage.cacheCreationTokens'),
       t('admin.usage.inputCost'), t('admin.usage.outputCost'),
       t('admin.usage.cacheReadCost'), t('admin.usage.cacheCreationCost'),
-      t('usage.rate'), t('usage.accountMultiplier'), t('usage.original'), t('usage.userBilled'), t('usage.accountBilled'),
-      t('usage.firstToken'), t('usage.duration'), t('usage.detailedTiming'),
-      t('admin.usage.requestId'), t('usage.userAgent'), t('admin.usage.ipAddress')
+      t('usage.rate'), t('usage.providerMultiplier'), t('usage.original'), t('usage.userBilled'), t('usage.providerBilled'),
+      t('usage.firstToken'), t('usage.duration'), t('usage.tpsExport'), t('usage.detailedTiming'),
+      t('admin.usage.requestId'), t('admin.usage.upstreamRequestId'), t('usage.userAgent'), t('admin.usage.ipAddress')
     ]
     const ws = XLSX.utils.aoa_to_sheet([headers])
+    const tpsColumn = headers.indexOf(t('usage.tpsExport'))
     while (true) {
       const res = await adminUsageAPI.list(
         buildUsageListParams(p, 100, true),
@@ -630,20 +692,26 @@ const exportToExcel = async () => {
       )
       if (c.signal.aborted) break; if (p === 1) { total = res.total; exportProgress.total = total }
       const rows = (res.items || []).map((log: AdminUsageLog) => [
-        log.created_at, log.user?.email || '', log.api_key?.name || '', log.account?.name || '', log.model,
-        log.upstream_model || '', formatReasoningEffort(log.reasoning_effort), log.group?.name || '',
+        log.created_at, log.user?.email || '', log.api_key?.name || '', log.provider?.name || '', log.model,
+        log.upstream_model || '', log.upstream_response_model || '', log.upstream_model_mismatch == null ? '' : t(log.upstream_model_mismatch ? 'common.yes' : 'common.no'), formatReasoningEffort(log.requested_reasoning_effort || log.reasoning_effort), formatReasoningEffort(log.reasoning_effort), log.group?.name || '',
         log.inbound_endpoint || '', log.upstream_endpoint || '', getRequestTypeLabel(log),
         log.input_tokens, log.output_tokens, log.cache_read_tokens, log.cache_creation_tokens,
         log.input_cost?.toFixed(6) || '0.000000', log.output_cost?.toFixed(6) || '0.000000',
         log.cache_read_cost?.toFixed(6) || '0.000000', log.cache_creation_cost?.toFixed(6) || '0.000000',
-        log.rate_multiplier?.toPrecision(4) || '1.00', (log.account_rate_multiplier ?? 1).toPrecision(4),
+        log.rate_multiplier?.toPrecision(4) || '1.00', (log.provider_rate_multiplier ?? 1).toPrecision(4),
         log.total_cost?.toFixed(6) || '0.000000', log.actual_cost?.toFixed(6) || '0.000000',
-        ((log.account_stats_cost ?? log.total_cost) * (log.account_rate_multiplier ?? 1)).toFixed(6), log.first_token_ms ?? '', log.duration_ms,
+        ((log.provider_stats_cost ?? log.total_cost) * (log.provider_rate_multiplier ?? 1)).toFixed(6), log.first_token_ms ?? '', log.duration_ms,
+        calculateUsageTps(log) ?? '',
         formatDetailedTimingForExport(log),
-        log.request_id || '', log.user_agent || '', log.ip_address || ''
+        log.request_id || '', log.upstream_request_id || '', log.user_agent || '', log.ip_address || ''
       ])
       if (rows.length) {
         XLSX.utils.sheet_add_aoa(ws, rows, { origin: -1 })
+        // 每批追加后设置 TPS 的显示精度，单元格保存可用于计算的数值。
+        for (let index = 0; index < rows.length; index++) {
+          const cell = ws[XLSX.utils.encode_cell({ r: exportedCount + index + 1, c: tpsColumn })]
+          if (cell?.t === 'n') cell.z = '0.0'
+        }
       }
       exportedCount += rows.length
       exportProgress.current = exportedCount
@@ -662,15 +730,16 @@ const exportToExcel = async () => {
 
 // Column visibility
 const ALWAYS_VISIBLE = ['user', 'created_at']
-const DEFAULT_HIDDEN_COLUMNS = ['reasoning_effort', 'request_id', 'user_agent']
+const DEFAULT_HIDDEN_COLUMNS = ['reasoning_effort', 'upstream_request_id', 'user_agent']
 const HIDDEN_COLUMNS_KEY = 'usage-hidden-columns'
 const HIDDEN_COLUMNS_VERSION_KEY = 'usage-hidden-columns-version'
-const HIDDEN_COLUMNS_CURRENT_VERSION = 'request-id-hidden-by-default'
+// 隐藏列按版本逐级升级，每级将新增列加入隐藏集，用户打开的既有列保持可见。
+const HIDDEN_COLUMNS_CURRENT_VERSION = 'upstream-request-id-hidden-by-default'
 
 const allColumns = computed(() => [
   { key: 'user', label: t('admin.usage.user'), sortable: false, class: 'w-36 min-w-36 max-w-36' },
   { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
-  { key: 'account', label: t('admin.usage.account'), sortable: false },
+  { key: 'provider', label: t('admin.usage.provider'), sortable: false },
   { key: 'model', label: t('usage.model'), sortable: true },
   { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
   { key: 'endpoint', label: t('usage.endpoint'), sortable: false },
@@ -680,8 +749,10 @@ const allColumns = computed(() => [
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
   { key: 'latency', label: t('usage.latency'), sortable: false },
+  { key: 'tps', label: t('usage.tps'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'request_id', label: t('admin.usage.requestId'), sortable: false },
+  { key: 'upstream_request_id', label: t('admin.usage.upstreamRequestId'), sortable: false },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
   { key: 'ip_address', label: t('admin.usage.ipAddress'), sortable: false }
 ])
@@ -723,7 +794,7 @@ const ERR_HIDDEN_COLUMNS_KEY = 'usage-error-hidden-columns'
 const errAllColumns = computed(() => [
   { key: 'user', label: t('admin.ops.errorLog.user') },
   { key: 'api_key', label: t('admin.ops.errorLog.apiKey') },
-  { key: 'account', label: t('admin.ops.errorLog.account') },
+  { key: 'provider', label: t('admin.ops.errorLog.provider') },
   { key: 'platform', label: t('admin.ops.errorLog.platform') },
   { key: 'model', label: t('admin.ops.errorLog.model') },
   { key: 'endpoint', label: t('admin.ops.errorLog.endpoint') },
@@ -789,9 +860,10 @@ const loadSavedColumns = () => {
       (JSON.parse(saved) as string[]).forEach((key) => {
         hiddenColumns.add(key)
       })
-      // 升级旧偏好时只追加新列的默认隐藏状态，保留管理员原有选择。
-      if (localStorage.getItem(HIDDEN_COLUMNS_VERSION_KEY) !== HIDDEN_COLUMNS_CURRENT_VERSION) {
-        hiddenColumns.add('request_id')
+      // 升级列偏好时追加新列的默认隐藏状态，已有列使用管理员保存的选择。
+      const savedVersion = localStorage.getItem(HIDDEN_COLUMNS_VERSION_KEY)
+      if (savedVersion !== HIDDEN_COLUMNS_CURRENT_VERSION) {
+        hiddenColumns.add('upstream_request_id')
         localStorage.setItem(HIDDEN_COLUMNS_KEY, JSON.stringify([...hiddenColumns]))
         localStorage.setItem(HIDDEN_COLUMNS_VERSION_KEY, HIDDEN_COLUMNS_CURRENT_VERSION)
       }
@@ -837,7 +909,7 @@ const errSortOrder = ref<'asc' | 'desc'>('desc')
 const showErrorModal = ref(false)
 const selectedErrorId = ref<number | null>(null)
 
-// 注意：'YYYY-MM-DDT00:00:00' 无时区后缀，按本地时区解析后再转 UTC——与页面其它日期处理语义一致，刻意如此，勿改成 'T00:00:00Z'
+// 日期字符串省略时区后缀，先按本地时区解析，再转为 UTC，与页面其它日期处理一致。
 const toRFC3339 = (d: string | undefined, endOfDay = false): string | undefined =>
   d ? new Date(d + (endOfDay ? 'T23:59:59.999' : 'T00:00:00')).toISOString() : undefined
 
@@ -848,11 +920,12 @@ const loadAdminErrors = async () => {
       page: errPage.value,
       page_size: errPageSize.value,
       view: 'all',
-      start_time: toRFC3339(filters.value.start_date),
-      end_time: toRFC3339(filters.value.end_date, true),
+      request_id: filters.value.request_id || undefined,
+      start_time: filters.value.request_id ? undefined : toRFC3339(filters.value.start_date),
+      end_time: filters.value.request_id ? undefined : toRFC3339(filters.value.end_date, true),
       user_id: filters.value.user_id ?? undefined,
       api_key_id: filters.value.api_key_id ?? undefined,
-      account_id: filters.value.account_id ?? undefined,
+      provider_id: filters.value.provider_id ?? undefined,
       group_id: filters.value.group_id ?? undefined,
       model: filters.value.model || undefined,
       phase: filters.value.error_phase || undefined,
@@ -903,7 +976,17 @@ onMounted(() => {
   loadSavedErrColumns()
   document.addEventListener('click', handleColumnClickOutside)
 })
-onUnmounted(() => { abortController?.abort(); exportAbortController?.abort(); document.removeEventListener('click', handleColumnClickOutside) })
+watch(endpointDistributionSource, (source) => { void loadEndpointStats(source) })
+
+onUnmounted(() => {
+  statsReqSeq += 1
+  endpointReqSeq += 1
+  statsAbortController?.abort()
+  endpointAbortController?.abort()
+  abortController?.abort()
+  exportAbortController?.abort()
+  document.removeEventListener('click', handleColumnClickOutside)
+})
 
 watch(modelDistributionSource, (source) => {
   void loadModelStats(source)

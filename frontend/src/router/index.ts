@@ -1,5 +1,5 @@
 /**
- * Vue Router configuration for Sub2API frontend
+ * Vue Router configuration for TokenRouter frontend
  * Defines all application routes with lazy loading and navigation guards
  */
 
@@ -7,11 +7,15 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
-import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
+import { installNavigationLoading } from './navigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
+import { initializeTfCliImportSession } from '@/utils/tfCliImport'
+
+// 登录守卫读取 fullPath 前移除一次性会话 secret，重定向参数使用清理后的路径。
+initializeTfCliImportSession()
 
 /**
  * Route definitions with lazy loading
@@ -252,6 +256,21 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/creative',
+    name: 'CreativeStudio',
+    component: () => import('@/views/user/CreativeStudioView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      requiresCreative: true,
+      title: 'Creative',
+      titleKey: 'creative.title',
+      descriptionKey: 'creative.description',
+      hidePageHeading: true,
+      hideSidebar: true
+    }
+  },
+  {
     path: '/usage',
     name: 'Usage',
     component: () => import('@/views/user/UsageView.vue'),
@@ -261,17 +280,6 @@ const routes: RouteRecordRaw[] = [
       title: 'Usage Records',
       titleKey: 'usage.title',
       descriptionKey: 'usage.description'
-    }
-  },
-  {
-    path: '/data-sharing',
-    name: 'DataSharing',
-    component: () => import('@/views/user/DataSharingView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: false,
-      title: '数据共享',
-      requiresDataSharing: true
     }
   },
   {
@@ -513,15 +521,21 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/admin/channels',
-    name: 'AdminChannels',
-    component: () => import('@/views/admin/ChannelsView.vue'),
+    path: '/admin/model-attributes',
+    name: 'AdminModelAttributes',
+    component: () => import('@/views/admin/ModelAttributesView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Model Attributes', titleKey: 'admin.modelAttributes.title', descriptionKey: 'admin.modelAttributes.description' }
+  },
+  {
+    path: '/admin/pricing',
+    name: 'AdminPricing',
+    component: () => import('@/views/admin/PricingView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
-      title: 'Channel Management',
-      titleKey: 'admin.channels.title',
-      descriptionKey: 'admin.channels.description'
+      title: 'Price Management',
+      titleKey: 'admin.pricing.title',
+      descriptionKey: 'admin.pricing.description'
     }
   },
   {
@@ -531,21 +545,21 @@ const routes: RouteRecordRaw[] = [
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
-      title: 'Subscription Management',
+      title: 'User Subscriptions',
       titleKey: 'admin.subscriptions.title',
       descriptionKey: 'admin.subscriptions.description'
     }
   },
   {
-    path: '/admin/accounts',
-    name: 'AdminAccounts',
-    component: () => import('@/views/admin/AccountsView.vue'),
+    path: '/admin/providers',
+    name: 'AdminProviders',
+    component: () => import('@/views/admin/ProvidersView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
-      title: 'Account Management',
-      titleKey: 'admin.accounts.title',
-      descriptionKey: 'admin.accounts.description'
+      title: 'Provider Management',
+      titleKey: 'admin.providers.title',
+      descriptionKey: 'admin.providers.description'
     }
   },
   {
@@ -635,14 +649,15 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/admin/data-sharing',
-    name: 'AdminDataSharing',
-    component: () => import('@/views/admin/DataSharingView.vue'),
+    path: '/admin/requests',
+    name: 'AdminRequests',
+    component: () => import('@/views/RequestsView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
-      title: '数据共享',
-      requiresDataSharing: true
+      title: 'Request Lookup',
+      titleKey: 'requests.title',
+      descriptionKey: 'requests.description'
     }
   },
   {
@@ -693,7 +708,6 @@ const routes: RouteRecordRaw[] = [
       requiresAffiliate: true
     }
   },
-
 
   // ==================== Payment Admin Routes ====================
   {
@@ -768,8 +782,8 @@ const router = createRouter({
  */
 let authInitialized = false
 
-// 初始化导航加载状态和预加载
-const navigationLoading = useNavigationLoadingState()
+// 在鉴权守卫之前安装进度反馈，覆盖重定向和异步路由加载。
+installNavigationLoading(router)
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
 // 后端模式下这些公开页面仍需直达访问，模型广场属于公开入口。
@@ -803,9 +817,6 @@ function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: bo
 }
 
 router.beforeEach(async (to, _from, next) => {
-  // 开始导航加载状态
-  navigationLoading.startNavigation()
-
   const authStore = useAuthStore()
 
   // Restore auth state from localStorage on first navigation (page refresh)
@@ -835,7 +846,7 @@ router.beforeEach(async (to, _from, next) => {
         return
       }
     } catch {
-      // 无法确认初始化状态时保留 setup 页面可访问，避免阻断首次安装。
+      // 无法确认初始化状态时仍可访问 setup 页面，供首次安装继续执行。
     }
   }
 
@@ -882,15 +893,14 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
-
   // 公共设置可能尚未加载（App.vue 的 onMounted 异步拉取晚于首次导航，且纯静态部署
   // 无 __APP_CONFIG__ 注入）。此时 cachedPublicSettings 为空会把页面功能开关
   // 误判为“未启用”而错误拦截，故这里先确保设置加载完成。
   const requiresPublicFeature = to.meta.requiresPayment
     || to.meta.requiresRiskControl
     || to.meta.requiresTeam
-    || to.meta.requiresDataSharing
     || to.meta.requiresUsageRanking
+    || to.meta.requiresCreative
   if (requiresPublicFeature && !appStore.publicSettingsLoaded) {
     try {
       await appStore.fetchPublicSettings()
@@ -929,18 +939,18 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   if (
-    to.meta.requiresDataSharing &&
+    to.meta.requiresUsageRanking &&
     appStore.publicSettingsLoaded &&
-    appStore.cachedPublicSettings?.data_sharing_enabled === false
+    appStore.cachedPublicSettings?.usage_ranking_enabled === false
   ) {
     next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
     return
   }
 
   if (
-    to.meta.requiresUsageRanking &&
+    to.meta.requiresCreative &&
     appStore.publicSettingsLoaded &&
-    appStore.cachedPublicSettings?.usage_ranking_enabled === false
+    appStore.cachedPublicSettings?.creative_enabled === false
   ) {
     next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
     return
@@ -950,25 +960,6 @@ router.beforeEach(async (to, _from, next) => {
     const affiliateEnabled = appStore.cachedPublicSettings?.affiliate_enabled === true
     if (!affiliateEnabled) {
       next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
-      return
-    }
-  }
-
-  // 简易模式下限制访问某些页面
-  if (authStore.isSimpleMode) {
-    const restrictedPaths = [
-      '/admin/groups',
-      '/admin/subscriptions',
-      '/admin/redeem',
-      '/admin/affiliates',
-      '/subscriptions',
-      '/redeem',
-      '/affiliate'
-    ]
-
-    if (restrictedPaths.some((path) => to.path.startsWith(path))) {
-      // 简易模式下访问受限页面,重定向到仪表板
-      next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
       return
     }
   }
@@ -990,12 +981,10 @@ router.beforeEach(async (to, _from, next) => {
   next()
 })
 
-/**
- * Navigation guard: End loading and trigger prefetch
- */
-router.afterEach((to) => {
-  // 结束导航加载状态
-  navigationLoading.endNavigation()
+/** 导航成功后，在浏览器空闲时预加载后续页面。 */
+router.afterEach((to, _from, failure) => {
+  // 被取消或中止的目标不触发预加载。
+  if (failure) return
 
   // 懒初始化预加载（首次导航时创建，传入 router 实例）
   if (!routePrefetch) {

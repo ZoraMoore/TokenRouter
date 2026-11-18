@@ -136,6 +136,36 @@ describe('StripePaymentView', () => {
     expect(wrapper.text()).toContain(formatPaymentAmount(103, 'HKD', 'zh-CN'))
   })
 
+  it('订单读取期间显示骨架，数据就绪后只挂载一次支付表单', async () => {
+    let finish!: (value: { data: PaymentOrder }) => void
+    getOrder.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-loading-skeleton]').attributes('aria-busy')).toBe('true')
+    expect(wrapper.find('#stripe-payment-element').exists()).toBe(false)
+    expect(stripePaymentElement.mount).not.toHaveBeenCalled()
+
+    finish({ data: orderFactory() })
+    await flushPromises()
+    await flushPromises()
+    expect(wrapper.find('[data-loading-skeleton]').exists()).toBe(false)
+    expect(wrapper.find('#stripe-payment-element').exists()).toBe(true)
+    expect(stripePaymentElement.mount).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('订单读取失败时结束骨架并显示原有错误提示', async () => {
+    getOrder.mockRejectedValue(new Error('order unavailable'))
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-loading-skeleton]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('payment.stripeLoadFailed')
+    expect(stripePaymentElement.mount).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('订单进入处理中后改为每 15 秒查询本地状态', async () => {
     vi.useFakeTimers()
     routeState.query = {
@@ -164,6 +194,8 @@ describe('StripePaymentView', () => {
     await flushPromises()
     expect(paymentStore.pollOrderStatus).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('payment.result.processing')
+    expect(wrapper.find('[data-loading-skeleton]').exists()).toBe(false)
+    expect(wrapper.find('.spinner').exists()).toBe(true)
 
     await vi.advanceTimersByTimeAsync(14999)
     expect(paymentStore.pollOrderStatus).toHaveBeenCalledTimes(1)

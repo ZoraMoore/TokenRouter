@@ -51,7 +51,6 @@ function mountView() {
     global: {
       stubs: {
         AppLayout: { template: '<div><slot name="page-heading-actions" /><slot /></div>' },
-        LoadingSpinner: true,
         Icon: true,
         OrderStatsCards: true,
         DailyRevenueChart: true,

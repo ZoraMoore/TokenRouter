@@ -52,7 +52,6 @@ const mountDialog = (overrides: Record<string, unknown> = {}) => mount(TeamInvit
     stubs: {
       BaseDialog: BaseDialogStub,
       Icon: true,
-      LoadingSpinner: true,
     },
   },
 })
@@ -75,5 +74,22 @@ describe('TeamInvitationDialog', () => {
     await buttons[1].trigger('click')
 
     expect(wrapper.emitted('resolve')).toEqual([['declined'], ['accepted']])
+  })
+
+  it('加载期间用详情骨架占位，结束后恢复详情或错误提示', async () => {
+    const wrapper = mountDialog({ loading: true })
+    expect(wrapper.get('[data-testid="invitation-loading"]').attributes('aria-busy')).toBe('true')
+    expect(wrapper.findAll('.skeleton').length).toBeGreaterThan(0)
+    expect(wrapper.find('[data-testid="invitation-details"]').exists()).toBe(false)
+
+    await wrapper.setProps({ loading: false })
+    expect(wrapper.find('[data-loading-skeleton]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="invitation-details"]').text()).toContain('词元流动')
+
+    await wrapper.setProps({ loading: true })
+    await wrapper.setProps({ loading: false, preview: null, error: '邀请已失效' })
+    expect(wrapper.find('[data-loading-skeleton]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="invitation-error"]').text()).toContain('邀请已失效')
+    wrapper.unmount()
   })
 })

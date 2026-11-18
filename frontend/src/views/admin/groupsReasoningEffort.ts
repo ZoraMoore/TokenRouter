@@ -1,4 +1,7 @@
-import type { GroupPlatform, ReasoningEffortMapping } from "@/types";
+import type {
+  ReasoningEffortMapping,
+  ReasoningEffortMatchType,
+} from "@/types";
 
 const openAIReasoningEffortValues = [
   "minimal",
@@ -9,110 +12,227 @@ const openAIReasoningEffortValues = [
   "max",
 ] as const;
 
-const reasoningEffortValuesForPlatform = (
-  platform: GroupPlatform,
-): readonly string[] =>
-  platform === "openai" ? openAIReasoningEffortValues : [];
+// 映射候选覆盖全部文本执行器；各提供商仍校验实际支持的强度。
+const openAIReasoningEffortMappingValues = ["none", ...openAIReasoningEffortValues] as const;
 
-export function reasoningEffortOptionsForPlatform(platform: GroupPlatform) {
-  return reasoningEffortValuesForPlatform(platform).map((value) => ({
-    value,
-    label: value,
-  }));
+export const reasoningEffortOverLimitDowngrade = "downgrade";
+export const reasoningEffortOverLimitDeny = "deny";
+
+const reasoningEffortMatchTypes: readonly ReasoningEffortMatchType[] = [
+  "exact",
+  "prefix",
+  "suffix",
+];
+
+export function reasoningEffortOptionsForPlatform() {
+  return openAIReasoningEffortValues.map(value => ({ value, label: value }));
+}
+export function reasoningEffortMappingOptionsForPlatform() {
+  return openAIReasoningEffortMappingValues.map(value => ({ value, label: value }));
+}
+export function normalizeReasoningEffortForPlatform(value: string | null | undefined): string {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return openAIReasoningEffortValues.some(allowed => allowed === normalized) ? normalized : "";
+}
+export function normalizeReasoningEffortMappingForPlatform(value: string | null | undefined): string {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return openAIReasoningEffortMappingValues.some(allowed => allowed === normalized) ? normalized : "";
 }
 
-export function normalizeReasoningEffortForPlatform(
-  platform: GroupPlatform,
+export function normalizeReasoningEffortOverLimit(
   value: string | null | undefined,
 ): string {
+  return value?.trim().toLowerCase() === reasoningEffortOverLimitDeny
+    ? reasoningEffortOverLimitDeny
+    : reasoningEffortOverLimitDowngrade;
+}
+
+export function normalizeReasoningEffortMatchType(
+  value: string | null | undefined,
+): ReasoningEffortMatchType | "" {
   const normalized = value?.trim().toLowerCase() ?? "";
-  return reasoningEffortValuesForPlatform(platform).some(
-    (allowed) => allowed === normalized,
-  )
-    ? normalized
+  return reasoningEffortMatchTypes.some((allowed) => allowed === normalized)
+    ? (normalized as ReasoningEffortMatchType)
     : "";
 }
 
-export interface ReasoningEffortMappingRow extends ReasoningEffortMapping {
+export interface ReasoningEffortMappingPair {
   id: string;
+  from: string;
+  to: string;
+}
+
+export interface ReasoningEffortMappingRow {
+  id: string;
+  match_type: ReasoningEffortMatchType | "";
+  model: string;
+  pairs: ReasoningEffortMappingPair[];
 }
 
 export type ReasoningEffortMappingErrorCode =
   | "fromRequired"
   | "toRequired"
   | "duplicateFrom"
+  | "duplicateScope"
   | "unsupportedFrom"
-  | "unsupportedTo";
+  | "unsupportedTo"
+  | "unsupportedMatchType";
 
 export type ReasoningEffortMappingErrors = Record<
   string,
-  Partial<Record<"from" | "to", ReasoningEffortMappingErrorCode>>
+  Partial<
+    Record<
+      "from" | "to" | "match_type" | "duplicateScope",
+      ReasoningEffortMappingErrorCode
+    >
+  >
 >;
 
 let nextMappingRowID = 0;
 
+export function createReasoningEffortMappingPair(
+  pair: Partial<Pick<ReasoningEffortMapping, "from" | "to">> = {},
+): ReasoningEffortMappingPair {
+  nextMappingRowID += 1;
+  return {
+    id: `reasoning-effort-pair-${nextMappingRowID}`,
+    from: pair.from ?? "",
+    to: pair.to ?? "",
+  };
+}
+
 export function createReasoningEffortMappingRow(
-  mapping: Partial<ReasoningEffortMapping> = {},
+  mapping: Partial<Omit<ReasoningEffortMapping, "match_type">> & {
+    match_type?: ReasoningEffortMatchType | "";
+  } = {},
 ): ReasoningEffortMappingRow {
   nextMappingRowID += 1;
   return {
-    id: `reasoning-effort-mapping-${nextMappingRowID}`,
-    from: mapping.from ?? "",
-    to: mapping.to ?? "",
+    id: `reasoning-effort-group-${nextMappingRowID}`,
+    match_type: normalizeReasoningEffortMatchType(mapping.match_type),
+    model: mapping.model?.trim() ?? "",
+    pairs: [
+      createReasoningEffortMappingPair({
+        from: mapping.from,
+        to: mapping.to,
+      }),
+    ],
   };
+}
+
+function mappingScopeKey(
+  matchType: string | null | undefined,
+  model: string | null | undefined,
+): string {
+  const trimmedModel = model?.trim().toLowerCase() ?? "";
+  const normalizedType = trimmedModel
+    ? normalizeReasoningEffortMatchType(matchType) || "exact"
+    : "";
+  return `${normalizedType}\0${trimmedModel}`;
 }
 
 export function reasoningEffortMappingsToRows(
   mappings?: ReasoningEffortMapping[] | null,
-  platform: GroupPlatform = "openai",
 ): ReasoningEffortMappingRow[] {
-  return (mappings ?? []).flatMap((mapping) => {
-    const from = normalizeReasoningEffortForPlatform(platform, mapping.from);
-    const to = normalizeReasoningEffortForPlatform(platform, mapping.to);
-    return from && to
-      ? [createReasoningEffortMappingRow({ from, to })]
-      : [];
+  const groups: ReasoningEffortMappingRow[] = [];
+  const indexByScope = new Map<string, number>();
+
+  (mappings ?? []).forEach((mapping) => {
+    const from = normalizeReasoningEffortMappingForPlatform(mapping.from);
+    const to = normalizeReasoningEffortMappingForPlatform(mapping.to);
+    if (!from || !to) return;
+
+    const matchType = normalizeReasoningEffortMatchType(mapping.match_type);
+    const model = mapping.model?.trim() ?? "";
+    const scope = mappingScopeKey(matchType, model);
+    const existingIndex = indexByScope.get(scope);
+    if (existingIndex !== undefined) {
+      groups[existingIndex].pairs.push(
+        createReasoningEffortMappingPair({ from, to }),
+      );
+      return;
+    }
+
+    const group = createReasoningEffortMappingRow({
+      from,
+      to,
+      match_type: matchType,
+      model,
+    });
+    indexByScope.set(scope, groups.length);
+    groups.push(group);
   });
+
+  return groups;
 }
 
 export function reasoningEffortMappingsToAPI(
   rows: ReasoningEffortMappingRow[],
 ): ReasoningEffortMapping[] {
-  return rows.map((row) => ({
-    from: row.from.trim(),
-    to: row.to.trim(),
-  }));
+  return rows.flatMap((row) => {
+    const model = row.model.trim();
+    return row.pairs.map((pair) => {
+      const mapping: ReasoningEffortMapping = {
+        from: pair.from.trim(),
+        to: pair.to.trim(),
+      };
+      if (model) {
+        mapping.match_type =
+          normalizeReasoningEffortMatchType(row.match_type) || "exact";
+        mapping.model = model;
+      }
+      return mapping;
+    });
+  });
 }
 
 export function validateReasoningEffortMappings(
   rows: ReasoningEffortMappingRow[],
-  platform: GroupPlatform = "openai",
 ): ReasoningEffortMappingErrors {
   const errors: ReasoningEffortMappingErrors = {};
-  const sourceRows = new Map<string, ReasoningEffortMappingRow[]>();
+  const scopeGroups = new Map<string, ReasoningEffortMappingRow[]>();
+  const sourcePairs = new Map<string, ReasoningEffortMappingPair[]>();
 
   rows.forEach((row) => {
-    const from = row.from.trim();
-    const to = row.to.trim();
-    if (!from) {
-      errors[row.id] = { ...errors[row.id], from: "fromRequired" };
-    } else if (!normalizeReasoningEffortForPlatform(platform, from)) {
-      errors[row.id] = { ...errors[row.id], from: "unsupportedFrom" };
-    } else {
-      const key = from.toLowerCase();
-      sourceRows.set(key, [...(sourceRows.get(key) ?? []), row]);
+    const rawMatchType = row.match_type.trim().toLowerCase();
+    const matchType = normalizeReasoningEffortMatchType(row.match_type);
+    if (rawMatchType && !matchType) {
+      errors[row.id] = { ...errors[row.id], match_type: "unsupportedMatchType" };
     }
-    if (!to) {
-      errors[row.id] = { ...errors[row.id], to: "toRequired" };
-    } else if (!normalizeReasoningEffortForPlatform(platform, to)) {
-      errors[row.id] = { ...errors[row.id], to: "unsupportedTo" };
-    }
+
+    const scope = mappingScopeKey(row.match_type, row.model);
+    scopeGroups.set(scope, [...(scopeGroups.get(scope) ?? []), row]);
+
+    row.pairs.forEach((pair) => {
+      const from = pair.from.trim();
+      const to = pair.to.trim();
+      if (!from) {
+        errors[pair.id] = { ...errors[pair.id], from: "fromRequired" };
+      } else if (!normalizeReasoningEffortMappingForPlatform(from)) {
+        errors[pair.id] = { ...errors[pair.id], from: "unsupportedFrom" };
+      } else {
+        const key = `${scope}\0${from.toLowerCase()}`;
+        sourcePairs.set(key, [...(sourcePairs.get(key) ?? []), pair]);
+      }
+      if (!to) {
+        errors[pair.id] = { ...errors[pair.id], to: "toRequired" };
+      } else if (!normalizeReasoningEffortMappingForPlatform(to)) {
+        errors[pair.id] = { ...errors[pair.id], to: "unsupportedTo" };
+      }
+    });
   });
 
-  sourceRows.forEach((duplicateRows) => {
-    if (duplicateRows.length < 2) return;
-    duplicateRows.forEach((row) => {
-      errors[row.id] = { ...errors[row.id], from: "duplicateFrom" };
+  scopeGroups.forEach((duplicateGroups) => {
+    if (duplicateGroups.length < 2) return;
+    duplicateGroups.forEach((row) => {
+      errors[row.id] = { ...errors[row.id], duplicateScope: "duplicateScope" };
+    });
+  });
+
+  sourcePairs.forEach((duplicatePairs) => {
+    if (duplicatePairs.length < 2) return;
+    duplicatePairs.forEach((pair) => {
+      errors[pair.id] = { ...errors[pair.id], from: "duplicateFrom" };
     });
   });
 

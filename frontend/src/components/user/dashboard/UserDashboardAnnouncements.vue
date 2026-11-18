@@ -12,7 +12,7 @@
         :class="unreadCount > 0
           ? 'bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300'
           : 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-dark-300'"
-        class="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium"
+        class="inline-flex shrink-0 items-center gap-1.5 rounded-compact px-2 py-1 text-xs font-medium"
       >
         <span
           :class="unreadCount > 0
@@ -28,9 +28,19 @@
       <div
         v-if="loading"
         data-testid="announcement-timeline-loading"
-        class="flex items-center justify-center py-12"
+        class="space-y-5 py-4"
+        role="status"
+        :aria-label="t('common.loading')"
+        aria-busy="true"
       >
-        <LoadingSpinner size="lg" />
+        <div v-for="row in 3" :key="row" class="flex items-start gap-4" aria-hidden="true">
+          <Skeleton variant="circle" :width="12" :height="12" class="shrink-0" />
+          <div class="min-w-0 flex-1 space-y-3">
+            <Skeleton width="65%" :height="16" />
+            <Skeleton width="90%" :height="12" />
+            <Skeleton width="35%" :height="12" />
+          </div>
+        </div>
       </div>
 
       <div v-else-if="timelineItems.length === 0" class="py-8">
@@ -72,7 +82,7 @@
             type="button"
             data-testid="announcement-timeline-item"
             :data-announcement-id="item.announcement.id"
-            class="group flex min-h-[88px] w-full items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10 dark:hover:bg-dark-800/60 dark:focus-visible:ring-primary-400/70"
+            class="group flex min-h-[88px] w-full items-start gap-3 rounded-control px-3 py-3 text-left transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10 dark:hover:bg-dark-800/60 dark:focus-visible:ring-primary-400/70"
             @click="openAnnouncement(item.announcement)"
           >
             <div class="min-w-0 flex-1">
@@ -98,6 +108,7 @@
               name="chevronRight"
               size="sm"
               class="mt-1 shrink-0 text-gray-400 transition-transform group-hover:translate-x-0.5 group-hover:text-primary-500 dark:text-dark-500 dark:group-hover:text-primary-400"
+              :animate-on-hover="false"
             />
           </button>
         </li>
@@ -124,7 +135,7 @@ import { formatDate, formatDateTime } from '@/utils/format'
 import type { UserAnnouncement } from '@/types'
 import AnnouncementPopup from '@/components/common/AnnouncementPopup.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import Skeleton from '@/components/common/Skeleton.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const MAX_ANNOUNCEMENTS = 5

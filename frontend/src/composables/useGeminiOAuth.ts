@@ -62,7 +62,7 @@ export function useGeminiOAuth() {
       state.value = response.state
       return true
     } catch (err: any) {
-      error.value = err.response?.data?.detail || t('admin.accounts.oauth.gemini.failedToGenerateUrl')
+      error.value = err.response?.data?.detail || t('admin.providers.oauth.gemini.failedToGenerateUrl')
       appStore.showError(error.value)
       return false
     } finally {
@@ -80,7 +80,7 @@ export function useGeminiOAuth() {
   }): Promise<GeminiTokenInfo | null> => {
     const code = params.code?.trim()
     if (!code || !params.sessionId || !params.state) {
-      error.value = t('admin.accounts.oauth.gemini.missingExchangeParams')
+      error.value = t('admin.providers.oauth.gemini.missingExchangeParams')
       return null
     }
 
@@ -104,9 +104,9 @@ export function useGeminiOAuth() {
       // Check for specific missing project_id error
       const errorMessage = err.message || err.response?.data?.message || ''
       if (errorMessage.includes('missing project_id')) {
-        error.value = t('admin.accounts.oauth.gemini.missingProjectId')
+        error.value = t('admin.providers.oauth.gemini.missingProjectId')
       } else {
-        error.value = errorMessage || t('admin.accounts.oauth.gemini.failedToExchangeCode')
+        error.value = errorMessage || t('admin.providers.oauth.gemini.failedToExchangeCode')
       }
       appStore.showError(error.value)
       return null
@@ -143,7 +143,7 @@ export function useGeminiOAuth() {
   const getCapabilities = async (): Promise<GeminiOAuthCapabilities | null> => {
     try {
       return await adminAPI.gemini.getCapabilities()
-    } catch (err: any) {
+    } catch {
       // Capabilities are optional for older servers; don't block the UI.
       return null
     }

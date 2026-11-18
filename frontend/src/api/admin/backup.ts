@@ -21,12 +21,10 @@ export interface BackupStorageConfig {
 
 export interface BackupContentConfig {
   include_usage_records: boolean
-  include_ops_logs: boolean
-  include_audit_logs: boolean
-  include_runtime_data: boolean
-  // 控制备份是否包含完整的数据共享会话载荷。
-  include_data_share_sessions: boolean
-  excluded_table_data?: string[]
+	include_ops_logs: boolean
+	include_audit_logs: boolean
+	include_runtime_data: boolean
+	excluded_table_data?: string[]
 }
 
 export interface BackupScheduleConfig {
@@ -112,22 +110,6 @@ export async function updateContentConfig(config: BackupContentConfig): Promise<
   return data
 }
 
-// S3 配置
-export async function getS3Config(): Promise<BackupS3Config> {
-  const { data } = await apiClient.get<BackupS3Config>('/admin/backups/s3-config')
-  return data
-}
-
-export async function updateS3Config(config: BackupS3Config): Promise<BackupS3Config> {
-  const { data } = await apiClient.put<BackupS3Config>('/admin/backups/s3-config', config)
-  return data
-}
-
-export async function testS3Connection(config: BackupS3Config): Promise<TestS3Response> {
-  const { data } = await apiClient.post<TestS3Response>('/admin/backups/s3-config/test', config)
-  return data
-}
-
 // 定时备份
 export async function getSchedule(): Promise<BackupScheduleConfig> {
   const { data } = await apiClient.get<BackupScheduleConfig>('/admin/backups/schedule')
@@ -183,9 +165,6 @@ export const backupAPI = {
   testStorageConnection,
   getContentConfig,
   updateContentConfig,
-  getS3Config,
-  updateS3Config,
-  testS3Connection,
   getSchedule,
   updateSchedule,
   createBackup,

@@ -1,109 +1,78 @@
 <script setup lang="ts">
-/**
- * 导航进度条组件
- * 在页面顶部显示加载进度，提供导航反馈
- */
-import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 
-const { isLoading } = useNavigationLoadingState()
+const { t } = useI18n()
+const { isLoading, isNavigating, navigationId, finishNavigation } = useNavigationLoadingState()
 
-// 进度条可见性
-const isVisible = computed(() => isLoading.value)
+// CSS 动画结束事件触发隐藏。
+const onAnimationEnd = (event: AnimationEvent) => {
+  if (!event.animationName.startsWith('navigation-complete')) return
+  const target = event.currentTarget as HTMLElement
+  finishNavigation(Number(target.dataset.navigationId))
+}
 </script>
 
 <template>
-  <Transition name="progress-fade">
+  <div
+    v-if="isLoading"
+    :key="navigationId"
+    class="navigation-progress"
+    :class="{ 'is-complete': !isNavigating }"
+    role="progressbar"
+    :aria-label="t('common.loading')"
+    aria-valuemin="0"
+    aria-valuemax="100"
+  >
+    <!-- 进度线表示导航仍在进行。 -->
     <div
-      v-show="isVisible"
-      class="navigation-progress"
-      role="progressbar"
-      aria-label="Loading"
-      aria-valuenow="0"
-      aria-valuemin="0"
-      aria-valuemax="100"
-    >
-      <div class="navigation-progress-bar" />
-    </div>
-  </Transition>
+      class="navigation-progress-bar"
+      :data-navigation-id="navigationId"
+      @animationend="onAnimationEnd"
+    />
+  </div>
 </template>
 
 <style scoped>
 .navigation-progress {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  z-index: 9999;
+  inset: 0 0 auto;
+  height: 2px;
+  z-index: var(--z-toast);
   overflow: hidden;
-  background: transparent;
+  pointer-events: none;
 }
 
 .navigation-progress-bar {
   height: 100%;
-  width: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    theme('colors.primary.400') 20%,
-    theme('colors.primary.500') 50%,
-    theme('colors.primary.400') 80%,
-    transparent 100%
-  );
-  animation: progress-slide 1.5s ease-in-out infinite;
+  background: theme('colors.primary.500');
+  transform-origin: left;
+  animation: navigation-advance 8s cubic-bezier(0.1, 0.5, 0.2, 1) forwards;
 }
 
-/* 暗色模式下的进度条颜色 */
-:root.dark .navigation-progress-bar {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    theme('colors.primary.500') 20%,
-    theme('colors.primary.400') 50%,
-    theme('colors.primary.500') 80%,
-    transparent 100%
-  );
+.navigation-progress.is-complete .navigation-progress-bar {
+  transform: scaleX(1);
+  animation: navigation-complete 180ms ease-out forwards;
 }
 
-/* 进度条滑动动画 */
-@keyframes progress-slide {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+@keyframes navigation-advance {
+  from { transform: scaleX(0.08); }
+  to { transform: scaleX(0.9); }
 }
 
-/* 淡入淡出过渡 */
-.progress-fade-enter-active {
-  transition: opacity 0.15s ease-out;
+@keyframes navigation-complete {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
-.progress-fade-leave-active {
-  transition: opacity 0.3s ease-out;
-}
-
-.progress-fade-enter-from,
-.progress-fade-leave-to {
-  opacity: 0;
-}
-
-/* 减少动画模式 */
 @media (prefers-reduced-motion: reduce) {
   .navigation-progress-bar {
-    animation: progress-pulse 2s ease-in-out infinite;
+    animation: none;
+    transform: scaleX(0.35);
   }
 
-  @keyframes progress-pulse {
-    0%,
-    100% {
-      opacity: 0.4;
-    }
-    50% {
-      opacity: 1;
-    }
+  .navigation-progress.is-complete .navigation-progress-bar {
+    animation-duration: 1ms;
   }
 }
 </style>

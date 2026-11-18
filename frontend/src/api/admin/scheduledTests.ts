@@ -1,6 +1,6 @@
 /**
  * Admin Scheduled Tests API endpoints
- * Handles scheduled test plan management for account connectivity monitoring
+ * Handles scheduled test plan management for provider connectivity monitoring
  */
 
 import { apiClient } from '../client'
@@ -12,13 +12,13 @@ import type {
 } from '@/types'
 
 /**
- * List all scheduled test plans for an account
- * @param accountId - Account ID
+ * 列出提供商的全部计划测试任务。
+ * @param providerId - Provider ID
  * @returns List of scheduled test plans
  */
-export async function listByAccount(accountId: number): Promise<ScheduledTestPlan[]> {
+export async function listByProvider(providerId: number): Promise<ScheduledTestPlan[]> {
   const { data } = await apiClient.get<ScheduledTestPlan[]>(
-    `/admin/accounts/${accountId}/scheduled-test-plans`
+    `/admin/providers/${providerId}/scheduled-test-plans`
   )
   return data ?? []
 }
@@ -75,7 +75,7 @@ export async function listResults(planId: number, limit?: number): Promise<Sched
 }
 
 export const scheduledTestsAPI = {
-  listByAccount,
+  listByProvider,
   create,
   update,
   delete: deletePlan,

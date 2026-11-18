@@ -10,8 +10,8 @@ vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (key: string) => {
       const messages: Record<string, string> = {
-        'admin.accounts.oauth.openai.failedToExchangeCode': 'OpenAI 授权码兑换失败',
-        'admin.accounts.oauth.openai.errors.OPENAI_OAUTH_PROXY_REQUIRED':
+        'admin.providers.oauth.openai.failedToExchangeCode': 'OpenAI 授权码兑换失败',
+        'admin.providers.oauth.openai.errors.OPENAI_OAUTH_PROXY_REQUIRED':
           '未设置代理，当前服务器无法直连 OpenAI，导致 OpenAI OAuth 请求失败。请先选择可访问 OpenAI 的代理后重试；如果授权码已失效，请重新生成授权链接。'
       }
       return messages[key] ?? key
@@ -21,7 +21,7 @@ vi.mock('vue-i18n', () => ({
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
-    accounts: {
+    providers: {
       generateAuthUrl: vi.fn(),
       exchangeCode: vi.fn(),
       refreshOpenAIToken: vi.fn()
@@ -33,9 +33,9 @@ import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
 import { adminAPI } from '@/api/admin'
 
 beforeEach(() => {
-  vi.mocked(adminAPI.accounts.generateAuthUrl).mockReset()
-  vi.mocked(adminAPI.accounts.exchangeCode).mockReset()
-  vi.mocked(adminAPI.accounts.refreshOpenAIToken).mockReset()
+  vi.mocked(adminAPI.providers.generateAuthUrl).mockReset()
+  vi.mocked(adminAPI.providers.exchangeCode).mockReset()
+  vi.mocked(adminAPI.providers.refreshOpenAIToken).mockReset()
 })
 
 describe('useOpenAIOAuth.buildCredentials', () => {
@@ -83,7 +83,7 @@ describe('useOpenAIOAuth.buildCredentials', () => {
 
 describe('useOpenAIOAuth.exchangeAuthCode', () => {
   it('passes selected TLS router id to token exchange', async () => {
-    vi.mocked(adminAPI.accounts.exchangeCode).mockResolvedValueOnce({
+    vi.mocked(adminAPI.providers.exchangeCode).mockResolvedValueOnce({
       access_token: 'at',
       refresh_token: 'rt'
     })
@@ -92,7 +92,7 @@ describe('useOpenAIOAuth.exchangeAuthCode', () => {
     const tokenInfo = await oauth.exchangeAuthCode(' code ', 'session-id', ' state ', 3, 9)
 
     expect(tokenInfo?.access_token).toBe('at')
-    expect(adminAPI.accounts.exchangeCode).toHaveBeenCalledWith('/admin/openai/exchange-code', {
+    expect(adminAPI.providers.exchangeCode).toHaveBeenCalledWith('/admin/openai/exchange-code', {
       session_id: 'session-id',
       code: 'code',
       state: 'state',
@@ -102,7 +102,7 @@ describe('useOpenAIOAuth.exchangeAuthCode', () => {
   })
 
   it('shows a clear proxy hint when code exchange fails without a proxy', async () => {
-    vi.mocked(adminAPI.accounts.exchangeCode).mockRejectedValueOnce({
+    vi.mocked(adminAPI.providers.exchangeCode).mockRejectedValueOnce({
       status: 502,
       reason: 'OPENAI_OAUTH_PROXY_REQUIRED',
       message: 'OpenAI OAuth token exchange failed: no proxy is configured.'
@@ -120,7 +120,7 @@ describe('useOpenAIOAuth.exchangeAuthCode', () => {
 
 describe('useOpenAIOAuth.validateRefreshToken', () => {
   it('passes selected TLS router id to refresh-token validation', async () => {
-    vi.mocked(adminAPI.accounts.refreshOpenAIToken).mockResolvedValueOnce({
+    vi.mocked(adminAPI.providers.refreshOpenAIToken).mockResolvedValueOnce({
       access_token: 'at',
       refresh_token: 'rt'
     })
@@ -129,7 +129,7 @@ describe('useOpenAIOAuth.validateRefreshToken', () => {
     const tokenInfo = await oauth.validateRefreshToken(' rt ', 3, 'client-id', 9)
 
     expect(tokenInfo?.access_token).toBe('at')
-    expect(adminAPI.accounts.refreshOpenAIToken).toHaveBeenCalledWith(
+    expect(adminAPI.providers.refreshOpenAIToken).toHaveBeenCalledWith(
       'rt',
       3,
       '/admin/openai/refresh-token',

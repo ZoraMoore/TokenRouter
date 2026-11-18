@@ -13,7 +13,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/TokenFlux/TokenRouter/ent/announcement"
 	"github.com/TokenFlux/TokenRouter/ent/announcementread"
-	"github.com/TokenFlux/TokenRouter/internal/domain"
+	"github.com/TokenFlux/TokenRouter/internal/site"
 )
 
 // AnnouncementCreate is the builder for creating a Announcement entity.
@@ -22,6 +22,20 @@ type AnnouncementCreate struct {
 	mutation *AnnouncementMutation
 	hooks    []Hook
 	conflict []sql.ConflictOption
+}
+
+// SetLocalization sets the "localization" field.
+func (_c *AnnouncementCreate) SetLocalization(v site.AnnouncementLocalization) *AnnouncementCreate {
+	_c.mutation.SetLocalization(v)
+	return _c
+}
+
+// SetNillableLocalization sets the "localization" field if the given value is not nil.
+func (_c *AnnouncementCreate) SetNillableLocalization(v *site.AnnouncementLocalization) *AnnouncementCreate {
+	if v != nil {
+		_c.SetLocalization(*v)
+	}
+	return _c
 }
 
 // SetTitle sets the "title" field.
@@ -65,13 +79,13 @@ func (_c *AnnouncementCreate) SetNillableNotifyMode(v *string) *AnnouncementCrea
 }
 
 // SetTargeting sets the "targeting" field.
-func (_c *AnnouncementCreate) SetTargeting(v domain.AnnouncementTargeting) *AnnouncementCreate {
+func (_c *AnnouncementCreate) SetTargeting(v site.AnnouncementTargeting) *AnnouncementCreate {
 	_c.mutation.SetTargeting(v)
 	return _c
 }
 
 // SetNillableTargeting sets the "targeting" field if the given value is not nil.
-func (_c *AnnouncementCreate) SetNillableTargeting(v *domain.AnnouncementTargeting) *AnnouncementCreate {
+func (_c *AnnouncementCreate) SetNillableTargeting(v *site.AnnouncementTargeting) *AnnouncementCreate {
 	if v != nil {
 		_c.SetTargeting(*v)
 	}
@@ -297,6 +311,10 @@ func (_c *AnnouncementCreate) createSpec() (*Announcement, *sqlgraph.CreateSpec)
 		_spec = sqlgraph.NewCreateSpec(announcement.Table, sqlgraph.NewFieldSpec(announcement.FieldID, field.TypeInt64))
 	)
 	_spec.OnConflict = _c.conflict
+	if value, ok := _c.mutation.Localization(); ok {
+		_spec.SetField(announcement.FieldLocalization, field.TypeJSON, value)
+		_node.Localization = value
+	}
 	if value, ok := _c.mutation.Title(); ok {
 		_spec.SetField(announcement.FieldTitle, field.TypeString, value)
 		_node.Title = value
@@ -364,7 +382,7 @@ func (_c *AnnouncementCreate) createSpec() (*Announcement, *sqlgraph.CreateSpec)
 // of the `INSERT` statement. For example:
 //
 //	client.Announcement.Create().
-//		SetTitle(v).
+//		SetLocalization(v).
 //		OnConflict(
 //			// Update the row with the new values
 //			// the was proposed for insertion.
@@ -373,7 +391,7 @@ func (_c *AnnouncementCreate) createSpec() (*Announcement, *sqlgraph.CreateSpec)
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.AnnouncementUpsert) {
-//			SetTitle(v+v).
+//			SetLocalization(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *AnnouncementCreate) OnConflict(opts ...sql.ConflictOption) *AnnouncementUpsertOne {
@@ -408,6 +426,24 @@ type (
 		*sql.UpdateSet
 	}
 )
+
+// SetLocalization sets the "localization" field.
+func (u *AnnouncementUpsert) SetLocalization(v site.AnnouncementLocalization) *AnnouncementUpsert {
+	u.Set(announcement.FieldLocalization, v)
+	return u
+}
+
+// UpdateLocalization sets the "localization" field to the value that was provided on create.
+func (u *AnnouncementUpsert) UpdateLocalization() *AnnouncementUpsert {
+	u.SetExcluded(announcement.FieldLocalization)
+	return u
+}
+
+// ClearLocalization clears the value of the "localization" field.
+func (u *AnnouncementUpsert) ClearLocalization() *AnnouncementUpsert {
+	u.SetNull(announcement.FieldLocalization)
+	return u
+}
 
 // SetTitle sets the "title" field.
 func (u *AnnouncementUpsert) SetTitle(v string) *AnnouncementUpsert {
@@ -458,7 +494,7 @@ func (u *AnnouncementUpsert) UpdateNotifyMode() *AnnouncementUpsert {
 }
 
 // SetTargeting sets the "targeting" field.
-func (u *AnnouncementUpsert) SetTargeting(v domain.AnnouncementTargeting) *AnnouncementUpsert {
+func (u *AnnouncementUpsert) SetTargeting(v site.AnnouncementTargeting) *AnnouncementUpsert {
 	u.Set(announcement.FieldTargeting, v)
 	return u
 }
@@ -616,6 +652,27 @@ func (u *AnnouncementUpsertOne) Update(set func(*AnnouncementUpsert)) *Announcem
 	return u
 }
 
+// SetLocalization sets the "localization" field.
+func (u *AnnouncementUpsertOne) SetLocalization(v site.AnnouncementLocalization) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetLocalization(v)
+	})
+}
+
+// UpdateLocalization sets the "localization" field to the value that was provided on create.
+func (u *AnnouncementUpsertOne) UpdateLocalization() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateLocalization()
+	})
+}
+
+// ClearLocalization clears the value of the "localization" field.
+func (u *AnnouncementUpsertOne) ClearLocalization() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.ClearLocalization()
+	})
+}
+
 // SetTitle sets the "title" field.
 func (u *AnnouncementUpsertOne) SetTitle(v string) *AnnouncementUpsertOne {
 	return u.Update(func(s *AnnouncementUpsert) {
@@ -673,7 +730,7 @@ func (u *AnnouncementUpsertOne) UpdateNotifyMode() *AnnouncementUpsertOne {
 }
 
 // SetTargeting sets the "targeting" field.
-func (u *AnnouncementUpsertOne) SetTargeting(v domain.AnnouncementTargeting) *AnnouncementUpsertOne {
+func (u *AnnouncementUpsertOne) SetTargeting(v site.AnnouncementTargeting) *AnnouncementUpsertOne {
 	return u.Update(func(s *AnnouncementUpsert) {
 		s.SetTargeting(v)
 	})
@@ -940,7 +997,7 @@ func (_c *AnnouncementCreateBulk) ExecX(ctx context.Context) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.AnnouncementUpsert) {
-//			SetTitle(v+v).
+//			SetLocalization(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *AnnouncementCreateBulk) OnConflict(opts ...sql.ConflictOption) *AnnouncementUpsertBulk {
@@ -1016,6 +1073,27 @@ func (u *AnnouncementUpsertBulk) Update(set func(*AnnouncementUpsert)) *Announce
 	return u
 }
 
+// SetLocalization sets the "localization" field.
+func (u *AnnouncementUpsertBulk) SetLocalization(v site.AnnouncementLocalization) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetLocalization(v)
+	})
+}
+
+// UpdateLocalization sets the "localization" field to the value that was provided on create.
+func (u *AnnouncementUpsertBulk) UpdateLocalization() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateLocalization()
+	})
+}
+
+// ClearLocalization clears the value of the "localization" field.
+func (u *AnnouncementUpsertBulk) ClearLocalization() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.ClearLocalization()
+	})
+}
+
 // SetTitle sets the "title" field.
 func (u *AnnouncementUpsertBulk) SetTitle(v string) *AnnouncementUpsertBulk {
 	return u.Update(func(s *AnnouncementUpsert) {
@@ -1073,7 +1151,7 @@ func (u *AnnouncementUpsertBulk) UpdateNotifyMode() *AnnouncementUpsertBulk {
 }
 
 // SetTargeting sets the "targeting" field.
-func (u *AnnouncementUpsertBulk) SetTargeting(v domain.AnnouncementTargeting) *AnnouncementUpsertBulk {
+func (u *AnnouncementUpsertBulk) SetTargeting(v site.AnnouncementTargeting) *AnnouncementUpsertBulk {
 	return u.Update(func(s *AnnouncementUpsert) {
 		s.SetTargeting(v)
 	})

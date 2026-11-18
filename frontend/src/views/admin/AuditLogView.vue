@@ -1,102 +1,72 @@
 <template>
   <AppLayout>
     <TablePageLayout>
-      <!-- 筛选条件 -->
+      <!-- 关键字搜索与筛选条件 -->
       <template #filters>
-        <div class="flex items-center justify-between gap-3">
-            <div ref="filterPanelRef" class="relative shrink-0">
-              <button
-                type="button"
-                class="btn btn-secondary relative h-11 w-11 p-0"
-                :aria-expanded="showFilterDropdown"
-                :aria-label="t('common.filter')"
-                :title="t('common.filter')"
-                @click="showFilterDropdown = !showFilterDropdown"
-              >
-                <Icon name="filter" size="sm" />
-                <span v-if="activeFilterCount > 0" class="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-100 px-1.5 text-xs font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
-                  {{ activeFilterCount }}
-                </span>
-              </button>
-
-              <div v-show="showFilterDropdown" class="absolute -left-4 top-full z-[60] mt-2 max-h-[min(70vh,42rem)] w-[min(48rem,calc(100vw-3rem))] overflow-y-auto rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-dark-600 dark:bg-dark-900 sm:left-0" @click.stop>
-                <div class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{{ t('common.filter') }}</div>
-                <div class="flex flex-wrap items-end gap-4">
-              <div class="w-full sm:w-auto sm:min-w-[240px]">
-                <label class="input-label">{{ t('admin.audit.filters.q') }}</label>
-                <div class="relative">
-                  <Icon
-                    name="search"
-                    size="md"
-                    class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                  />
-                  <input
-                    v-model.trim="filters.q"
-                    type="text"
-                    class="input pl-10"
-                    :placeholder="t('admin.audit.filters.qPlaceholder')"
-                    @keyup.enter="search"
-                  />
-                </div>
-              </div>
-
-              <div class="w-full sm:w-auto sm:min-w-[200px]">
-                <label class="input-label">{{ t('admin.audit.filters.actorEmail') }}</label>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex min-w-0 w-full items-center gap-2 sm:w-auto">
+            <div class="input-icon-wrap min-w-0 flex-1 sm:w-64 sm:flex-none">
+              <Icon
+                name="search"
+                size="md"
+                class="input-icon text-gray-400"
+              />
+              <input
+                v-model.trim="filters.q"
+                type="text"
+                class="input input-has-icon"
+                :aria-label="t('admin.audit.filters.q')"
+                :placeholder="t('admin.audit.filters.qPlaceholder')"
+                @keyup.enter="search"
+              />
+            </div>
+            <FilterDropdown :active-count="activeFilterCount" :columns="3" keep-mounted @reset="resetAuditFilters">
+              <FilterField :label="t('requests.id')" :value-text="filters.request_id" @clear="clearAuditFilter('request_id')">
+                <input v-model.trim="filters.request_id" type="text" class="input font-mono" spellcheck="false" maxlength="255" @keyup.enter="search" />
+              </FilterField>
+              <FilterField :label="t('admin.audit.filters.actorEmail')" :value-text="filters.actor_email" @clear="clearAuditFilter('actor_email')">
                 <input v-model.trim="filters.actor_email" type="text" class="input" @keyup.enter="search" />
-              </div>
-
-              <div class="w-full sm:w-auto sm:min-w-[180px]">
-                <label class="input-label">{{ t('admin.audit.filters.action') }}</label>
+              </FilterField>
+              <FilterField :label="t('admin.audit.filters.action')" :value-text="filters.action" @clear="clearAuditFilter('action')">
                 <input v-model.trim="filters.action" type="text" class="input" @keyup.enter="search" />
-              </div>
-
-              <div class="w-full sm:w-auto sm:min-w-[160px]">
-                <label class="input-label">{{ t('admin.audit.filters.clientIp') }}</label>
+              </FilterField>
+              <FilterField :label="t('admin.audit.filters.clientIp')" :value-text="filters.client_ip" @clear="clearAuditFilter('client_ip')">
                 <input v-model.trim="filters.client_ip" type="text" class="input" @keyup.enter="search" />
-              </div>
-
-              <div class="w-full sm:w-auto sm:min-w-[140px]">
-                <label class="input-label">{{ t('admin.audit.filters.method') }}</label>
+              </FilterField>
+              <FilterField :label="t('admin.audit.filters.method')">
                 <Select v-model="filters.method" :options="methodOptions" @change="search" />
-              </div>
-
-              <div class="w-full sm:w-auto sm:min-w-[170px]">
-                <label class="input-label">{{ t('admin.audit.filters.authMethod') }}</label>
+              </FilterField>
+              <FilterField :label="t('admin.audit.filters.authMethod')">
                 <Select v-model="filters.auth_method" :options="authMethodOptions" @change="search" />
-              </div>
-
-              <div class="w-full sm:w-auto sm:min-w-[140px]">
-                <label class="input-label">{{ t('admin.audit.filters.result') }}</label>
+              </FilterField>
+              <FilterField :label="t('admin.audit.filters.result')">
                 <Select v-model="filters.success" :options="resultOptions" @change="search" />
-              </div>
-
-              <div class="w-full sm:w-auto sm:min-w-[170px]">
-                <label class="input-label">{{ t('admin.dashboard.timeRange') }}</label>
+              </FilterField>
+              <FilterField :label="t('admin.dashboard.timeRange')">
                 <Select
                   :model-value="timeRange"
                   :options="timeRangeOptions"
                   @update:model-value="handleTimeRangeChange"
                 />
-              </div>
-                </div>
-              </div>
-            </div>
+              </FilterField>
+            </FilterDropdown>
+          </div>
 
-            <div class="flex flex-wrap items-center justify-end gap-2">
-              <button type="button" class="btn btn-primary h-11 whitespace-nowrap px-3 sm:px-4" :disabled="loading" @click="search">
-                {{ t('common.search') }}
-              </button>
-              <button type="button" class="btn btn-danger h-11 whitespace-nowrap px-3 sm:px-4" @click="openClearDialog">
-                <Icon name="trash" size="sm" class="mr-1.5" />
-                {{ t('admin.audit.clearAll') }}
-              </button>
-            </div>
+          <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
+            <button type="button" class="btn btn-primary whitespace-nowrap px-3 sm:px-4" :disabled="loading" @click="search">
+              {{ t('common.search') }}
+            </button>
+            <button type="button" class="btn btn-danger whitespace-nowrap px-3 sm:px-4" @click="openClearDialog">
+              <Icon name="trash" size="sm" class="mr-1.5" />
+              {{ t('admin.audit.clearAll') }}
+            </button>
+          </div>
         </div>
       </template>
 
       <!-- 日志表格 -->
       <template #table>
-        <DataTable :columns="columns" :data="logs" :loading="loading" row-key="id">
+        <DataTable column-order-storage-key="admin-audit-logs-column-order" :columns="columns" :data="logs" :loading="loading" row-key="id">
           <template #cell-created_at="{ value }">
             <span class="whitespace-nowrap text-gray-600 dark:text-gray-300">{{ formatTime(value) }}</span>
           </template>
@@ -126,7 +96,8 @@
           <template #cell-status_code="{ row }">
             <span :class="statusBadgeClass(row.status_code)">
               <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(row.status_code)"></span>
-              {{ row.status_code }}
+              <!-- 状态码加 self-baseline，移动卡片的标签对齐状态码。 -->
+              <span class="self-baseline">{{ row.status_code }}</span>
             </span>
           </template>
 
@@ -179,16 +150,11 @@
       :close-on-click-outside="true"
       @close="detailVisible = false"
     >
-      <div v-if="detailLoading" class="flex items-center justify-center py-16">
-        <div class="flex flex-col items-center gap-3">
-          <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"></div>
-          <div class="text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('common.loading') }}</div>
-        </div>
-      </div>
+      <ContentSkeleton v-if="detailLoading" variant="detail" :rows="8" class="py-4" />
 
       <div v-else-if="detail" class="space-y-5 py-2">
         <!-- 操作与结果概览 -->
-        <div class="rounded-lg border border-gray-200 bg-gray-50/60 p-5 dark:border-dark-700 dark:bg-dark-900/60">
+        <div class="rounded-surface border border-gray-200 bg-gray-50/60 p-5 dark:border-dark-700 dark:bg-dark-900/60">
           <div class="flex flex-wrap items-center gap-3">
             <span :class="statusBadgeClass(detail.status_code)">
               <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(detail.status_code)"></span>
@@ -199,8 +165,8 @@
             </span>
           </div>
 
-          <div class="mt-3 flex items-center gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-gray-200 dark:bg-dark-800 dark:ring-dark-600">
-            <span class="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-gray-700 dark:bg-dark-700 dark:text-gray-200">
+          <div class="mt-3 flex items-center gap-2 rounded-control bg-white px-3 py-2 ring-1 ring-gray-200 dark:bg-dark-800 dark:ring-dark-600">
+            <span class="rounded-compact bg-gray-100 px-1.5 py-0.5 font-mono text-xs font-bold text-gray-700 dark:bg-dark-700 dark:text-gray-200">
               {{ detail.method }}
             </span>
             <span class="break-all font-mono text-xs text-gray-600 dark:text-gray-300">{{ detail.path }}</span>
@@ -212,16 +178,13 @@
               {{ formatTime(detail.created_at) }}
             </span>
             <span>{{ t('admin.audit.detail.latency') }} {{ detail.latency_ms }} ms</span>
-            <span v-if="detail.request_id" class="inline-flex items-center gap-1">
-              {{ t('admin.audit.detail.requestId') }}
-              <span class="break-all font-mono">{{ detail.request_id }}</span>
-            </span>
+            <RequestIdLink v-if="detail.request_id" :value="detail.request_id" />
           </div>
         </div>
 
         <!-- 操作者、认证方式与来源 -->
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div class="rounded-lg bg-gray-50 p-4 dark:bg-dark-900">
+          <div class="rounded-control bg-gray-50 p-4 dark:bg-dark-900">
             <div class="text-xs font-bold uppercase tracking-wider text-gray-400">
               {{ t('admin.audit.columns.actor') }}
             </div>
@@ -231,7 +194,7 @@
             <div class="mt-0.5 text-xs text-gray-400">{{ detail.actor_role }}</div>
           </div>
 
-          <div class="rounded-lg bg-gray-50 p-4 dark:bg-dark-900">
+          <div class="rounded-control bg-gray-50 p-4 dark:bg-dark-900">
             <div class="text-xs font-bold uppercase tracking-wider text-gray-400">
               {{ t('admin.audit.filters.authMethod') }}
             </div>
@@ -243,7 +206,7 @@
             </div>
           </div>
 
-          <div class="rounded-lg bg-gray-50 p-4 dark:bg-dark-900">
+          <div class="rounded-control bg-gray-50 p-4 dark:bg-dark-900">
             <div class="text-xs font-bold uppercase tracking-wider text-gray-400">
               {{ t('admin.audit.columns.clientIp') }}
             </div>
@@ -258,7 +221,7 @@
           <h4 class="mb-1.5 text-xs font-bold uppercase tracking-wider text-gray-400">
             {{ t('admin.audit.detail.userAgent') }}
           </h4>
-          <div class="break-all rounded-lg bg-gray-50 p-3 font-mono text-xs leading-relaxed text-gray-600 dark:bg-dark-900 dark:text-gray-400">
+          <div class="break-all rounded-control bg-gray-50 p-3 font-mono text-xs leading-relaxed text-gray-600 dark:bg-dark-900 dark:text-gray-400">
             {{ detail.user_agent || '—' }}
           </div>
         </section>
@@ -268,7 +231,7 @@
           <h4 class="mb-1.5 text-xs font-bold uppercase tracking-wider text-gray-400">
             {{ t('admin.audit.detail.requestBody') }}
           </h4>
-          <pre class="max-h-72 overflow-auto rounded-lg bg-gray-50 p-4 font-mono text-xs leading-relaxed text-gray-600 dark:bg-dark-900 dark:text-gray-400">{{ prettyBody(detail.request_body) }}</pre>
+          <pre class="max-h-72 overflow-auto rounded-control bg-gray-50 p-4 font-mono text-xs leading-relaxed text-gray-600 dark:bg-dark-900 dark:text-gray-400">{{ prettyBody(detail.request_body) }}</pre>
         </section>
 
         <!-- 附加信息 -->
@@ -276,7 +239,7 @@
           <h4 class="mb-1.5 text-xs font-bold uppercase tracking-wider text-gray-400">
             {{ t('admin.audit.detail.extra') }}
           </h4>
-          <pre class="max-h-48 overflow-auto rounded-lg bg-gray-50 p-4 font-mono text-xs leading-relaxed text-gray-600 dark:bg-dark-900 dark:text-gray-400">{{ JSON.stringify(detail.extra, null, 2) }}</pre>
+          <pre class="max-h-48 overflow-auto rounded-control bg-gray-50 p-4 font-mono text-xs leading-relaxed text-gray-600 dark:bg-dark-900 dark:text-gray-400">{{ JSON.stringify(detail.extra, null, 2) }}</pre>
         </section>
       </div>
     </BaseDialog>
@@ -363,7 +326,9 @@
   </AppLayout>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import RequestIdLink from '@/components/common/RequestIdLink.vue'
+import ContentSkeleton from '@/components/common/ContentSkeleton.vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI, type AuditLog } from '@/api/admin'
 import { totpAPI } from '@/api'
@@ -373,6 +338,8 @@ import DataTable from '@/components/common/DataTable.vue'
 import type { Column } from '@/components/common/types'
 import Pagination from '@/components/common/Pagination.vue'
 import Select from '@/components/common/Select.vue'
+import FilterDropdown from '@/components/common/FilterDropdown.vue'
+import FilterField from '@/components/common/FilterField.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -388,6 +355,7 @@ const page = ref(1)
 const pageSize = ref(20)
 
 const filters = reactive({
+  request_id: '',
   q: '',
   actor_email: '',
   action: '',
@@ -396,9 +364,9 @@ const filters = reactive({
   auth_method: '',
   success: ''
 })
-const showFilterDropdown = ref(false)
-const filterPanelRef = ref<HTMLElement | null>(null)
-const activeFilterCount = computed(() => Object.values(filters).filter((value) => String(value).trim() !== '').length + (timeRange.value ? 1 : 0))
+// 关键字独立展示，筛选角标只统计面板内的条件。
+const activeFilterCount = computed(() => Object.entries(filters)
+  .filter(([key, value]) => key !== 'q' && value.trim() !== '').length + (timeRange.value ? 1 : 0))
 
 // 时间范围：预设窗口（同 /admin/ops 时间下拉）+ 自定义起止（datetime-local，支持时分）
 const timeRange = ref('')
@@ -472,6 +440,23 @@ function handleCustomTimeRangeConfirm() {
   search()
 }
 
+// 移除单个文本条件后立即重新查询。
+function clearAuditFilter(key: 'request_id' | 'actor_email' | 'action' | 'client_ip') {
+  filters[key] = ''
+  search()
+}
+
+// 重置面板内的条件和时间范围，保留工具栏中的关键字。
+function resetAuditFilters() {
+  for (const key of Object.keys(filters) as Array<keyof typeof filters>) {
+    if (key !== 'q') filters[key] = ''
+  }
+  timeRange.value = ''
+  customStartTime.value = ''
+  customEndTime.value = ''
+  search()
+}
+
 function handleCustomTimeRangeCancel() {
   // 未确认不改变当前时间范围；Select 是受控组件，展示值保持不变。
   showCustomTimeRangeDialog.value = false
@@ -536,6 +521,7 @@ function buildQuery() {
   return {
     page: page.value,
     page_size: pageSize.value,
+    request_id: filters.request_id || undefined,
     q: filters.q || undefined,
     actor_email: filters.actor_email || undefined,
     action: filters.action || undefined,
@@ -610,8 +596,7 @@ const clearTotpCode = ref('')
 const clearing = ref(false)
 const checkingTotpStatus = ref(false)
 
-// 与其他敏感操作一致：未启用 2FA 时直接提示去个人资料启用 TOTP，
-// 而不是弹出一个无法完成的验证码输入框（后端会以 TOTP_NOT_SETUP 拒绝）。
+// 未启用 2FA 时提示用户去个人资料启用 TOTP，后端会以 TOTP_NOT_SETUP 拒绝未配置 TOTP 的请求。
 async function openClearDialog() {
   if (checkingTotpStatus.value) return
   checkingTotpStatus.value = true
@@ -681,17 +666,7 @@ function statusDotClass(status: number): string {
   return 'bg-green-500'
 }
 
-function handleFilterClickOutside(event: MouseEvent) {
-  const target = event.target
-  if (target instanceof Node && filterPanelRef.value?.contains(target)) return
-  if (target instanceof Element && target.closest('.select-dropdown-portal')) return
-  showFilterDropdown.value = false
-}
-
 onMounted(() => {
   fetchLogs()
-  document.addEventListener('click', handleFilterClickOutside)
 })
-
-onUnmounted(() => document.removeEventListener('click', handleFilterClickOutside))
 </script>

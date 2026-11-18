@@ -10,7 +10,7 @@ const messages: Record<string, string> = {
   'admin.dashboard.requests': 'Requests',
   'admin.dashboard.tokens': 'Tokens',
   'admin.dashboard.actual': 'Actual',
-  'admin.dashboard.accountCost': 'Account Cost',
+  'admin.dashboard.providerCost': 'Provider Cost',
   'admin.dashboard.standard': 'Standard',
   'admin.dashboard.metricTokens': 'By Tokens',
   'admin.dashboard.metricActualCost': 'By Actual Cost',
@@ -82,6 +82,8 @@ describe('GroupDistributionChart', () => {
     expect(rows[1].text()).toContain('group-b')
 
     const options = (wrapper.vm as any).$?.setupState.doughnutOptions
+    expect(options.plugins.tooltip.enabled).toBe(false)
+    expect(options.plugins.tooltip.external).toBeTypeOf('function')
     const label = options.plugins.tooltip.callbacks.label({
       label: 'group-a',
       dataIndex: 0,
@@ -118,11 +120,11 @@ describe('GroupDistributionChart', () => {
     expect(label).toBe('group-b: $0.900 (90.0%)')
   })
 
-  it('can hide account cost for user usage stats without account_cost', () => {
+  it('can hide provider cost for user usage stats without provider_cost', () => {
     const wrapper = mount(GroupDistributionChart, {
       props: {
         groupStats,
-        showAccountCost: false,
+        showProviderCost: false,
       },
       global: {
         stubs: {
@@ -131,12 +133,12 @@ describe('GroupDistributionChart', () => {
       },
     })
 
-    expect(wrapper.text()).not.toContain('Account Cost')
+    expect(wrapper.text()).not.toContain('Provider Cost')
     expect(wrapper.findAll('thead th')).toHaveLength(5)
     expect(wrapper.findAll('tbody tr')[0].findAll('td')).toHaveLength(5)
   })
 
-  it('renders a horizontal log-scale bar chart instead of doughnut when chartType is bar', () => {
+  it('renders a horizontal linear-scale bar chart starting at zero instead of doughnut when chartType is bar', () => {
     const wrapper = mount(GroupDistributionChart, {
       props: {
         groupStats,
@@ -155,8 +157,11 @@ describe('GroupDistributionChart', () => {
     expect(chartData.datasets[0].data).toEqual([1200, 600])
 
     const options = (wrapper.vm as any).$?.setupState.barOptions
+    expect(options.plugins.tooltip.enabled).toBe(false)
+    expect(options.plugins.tooltip.external).toBeTypeOf('function')
     expect(options.indexAxis).toBe('y')
-    expect(options.scales.x.type).toBe('logarithmic')
+    expect(options.scales.x.type).toBe('linear')
+    expect(options.scales.x.beginAtZero).toBe(true)
     expect(options.scales.x.ticks.display).toBe(false)
     expect(options.scales.x.grid.display).toBe(false)
 
@@ -171,7 +176,7 @@ describe('GroupDistributionChart', () => {
     expect(label).toBe('group-a: 1.20K (66.7%)')
   })
 
-  it('compresses doughnut slices under skewed values while tooltip keeps raw value and real percentage', () => {
+  it('keeps doughnut slices proportional to raw values even with large differences', () => {
     const wrapper = mount(GroupDistributionChart, {
       props: {
         groupStats: [
@@ -188,8 +193,8 @@ describe('GroupDistributionChart', () => {
 
     const chartData = JSON.parse(wrapper.find('.chart-data').text())
     expect(chartData.labels).toEqual(['big', 'small'])
-    // 扇区按 log10 压缩，小占比分组仍获得可见角度
-    expect(chartData.datasets[0].data).toEqual([5, 1])
+    // 数量级差异较大时，扇区仍按真实用量比例绘制。
+    expect(chartData.datasets[0].data).toEqual([1_000_000, 100])
 
     const options = (wrapper.vm as any).$?.setupState.doughnutOptions
     const label = options.plugins.tooltip.callbacks.label({

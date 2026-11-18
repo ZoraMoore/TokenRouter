@@ -1,10 +1,10 @@
 # 网关策略控制
 
-本文描述分组、渠道、账号和全局运行设置共同形成的网关策略。它关注策略所有权、优先级和失败边界，不重复平台协议转换、账号调度算法或具体 HTTP 字段。
+本文描述分组、价格配置、提供商和全局运行设置共同决定的网关策略：每项策略归哪一层管、优先级如何、失败时怎么处理。平台协议转换、提供商调度算法和具体 HTTP 字段见各自的文档。
 
 ## 章节导航
 
-- [策略层级](#策略层级)：判断配置应归属分组、渠道、账号还是全局。
+- [策略层级](#策略层级)：一项配置应该放在分组、价格配置、提供商还是全局。
 - [协议与能力准入](#协议与能力准入)：修改 Messages、Live、媒体或客户端限制时读取。
 - [模型路由](#模型路由)：修改模型重定向、映射、白名单或 fallback 时读取。
 - [认证与隐私](#认证与隐私)：修改 OAuth-only、privacy 或会话隔离时读取。
@@ -14,68 +14,81 @@
 <a id="gateway_policy_layers"></a>
 ## 策略层级
 
-| 层级 | 拥有的策略 | 不应承担的责任 |
+| 层级 | 管理的策略 | 职责范围之外 |
 | --- | --- | --- |
-| API Key | 分组选择、复合前缀、Key 级模型重定向、Key 限额 | 不能改变上游账号凭据或平台 |
-| Group | 上游平台、基础/高级调度器选择、高级调度器稀疏覆盖、客户端协议/媒体准入、fallback、OAuth/privacy、推理上限、模型可见性、RPM 和数据共享 | 不保存真实上游 token |
-| Channel | 一个分组的模型映射、定价和功能配置 | 不能把不存在的账号能力变成可调度能力 |
-| Account | 凭据、代理、模型映射/白名单、重试状态码、临时不可调度、Header override 和 capability | 不能绕过分组对用户公开的能力 |
-| Setting/config | 高级调度评分参数、跨分组运行策略、兼容开关、默认 Header/UA、缓存和安全策略 | 不能替代分组的调度器选择或每个账号的权威运行状态 |
+| API Key | 分组选择、复合前缀、Key 级模型重定向、Key 限额 | 上游提供商的凭据和平台 |
+| Group | 组内提供商关联、基础或高级调度器的选择、高级调度器的稀疏覆盖、客户端协议和媒体准入、fallback、OAuth 和 privacy、推理上限、模型可见性、Fast/Standard 计费和 RPM | 上游 token |
+| PricingConfig | 可以被多个分组复用的价卡、计费设置、计费模型来源和提供商成本配置 | 模型权限、模型映射和功能开关 |
+| Provider | 凭据、代理、模型映射和白名单、重试状态码、临时不可调度、Header override 和 capability | 超出分组对用户公开的能力范围 |
+| Setting/config | 高级调度的评分参数、跨分组的运行策略、兼容开关、默认 Header 和 UA、缓存和安全策略 | 分组的调度器选择，以及各提供商的运行状态 |
 
-每个 Group 当前最多关联一个 Channel；不存在“同一分组多个渠道再二次选择”的运行关系。字段属于哪一层决定缓存失效范围、管理权限和审计来源，不能为了前端表单方便复制为多份互相覆盖的配置。
+每个分组最多关联一个价格配置。分组还可以单独关联一份模型属性配置，它影响模型展示和客户端配置导出，属于展示配置；可请求的模型和请求参数由这里的请求策略决定。提供商资格由分组和提供商的策略决定，价格配置只参与计费。字段属于哪一层，决定了缓存失效的范围、管理权限和审计来源；为了前端表单方便把同一字段复制成几份互相覆盖的配置，会让这三件事都变得不确定。
+
+<a id="group_routing_policy"></a>
+## 分组模型与功能策略
+
+`groups.routing_policy` 保存模型映射、模型白名单、白名单检查阶段、网页搜索模拟和 Bedrock CC 兼容设置。管理表单没有策略总开关，各项设置保存后直接生效，模型白名单有自己的开关。存储里的 `enabled` 字段用来兼容历史上停用的草稿：保存前不参与请求处理，重新编辑并保存时写入 `true`；只打开弹窗不会修改服务端的值。没有配置过策略的存量分组不受任何限制。
+
+旧的 `features` 文本只保存在存储和 API 里，目前没有页面展示，运行时也不读取，管理表单没有这个输入项；编辑其他策略设置时，已有的文本原样保留。
+
+分组管理表单没有「支持的模型系列」和「MCP XML 协议注入」两项，创建和更新请求也不提交 `supported_model_scopes` 和 `mcp_xml_inject`。这两个字段仍保存在存储和 API 里，编辑其他设置时已有的值保持不变。当前路由不按模型系列字段过滤候选提供商。Antigravity 的 Claude 请求转换默认开启 MCP XML 提示词注入，工具名以 `mcp__` 开头时触发，分组里的注入开关不起作用。
+
+`model_mapping` 是不分平台的模型名映射表，`allowed_models` 是一个字符串列表。模型映射精确匹配优先，其次是末尾通配符，每个阶段只改写一次。白名单的 `restriction_model_source` 可以选 `requested`、`group_mapped` 或 `upstream`；选上游阶段时逐个提供商验证。开启限制且白名单为空时，所有模型都被拒绝。模型目录也使用这份策略，所以修改价格、停用或删除价格配置，都不会增减模型权限或改写请求模型。
+
+Codex 图片行为在分组的「协议与访问」里设置，依次取分组的协议设置、提供商设置和全局默认值；routing_policy 里旧的桥接默认值不再读取。网页搜索按全局门禁、提供商覆盖的顺序判断。策略通过分组管理入口保存，普通 Key 和复合 Key 的快照分别深拷贝。请求优先读取匹配分组的可信认证快照，回退和管理查询读取目标分组的策略。读取或解码失败时，模型白名单按原样生效。
 
 ## 协议与能力准入
 
-Group 的 `platform` 表示上游平台，不再隐含客户端必须使用同形协议。文本生成准入由独立的 `allowed_client_protocols` 完整集合控制，固定顺序为 `anthropic_messages`、`openai_responses`、`openai_chat_completions`、`gemini_generate_content`。各平台策略如下：
+分组没有平台字段：`allowed_protocols` 控制客户端可以使用哪些入口，`protocol_fallbacks` 按入口保存有序的转换目标数组。某个入口没有配置时自动匹配，空数组表示只走原生协议，非空数组限定允许的目标和顺序。提供商的 `credentials.upstream_protocols` 只勾选它原生支持的协议。完整的 24 项协议目录、各平台和认证类型的支持范围、新建时的默认值，由后端提供给前端，详见[统一协议能力](../interfaces/protocol_capabilities.md)。
 
-| 上游平台 | 支持协议 | 新建默认 |
-| --- | --- | --- |
-| Anthropic | Messages、Responses、Chat | Messages |
-| OpenAI | Messages、Responses、Chat | Responses、Chat |
-| Gemini | 四项全部 | Gemini GenerateContent |
-| Antigravity | 四项全部 | Messages、Gemini GenerateContent |
-| Qoder | Messages、Responses、Chat | 空集合 |
-| Grok | Messages、Responses、Chat | Responses、Chat |
-| Kimi | Messages、Responses、Chat | 三项全部 |
-| Zhipu | Messages、Responses、Chat | 三项全部 |
-| DeepSeek | Messages、Responses、Chat | 三项全部 |
+协议配置是硬资格。候选先看原生协议，没有可用的原生协议、也没有允许的单步转换路线时，这个候选不参与评分；模型、配额、媒体资格和会话的约束照常生效。换号时重新解析；请求失败后也不会临时换用另一个协议。分组的转换目标不需要同时作为客户端入口开放。
 
-上表默认值只决定新建分组的初始选择，不构成必选项；所有平台都允许保存空集合。显式保存时，未知、重复或不受平台支持的集合返回 `400`。创建缺省使用平台默认集合，更新缺省保持原值；更新同时切换平台时，只移除新平台不支持的协议，不自动启用任何协议。`allow_messages_dispatch` 仅作为弃用兼容字段：响应从新集合派生，新字段缺省时只有 OpenAI 分组继续接受它作为 Messages 输入，新字段与旧字段同时存在时新字段优先。`messages_dispatch_model_config` 只负责 OpenAI 的 Claude 到 GPT 模型映射，不再承担协议准入。
-
-协议门禁覆盖 Messages、支持平台的 token-count 别名、Responses HTTP/SSE 根路径和允许子路径、两个 Chat Completions 别名，以及 Gemini/Antigravity GenerateContent、StreamGenerateContent、CountTokens POST 动作；模型列表 GET 不受影响。Antigravity、Qoder 的 Anthropic token count 始终保持不支持的 `404`，不受 Messages 开关影响；Kimi、Zhipu、DeepSeek 的 token count 统一本地估算，不调用供应商原生计数端点。门禁使用复合 Key 最终选中的分组，并在 handler 解析正文、账号选择、计费、重试和 fallback 之前拒绝。Responses WebSocket 仍只属于 OpenAI/Grok 原生传输能力，兼容 Responses 开关不会为其它平台开放它。
-
-Group 还可独立限制 Live、图片、批量图片和视频等能力，并可表达 Claude Code-only、受支持模型 scope 或自定义模型列表。公开路由先存在，具体分组仍可能在本地 feature gate 拒绝；协议拒绝记录 `LocalPolicyDenied`，其它能力拒绝沿用各自本地业务限制，二者都不能伪装成上游故障。
-
-endpoint capability 还会由账号类型和探测结果继续收窄。例如 Embeddings 只允许 OpenAI，Grok OAuth 媒体需要明确资格，Realtime 需要 OpenAI 分组与支持的 transport。策略检查应在昂贵调度或上游调用前尽早执行，但不能绕过 Key、团队和计费准入。
+Images 的生成和编辑单独控制。Responses 的图片工具使用 `responses_image_policy`，有四种状态：继承、开启桥接、关闭桥接、屏蔽。分组的配置优先，选择继承时沿用提供商和全局的设置。已有的视频和批量作业资源操作按任务归属授权，新建入口的开关不影响它们。
 
 ## 模型路由
 
-共同模型链为：复合 Key 前缀解析、Key 级精确重定向、Group/Channel 路由、Account 映射与白名单。每层只执行自己的单步规则；不要依赖隐式多跳别名链。请求模型、上游模型和计费模型分别记录，响应中的模型恢复以客户端契约为准。
+模型链依次是：复合 Key 前缀解析、Key 级重定向（精确匹配或最长的末尾通配符）、分组路由、提供商映射和白名单。每层执行自己的一步规则，层与层之间按上面的顺序衔接。请求模型、上游模型和计费模型分别记录，响应里的模型名按客户端协议恢复。
 
-Group 可以启用模型路由、默认映射和 OpenAI Messages 专用模型配置。OpenAI Messages 专用配置中的精确规则优先于系列规则，只有非空目标值才生效；空配置或空系列字段不使用内置默认模型，当前渠道模型保持不变并继续进入账号层。Channel 决定分组内的映射、价格和功能；Account 则处理供应商或站点差异。可见模型只包含当前可请求结果，未知或歧义定价以未定价表达，不使用猜测价格。
+分组模型映射统一使用 `routing_policy.model_mapping`，支持精确名称和末尾通配符。Messages 和其他文本入口共用这一层规则，完成后直接进入提供商的模型规则，中间没有协议专用的覆盖层。分组策略决定映射、白名单和功能，价格配置决定价格，提供商处理供应商或站点之间的差异。可见的模型只包括当前可以请求的结果；未知或有歧义的价格显示为未定价，系统不会猜测价格。
 
-Group 的 fallback 包括普通 fallback、invalid-request fallback 和 unavailable fallback。它们是显式的跨分组策略：目标分组仍要重新执行平台、Key、模型、权限、计费和 `scheduler_type` 约束，不能只把原账号列表替换掉。循环、目标失效或策略不匹配必须终止。
+客户端限制的逐组读取和回退，由 routing 的 `ResolveClientGroup` 执行。通用入口返回读取时的原始错误；OpenAI 快照入口可以保留未解析的分组；客户端识别在读取当前分组后，按固定的短路顺序执行。强制平台的旁路，以及最终分组的资金和权限复查，由各入口自己负责。
 
-`scheduler_type` 仅属于 Group，`basic` 为默认值，`advanced` 表示该分组在硬过滤后使用通用高级评分。高级调度的 Top-K、评分权重、粘性加权和订阅优先是网关通用设置，不存在全局启用开关；设置不能把基础分组隐式切换为高级，也不能让 OpenAI/Grok 特有能力作用于不具备该能力的账号。
+普通 Key 在创建和调用时都需要选定分组；系统不会自动创建或查找默认分组，没有关联分组的提供商不会进入候选池。Key 的 `fallback_when_group_unavailable` 只允许回退到管理员配置的不可用回退分组。
 
-高级分组可在 `advanced_scheduler_overrides` 保存稀疏参数覆盖。每个未出现的字段依次继承数据库通用设置和 `gateway.advanced_scheduler` 配置默认值；出现的字段（包括 `false` 和 `0`）以分组值为准。空对象表示全部恢复继承。基础分组即使历史上留有该对象也不读取它，切换为高级后才重新生效。
+分组的 fallback 有三种：客户端限制 fallback、invalid-request fallback 和 unavailable fallback。它们都是明确配置的跨分组策略：目标分组要重新检查 Key、模型、协议、权限、计费和 `scheduler_type`；强制平台的入口另外保留提供商的平台条件，提供商列表按目标分组重新生成。出现循环、目标失效或策略不匹配时，回退终止。
+
+客户端限制回退在入口完成。Messages 和计数入口先识别 Claude Code；其他协议在共同的协议门禁里解析配置好的回退链。每一跳都重新检查目标分组的权限、协议和资金，成功后同时替换有效的 Key、资金来源和请求分组，再按最终的分组应用策略、规划路线。初始回退不额外累计 RPM，最终入口照常执行一次准入。选择器只校验已经授权的当前分组，回退链由入口处理。
+
+`scheduler_type` 是分组的字段，`basic` 是默认值，`advanced` 表示这个分组在硬过滤后使用通用的高级评分。高级调度的 Top-K、评分权重、粘性加权和订阅优先是网关通用设置，没有全局启用开关；这些设置不会把基础分组切换成高级，OpenAI 和 Grok 特有的能力也只作用于具备这些能力的提供商。
+
+高级分组可以在 `advanced_scheduler_overrides` 里保存稀疏的参数覆盖。没有出现的字段，依次继承数据库里的通用设置和 `gateway.advanced_scheduler` 的配置默认值。可以覆盖的内容：Top-K、评分权重、粘性和订阅开关、错误率和 TTFT 两个 EWMA alpha、sticky escape 开关和两个阈值。出现的字段（包括 `false` 和 `0`）以分组的值为准：alpha 大于 0 且不超过 1，TTFT 阈值是正数，错误率阈值在 `0..1` 之间。空对象表示全部恢复继承。基础分组即使留有这个对象也不会读取，切换为高级之后才重新生效。
 
 ## 认证与隐私
 
-`require_oauth_only` 排除 API Key 等非 OAuth 账号；`require_privacy_set` 要求上游隐私状态已经确认。OpenAI/Antigravity 的 privacy 检查和设置可在创建、刷新或维护流程触发，但请求热路径只能使用当前已验证状态，不能假定刷新成功。
+`require_oauth_only` 排除 API Key 等非 OAuth 提供商；`require_privacy_set` 要求上游的隐私状态已经确认。OpenAI 和 Antigravity 的 privacy 检查和设置，可以在创建、刷新或维护流程里触发，请求热路径使用当前已经验证过的状态，刷新是否成功以刷新结果为准。
 
-会话隔离与粘性约束防止不同账号、团队或用户上下文互相复用。OAuth passthrough、Claude Code-only 和允许客户端策略必须与账号类型共同校验；客户端伪造 User-Agent 不能自动获得额外权限。
+OpenAI 客户端的访问判定直接使用 provider 的检测接口，按需读取 Header 字符串，TLS 路由只传入匹配结果；HTTP、Live 和自动探针使用同一套规则。WS 传输的选择直接调用 gateway/provider 整理的提供商和配置数据，以及 egress 的决策（只有一处实现），配置和动态的客户端放行设置在调用时读取。
+
+提供商的模型白名单缺失或为空时允许任意模型 ID，包含统一目录未收录的型号。非空白名单在提供商映射后检查最终模型，支持末尾通配符和 `*`。Spark、OAuth、站点及端点资格分别检查。OAuth 和 API Key 的透传模式同样执行这些规则。
+
+会话隔离和粘性约束让不同的提供商、团队和用户上下文各自独立，互不复用。OAuth passthrough、Claude Code-only 和客户端白名单策略，要和提供商类型一起校验；客户端伪造 User-Agent 拿不到额外的权限。
 
 ## 推理与 Header
 
-Group 可限制最大 reasoning effort 并配置 effort 映射，平台适配器再把统一值转换为 Anthropic thinking、OpenAI reasoning 或 Qoder/Gemini 原生字段。显式关闭、平台不支持和管理员上限的优先级必须可预测；无效字符串通常保持默认或被拒绝，不能静默提升推理强度。
+分组可以限制最大的 reasoning effort，并配置 effort 映射，平台适配器再把统一的值转换成 Anthropic thinking、OpenAI reasoning，或 Qoder、Gemini 的原生字段。手动关闭、平台不支持和管理员上限三者的优先级要固定、可预测；无效的字符串通常保持默认值或者被拒绝，推理强度不会被悄悄提高。
 
-Header 策略来自平台默认、全局设置和允许的账号 override。认证、hop-by-hop、Host/长度等受保护头不能被任意覆盖。Anthropic beta/cache、OpenAI UA/客户端元数据、Claude Code mimicry 和 dateline/metadata 兼容均应在平台边界内处理，并接受出站安全校验。
+HTTP 在策略改写的位置记录客户端的档位，`gateway/requeststate` 保存请求的策略快照并改写报文字段；映射、上限和错误类型由 routing 负责。WS 使用相同的报文规则和用量解码器，每轮都区分客户端原来的档位和最终发给上游的档位。桥接补出的默认档位不算客户端请求；任何阶段都不从模型名后缀推断档位；异步完成只读取已经固定下来的值。
+
+Fast 和 Ultra Fast 的账号资格、系统、分组和 Key 判定由 `gateway/tierpolicy.Resolve` 执行，HTTP 报文和 WS 帧都使用这个结果。OpenAI OAuth 的 `edu_plus` 账号使用强制关闭策略，系统的过滤和阻断继续执行，系统、分组和 Key 的加速注入被关闭。其他账号执行系统、分组和 Key 的策略。系统层短路或分组强制关闭时，判定在此结束，后面 Key 开启时的查价不会执行；Key 强制开启产生的新档位，还要再经过一次系统策略。执行适配层提供资格信息和按需读取的接口，协议拒绝、HTTP/SSE 错误和 WS 错误帧分别由各自的适配层输出。
+
+Header 策略来自平台默认值、全局设置和允许的提供商 override。认证头、hop-by-hop 头、Host 和长度等受保护的头不能被随意覆盖。Anthropic 的 beta 和 cache、OpenAI 的 UA 和客户端元数据、Claude Code 模拟、dateline 和 metadata 的兼容，都在平台适配层里处理，并经过出站安全校验。
 
 ## 重试与降级
 
-账号可配置额外重试状态码和临时不可调度规则，但最终是否换账号还取决于平台错误分类、响应是否开始、attempt 上限和上下文截止时间。401/403、429、5xx、内容策略和本地拒绝不能只按 HTTP 数字归为一类。
+提供商可以配置额外的重试状态码和临时不可调度规则，但最终是否换提供商，还取决于平台的错误分类、响应是否已经开始、attempt 上限和上下文截止时间。401 和 403、429、5xx、内容策略和本地拒绝各有处理方式，分类时要结合错误内容，状态码只是其中一个依据。
 
-重试发生在同一分组的账号 attempt 内；fallback 发生在明确的跨分组策略上；错误响应规则只改变最终客户端展示。这三者是不同阶段。修改任何一层时要验证不会重复扣费、重复写流或把本地策略拒绝计作账号故障。
+同一分组里不同平台的提供商可以竞争同一个模型，但 `previous_response_id`、WS 和 Live 的状态、thinking 签名，以及已经开始的流，都会限制可以切换的范围。
 
-相关文档：[账号调度与缓存一致性](../architecture/account_scheduling_and_cache.md)、[网关错误响应策略](../interfaces/gateway_error_policy.md)、[路由与结算](routing_and_billing.md)。
+重试发生在同一个分组内的提供商 attempt 之间；fallback 是明确配置的跨分组策略；错误响应规则只改变最终返回给客户端的内容。修改这些阶段时，要验证不会重复扣费、不会重复写流，也不会把本地策略的拒绝记为提供商故障。
+
+相关文档：[提供商调度与缓存一致性](../architecture/provider_scheduling_and_cache.md)、[网关错误响应策略](../interfaces/gateway_error_policy.md)、[路由与结算](routing_and_billing.md)。

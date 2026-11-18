@@ -22,6 +22,8 @@ const (
 	FieldValue = "value"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldRequiresPayment holds the string denoting the requires_payment field in the database.
+	FieldRequiresPayment = "requires_payment"
 	// FieldMaxUses holds the string denoting the max_uses field in the database.
 	FieldMaxUses = "max_uses"
 	// FieldUsedCount holds the string denoting the used_count field in the database.
@@ -76,6 +78,7 @@ var Columns = []string{
 	FieldType,
 	FieldValue,
 	FieldStatus,
+	FieldRequiresPayment,
 	FieldMaxUses,
 	FieldUsedCount,
 	FieldExpiresAt,
@@ -109,6 +112,8 @@ var (
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultRequiresPayment holds the default value on creation for the "requires_payment" field.
+	DefaultRequiresPayment bool
 	// DefaultMaxUses holds the default value on creation for the "max_uses" field.
 	DefaultMaxUses int
 	// DefaultUsedCount holds the default value on creation for the "used_count" field.
@@ -143,6 +148,11 @@ func ByValue(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByRequiresPayment orders the results by the requires_payment field.
+func ByRequiresPayment(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRequiresPayment, opts...).ToFunc()
 }
 
 // ByMaxUses orders the results by the max_uses field.

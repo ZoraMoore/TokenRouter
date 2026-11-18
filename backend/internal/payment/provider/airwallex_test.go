@@ -1,5 +1,3 @@
-//go:build unit
-
 package provider
 
 import (
@@ -16,8 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/payment"
 	"github.com/stretchr/testify/require"
+
+	"github.com/TokenFlux/TokenRouter/internal/payment"
 )
 
 func TestNewAirwallexValidatesConfig(t *testing.T) {

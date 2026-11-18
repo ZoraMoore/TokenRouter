@@ -1,10 +1,7 @@
-// Package schema 定义 Ent ORM 的数据库 schema。
 package schema
 
 import (
 	"time"
-
-	"github.com/TokenFlux/TokenRouter/internal/domain"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
@@ -13,12 +10,14 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 // UsageLog 定义使用日志实体的 schema。
 //
 // 使用日志记录每次 API 调用的详细信息，包括 token 使用量、成本计算等。
-// 这是一个只追加的表，不支持更新和删除。
+// UsageLog 用于追加用量记录。
 type UsageLog struct {
 	ent.Schema
 }
@@ -39,7 +38,11 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int64("billing_user_id").Optional(),
 		field.Int64("team_id").Optional().Nillable(),
 		field.Int64("api_key_id"),
-		field.Int64("account_id"),
+		field.Int64("provider_id"),
+		// 平台随使用事实保存，提供商或分组变动不会改变历史统计。
+		field.String("platform").MaxLen(64).Default("unknown"),
+		// billing_key 保存资金操作的稳定去重值，旧记录为空时使用 request_id。
+		field.String("billing_key").MaxLen(255).Optional().Nillable(),
 		field.String("request_id").
 			MaxLen(64).
 			NotEmpty(),
@@ -58,7 +61,10 @@ func (UsageLog) Fields() []ent.Field {
 			MaxLen(100).
 			Optional().
 			Nillable(),
-		field.Int64("channel_id").Optional().Nillable().Comment("渠道 ID"),
+		// 上游响应模型用于管理员审计；历史与缺失观测保持为空。
+		field.String("upstream_response_model").MaxLen(200).Optional().Nillable(),
+		field.Bool("upstream_model_mismatch").Optional().Nillable(),
+		field.Int64("pricing_config_id").Optional().Nillable().Comment("共享价格配置 ID"),
 		field.String("model_mapping_chain").MaxLen(500).Optional().Nillable().Comment("模型映射链"),
 		field.String("billing_tier").MaxLen(50).Optional().Nillable().Comment("计费层级标签"),
 		field.String("billing_mode").MaxLen(20).Optional().Nillable().Comment("计费模式：token/per_request/image"),
@@ -108,7 +114,7 @@ func (UsageLog) Fields() []ent.Field {
 		field.Float("balance_amount_usd").
 			Default(0).
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
-		field.JSON("billing_allocations", []domain.BillingAllocation{}).
+		field.JSON("billing_allocations", []billing.BillingAllocation{}).
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 		field.Float("rate_multiplier").
@@ -118,8 +124,8 @@ func (UsageLog) Fields() []ent.Field {
 			Default(false).
 			Comment("该请求是否因长上下文规则实际增加费用"),
 
-		// account_rate_multiplier: 账号计费倍率快照（NULL 表示按 1.0 处理）
-		field.Float("account_rate_multiplier").
+		// provider_rate_multiplier: 提供商计费倍率快照（NULL 表示按 1.0 处理）
+		field.Float("provider_rate_multiplier").
 			Optional().
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}),
@@ -205,9 +211,9 @@ func (UsageLog) Edges() []ent.Edge {
 			Field("api_key_id").
 			Required().
 			Unique(),
-		edge.From("account", Account.Type).
+		edge.From("provider", Provider.Type).
 			Ref("usage_logs").
-			Field("account_id").
+			Field("provider_id").
 			Required().
 			Unique(),
 		edge.From("group", Group.Type).
@@ -232,7 +238,7 @@ func (UsageLog) Indexes() []ent.Index {
 		index.Fields("billing_user_id"),
 		index.Fields("team_id"),
 		index.Fields("api_key_id"),
-		index.Fields("account_id"),
+		index.Fields("provider_id"),
 		index.Fields("group_id"),
 		index.Fields("subscription_id"),
 		index.Fields("created_at"),

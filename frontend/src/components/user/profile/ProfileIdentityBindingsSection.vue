@@ -25,7 +25,7 @@
           <div class="flex min-w-0 flex-1 items-start gap-4">
             <div
               :class="providerIconClass(item.provider)"
-              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-semibold"
+              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-sm font-semibold"
             >
               <Icon
                 v-if="item.provider === 'email'"
@@ -76,7 +76,7 @@
                 <p v-if="bindingCountLabel(item.details)">
                   {{ bindingCountLabel(item.details) }}
                 </p>
-                <p v-if="bindingNote(item.details)">
+                <p v-if="item.provider !== 'email' && bindingNote(item.details)">
                   {{ bindingNote(item.details) }}
                 </p>
               </div>
@@ -144,7 +144,7 @@
 
           <div class="flex shrink-0 flex-wrap items-center gap-3">
             <button
-              v-if="item.provider === 'email' && compact"
+              v-if="item.provider === 'email' && compact && canManageEmail"
               data-testid="profile-binding-email-toggle"
               type="button"
               class="btn btn-secondary btn-sm"
@@ -279,12 +279,19 @@ const compact = computed(() => props.compact)
 const rowClass = computed(() =>
   props.embedded
     ? compact.value
-      ? 'rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-900/40'
-      : 'rounded-2xl border border-gray-100 bg-gray-50/70 p-4 dark:border-dark-700 dark:bg-dark-900/30'
+      ? 'rounded-surface border border-gray-100 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-900/40'
+      : 'rounded-surface border border-gray-100 bg-gray-50/70 p-4 dark:border-dark-700 dark:bg-dark-900/30'
     : 'px-6 py-5'
 )
 const emailBound = computed(() => getBindingStatus('email'))
-const showEmailForm = computed(() => !compact.value || isEmailFormExpanded.value)
+// 公开设置缺失时关闭换绑入口。
+const userEmailChangeEnabled = computed(
+  () => appStore.cachedPublicSettings?.user_email_change_enabled === true
+)
+const canManageEmail = computed(() => !emailBound.value || userEmailChangeEnabled.value)
+const showEmailForm = computed(
+  () => canManageEmail.value && (!compact.value || isEmailFormExpanded.value)
+)
 const emailPasswordPlaceholder = computed(() =>
   emailBound.value
     ? t('profile.authBindings.replaceEmailPasswordPlaceholder')
@@ -296,10 +303,6 @@ const emailSubmitActionLabel = computed(() =>
     : t('profile.authBindings.confirmEmailBindAction')
 )
 const legacyBindingNoteKeys: Record<string, string> = {
-  'Primary account email is managed from the profile form.':
-    'profile.authBindings.notes.emailManagedByBinding',
-  'Primary account email is managed through verified email binding.':
-    'profile.authBindings.notes.emailManagedByBinding',
   'You can unbind this sign-in method.': 'profile.authBindings.notes.canUnbind',
   'Bind another sign-in method before unbinding.':
     'profile.authBindings.notes.bindAnotherBeforeUnbind',
@@ -541,8 +544,9 @@ function hasBindingDetails(
 
   const showsProviderIdentityDetails =
     provider !== 'email' && Boolean(details.display_name || details.subject_hint)
+  const showsBindingNote = provider !== 'email' && Boolean(bindingNote(details))
 
-  return Boolean(showsProviderIdentityDetails || bindingCountLabel(details) || bindingNote(details))
+  return Boolean(showsProviderIdentityDetails || bindingCountLabel(details) || showsBindingNote)
 }
 
 function toggleEmailForm(): void {

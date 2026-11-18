@@ -1,0 +1,234 @@
+package provider
+
+import (
+	"encoding/json"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/TokenFlux/TokenRouter/internal/billing"
+	"github.com/TokenFlux/TokenRouter/internal/scheduler/policy"
+)
+
+const (
+	WindowCostSchedulable    = billing.WindowCostSchedulable
+	WindowCostStickyOnly     = billing.WindowCostStickyOnly
+	WindowCostNotSchedulable = billing.WindowCostNotSchedulable
+)
+
+// RuntimeConfig 为规则计算提供当前配置和窗口数据。
+// 凭据不会进入这个只读配置输入。
+type RuntimeConfig struct {
+	Extra              map[string]any `json:"-"`
+	Concurrency        int
+	SessionWindowStart *time.Time
+	SessionWindowEnd   *time.Time
+}
+
+// WindowCostSchedulability 窗口费用调度状态。
+type WindowCostSchedulability = billing.WindowCostSchedulability
+
+// SanitizeManagedBaseRPM 对 extra map 中的 base_rpm 值进行范围校验和归一化。
+// 负值归零，超过 10000 截断为 10000。extra 为 nil 或不含 base_rpm 时无操作。
+func SanitizeManagedBaseRPM(extra map[string]any) {
+	if extra == nil {
+		return
+	}
+	raw, ok := extra["base_rpm"]
+	if !ok {
+		return
+	}
+	v := ParseExtraInt(raw)
+	if v < 0 {
+		v = 0
+	} else if v > 10000 {
+		v = 10000
+	}
+	extra["base_rpm"] = v
+}
+
+// GetMaxSessions 获取最大并发会话数
+// 返回 0 表示未启用。
+func (a *RuntimeConfig) GetMaxSessions() int {
+	if a.Extra == nil {
+		return 0
+	}
+	if v, ok := a.Extra["max_sessions"]; ok {
+		return ParseExtraInt(v)
+	}
+	return 0
+}
+
+// GetSessionIdleTimeoutMinutes 获取会话空闲超时分钟数
+// 默认值为 5 分钟。
+func (a *RuntimeConfig) GetSessionIdleTimeoutMinutes() int {
+	if a.Extra == nil {
+		return 5
+	}
+	if v, ok := a.Extra["session_idle_timeout_minutes"]; ok {
+		val := ParseExtraInt(v)
+		if val > 0 {
+			return val
+		}
+	}
+	return 5
+}
+
+// GetBaseRPM 获取基础 RPM 限制
+// 返回 0 表示未启用（负数视为无效配置，按 0 处理）。
+func (a *RuntimeConfig) GetBaseRPM() int {
+	if a.Extra == nil {
+		return 0
+	}
+	if v, ok := a.Extra["base_rpm"]; ok {
+		val := ParseExtraInt(v)
+		if val > 0 {
+			return val
+		}
+	}
+	return 0
+}
+
+// GetRPMStrategy 获取 RPM 策略
+// "tiered" = 三区模型（默认）, "sticky_exempt" = 粘性豁免。
+func (a *RuntimeConfig) GetRPMStrategy() string {
+	if a.Extra == nil {
+		return "tiered"
+	}
+	if v, ok := a.Extra["rpm_strategy"]; ok {
+		if s, ok := v.(string); ok && s == "sticky_exempt" {
+			return "sticky_exempt"
+		}
+	}
+	return "tiered"
+}
+
+// GetRPMStickyBuffer 获取 RPM 粘性缓冲数量
+// Cache-driven: buffer = concurrency + maxSessions（覆盖幽灵窗口 + 稳态会话需求）
+// floor = baseRPM / 5（向后兼容 maxSessions=0 且 concurrency=0 场景）。
+func (a *RuntimeConfig) GetRPMStickyBuffer() int {
+	if a.Extra == nil {
+		return 0
+	}
+	override := 0
+	if v, ok := a.Extra["rpm_sticky_buffer"]; ok {
+		override = ParseExtraInt(v)
+	}
+	return policy.RPMStickyBuffer(a.GetBaseRPM(), a.Concurrency, a.GetMaxSessions(), override)
+}
+
+// CheckRPMSchedulability 根据当前 RPM 计数检查调度状态
+// 复用 WindowCostSchedulability 三态：Schedulable / StickyOnly / NotSchedulable。
+func (a *RuntimeConfig) CheckRPMSchedulability(current int) WindowCostSchedulability {
+	return WindowCostSchedulability(policy.CheckRPM(current, a.GetBaseRPM(), a.GetRPMStickyBuffer(), a.GetRPMStrategy()))
+}
+
+// GetWindowCostLimit 获取 5h 窗口费用阈值（美元）
+// 返回 0 表示未启用。
+func (a *RuntimeConfig) GetWindowCostLimit() float64 {
+	if a.Extra == nil {
+		return 0
+	}
+	if v, ok := a.Extra["window_cost_limit"]; ok {
+		return ParseExtraFloat64(v)
+	}
+	return 0
+}
+
+// GetWindowCostStickyReserve 获取粘性会话预留额度（美元）
+// 默认值为 10。
+func (a *RuntimeConfig) GetWindowCostStickyReserve() float64 {
+	if a.Extra == nil {
+		return 10.0
+	}
+	if v, ok := a.Extra["window_cost_sticky_reserve"]; ok {
+		val := ParseExtraFloat64(v)
+		if val > 0 {
+			return val
+		}
+	}
+	return 10.0
+}
+
+// GetCurrentWindowStartTime 获取当前有效的窗口开始时间
+// 逻辑：
+// 1. 如果窗口未过期（SessionWindowEnd 存在且在当前时间之后），使用记录的 SessionWindowStart
+// 2. 否则（窗口过期或未设置），使用新的预测窗口开始时间（从当前整点开始）。
+func (a *RuntimeConfig) GetCurrentWindowStartTime(now time.Time) time.Time {
+	return billing.CurrentCostWindowStart(a.SessionWindowStart, a.SessionWindowEnd, now)
+}
+
+// ParseExtraFloat64 从 extra 字段解析 float64 值。
+func ParseExtraFloat64(value any) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case json.Number:
+		if f, err := v.Float64(); err == nil {
+			return f
+		}
+	case string:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
+func ParseExtraTime(value any) time.Time {
+	if s, ok := value.(string); ok {
+		if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+			return t
+		}
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+func ParseExtraInt(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case json.Number:
+		if i, err := v.Int64(); err == nil {
+			return int(i)
+		}
+	case string:
+		if i, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			return i
+		}
+	}
+	return 0
+}
+
+// GetUserMsgQueueMode 获取用户消息队列模式
+// "serialize" = 串行队列, "throttle" = 软性限速, "" = 未设置（使用全局配置）。
+func (a *RuntimeConfig) GetUserMsgQueueMode() string {
+	if a.Extra == nil {
+		return ""
+	}
+	// 优先读取新字段 user_msg_queue_mode（白名单校验，非法值视为未设置）
+	if mode, ok := a.Extra["user_msg_queue_mode"].(string); ok && mode != "" {
+		if mode == "serialize" || mode == "throttle" {
+			return mode
+		}
+		return "" // 非法值 fallback 到全局配置
+	}
+	// 向后兼容: user_msg_queue_enabled: true → "serialize"
+	if enabled, ok := a.Extra["user_msg_queue_enabled"].(bool); ok && enabled {
+		return "serialize"
+	}
+	return ""
+}

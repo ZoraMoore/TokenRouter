@@ -94,8 +94,11 @@ describe('EndpointDistributionChart', () => {
     expect(chartData.datasets[0].data).toEqual([1200, 600])
 
     const options = (wrapper.vm as any).$?.setupState.barOptions
+    expect(options.plugins.tooltip.enabled).toBe(false)
+    expect(options.plugins.tooltip.external).toBeTypeOf('function')
     expect(options.scales.x.ticks.display).toBe(false)
-    expect(options.scales.y.type).toBe('logarithmic')
+    expect(options.scales.y.type).toBe('linear')
+    expect(options.scales.y.beginAtZero).toBe(true)
     expect(options.scales.y.ticks.display).toBe(false)
     expect(options.scales.y.grid.display).toBe(false)
     const label = options.plugins.tooltip.callbacks.label({

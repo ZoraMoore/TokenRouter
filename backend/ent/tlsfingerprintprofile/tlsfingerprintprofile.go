@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"github.com/TokenFlux/TokenRouter/internal/egress"
 )
 
 const (
@@ -31,6 +32,8 @@ const (
 	FieldPointFormats = "point_formats"
 	// FieldSignatureAlgorithms holds the string denoting the signature_algorithms field in the database.
 	FieldSignatureAlgorithms = "signature_algorithms"
+	// FieldSignatureAlgorithmsCert holds the string denoting the signature_algorithms_cert field in the database.
+	FieldSignatureAlgorithmsCert = "signature_algorithms_cert"
 	// FieldAlpnProtocols holds the string denoting the alpn_protocols field in the database.
 	FieldAlpnProtocols = "alpn_protocols"
 	// FieldSupportedVersions holds the string denoting the supported_versions field in the database.
@@ -41,6 +44,8 @@ const (
 	FieldPskModes = "psk_modes"
 	// FieldExtensions holds the string denoting the extensions field in the database.
 	FieldExtensions = "extensions"
+	// FieldVerification holds the string denoting the verification field in the database.
+	FieldVerification = "verification"
 	// Table holds the table name of the tlsfingerprintprofile in the database.
 	Table = "tls_fingerprint_profiles"
 )
@@ -57,11 +62,13 @@ var Columns = []string{
 	FieldCurves,
 	FieldPointFormats,
 	FieldSignatureAlgorithms,
+	FieldSignatureAlgorithmsCert,
 	FieldAlpnProtocols,
 	FieldSupportedVersions,
 	FieldKeyShareGroups,
 	FieldPskModes,
 	FieldExtensions,
+	FieldVerification,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -85,6 +92,8 @@ var (
 	NameValidator func(string) error
 	// DefaultEnableGrease holds the default value on creation for the "enable_grease" field.
 	DefaultEnableGrease bool
+	// DefaultVerification holds the default value on creation for the "verification" field.
+	DefaultVerification egress.TLSFingerprintProfileVerification
 )
 
 // OrderOption defines the ordering options for the TLSFingerprintProfile queries.

@@ -3,10 +3,10 @@
     :show="show"
     :title="t('admin.groups.advancedSchedulerOverrides.title')"
     width="wide"
-    :z-index="60"
+    :z-index="Z_INDEX.MODAL_NESTED"
     @close="emit('close')"
   >
-    <form id="advanced-scheduler-overrides-form" class="space-y-5" @submit.prevent="handleSave">
+    <form id="advanced-scheduler-overrides-form" class="space-y-6" @submit.prevent="handleSave">
       <p class="text-sm leading-6 text-gray-500 dark:text-gray-400">
         {{ t('admin.groups.advancedSchedulerOverrides.description') }}
       </p>
@@ -19,6 +19,10 @@
         <div>
           <label class="input-label">{{ t('admin.groups.advancedSchedulerOverrides.subscriptionPriority') }}</label>
           <Select v-model="draft.subscriptionPriority" :options="booleanOptions" />
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.groups.advancedSchedulerOverrides.stickyEscapeEnabled') }}</label>
+          <Select v-model="draft.stickyEscapeEnabled" :options="booleanOptions" />
         </div>
       </div>
 
@@ -50,7 +54,7 @@
     </form>
 
     <template #footer>
-      <div class="flex flex-wrap items-center justify-between gap-3 pt-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
           class="btn btn-ghost"
@@ -70,7 +74,7 @@
             class="btn btn-primary"
             data-test="advanced-scheduler-overrides-save"
           >
-            <Icon name="check" size="sm" />
+            <Icon name="check" size="sm" :animate-on-hover="false" />
             {{ t('common.save') }}
           </button>
         </div>
@@ -81,6 +85,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
+import { Z_INDEX } from '@/constants/overlay'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
@@ -100,6 +105,10 @@ const emit = defineEmits<{
 const { t } = useI18n()
 type BooleanDraft = 'inherit' | 'true' | 'false'
 type NumericKey =
+  | 'ewmaErrorRateAlpha'
+  | 'ewmaTTFTAlpha'
+  | 'stickyEscapeTTFTMs'
+  | 'stickyEscapeErrorRate'
   | 'lbTopK'
   | 'weightPriority'
   | 'weightLoad'
@@ -110,15 +119,21 @@ type NumericKey =
   | 'weightQuotaHeadroom'
   | 'weightPreviousResponse'
   | 'weightSessionSticky'
-type NumericOverrideKey = Exclude<keyof GroupAdvancedSchedulerOverrides, 'sticky_weighted_enabled' | 'subscription_priority_enabled'>
+type NumericOverrideKey = Exclude<keyof GroupAdvancedSchedulerOverrides, 'sticky_weighted_enabled' | 'subscription_priority_enabled' | 'sticky_escape_enabled'>
 
 // 数字输入会写回 number，空字符串仍保留“未设置即继承”的语义。
 const draft = reactive<Record<NumericKey, string | number> & {
   stickyWeighted: BooleanDraft
   subscriptionPriority: BooleanDraft
+  stickyEscapeEnabled: BooleanDraft
 }>({
   stickyWeighted: 'inherit',
   subscriptionPriority: 'inherit',
+  stickyEscapeEnabled: 'inherit',
+  ewmaErrorRateAlpha: '',
+  ewmaTTFTAlpha: '',
+  stickyEscapeTTFTMs: '',
+  stickyEscapeErrorRate: '',
   lbTopK: '',
   weightPriority: '',
   weightLoad: '',
@@ -139,6 +154,10 @@ const booleanOptions = [
 ]
 
 const numericFields: Array<{ key: NumericKey; integer?: boolean }> = [
+  { key: 'ewmaErrorRateAlpha' },
+  { key: 'ewmaTTFTAlpha' },
+  { key: 'stickyEscapeTTFTMs', integer: true },
+  { key: 'stickyEscapeErrorRate' },
   { key: 'lbTopK', integer: true },
   { key: 'weightPriority' },
   { key: 'weightLoad' },
@@ -154,6 +173,7 @@ const numericFields: Array<{ key: NumericKey; integer?: boolean }> = [
 const resetToInherit = () => {
   draft.stickyWeighted = 'inherit'
   draft.subscriptionPriority = 'inherit'
+  draft.stickyEscapeEnabled = 'inherit'
   for (const field of numericFields) draft[field.key] = ''
   errorMessage.value = ''
 }
@@ -163,7 +183,12 @@ const hydrate = (value: GroupAdvancedSchedulerOverrides | undefined) => {
   if (!value) return
   if (value.sticky_weighted_enabled !== undefined) draft.stickyWeighted = String(value.sticky_weighted_enabled) as BooleanDraft
   if (value.subscription_priority_enabled !== undefined) draft.subscriptionPriority = String(value.subscription_priority_enabled) as BooleanDraft
+  if (value.sticky_escape_enabled !== undefined) draft.stickyEscapeEnabled = String(value.sticky_escape_enabled) as BooleanDraft
   const mapping: Array<[NumericKey, keyof GroupAdvancedSchedulerOverrides]> = [
+    ['ewmaErrorRateAlpha', 'ewma_error_rate_alpha'],
+    ['ewmaTTFTAlpha', 'ewma_ttft_alpha'],
+    ['stickyEscapeTTFTMs', 'sticky_escape_ttft_ms'],
+    ['stickyEscapeErrorRate', 'sticky_escape_error_rate'],
     ['lbTopK', 'lb_top_k'],
     ['weightPriority', 'weight_priority'],
     ['weightLoad', 'weight_load'],
@@ -190,15 +215,27 @@ const handleSave = () => {
   const value: GroupAdvancedSchedulerOverrides = {}
   if (draft.stickyWeighted !== 'inherit') value.sticky_weighted_enabled = draft.stickyWeighted === 'true'
   if (draft.subscriptionPriority !== 'inherit') value.subscription_priority_enabled = draft.subscriptionPriority === 'true'
+  if (draft.stickyEscapeEnabled !== 'inherit') value.sticky_escape_enabled = draft.stickyEscapeEnabled === 'true'
   for (const field of numericFields) {
     const raw = String(draft[field.key] ?? '').trim()
     if (!raw) continue
     const parsed = Number(raw)
-    if (!Number.isFinite(parsed) || parsed < 0 || (field.integer && (!Number.isInteger(parsed) || parsed <= 0))) {
+    const isAlpha = field.key === 'ewmaErrorRateAlpha' || field.key === 'ewmaTTFTAlpha'
+    const isRate = field.key === 'stickyEscapeErrorRate'
+    const valid = isAlpha
+      ? Number.isFinite(parsed) && parsed > 0 && parsed <= 1
+      : isRate
+        ? Number.isFinite(parsed) && parsed >= 0 && parsed <= 1
+        : Number.isFinite(parsed) && parsed >= 0 && (!field.integer || (Number.isInteger(parsed) && parsed > 0))
+    if (!valid) {
       errorMessage.value = t('admin.groups.advancedSchedulerOverrides.invalidValue')
       return
     }
     const keyMap: Record<NumericKey, NumericOverrideKey> = {
+      ewmaErrorRateAlpha: 'ewma_error_rate_alpha',
+      ewmaTTFTAlpha: 'ewma_ttft_alpha',
+      stickyEscapeTTFTMs: 'sticky_escape_ttft_ms',
+      stickyEscapeErrorRate: 'sticky_escape_error_rate',
       lbTopK: 'lb_top_k',
       weightPriority: 'weight_priority',
       weightLoad: 'weight_load',

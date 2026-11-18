@@ -27,6 +27,8 @@ type RedeemCode struct {
 	Value float64 `json:"value,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
+	// RequiresPayment holds the value of the "requires_payment" field.
+	RequiresPayment bool `json:"requires_payment,omitempty"`
 	// MaxUses holds the value of the "max_uses" field.
 	MaxUses int `json:"max_uses,omitempty"`
 	// UsedCount holds the value of the "used_count" field.
@@ -98,6 +100,8 @@ func (*RedeemCode) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case redeemcode.FieldRequiresPayment:
+			values[i] = new(sql.NullBool)
 		case redeemcode.FieldValue:
 			values[i] = new(sql.NullFloat64)
 		case redeemcode.FieldID, redeemcode.FieldMaxUses, redeemcode.FieldUsedCount, redeemcode.FieldUsedBy, redeemcode.FieldPlanID:
@@ -150,6 +154,12 @@ func (_m *RedeemCode) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
+			}
+		case redeemcode.FieldRequiresPayment:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field requires_payment", values[i])
+			} else if value.Valid {
+				_m.RequiresPayment = value.Bool
 			}
 		case redeemcode.FieldMaxUses:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -266,6 +276,9 @@ func (_m *RedeemCode) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
+	builder.WriteString(", ")
+	builder.WriteString("requires_payment=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RequiresPayment))
 	builder.WriteString(", ")
 	builder.WriteString("max_uses=")
 	builder.WriteString(fmt.Sprintf("%v", _m.MaxUses))

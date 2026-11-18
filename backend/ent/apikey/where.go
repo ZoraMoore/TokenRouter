@@ -145,6 +145,16 @@ func ExpiresAt(v time.Time) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldExpiresAt, v))
 }
 
+// ConcurrencyLimit applies equality check predicate on the "concurrency_limit" field. It's identical to ConcurrencyLimitEQ.
+func ConcurrencyLimit(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldConcurrencyLimit, v))
+}
+
+// RpmLimit applies equality check predicate on the "rpm_limit" field. It's identical to RpmLimitEQ.
+func RpmLimit(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldRpmLimit, v))
+}
+
 // RateLimit5h applies equality check predicate on the "rate_limit_5h" field. It's identical to RateLimit5hEQ.
 func RateLimit5h(v float64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldRateLimit5h, v))
@@ -190,24 +200,14 @@ func Window7dStart(v time.Time) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldWindow7dStart, v))
 }
 
-// DataSharingNoticeVersion applies equality check predicate on the "data_sharing_notice_version" field. It's identical to DataSharingNoticeVersionEQ.
-func DataSharingNoticeVersion(v int) predicate.APIKey {
-	return predicate.APIKey(sql.FieldEQ(FieldDataSharingNoticeVersion, v))
+// FallbackWhenGroupUnavailable applies equality check predicate on the "fallback_when_group_unavailable" field. It's identical to FallbackWhenGroupUnavailableEQ.
+func FallbackWhenGroupUnavailable(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFallbackWhenGroupUnavailable, v))
 }
 
-// DataSharingConfirmedGroupID applies equality check predicate on the "data_sharing_confirmed_group_id" field. It's identical to DataSharingConfirmedGroupIDEQ.
-func DataSharingConfirmedGroupID(v int64) predicate.APIKey {
-	return predicate.APIKey(sql.FieldEQ(FieldDataSharingConfirmedGroupID, v))
-}
-
-// DataSharingConfirmedAt applies equality check predicate on the "data_sharing_confirmed_at" field. It's identical to DataSharingConfirmedAtEQ.
-func DataSharingConfirmedAt(v time.Time) predicate.APIKey {
-	return predicate.APIKey(sql.FieldEQ(FieldDataSharingConfirmedAt, v))
-}
-
-// FallbackToDefaultGroupWhenUnavailable applies equality check predicate on the "fallback_to_default_group_when_unavailable" field. It's identical to FallbackToDefaultGroupWhenUnavailableEQ.
-func FallbackToDefaultGroupWhenUnavailable(v bool) predicate.APIKey {
-	return predicate.APIKey(sql.FieldEQ(FieldFallbackToDefaultGroupWhenUnavailable, v))
+// ManagedBy applies equality check predicate on the "managed_by" field. It's identical to ManagedByEQ.
+func ManagedBy(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldManagedBy, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -1015,6 +1015,86 @@ func ExpiresAtNotNil() predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotNull(FieldExpiresAt))
 }
 
+// ConcurrencyLimitEQ applies the EQ predicate on the "concurrency_limit" field.
+func ConcurrencyLimitEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldConcurrencyLimit, v))
+}
+
+// ConcurrencyLimitNEQ applies the NEQ predicate on the "concurrency_limit" field.
+func ConcurrencyLimitNEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldConcurrencyLimit, v))
+}
+
+// ConcurrencyLimitIn applies the In predicate on the "concurrency_limit" field.
+func ConcurrencyLimitIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldConcurrencyLimit, vs...))
+}
+
+// ConcurrencyLimitNotIn applies the NotIn predicate on the "concurrency_limit" field.
+func ConcurrencyLimitNotIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldConcurrencyLimit, vs...))
+}
+
+// ConcurrencyLimitGT applies the GT predicate on the "concurrency_limit" field.
+func ConcurrencyLimitGT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldConcurrencyLimit, v))
+}
+
+// ConcurrencyLimitGTE applies the GTE predicate on the "concurrency_limit" field.
+func ConcurrencyLimitGTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldConcurrencyLimit, v))
+}
+
+// ConcurrencyLimitLT applies the LT predicate on the "concurrency_limit" field.
+func ConcurrencyLimitLT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldConcurrencyLimit, v))
+}
+
+// ConcurrencyLimitLTE applies the LTE predicate on the "concurrency_limit" field.
+func ConcurrencyLimitLTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldConcurrencyLimit, v))
+}
+
+// RpmLimitEQ applies the EQ predicate on the "rpm_limit" field.
+func RpmLimitEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldRpmLimit, v))
+}
+
+// RpmLimitNEQ applies the NEQ predicate on the "rpm_limit" field.
+func RpmLimitNEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldRpmLimit, v))
+}
+
+// RpmLimitIn applies the In predicate on the "rpm_limit" field.
+func RpmLimitIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldRpmLimit, vs...))
+}
+
+// RpmLimitNotIn applies the NotIn predicate on the "rpm_limit" field.
+func RpmLimitNotIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldRpmLimit, vs...))
+}
+
+// RpmLimitGT applies the GT predicate on the "rpm_limit" field.
+func RpmLimitGT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldRpmLimit, v))
+}
+
+// RpmLimitGTE applies the GTE predicate on the "rpm_limit" field.
+func RpmLimitGTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldRpmLimit, v))
+}
+
+// RpmLimitLT applies the LT predicate on the "rpm_limit" field.
+func RpmLimitLT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldRpmLimit, v))
+}
+
+// RpmLimitLTE applies the LTE predicate on the "rpm_limit" field.
+func RpmLimitLTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldRpmLimit, v))
+}
+
 // RateLimit5hEQ applies the EQ predicate on the "rate_limit_5h" field.
 func RateLimit5hEQ(v float64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldRateLimit5h, v))
@@ -1405,154 +1485,89 @@ func Window7dStartNotNil() predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotNull(FieldWindow7dStart))
 }
 
-// DataSharingNoticeVersionEQ applies the EQ predicate on the "data_sharing_notice_version" field.
-func DataSharingNoticeVersionEQ(v int) predicate.APIKey {
-	return predicate.APIKey(sql.FieldEQ(FieldDataSharingNoticeVersion, v))
+// FallbackWhenGroupUnavailableEQ applies the EQ predicate on the "fallback_when_group_unavailable" field.
+func FallbackWhenGroupUnavailableEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFallbackWhenGroupUnavailable, v))
 }
 
-// DataSharingNoticeVersionNEQ applies the NEQ predicate on the "data_sharing_notice_version" field.
-func DataSharingNoticeVersionNEQ(v int) predicate.APIKey {
-	return predicate.APIKey(sql.FieldNEQ(FieldDataSharingNoticeVersion, v))
+// FallbackWhenGroupUnavailableNEQ applies the NEQ predicate on the "fallback_when_group_unavailable" field.
+func FallbackWhenGroupUnavailableNEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldFallbackWhenGroupUnavailable, v))
 }
 
-// DataSharingNoticeVersionIn applies the In predicate on the "data_sharing_notice_version" field.
-func DataSharingNoticeVersionIn(vs ...int) predicate.APIKey {
-	return predicate.APIKey(sql.FieldIn(FieldDataSharingNoticeVersion, vs...))
+// ManagedByEQ applies the EQ predicate on the "managed_by" field.
+func ManagedByEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldManagedBy, v))
 }
 
-// DataSharingNoticeVersionNotIn applies the NotIn predicate on the "data_sharing_notice_version" field.
-func DataSharingNoticeVersionNotIn(vs ...int) predicate.APIKey {
-	return predicate.APIKey(sql.FieldNotIn(FieldDataSharingNoticeVersion, vs...))
+// ManagedByNEQ applies the NEQ predicate on the "managed_by" field.
+func ManagedByNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldManagedBy, v))
 }
 
-// DataSharingNoticeVersionGT applies the GT predicate on the "data_sharing_notice_version" field.
-func DataSharingNoticeVersionGT(v int) predicate.APIKey {
-	return predicate.APIKey(sql.FieldGT(FieldDataSharingNoticeVersion, v))
+// ManagedByIn applies the In predicate on the "managed_by" field.
+func ManagedByIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldManagedBy, vs...))
 }
 
-// DataSharingNoticeVersionGTE applies the GTE predicate on the "data_sharing_notice_version" field.
-func DataSharingNoticeVersionGTE(v int) predicate.APIKey {
-	return predicate.APIKey(sql.FieldGTE(FieldDataSharingNoticeVersion, v))
+// ManagedByNotIn applies the NotIn predicate on the "managed_by" field.
+func ManagedByNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldManagedBy, vs...))
 }
 
-// DataSharingNoticeVersionLT applies the LT predicate on the "data_sharing_notice_version" field.
-func DataSharingNoticeVersionLT(v int) predicate.APIKey {
-	return predicate.APIKey(sql.FieldLT(FieldDataSharingNoticeVersion, v))
+// ManagedByGT applies the GT predicate on the "managed_by" field.
+func ManagedByGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldManagedBy, v))
 }
 
-// DataSharingNoticeVersionLTE applies the LTE predicate on the "data_sharing_notice_version" field.
-func DataSharingNoticeVersionLTE(v int) predicate.APIKey {
-	return predicate.APIKey(sql.FieldLTE(FieldDataSharingNoticeVersion, v))
+// ManagedByGTE applies the GTE predicate on the "managed_by" field.
+func ManagedByGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldManagedBy, v))
 }
 
-// DataSharingConfirmedGroupIDEQ applies the EQ predicate on the "data_sharing_confirmed_group_id" field.
-func DataSharingConfirmedGroupIDEQ(v int64) predicate.APIKey {
-	return predicate.APIKey(sql.FieldEQ(FieldDataSharingConfirmedGroupID, v))
+// ManagedByLT applies the LT predicate on the "managed_by" field.
+func ManagedByLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldManagedBy, v))
 }
 
-// DataSharingConfirmedGroupIDNEQ applies the NEQ predicate on the "data_sharing_confirmed_group_id" field.
-func DataSharingConfirmedGroupIDNEQ(v int64) predicate.APIKey {
-	return predicate.APIKey(sql.FieldNEQ(FieldDataSharingConfirmedGroupID, v))
+// ManagedByLTE applies the LTE predicate on the "managed_by" field.
+func ManagedByLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldManagedBy, v))
 }
 
-// DataSharingConfirmedGroupIDIn applies the In predicate on the "data_sharing_confirmed_group_id" field.
-func DataSharingConfirmedGroupIDIn(vs ...int64) predicate.APIKey {
-	return predicate.APIKey(sql.FieldIn(FieldDataSharingConfirmedGroupID, vs...))
+// ManagedByContains applies the Contains predicate on the "managed_by" field.
+func ManagedByContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldManagedBy, v))
 }
 
-// DataSharingConfirmedGroupIDNotIn applies the NotIn predicate on the "data_sharing_confirmed_group_id" field.
-func DataSharingConfirmedGroupIDNotIn(vs ...int64) predicate.APIKey {
-	return predicate.APIKey(sql.FieldNotIn(FieldDataSharingConfirmedGroupID, vs...))
+// ManagedByHasPrefix applies the HasPrefix predicate on the "managed_by" field.
+func ManagedByHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldManagedBy, v))
 }
 
-// DataSharingConfirmedGroupIDGT applies the GT predicate on the "data_sharing_confirmed_group_id" field.
-func DataSharingConfirmedGroupIDGT(v int64) predicate.APIKey {
-	return predicate.APIKey(sql.FieldGT(FieldDataSharingConfirmedGroupID, v))
+// ManagedByHasSuffix applies the HasSuffix predicate on the "managed_by" field.
+func ManagedByHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldManagedBy, v))
 }
 
-// DataSharingConfirmedGroupIDGTE applies the GTE predicate on the "data_sharing_confirmed_group_id" field.
-func DataSharingConfirmedGroupIDGTE(v int64) predicate.APIKey {
-	return predicate.APIKey(sql.FieldGTE(FieldDataSharingConfirmedGroupID, v))
+// ManagedByIsNil applies the IsNil predicate on the "managed_by" field.
+func ManagedByIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldManagedBy))
 }
 
-// DataSharingConfirmedGroupIDLT applies the LT predicate on the "data_sharing_confirmed_group_id" field.
-func DataSharingConfirmedGroupIDLT(v int64) predicate.APIKey {
-	return predicate.APIKey(sql.FieldLT(FieldDataSharingConfirmedGroupID, v))
+// ManagedByNotNil applies the NotNil predicate on the "managed_by" field.
+func ManagedByNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldManagedBy))
 }
 
-// DataSharingConfirmedGroupIDLTE applies the LTE predicate on the "data_sharing_confirmed_group_id" field.
-func DataSharingConfirmedGroupIDLTE(v int64) predicate.APIKey {
-	return predicate.APIKey(sql.FieldLTE(FieldDataSharingConfirmedGroupID, v))
+// ManagedByEqualFold applies the EqualFold predicate on the "managed_by" field.
+func ManagedByEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldManagedBy, v))
 }
 
-// DataSharingConfirmedGroupIDIsNil applies the IsNil predicate on the "data_sharing_confirmed_group_id" field.
-func DataSharingConfirmedGroupIDIsNil() predicate.APIKey {
-	return predicate.APIKey(sql.FieldIsNull(FieldDataSharingConfirmedGroupID))
-}
-
-// DataSharingConfirmedGroupIDNotNil applies the NotNil predicate on the "data_sharing_confirmed_group_id" field.
-func DataSharingConfirmedGroupIDNotNil() predicate.APIKey {
-	return predicate.APIKey(sql.FieldNotNull(FieldDataSharingConfirmedGroupID))
-}
-
-// DataSharingConfirmedAtEQ applies the EQ predicate on the "data_sharing_confirmed_at" field.
-func DataSharingConfirmedAtEQ(v time.Time) predicate.APIKey {
-	return predicate.APIKey(sql.FieldEQ(FieldDataSharingConfirmedAt, v))
-}
-
-// DataSharingConfirmedAtNEQ applies the NEQ predicate on the "data_sharing_confirmed_at" field.
-func DataSharingConfirmedAtNEQ(v time.Time) predicate.APIKey {
-	return predicate.APIKey(sql.FieldNEQ(FieldDataSharingConfirmedAt, v))
-}
-
-// DataSharingConfirmedAtIn applies the In predicate on the "data_sharing_confirmed_at" field.
-func DataSharingConfirmedAtIn(vs ...time.Time) predicate.APIKey {
-	return predicate.APIKey(sql.FieldIn(FieldDataSharingConfirmedAt, vs...))
-}
-
-// DataSharingConfirmedAtNotIn applies the NotIn predicate on the "data_sharing_confirmed_at" field.
-func DataSharingConfirmedAtNotIn(vs ...time.Time) predicate.APIKey {
-	return predicate.APIKey(sql.FieldNotIn(FieldDataSharingConfirmedAt, vs...))
-}
-
-// DataSharingConfirmedAtGT applies the GT predicate on the "data_sharing_confirmed_at" field.
-func DataSharingConfirmedAtGT(v time.Time) predicate.APIKey {
-	return predicate.APIKey(sql.FieldGT(FieldDataSharingConfirmedAt, v))
-}
-
-// DataSharingConfirmedAtGTE applies the GTE predicate on the "data_sharing_confirmed_at" field.
-func DataSharingConfirmedAtGTE(v time.Time) predicate.APIKey {
-	return predicate.APIKey(sql.FieldGTE(FieldDataSharingConfirmedAt, v))
-}
-
-// DataSharingConfirmedAtLT applies the LT predicate on the "data_sharing_confirmed_at" field.
-func DataSharingConfirmedAtLT(v time.Time) predicate.APIKey {
-	return predicate.APIKey(sql.FieldLT(FieldDataSharingConfirmedAt, v))
-}
-
-// DataSharingConfirmedAtLTE applies the LTE predicate on the "data_sharing_confirmed_at" field.
-func DataSharingConfirmedAtLTE(v time.Time) predicate.APIKey {
-	return predicate.APIKey(sql.FieldLTE(FieldDataSharingConfirmedAt, v))
-}
-
-// DataSharingConfirmedAtIsNil applies the IsNil predicate on the "data_sharing_confirmed_at" field.
-func DataSharingConfirmedAtIsNil() predicate.APIKey {
-	return predicate.APIKey(sql.FieldIsNull(FieldDataSharingConfirmedAt))
-}
-
-// DataSharingConfirmedAtNotNil applies the NotNil predicate on the "data_sharing_confirmed_at" field.
-func DataSharingConfirmedAtNotNil() predicate.APIKey {
-	return predicate.APIKey(sql.FieldNotNull(FieldDataSharingConfirmedAt))
-}
-
-// FallbackToDefaultGroupWhenUnavailableEQ applies the EQ predicate on the "fallback_to_default_group_when_unavailable" field.
-func FallbackToDefaultGroupWhenUnavailableEQ(v bool) predicate.APIKey {
-	return predicate.APIKey(sql.FieldEQ(FieldFallbackToDefaultGroupWhenUnavailable, v))
-}
-
-// FallbackToDefaultGroupWhenUnavailableNEQ applies the NEQ predicate on the "fallback_to_default_group_when_unavailable" field.
-func FallbackToDefaultGroupWhenUnavailableNEQ(v bool) predicate.APIKey {
-	return predicate.APIKey(sql.FieldNEQ(FieldFallbackToDefaultGroupWhenUnavailable, v))
+// ManagedByContainsFold applies the ContainsFold predicate on the "managed_by" field.
+func ManagedByContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldManagedBy, v))
 }
 
 // HasUser applies the HasEdge predicate on the "user" edge.

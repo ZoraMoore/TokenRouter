@@ -10,11 +10,11 @@
         @change="noop"
       />
 
-      <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+      <div class="rounded-surface border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
         {{ t('admin.usage.cleanup.warning') }}
       </div>
 
-      <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-700">
+      <div class="rounded-surface border border-gray-200 p-4 dark:border-dark-700">
         <div class="flex items-center justify-between">
           <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200">
             {{ t('admin.usage.cleanup.recentTasks') }}
@@ -35,7 +35,7 @@
             <div
               v-for="task in tasks"
               :key="task.id"
-              class="flex flex-col gap-2 rounded-lg border border-gray-100 px-3 py-2 text-sm text-gray-600 dark:border-dark-700 dark:text-gray-300"
+              class="flex flex-col gap-2 rounded-control border border-gray-100 px-3 py-2 text-sm text-gray-600 dark:border-dark-700 dark:text-gray-300"
             >
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-2">
@@ -211,7 +211,7 @@ const statusClass = (status: string) => {
     failed: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200',
     canceled: 'bg-gray-200 text-gray-600 dark:bg-dark-600 dark:text-gray-300'
   }
-  return map[status] || 'bg-gray-100 text-gray-600'
+  return map[status] || 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-dark-300'
 }
 
 const formatDateTime = (value?: string | null) => {
@@ -302,8 +302,8 @@ const buildPayload = (): CreateUsageCleanupTaskRequest | null => {
   if (localFilters.value.api_key_id && localFilters.value.api_key_id > 0) {
     payload.api_key_id = localFilters.value.api_key_id
   }
-  if (localFilters.value.account_id && localFilters.value.account_id > 0) {
-    payload.account_id = localFilters.value.account_id
+  if (localFilters.value.provider_id && localFilters.value.provider_id > 0) {
+    payload.provider_id = localFilters.value.provider_id
   }
   if (localFilters.value.group_id && localFilters.value.group_id > 0) {
     payload.group_id = localFilters.value.group_id

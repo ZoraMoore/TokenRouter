@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
-	"github.com/TokenFlux/TokenRouter/internal/domain"
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 const (
@@ -24,14 +24,14 @@ const (
 	FieldTeamID = "team_id"
 	// FieldAPIKeyID holds the string denoting the api_key_id field in the database.
 	FieldAPIKeyID = "api_key_id"
-	// FieldAccountID holds the string denoting the account_id field in the database.
-	FieldAccountID = "account_id"
+	// FieldProviderID holds the string denoting the provider_id field in the database.
+	FieldProviderID = "provider_id"
 	// FieldBillingMode holds the string denoting the billing_mode field in the database.
 	FieldBillingMode = "billing_mode"
 	// FieldPreferredSubscriptionID holds the string denoting the preferred_subscription_id field in the database.
 	FieldPreferredSubscriptionID = "preferred_subscription_id"
-	// FieldProvider holds the string denoting the provider field in the database.
-	FieldProvider = "provider"
+	// FieldPlatform holds the string denoting the platform field in the database.
+	FieldPlatform = "platform"
 	// FieldModel holds the string denoting the model field in the database.
 	FieldModel = "model"
 	// FieldTaskName holds the string denoting the task_name field in the database.
@@ -126,10 +126,10 @@ var Columns = []string{
 	FieldBillingUserID,
 	FieldTeamID,
 	FieldAPIKeyID,
-	FieldAccountID,
+	FieldProviderID,
 	FieldBillingMode,
 	FieldPreferredSubscriptionID,
-	FieldProvider,
+	FieldPlatform,
 	FieldModel,
 	FieldTaskName,
 	FieldStatus,
@@ -190,8 +190,8 @@ var (
 	DefaultBillingMode string
 	// BillingModeValidator is a validator for the "billing_mode" field. It is called by the builders before save.
 	BillingModeValidator func(string) error
-	// ProviderValidator is a validator for the "provider" field. It is called by the builders before save.
-	ProviderValidator func(string) error
+	// PlatformValidator is a validator for the "platform" field. It is called by the builders before save.
+	PlatformValidator func(string) error
 	// ModelValidator is a validator for the "model" field. It is called by the builders before save.
 	ModelValidator func(string) error
 	// DefaultTaskName holds the default value on creation for the "task_name" field.
@@ -223,7 +223,7 @@ var (
 	// DefaultBalanceHoldAmount holds the default value on creation for the "balance_hold_amount" field.
 	DefaultBalanceHoldAmount float64
 	// DefaultSubscriptionHoldAllocations holds the default value on creation for the "subscription_hold_allocations" field.
-	DefaultSubscriptionHoldAllocations func() []domain.BillingAllocation
+	DefaultSubscriptionHoldAllocations func() []billing.BillingAllocation
 	// DefaultSubscriptionRateMultiplier holds the default value on creation for the "subscription_rate_multiplier" field.
 	DefaultSubscriptionRateMultiplier float64
 	// DefaultBalanceRateMultiplier holds the default value on creation for the "balance_rate_multiplier" field.
@@ -291,9 +291,9 @@ func ByAPIKeyID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAPIKeyID, opts...).ToFunc()
 }
 
-// ByAccountID orders the results by the account_id field.
-func ByAccountID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldAccountID, opts...).ToFunc()
+// ByProviderID orders the results by the provider_id field.
+func ByProviderID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProviderID, opts...).ToFunc()
 }
 
 // ByBillingMode orders the results by the billing_mode field.
@@ -306,9 +306,9 @@ func ByPreferredSubscriptionID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPreferredSubscriptionID, opts...).ToFunc()
 }
 
-// ByProvider orders the results by the provider field.
-func ByProvider(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldProvider, opts...).ToFunc()
+// ByPlatform orders the results by the platform field.
+func ByPlatform(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPlatform, opts...).ToFunc()
 }
 
 // ByModel orders the results by the model field.

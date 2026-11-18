@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
+import * as XLSX from 'xlsx'
 
 import UsageView from '../UsageView.vue'
 
@@ -22,12 +23,35 @@ const { list, getStats, getSnapshotV2, getById, getModelStats, listErrorLogs, ro
   }
 })
 
+const exportMocks = vi.hoisted(() => ({
+  list: vi.fn(), headers: vi.fn(), rows: vi.fn(), save: vi.fn(),
+}))
+vi.mock('xlsx', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('xlsx')>()
+  exportMocks.headers.mockImplementation(actual.utils.aoa_to_sheet)
+  exportMocks.rows.mockImplementation(actual.utils.sheet_add_aoa)
+  return {
+    ...actual,
+    utils: { ...actual.utils, aoa_to_sheet: exportMocks.headers, sheet_add_aoa: exportMocks.rows },
+  }
+})
+vi.mock('file-saver', () => ({ saveAs: exportMocks.save }))
+
 const messages: Record<string, string> = {
+  'usage.tps': 'TPS',
+  'usage.tpsExport': 'TPS (tok/s)',
   'admin.dashboard.timeRange': 'Time Range',
   'admin.dashboard.day': 'Day',
   'admin.dashboard.hour': 'Hour',
   'admin.usage.failedToLoadUser': 'Failed to load user',
   'admin.usage.requestId': 'Request ID',
+	'admin.usage.upstreamRequestId': 'Upstream ID',
+	'usage.requestedModel': 'Requested model',
+	'usage.sentUpstreamModel': 'Sent upstream model',
+	'usage.upstreamResponseModel': 'Upstream response model',
+	'usage.upstreamModelMismatch': 'Upstream model mismatch',
+	'common.yes': 'Yes',
+	'common.no': 'No',
 }
 
 const formatLocalDate = (date: Date): string => {
@@ -55,7 +79,7 @@ vi.mock('@/api/admin', () => ({
 
 vi.mock('@/api/admin/usage', () => ({
   adminUsageAPI: {
-    list: vi.fn(),
+    list: exportMocks.list,
   },
 }))
 
@@ -130,7 +154,7 @@ const ModelDistributionChartStub = {
   `,
 }
 const GroupDistributionChartStub = {
-  props: ['metric'],
+  props: ['metric', 'chartType'],
   emits: ['update:metric'],
   template: `
     <div data-test="group-chart">
@@ -138,6 +162,10 @@ const GroupDistributionChartStub = {
       <button class="switch-metric" @click="$emit('update:metric', 'actual_cost')">switch</button>
     </div>
   `,
+}
+const EndpointDistributionChartStub = {
+  props: ['chartType'],
+  template: '<div data-test="endpoint-chart" />',
 }
 
 const mountRouteFilteredUsageView = () => mount(UsageView, {
@@ -174,6 +202,113 @@ describe('admin UsageView 路由筛选', () => {
   afterEach(() => {
     Object.keys(routeQuery).forEach((key) => delete routeQuery[key])
     vi.useRealTimers()
+  })
+
+  it('端点图按需加载，切换时取消旧请求且复用已加载结果', async () => {
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    expect(getStats).toHaveBeenCalledTimes(1)
+    expect(getStats.mock.calls[0][0].endpoint_source).toBe('inbound')
+    const chart = wrapper.findComponent({ name: 'EndpointDistributionChart' })
+    chart.vm.$emit('update:source', 'upstream')
+    await flushPromises()
+    expect(getStats.mock.calls[1][0].endpoint_source).toBe('upstream')
+    let resolvePath!: (value: any) => void
+    getStats.mockImplementationOnce(() => new Promise((resolve) => { resolvePath = resolve }))
+    chart.vm.$emit('update:source', 'path')
+    await flushPromises()
+    expect(getStats.mock.calls[2][0].endpoint_source).toBe('path')
+    const signal = getStats.mock.calls[2][1].signal as AbortSignal
+    chart.vm.$emit('update:source', 'upstream')
+    await flushPromises()
+    expect(signal.aborted).toBe(true)
+    expect(getStats).toHaveBeenCalledTimes(3)
+    resolvePath({ endpoint_paths: [{ endpoint: 'stale', requests: 999 }] })
+    await flushPromises()
+    expect(chart.props('endpointPathStats')).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('筛选变更后重新加载当前端点图，摘要独立更新', async () => {
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    const chart = wrapper.findComponent({ name: 'EndpointDistributionChart' })
+    chart.vm.$emit('update:source', 'upstream')
+    await flushPromises()
+    getStats.mockClear()
+    getStats.mockImplementation((params) => params.endpoint_source === 'upstream'
+      ? new Promise(() => {})
+      : Promise.resolve({ total_requests: 17, endpoints: [] }))
+    wrapper.findComponent(UsageFiltersStub).vm.$emit('change')
+    await flushPromises()
+    expect(getStats.mock.calls.map((call) => call[0].endpoint_source)).toEqual(['upstream', 'inbound'])
+    expect(wrapper.findComponent({ name: 'UsageStatsCards' }).props('stats').total_requests).toBe(17)
+    expect(chart.props('loading')).toBe(true)
+    const rawCall = getStats.mock.calls.find((call) => call[0].endpoint_source === 'upstream')!
+    wrapper.unmount()
+    expect(rawCall[1].signal.aborted).toBe(true)
+  })
+
+  it('导出上游响应模型并区分相同、不同和未知', async () => {
+    exportMocks.list.mockResolvedValue({ total: 3, pages: 1, items: [
+      { model: 'sent', upstream_response_model: 'runtime', upstream_model_mismatch: true },
+      { model: 'sent', upstream_response_model: 'sent', upstream_model_mismatch: false },
+      { model: 'historical' },
+    ] })
+    exportMocks.headers.mockClear()
+    exportMocks.rows.mockClear()
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    wrapper.findComponent(UsageFiltersStub).vm.$emit('export')
+    await flushPromises()
+    const headers = exportMocks.headers.mock.calls[0]?.[0]?.[0] as string[]
+    const rows = exportMocks.rows.mock.calls[0]?.[1] as unknown[][]
+    const model = headers.indexOf('Upstream response model')
+    const mismatch = headers.indexOf('Upstream model mismatch')
+    expect(model).toBeGreaterThan(-1)
+    expect(rows.map(row => [row[model], row[mismatch]])).toEqual([
+      ['runtime', 'Yes'], ['sent', 'No'], ['', ''],
+    ])
+    expect(rows.every(row => row.length === headers.length)).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('TPS 分页导出为数值并设置一位小数，缺少首字耗时时留空', async () => {
+    const row = { model: 'test', output_tokens: 100, duration_ms: 5000, first_token_ms: 1000 }
+    exportMocks.list.mockReset()
+      .mockResolvedValueOnce({ total: 104, items: Array.from({ length: 100 }, () => row) })
+      .mockResolvedValueOnce({ total: 104, items: [
+        { ...row, output_tokens: 101, duration_ms: 4000 },
+        { ...row, output_tokens: 23, duration_ms: 21000 },
+        { ...row, output_tokens: 469, duration_ms: 21000 },
+        { ...row, first_token_ms: null },
+      ] })
+    exportMocks.headers.mockClear()
+    exportMocks.rows.mockClear()
+    exportMocks.save.mockClear()
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    wrapper.findComponent(UsageFiltersStub).vm.$emit('export')
+    await flushPromises()
+
+    const { utils, write, read } = XLSX
+    const headers = exportMocks.headers.mock.calls[0][0][0] as string[]
+    const column = headers.indexOf('TPS (tok/s)')
+    expect(column).toBe(headers.indexOf('usage.duration') + 1)
+    expect(exportMocks.list.mock.calls.map(call => call[0].page)).toEqual([1, 2])
+    expect(exportMocks.rows).toHaveBeenCalledTimes(2)
+    const sheet = exportMocks.rows.mock.calls[1][0]
+    const workbook = utils.book_new()
+    utils.book_append_sheet(workbook, sheet, 'Usage')
+    // 读取序列化后的工作簿，检查分页末尾的值、单元格类型和显示格式。
+    const restored = read(write(workbook, { type: 'array', bookType: 'xlsx' }), { type: 'array', cellNF: true }).Sheets.Usage
+    expect(restored[utils.encode_cell({ r: 1, c: column })]).toMatchObject({ t: 'n', v: 25, z: '0.0', w: '25.0' })
+    expect(restored[utils.encode_cell({ r: 101, c: column })]).toMatchObject({ t: 'n', v: 33.7, z: '0.0', w: '33.7' })
+    expect(restored[utils.encode_cell({ r: 102, c: column })]).toMatchObject({ t: 'n', v: 1.1, z: '0.0', w: '1.1' })
+    expect(restored[utils.encode_cell({ r: 103, c: column })]).toMatchObject({ t: 'n', v: 23.4, z: '0.0', w: '23.4' })
+    expect(restored[utils.encode_cell({ r: 104, c: column })]?.v ?? '').toBe('')
+    expect(exportMocks.save).toHaveBeenCalledOnce()
+    wrapper.unmount()
   })
 
   it('应用 user_id 请求筛选时回显路由用户', async () => {
@@ -354,6 +489,7 @@ describe('admin UsageView distribution metric toggles', () => {
           TokenUsageTrend: true,
           ModelDistributionChart: ModelDistributionChartStub,
           GroupDistributionChart: GroupDistributionChartStub,
+          EndpointDistributionChart: EndpointDistributionChartStub,
           UserTokenRanking: true,
         },
       },
@@ -374,6 +510,8 @@ describe('admin UsageView distribution metric toggles', () => {
     const modelChart = wrapper.find('[data-test="model-chart"]')
     const groupChart = wrapper.find('[data-test="group-chart"]')
 
+    expect(wrapper.findComponent(GroupDistributionChartStub).props('chartType')).toBe('bar')
+    expect(wrapper.findComponent(EndpointDistributionChartStub).props('chartType')).toBe('bar')
     expect(modelChart.find('.metric').text()).toBe('tokens')
     expect(groupChart.find('.metric').text()).toBe('tokens')
 
@@ -435,12 +573,31 @@ describe('admin UsageView request ID column visibility', () => {
     },
   })
 
-  it('keeps request ID hidden by default and persists an explicit enable', async () => {
+  it('TPS 默认可见，旧偏好补入该列，隐藏后重新挂载仍隐藏', async () => {
+    const saved = new Map([['usage-hidden-columns', JSON.stringify(['ip_address'])]])
+    vi.mocked(localStorage.getItem).mockImplementation(key => saved.get(key) ?? null)
+    vi.mocked(localStorage.setItem).mockImplementation((key, value) => { saved.set(key, value) })
+    const wrapper = mountColumnView()
+    await flushPromises()
+    const columns = wrapper.findComponent(UsageTableStub).props('columns') as Array<{ key: string; sortable?: boolean }>
+    expect(columns.findIndex(column => column.key === 'tps')).toBe(columns.findIndex(column => column.key === 'latency') + 1)
+    expect(columns.find(column => column.key === 'tps')?.sortable).toBe(false)
+    await wrapper.get('button[title="admin.users.columnSettings"]').trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === 'TPS')!.trigger('click')
+    expect(JSON.parse(saved.get('usage-hidden-columns')!)).toContain('tps')
+    wrapper.unmount()
+    const restored = mountColumnView()
+    await flushPromises()
+    expect(restored.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).not.toContain('tps')
+    restored.unmount()
+  })
+
+  it('shows request ID by default and persists an explicit hide', async () => {
     const wrapper = mountColumnView()
     await wrapper.vm.$nextTick()
 
     const usageTable = wrapper.findComponent(UsageTableStub)
-    expect(usageTable.props('columns')).not.toEqual(
+    expect(usageTable.props('columns')).toEqual(
       expect.arrayContaining([expect.objectContaining({ key: 'request_id' })]),
     )
 
@@ -449,12 +606,53 @@ describe('admin UsageView request ID column visibility', () => {
     expect(requestIdToggle).toBeDefined()
     await requestIdToggle!.trigger('click')
 
-    expect(usageTable.props('columns')).toEqual(
+    expect(usageTable.props('columns')).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ key: 'request_id', label: 'Request ID' })]),
     )
     expect(localStorage.setItem).toHaveBeenCalledWith(
       'usage-hidden-columns-version',
-      'request-id-hidden-by-default',
+      'upstream-request-id-hidden-by-default',
+    )
+  })
+
+  it('keeps upstream ID hidden by default and allows enabling it from column settings', async () => {
+    const wrapper = mount(UsageView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+          UsageStatsCards: true,
+          UsageFilters: UsageFiltersStub,
+          UsageTable: UsageTableStub,
+          UsageExportProgress: true,
+          UsageCleanupDialog: true,
+          UserBalanceHistoryModal: true,
+          AuditLogModal: true,
+          Pagination: true,
+          Select: true,
+          DateRangePicker: true,
+          Icon: true,
+          TokenUsageTrend: true,
+          ModelDistributionChart: true,
+          GroupDistributionChart: true,
+          EndpointDistributionChart: true,
+          UserTokenRanking: true,
+        },
+      },
+    })
+    await wrapper.vm.$nextTick()
+
+    const usageTable = wrapper.findComponent(UsageTableStub)
+    expect(usageTable.props('columns')).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: 'upstream_request_id' })]),
+    )
+
+    await wrapper.get('button[title="admin.users.columnSettings"]').trigger('click')
+    const upstreamToggle = wrapper.findAll('button').find((button) => button.text() === 'Upstream ID')
+    expect(upstreamToggle).toBeDefined()
+    await upstreamToggle!.trigger('click')
+
+    expect(usageTable.props('columns')).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: 'upstream_request_id', label: 'Upstream ID' })]),
     )
   })
 
@@ -469,7 +667,7 @@ describe('admin UsageView request ID column visibility', () => {
     const columns = wrapper.findComponent(UsageTableStub).props('columns') as Array<{ key: string }>
 
     expect(columns).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'ip_address' })]))
-    expect(columns).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'request_id' })]))
+    expect(columns).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'request_id' })]))
     expect(localStorage.setItem).toHaveBeenCalledWith(
       'usage-hidden-columns',
       expect.stringContaining('request_id'),
@@ -572,7 +770,7 @@ describe('admin UsageView errors tab filter forwarding', () => {
     vi.useRealTimers()
   })
 
-  it('forwards model/account_id/group_id to listErrorLogs on the errors tab', async () => {
+  it('forwards model/provider_id/group_id to listErrorLogs on the errors tab', async () => {
     const wrapper = mount(UsageView, {
       global: { stubs: {
         AppLayout: AppLayoutStub, UsageStatsCards: true, UsageFilters: UsageFiltersStub,
@@ -586,10 +784,10 @@ describe('admin UsageView errors tab filter forwarding', () => {
     vi.advanceTimersByTime(120)
     await flushPromises()
 
-    // 模拟用户在过滤器里选择了模型/账户/分组
+    // 模拟用户在过滤器里选择了模型/提供商/分组
     const vm = wrapper.vm as any
     vm.filters.model = 'gpt-5.3-codex'
-    vm.filters.account_id = 7
+    vm.filters.provider_id = 7
     vm.filters.group_id = 3
     await flushPromises()
 
@@ -601,7 +799,7 @@ describe('admin UsageView errors tab filter forwarding', () => {
     expect(listErrorLogs).toHaveBeenCalledWith(expect.objectContaining({
       view: 'all',
       model: 'gpt-5.3-codex',
-      account_id: 7,
+      provider_id: 7,
       group_id: 3,
     }))
   })

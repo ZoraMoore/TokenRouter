@@ -1,9 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 
 import UsageView from '../UsageView.vue'
 
+enableAutoUnmount(afterEach)
+
 const {
+  authState,
   query,
   getStats,
   getDashboardModels,
@@ -19,6 +23,7 @@ const {
   showSuccess,
   showInfo,
 } = vi.hoisted(() => ({
+  authState: { user: { id: 17 } as { id: number } | null },
   query: vi.fn(),
   getStats: vi.fn(),
   getDashboardModels: vi.fn(),
@@ -36,6 +41,22 @@ const {
 }))
 
 const messages: Record<string, string> = {
+  'usage.time': 'Time',
+  'usage.reasoningEffort': 'Reasoning Effort',
+  'usage.inboundEndpoint': 'Inbound Endpoint',
+  'admin.usage.ipAddress': 'IP Address',
+  'admin.usage.inputTokens': 'Input Tokens',
+  'admin.usage.outputTokens': 'Output Tokens',
+  'admin.usage.cacheReadTokens': 'Cache Read Tokens',
+  'admin.usage.cacheCreationTokens': 'Cache Creation Tokens',
+  'usage.rate': 'Rate Multiplier',
+  'usage.userBilled': 'Billed Cost',
+  'usage.original': 'Original Cost',
+  'usage.firstToken': 'First Token (ms)',
+  'usage.duration': 'Duration (ms)',
+  'usage.tps': 'TPS',
+  'usage.tpsExport': 'TPS (tok/s)',
+
   'admin.dashboard.timeRange': 'Time range',
   'admin.dashboard.granularity': 'Granularity',
   'admin.dashboard.day': 'Day',
@@ -62,7 +83,7 @@ const messages: Record<string, string> = {
   'usage.stream': 'Stream',
   'usage.sync': 'Sync',
   'usage.exporting': 'Exporting',
-  'usage.exportCsv': 'Export CSV',
+  'usage.exportCsv': 'Export',
   'usage.failedToLoad': 'Failed to load',
   'usage.noDataToExport': 'No data',
   'usage.preparingExport': 'Preparing export',
@@ -78,6 +99,7 @@ vi.mock('@/api', () => ({
     getStats,
     getDashboardModels,
     getDashboardSnapshotV2,
+    listMyErrorRequests: vi.fn().mockResolvedValue({ items: [], total: 0, pages: 0 }),
   },
   keysAPI: {
     list,
@@ -100,6 +122,10 @@ vi.mock('@/stores/app', () => ({
   useAppStore: () => ({ showError, showWarning, showSuccess, showInfo }),
 }))
 
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authState,
+}))
+
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
   return {
@@ -113,8 +139,21 @@ vi.mock('vue-i18n', async () => {
 const simpleStub = { template: '<div><slot /></div>' }
 const chartStub = { template: '<div />' }
 const UsageTableStub = {
-  props: ['columns', 'userClickable', 'compactUserColumn'],
+  props: ['data', 'columns', 'userClickable', 'compactUserColumn'],
   template: '<div data-test="usage-table" />',
+}
+// 渲染 UsageTable 的单元格插槽，让鼠标事件经过组件里的浮层处理函数。
+const UsageCellsStub = {
+  props: ['data'],
+  template: `
+    <div>
+      <div v-for="row in data" :key="row.id">
+        <div data-test="usage-cost-cell"><slot name="cell-cost" :row="row" /></div>
+        <div data-test="usage-tokens-cell"><slot name="cell-tokens" :row="row" /></div>
+        <div data-test="usage-latency-cell"><slot name="cell-latency" :row="row" /></div>
+      </div>
+    </div>
+  `,
 }
 
 const usageLog = {
@@ -148,9 +187,10 @@ const usageLog = {
   stream: false,
 }
 
-function mountUsageView() {
+function mountUsageView({ renderUsageTable = false } = {}) {
   return mount(UsageView, {
     global: {
+      plugins: renderUsageTable ? [createPinia()] : [],
       stubs: {
         AppLayout: simpleStub,
         Pagination: true,
@@ -158,7 +198,9 @@ function mountUsageView() {
         DateRangePicker: true,
         Icon: true,
         UsageStatsCards: chartStub,
-        UsageTable: UsageTableStub,
+        UsageTable: renderUsageTable ? false : UsageTableStub,
+        DataTable: UsageCellsStub,
+        Teleport: true,
         ModelDistributionChart: chartStub,
         GroupDistributionChart: chartStub,
         EndpointDistributionChart: chartStub,
@@ -171,6 +213,8 @@ function mountUsageView() {
 
 describe('user UsageView', () => {
   beforeEach(() => {
+    localStorage.clear()
+    authState.user = { id: 17 }
     query.mockReset()
     getStats.mockReset()
     getDashboardModels.mockReset()
@@ -221,6 +265,75 @@ describe('user UsageView', () => {
     getTeamMemberUsage.mockResolvedValue([])
   })
 
+  it('本人测试账号在指定分组预览 0.14 倍率，金额和查询记录使用计费数值', async () => {
+    authState.user = { id: 233 }
+    const billedLog = { ...usageLog, user_id: 233, group_id: 8, rate_multiplier: 0.2 }
+    const otherGroupLog = { ...billedLog, id: 2, group_id: 9 }
+    const otherUserLog = { ...billedLog, id: 3, user_id: 234 }
+    const historyLog = { ...billedLog, id: 4, rate_multiplier: 0.1 }
+    const freeLog = { ...billedLog, id: 5, rate_multiplier: 0 }
+    const items = [billedLog, otherGroupLog, otherUserLog, historyLog, freeLog]
+    query.mockResolvedValue({ items, total: items.length, pages: 1 })
+
+    const wrapper = mountUsageView()
+    await flushPromises()
+
+    const rows = wrapper.findComponent(UsageTableStub).props('data')
+    expect(rows[0]).toEqual({ ...billedLog, rate_multiplier: 0.14 })
+    expect(rows[0]).not.toBe(billedLog)
+    expect(rows.slice(1)).toEqual(items.slice(1))
+    expect(billedLog.rate_multiplier).toBe(0.2)
+    expect((wrapper.vm as any).usageLogs[0]).toEqual(billedLog)
+  })
+
+  it('倍率预览记录的费用、Token 和耗时浮层可以显示', async () => {
+    authState.user = { id: 233 }
+    const billedLog = {
+      ...usageLog,
+      user_id: 233,
+      group_id: 8,
+      rate_multiplier: 0.2,
+      detailed_timing: { request_content_length: 1024 },
+    }
+    query.mockResolvedValue({ items: [billedLog], total: 1, pages: 1 })
+
+    const wrapper = mountUsageView({ renderUsageTable: true })
+    await flushPromises()
+
+    const costTrigger = wrapper.get('[data-test="usage-cost-cell"] .group.relative')
+    await costTrigger.trigger('mouseenter')
+    await flushPromises()
+
+    const costTooltip = wrapper.get('[data-testid="cost-detail-tooltip"]')
+    expect(costTooltip.classes()).not.toContain('invisible')
+    expect(costTooltip.text()).toContain('0.14x')
+    expect(costTooltip.text()).toContain('$0.092883')
+    await costTrigger.trigger('mouseleave')
+
+    const tokenTrigger = wrapper.get('[data-test="usage-tokens-cell"] .group.relative')
+    await tokenTrigger.trigger('mouseenter')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="token-detail-tooltip"]').classes()).not.toContain('invisible')
+    await tokenTrigger.trigger('mouseleave')
+
+    await wrapper.get('[data-test="usage-latency-cell"] button').trigger('mouseenter')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="timing-detail-tooltip"]').classes()).not.toContain('invisible')
+    expect(billedLog.rate_multiplier).toBe(0.2)
+    expect((wrapper.vm as any).usageLogs[0]).toEqual(billedLog)
+  })
+
+  it.each([234, null])('其他登录账号 %s 按记录展示倍率', async (userID) => {
+    authState.user = userID === null ? null : { id: userID }
+    const billedLog = { ...usageLog, user_id: 233, group_id: 8, rate_multiplier: 0.2 }
+    query.mockResolvedValue({ items: [billedLog], total: 1, pages: 1 })
+
+    const wrapper = mountUsageView()
+    await flushPromises()
+
+    expect(wrapper.findComponent(UsageTableStub).props('data')).toEqual([billedLog])
+  })
+
   it('loads logs, stats, model stats, and snapshot on first render', async () => {
     mountUsageView()
     await flushPromises()
@@ -234,7 +347,37 @@ describe('user UsageView', () => {
       include_group_stats: true,
     }))
     expect(list).toHaveBeenCalledWith(1, 100, { scope: 'personal' })
-    expect(getAvailable).toHaveBeenCalled()
+    expect(getAvailable).toHaveBeenCalledWith('personal', undefined, false)
+  })
+
+  it('分组筛选使用展示名称，并在切换语言后刷新', async () => {
+    getAvailable.mockResolvedValue([{ id: 1, name: 'business-group', display_name: 'English group' }, { id: 2, name: 'Legacy group' }])
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const options = () => wrapper.findAllComponents({ name: 'Select' }).flatMap(item => item.props('options') || [])
+    expect(options()).toContainEqual(expect.objectContaining({ value: 1, label: 'English group' }))
+    expect(options()).toContainEqual(expect.objectContaining({ value: 2, label: 'Legacy group' }))
+    getAvailable.mockResolvedValue([{ id: 1, name: 'business-group', display_name: '中文分组' }])
+    window.dispatchEvent(new CustomEvent('locale-changed', { detail: 'zh-Hans' }))
+    await flushPromises()
+    expect(options()).toContainEqual(expect.objectContaining({ value: 1, label: '中文分组' }))
+    wrapper.unmount()
+  })
+
+  it('主筛选框初始值为 null，显示“全部”选项，请求参数不带未选条件', async () => {
+    const wrapper = mountUsageView()
+    await flushPromises()
+
+    const labels = ['usage.allApiKeys', 'admin.usage.allModels', 'admin.usage.allGroups', 'admin.usage.allTypes']
+    for (const label of labels) {
+      const select = wrapper.findAllComponents({ name: 'Select' })
+        .find((item) => item.props('options')?.[0]?.label === (messages[label] ?? label))
+      expect(select?.props('modelValue')).toBeNull()
+    }
+    const params = query.mock.calls[0][0]
+    for (const key of ['api_key_id', 'group_id', 'model', 'request_type']) {
+      expect(params[key]).toBeUndefined()
+    }
   })
 
   it('loads team keys and aggregated member charts for a team owner', async () => {
@@ -276,6 +419,7 @@ describe('user UsageView', () => {
     const usageTable = wrapper.findComponent(UsageTableStub)
     const columns = usageTable.props('columns') as Array<{ key: string; class?: string }>
     expect(columns.map((column) => column.key)).toContain('user')
+    expect(columns.map((column) => column.key)).toContain('tps')
     expect(columns.find((column) => column.key === 'user')?.class).toContain('w-36')
     expect(usageTable.props('userClickable')).toBe(false)
     expect(usageTable.props('compactUserColumn')).toBe(true)
@@ -291,14 +435,39 @@ describe('user UsageView', () => {
     expect(columns.map((col) => col.key)).not.toContain('user_agent')
   })
 
-  it('exports csv with current filters and without admin-only fields', async () => {
+  it('TPS 默认放在延迟后，旧偏好可见且隐藏后重新挂载仍隐藏', async () => {
+    localStorage.setItem('user-usage-hidden-columns', JSON.stringify(['ip_address']))
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const columns = wrapper.findComponent(UsageTableStub).props('columns') as Array<{ key: string; sortable?: boolean }>
+    expect(columns.findIndex(column => column.key === 'tps')).toBe(columns.findIndex(column => column.key === 'latency') + 1)
+    expect(columns.find(column => column.key === 'tps')?.sortable).toBe(false)
+    await wrapper.get('button[title="Columns"]').trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === 'TPS')!.trigger('click')
+    expect(JSON.parse(localStorage.getItem('user-usage-hidden-columns')!)).toEqual(['ip_address', 'tps'])
+    wrapper.unmount()
+    const restored = mountUsageView()
+    await flushPromises()
+    expect(restored.findComponent(UsageTableStub).props('columns').map((column: { key: string }) => column.key)).not.toContain('tps')
+  })
+
+  it.each([
+    { userID: 233, expectedRate: 0.14 },
+    { userID: 234, expectedRate: 0.2 },
+  ])('exports csv with current filters and the displayed rate for user $userID', async ({ userID, expectedRate }) => {
+    authState.user = { id: userID }
+    query.mockResolvedValue({
+      items: [{ ...usageLog, user_id: 233, group_id: 8, rate_multiplier: 0.2 }],
+      total: 1,
+      pages: 1,
+    })
     const wrapper = mountUsageView()
     await flushPromises()
 
     let exportedBlob: Blob | null = null
     let csvContent = ''
     const OriginalBlob = globalThis.Blob
-    vi.stubGlobal('Blob', vi.fn((parts: BlobPart[], options?: BlobPropertyBag) => {
+    vi.stubGlobal('Blob', vi.fn(function (parts: BlobPart[], options?: BlobPropertyBag) {
       csvContent = parts.map((part) => String(part)).join('')
       return new OriginalBlob(parts, options)
     }))
@@ -323,21 +492,64 @@ describe('user UsageView', () => {
     expect(showSuccess).toHaveBeenCalled()
     expect(csvContent.startsWith('\uFEFF')).toBe(true)
     expect(csvContent.slice(1)).toBe([
-      'Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)',
-      '2026-03-08T00:00:00Z,demo-key,gpt-5.4,"\'-",,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345',
+      'Time,API Key,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms),TPS (tok/s)',
+      `2026-03-08T00:00:00Z,demo-key,gpt-5.4,"'-",,203.0.113.10,Sync,Token,4057,101,278272,4,${expectedRate},0.09288300,0.09288300,12,345,303.3`,
     ].join('\n'))
     expect(csvContent).toContain('IP Address')
     expect(csvContent).toContain('203.0.113.10')
     expect(csvContent).toContain('Billed Cost')
     expect(csvContent).toContain('Original Cost')
     expect(csvContent).not.toContain('Upstream Endpoint')
-    expect(csvContent).not.toContain('account_cost')
-    expect(csvContent).not.toContain('account_rate_multiplier')
+    expect(csvContent).not.toContain('provider_cost')
+    expect(csvContent).not.toContain('provider_rate_multiplier')
 
     window.URL.createObjectURL = originalCreateObjectURL
     window.URL.revokeObjectURL = originalRevokeObjectURL
     vi.unstubAllGlobals()
     clickSpy.mockRestore()
+  })
+
+  it('CSV 分页导出使用相同 TPS 公式，缺少首字耗时时留空', async () => {
+    query.mockResolvedValue({ items: [usageLog], total: 103, pages: 2 })
+    const wrapper = mountUsageView()
+    await flushPromises()
+    query.mockReset()
+      .mockResolvedValueOnce({ items: Array.from({ length: 100 }, () => usageLog), total: 103, pages: 2 })
+      .mockResolvedValueOnce({ items: [
+        { ...usageLog, output_tokens: 23, duration_ms: 21000, first_token_ms: 1000 },
+        { ...usageLog, output_tokens: 469, duration_ms: 21000, first_token_ms: 1000 },
+        { ...usageLog, first_token_ms: null },
+      ], total: 103, pages: 2 })
+    let csvContent = ''
+    const OriginalBlob = globalThis.Blob
+    vi.stubGlobal('Blob', vi.fn(function (parts: BlobPart[], options?: BlobPropertyBag) {
+      csvContent = parts.map(String).join('')
+      return new OriginalBlob(parts, options)
+    }))
+    const originalCreateObjectURL = window.URL.createObjectURL
+    const originalRevokeObjectURL = window.URL.revokeObjectURL
+    window.URL.createObjectURL = vi.fn(() => 'blob:usage-tps')
+    window.URL.revokeObjectURL = vi.fn()
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    try {
+      await (wrapper.vm as any).exportToCSV()
+      expect(query.mock.calls.map(call => call[0].page)).toEqual([1, 2])
+      const lines = csvContent.slice(1).split('\n').map(line => line.split(','))
+      const tpsIndex = lines[0].indexOf('TPS (tok/s)')
+      expect(tpsIndex).toBe(lines[0].indexOf('Duration (ms)') + 1)
+      expect(lines).toHaveLength(104)
+      expect(lines[1][tpsIndex]).toBe('303.3')
+      expect(lines[100][tpsIndex]).toBe('303.3')
+      expect(lines[101][tpsIndex]).toBe('1.1')
+      expect(lines[102][tpsIndex]).toBe('23.4')
+      expect(lines[103][tpsIndex]).toBe('')
+      expect(lines.every(line => line.length === lines[0].length)).toBe(true)
+    } finally {
+      window.URL.createObjectURL = originalCreateObjectURL
+      window.URL.revokeObjectURL = originalRevokeObjectURL
+      vi.unstubAllGlobals()
+      clickSpy.mockRestore()
+    }
   })
 
   it('exports historical image rows with image billing mode derived from image_count', async () => {
@@ -371,7 +583,7 @@ describe('user UsageView', () => {
 
     let csvContent = ''
     const OriginalBlob = globalThis.Blob
-    vi.stubGlobal('Blob', vi.fn((parts: BlobPart[], options?: BlobPropertyBag) => {
+    vi.stubGlobal('Blob', vi.fn(function (parts: BlobPart[], options?: BlobPropertyBag) {
       csvContent = parts.map((part) => String(part)).join('')
       return new OriginalBlob(parts, options)
     }))
@@ -383,9 +595,10 @@ describe('user UsageView', () => {
 
     await (wrapper.vm as any).exportToCSV()
 
-    expect(csvContent).toContain('Billing Mode')
+    expect(csvContent).toContain('Billing mode')
     expect(csvContent).toContain('Image')
     expect(csvContent).not.toContain(',Token,0,0,0,0,')
+    expect(csvContent.split('\n')[1].endsWith(',')).toBe(true)
 
     window.URL.createObjectURL = originalCreateObjectURL
     window.URL.revokeObjectURL = originalRevokeObjectURL

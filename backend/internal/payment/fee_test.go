@@ -102,7 +102,7 @@ func TestCalculatePayAmount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := CalculatePayAmount(tt.amount, tt.feeRate)
+			got := CalculatePayAmountForCurrency(tt.amount, tt.feeRate, DefaultPaymentCurrency)
 			if got != tt.expected {
 				t.Fatalf("CalculatePayAmount(%v, %v) = %q, want %q", tt.amount, tt.feeRate, got, tt.expected)
 			}
@@ -154,7 +154,7 @@ func TestCalculatePayAmountWithFee(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := CalculatePayAmountWithFee(tt.base, tt.fee)
+			got := CalculatePayAmountWithFeeForCurrency(tt.base, tt.fee, DefaultPaymentCurrency)
 			if got != tt.want {
 				t.Fatalf("CalculatePayAmountWithFee() = %+v, want %+v", got, tt.want)
 			}

@@ -6,6 +6,20 @@
 import { apiClient } from '../client'
 import type { AdminUser, UpdateUserRequest, PaginatedResponse, ApiKey } from '@/types'
 
+export interface APIActivityStats {
+  active_users: number
+  window_seconds: number
+  reporting_nodes: number
+  total_nodes: number
+  complete: boolean
+  generated_at: string
+}
+
+export async function getAPIActivity(options?: { signal?: AbortSignal }): Promise<APIActivityStats> {
+  const { data } = await apiClient.get<APIActivityStats>('/admin/users/activity-stats', options)
+  return data
+}
+
 export interface AdminBindAuthIdentityChannelRequest {
   channel: string
   channel_app_id: string
@@ -187,16 +201,6 @@ export async function updateBalance(
   return data
 }
 
-/**
- * Update user concurrency
- * @param id - User ID
- * @param concurrency - New concurrency limit
- * @returns Updated user
- */
-export async function updateConcurrency(id: number, concurrency: number): Promise<AdminUser> {
-  return update(id, { concurrency })
-}
-
 /** 通过一次请求覆盖多个用户的并发数和/或 RPM 上限。 */
 export async function batchUpdateLimits(
   request: BatchUpdateUserLimitsRequest
@@ -225,30 +229,6 @@ export async function toggleStatus(id: number, status: 'active' | 'disabled'): P
  */
 export async function getUserApiKeys(id: number): Promise<PaginatedResponse<ApiKey>> {
   const { data } = await apiClient.get<PaginatedResponse<ApiKey>>(`/admin/users/${id}/api-keys`)
-  return data
-}
-
-/**
- * Get user's usage statistics
- * @param id - User ID
- * @param period - Time period
- * @returns User usage statistics
- */
-export async function getUserUsageStats(
-  id: number,
-  period: string = 'month'
-): Promise<{
-  total_requests: number
-  total_cost: number
-  total_tokens: number
-}> {
-  const { data } = await apiClient.get<{
-    total_requests: number
-    total_cost: number
-    total_tokens: number
-  }>(`/admin/users/${id}/usage`, {
-    params: { period }
-  })
   return data
 }
 
@@ -329,96 +309,20 @@ export async function bindUserAuthIdentity(
   return data
 }
 
-/**
- * Platform quota types
- */
-export type PlatformQuotaPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'qoder' | 'grok' | 'kimi' | 'zhipu' | 'deepseek'
-export type PlatformQuotaWindow = 'daily' | 'weekly' | 'monthly'
-
-export interface PlatformQuotaItem {
-  platform: PlatformQuotaPlatform
-  daily_limit_usd: number | null
-  weekly_limit_usd: number | null
-  monthly_limit_usd: number | null
-  daily_usage_usd: number
-  weekly_usage_usd: number
-  monthly_usage_usd: number
-  daily_window_start?: string | null
-  weekly_window_start?: string | null
-  monthly_window_start?: string | null
-  daily_window_resets_at?: string | null
-  weekly_window_resets_at?: string | null
-  monthly_window_resets_at?: string | null
-}
-
-export interface PlatformQuotaUpdateItem {
-  platform: PlatformQuotaPlatform
-  daily_limit_usd: number | null
-  weekly_limit_usd: number | null
-  monthly_limit_usd: number | null
-}
-
-export interface PlatformQuotasResponse {
-  platform_quotas: PlatformQuotaItem[]
-}
-
-/**
- * Get user's platform quotas
- */
-export async function getPlatformQuotas(id: number): Promise<PlatformQuotasResponse> {
-  const { data } = await apiClient.get<PlatformQuotasResponse>(
-    `/admin/users/${id}/platform-quotas`
-  )
-  return data
-}
-
-/**
- * Replace user's platform quotas (全量替换)
- */
-export async function updatePlatformQuotas(
-  id: number,
-  quotas: PlatformQuotaUpdateItem[]
-): Promise<PlatformQuotasResponse> {
-  const { data } = await apiClient.put<PlatformQuotasResponse>(
-    `/admin/users/${id}/platform-quotas`,
-    { quotas }
-  )
-  return data
-}
-
-/**
- * Reset a single (platform, window) usage immediately
- */
-export async function resetPlatformQuotaWindow(
-  id: number,
-  platform: PlatformQuotaPlatform,
-  window: PlatformQuotaWindow
-): Promise<PlatformQuotasResponse> {
-  const { data } = await apiClient.post<PlatformQuotasResponse>(
-    `/admin/users/${id}/platform-quotas/reset`,
-    { platform, window }
-  )
-  return data
-}
-
 export const usersAPI = {
+  getAPIActivity,
   list,
   getById,
   create,
   update,
   delete: deleteUser,
   updateBalance,
-  updateConcurrency,
   batchUpdateLimits,
   toggleStatus,
   getUserApiKeys,
-  getUserUsageStats,
   getUserBalanceHistory,
   replaceGroup,
   bindUserAuthIdentity,
-  getPlatformQuotas,
-  updatePlatformQuotas,
-  resetPlatformQuotaWindow,
 }
 
 export default usersAPI

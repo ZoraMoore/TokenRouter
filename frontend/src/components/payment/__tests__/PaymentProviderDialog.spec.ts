@@ -25,7 +25,8 @@ const messages: Record<string, string> = {
   'admin.settings.payment.testingConnection': 'Testing...',
 }
 
-vi.mock('vue-i18n', () => ({
+vi.mock('vue-i18n', async () => ({
+  ...await vi.importActual<typeof import('vue-i18n')>('vue-i18n'),
   useI18n: () => ({
     t: (key: string, params?: Record<string, string>) => {
       const message = messages[key] ?? key
@@ -206,14 +207,14 @@ describe('PaymentProviderDialog payment guide', () => {
     ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
     await nextTick()
 
-    await wrapper.find('button.btn-sm').trigger('click')
+    await wrapper.get('[data-testid="easypay-custom-methods-add"]').trigger('click')
     await nextTick()
 
     const inputs = wrapper.findAll('input[type="text"]')
     const customTypeInputs = inputs.filter(input => (input.element as HTMLInputElement).placeholder === 'credit_card')
     const ldcTypeInput = customTypeInputs[0]
     const upstreamTypeInput = customTypeInputs[1]
-    const displayNameInput = inputs.find(input => (input.element as HTMLInputElement).placeholder === '信用卡')
+    const displayNameInput = wrapper.get('[data-testid="method-display-name"] input')
     if (!ldcTypeInput || !upstreamTypeInput || !displayNameInput) {
       throw new Error('custom method inputs not found')
     }
@@ -227,7 +228,7 @@ describe('PaymentProviderDialog payment guide', () => {
       config: Record<string, string>
       supported_types: string[]
     }
-    expect(payload.config.customMethods).toBe('[{"type":"ldc","upstreamType":"epay","displayName":"LDC"}]')
+    expect(JSON.parse(payload.config.customMethods)).toEqual([expect.objectContaining({ id: expect.any(String), type: 'ldc', upstreamType: 'epay', displayName: 'LDC', displayNameLocalization: expect.objectContaining({ source: 'LDC', source_locale: expect.any(String) }) })])
     expect(payload.supported_types).toEqual(['alipay', 'wxpay', 'ldc'])
   })
 
@@ -286,14 +287,14 @@ describe('PaymentProviderDialog payment guide', () => {
     ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
     await nextTick()
 
-    await wrapper.find('button.btn-sm').trigger('click')
+    await wrapper.get('[data-testid="easypay-custom-methods-add"]').trigger('click')
     await nextTick()
 
     const inputs = wrapper.findAll('input[type="text"]')
     const customTypeInputs = inputs.filter(input => (input.element as HTMLInputElement).placeholder === 'credit_card')
     const typeInput = customTypeInputs[0]
     const upstreamTypeInput = customTypeInputs[1]
-    const displayNameInput = inputs.find(input => (input.element as HTMLInputElement).placeholder === '信用卡')
+    const displayNameInput = wrapper.get('[data-testid="method-display-name"] input')
     if (!typeInput || !upstreamTypeInput || !displayNameInput) {
       throw new Error('custom method inputs not found')
     }

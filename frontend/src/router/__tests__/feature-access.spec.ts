@@ -8,25 +8,24 @@ type NavigationGuard = (
 
 const routerHarness = vi.hoisted(() => ({
   guard: null as NavigationGuard | null,
+  routes: [] as Array<{ path: string; meta?: Record<string, unknown> }>,
 }))
 
 const authStore = vi.hoisted(() => ({
   checkAuth: vi.fn(),
   isAuthenticated: true,
   isAdmin: false,
-  isSimpleMode: false,
   hasPendingAuthSession: false,
 }))
 
 const appStore = vi.hoisted(() => ({
-  siteName: 'Sub2API',
+  siteName: 'TokenRouter',
   backendModeEnabled: false,
   publicSettingsLoaded: false,
   cachedPublicSettings: null as null | {
     payment_enabled?: boolean
     risk_control_enabled?: boolean
     team_enabled?: boolean
-    data_sharing_enabled?: boolean
     usage_ranking_enabled?: boolean
     custom_menu_items?: []
   },
@@ -35,13 +34,16 @@ const appStore = vi.hoisted(() => ({
 
 vi.mock('vue-router', () => ({
   createWebHistory: vi.fn(() => ({})),
-  createRouter: vi.fn(() => ({
-    beforeEach: vi.fn((guard: NavigationGuard) => {
-      routerHarness.guard = guard
-    }),
-    afterEach: vi.fn(),
-    onError: vi.fn(),
-  })),
+  createRouter: vi.fn((options: { routes: typeof routerHarness.routes }) => {
+    routerHarness.routes = options.routes
+    return {
+      beforeEach: vi.fn((guard: NavigationGuard) => {
+        routerHarness.guard = guard
+      }),
+      afterEach: vi.fn(),
+      onError: vi.fn(),
+    }
+  }),
 }))
 
 vi.mock('@/stores/auth', () => ({
@@ -116,7 +118,6 @@ describe('feature route guard', () => {
   beforeEach(() => {
     authStore.isAuthenticated = true
     authStore.isAdmin = false
-    authStore.isSimpleMode = false
     appStore.publicSettingsLoaded = false
     appStore.cachedPublicSettings = null
     appStore.fetchPublicSettings.mockReset()
@@ -146,8 +147,8 @@ describe('feature route guard', () => {
     ['payment', { requiresPayment: true }, '/purchase'],
     ['risk control', { requiresRiskControl: true }, '/admin/risk-control'],
     ['team', { requiresTeam: true }, '/team'],
-    ['data sharing', { requiresDataSharing: true }, '/data-sharing'],
     ['usage ranking', { requiresUsageRanking: true }, '/usage-ranking'],
+    ['creative', { requiresCreative: true }, '/creative'],
   ])('does not treat a failed %s settings load as explicitly disabled', async (_name, meta, path) => {
     authStore.isAdmin = path.startsWith('/admin/')
     appStore.fetchPublicSettings.mockResolvedValue(null)
@@ -171,9 +172,9 @@ describe('feature route guard', () => {
     ],
     ['team', { requiresTeam: true }, { team_enabled: false }, '/dashboard', false],
     ['admin team', { requiresTeam: true }, { team_enabled: false }, '/admin/settings', true],
-    ['data sharing', { requiresDataSharing: true }, { data_sharing_enabled: false }, '/dashboard', false],
-    ['admin data sharing', { requiresDataSharing: true }, { data_sharing_enabled: false }, '/admin/settings', true],
     ['usage ranking', { requiresUsageRanking: true }, { usage_ranking_enabled: false }, '/dashboard', false],
+    ['creative', { requiresCreative: true }, { creative_enabled: false }, '/dashboard', false],
+    ['admin creative', { requiresCreative: true }, { creative_enabled: false }, '/admin/settings', true],
   ])('redirects when loaded settings explicitly disable %s', async (_name, meta, settings, target, isAdmin) => {
     authStore.isAdmin = isAdmin
     appStore.cachedPublicSettings = settings
@@ -185,5 +186,18 @@ describe('feature route guard', () => {
     expect(appStore.fetchPublicSettings).not.toHaveBeenCalled()
     expect(next).toHaveBeenCalledOnce()
     expect(next).toHaveBeenCalledWith(target)
+  })
+
+  it('请求诊断只注册管理员路由，普通用户直接访问会被拦截', async () => {
+    expect(routerHarness.routes.find(route => route.path === '/requests')).toBeUndefined()
+    const route = routerHarness.routes.find(route => route.path === '/admin/requests')
+    expect(route?.meta?.requiresAdmin).toBe(true)
+    const blocked = runGuard(route?.meta ?? {}, '/admin/requests')
+    await blocked.navigation
+    expect(blocked.next).toHaveBeenCalledWith('/dashboard')
+    authStore.isAdmin = true
+    const allowed = runGuard(route?.meta ?? {}, '/admin/requests')
+    await allowed.navigation
+    expect(allowed.next).toHaveBeenCalledWith()
   })
 })

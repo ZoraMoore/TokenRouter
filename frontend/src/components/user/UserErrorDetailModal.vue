@@ -1,12 +1,7 @@
 <template>
   <BaseDialog :show="show" :title="t('usage.errors.detail.title')" width="wide" @close="emit('update:show', false)">
     <!-- 加载中 -->
-    <div v-if="loading" class="flex justify-center py-10">
-      <svg class="h-7 w-7 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-      </svg>
-    </div>
+    <ContentSkeleton v-if="loading" variant="detail" :rows="8" class="p-6" />
 
     <!-- 加载失败 -->
     <div v-else-if="loadError" class="py-8 text-center text-sm text-red-500">
@@ -16,6 +11,11 @@
     <!-- 详情内容 -->
     <div v-else-if="detail" class="space-y-4 text-sm">
       <div class="grid grid-cols-2 gap-x-6 gap-y-3">
+        <!-- 请求 ID -->
+        <div v-if="detail.request_id" class="col-span-2">
+          <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('requests.id') }}</span>
+          <p class="mt-0.5"><RequestIdLink :value="detail.request_id" full /></p>
+        </div>
         <!-- 时间 -->
         <div>
           <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.time') }}</span>
@@ -64,13 +64,15 @@
       <!-- 错误响应体 -->
       <div v-if="detail.error_body">
         <span class="font-medium text-gray-500 dark:text-dark-400">{{ t('usage.errors.detail.responseBody') }}</span>
-        <pre class="mt-1 overflow-auto max-h-[40vh] whitespace-pre-wrap break-all rounded-lg bg-gray-50 dark:bg-dark-900 border border-gray-200 dark:border-dark-700 p-3 text-xs text-gray-800 dark:text-dark-200">{{ detail.error_body }}</pre>
+        <pre class="mt-1 overflow-auto max-h-[40vh] whitespace-pre-wrap break-all rounded-surface bg-gray-50 dark:bg-dark-900 border border-gray-200 dark:border-dark-700 p-3 text-xs text-gray-800 dark:text-dark-200">{{ detail.error_body }}</pre>
       </div>
     </div>
   </BaseDialog>
 </template>
 
 <script setup lang="ts">
+import RequestIdLink from '@/components/common/RequestIdLink.vue'
+import ContentSkeleton from '@/components/common/ContentSkeleton.vue'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'

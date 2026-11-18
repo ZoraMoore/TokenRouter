@@ -12,10 +12,10 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/TokenFlux/TokenRouter/ent/account"
 	"github.com/TokenFlux/TokenRouter/ent/apikey"
 	"github.com/TokenFlux/TokenRouter/ent/group"
 	"github.com/TokenFlux/TokenRouter/ent/predicate"
+	"github.com/TokenFlux/TokenRouter/ent/provider"
 	"github.com/TokenFlux/TokenRouter/ent/team"
 	"github.com/TokenFlux/TokenRouter/ent/usagelog"
 	"github.com/TokenFlux/TokenRouter/ent/user"
@@ -31,7 +31,7 @@ type UsageLogQuery struct {
 	predicates       []predicate.UsageLog
 	withUser         *UserQuery
 	withAPIKey       *APIKeyQuery
-	withAccount      *AccountQuery
+	withProvider     *ProviderQuery
 	withGroup        *GroupQuery
 	withSubscription *UserSubscriptionQuery
 	withTeam         *TeamQuery
@@ -116,9 +116,9 @@ func (_q *UsageLogQuery) QueryAPIKey() *APIKeyQuery {
 	return query
 }
 
-// QueryAccount chains the current query on the "account" edge.
-func (_q *UsageLogQuery) QueryAccount() *AccountQuery {
-	query := (&AccountClient{config: _q.config}).Query()
+// QueryProvider chains the current query on the "provider" edge.
+func (_q *UsageLogQuery) QueryProvider() *ProviderQuery {
+	query := (&ProviderClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -129,8 +129,8 @@ func (_q *UsageLogQuery) QueryAccount() *AccountQuery {
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(usagelog.Table, usagelog.FieldID, selector),
-			sqlgraph.To(account.Table, account.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, usagelog.AccountTable, usagelog.AccountColumn),
+			sqlgraph.To(provider.Table, provider.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, usagelog.ProviderTable, usagelog.ProviderColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -398,7 +398,7 @@ func (_q *UsageLogQuery) Clone() *UsageLogQuery {
 		predicates:       append([]predicate.UsageLog{}, _q.predicates...),
 		withUser:         _q.withUser.Clone(),
 		withAPIKey:       _q.withAPIKey.Clone(),
-		withAccount:      _q.withAccount.Clone(),
+		withProvider:     _q.withProvider.Clone(),
 		withGroup:        _q.withGroup.Clone(),
 		withSubscription: _q.withSubscription.Clone(),
 		withTeam:         _q.withTeam.Clone(),
@@ -430,14 +430,14 @@ func (_q *UsageLogQuery) WithAPIKey(opts ...func(*APIKeyQuery)) *UsageLogQuery {
 	return _q
 }
 
-// WithAccount tells the query-builder to eager-load the nodes that are connected to
-// the "account" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *UsageLogQuery) WithAccount(opts ...func(*AccountQuery)) *UsageLogQuery {
-	query := (&AccountClient{config: _q.config}).Query()
+// WithProvider tells the query-builder to eager-load the nodes that are connected to
+// the "provider" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UsageLogQuery) WithProvider(opts ...func(*ProviderQuery)) *UsageLogQuery {
+	query := (&ProviderClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withAccount = query
+	_q.withProvider = query
 	return _q
 }
 
@@ -555,7 +555,7 @@ func (_q *UsageLogQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Usa
 		loadedTypes = [6]bool{
 			_q.withUser != nil,
 			_q.withAPIKey != nil,
-			_q.withAccount != nil,
+			_q.withProvider != nil,
 			_q.withGroup != nil,
 			_q.withSubscription != nil,
 			_q.withTeam != nil,
@@ -594,9 +594,9 @@ func (_q *UsageLogQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Usa
 			return nil, err
 		}
 	}
-	if query := _q.withAccount; query != nil {
-		if err := _q.loadAccount(ctx, query, nodes, nil,
-			func(n *UsageLog, e *Account) { n.Edges.Account = e }); err != nil {
+	if query := _q.withProvider; query != nil {
+		if err := _q.loadProvider(ctx, query, nodes, nil,
+			func(n *UsageLog, e *Provider) { n.Edges.Provider = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -679,11 +679,11 @@ func (_q *UsageLogQuery) loadAPIKey(ctx context.Context, query *APIKeyQuery, nod
 	}
 	return nil
 }
-func (_q *UsageLogQuery) loadAccount(ctx context.Context, query *AccountQuery, nodes []*UsageLog, init func(*UsageLog), assign func(*UsageLog, *Account)) error {
+func (_q *UsageLogQuery) loadProvider(ctx context.Context, query *ProviderQuery, nodes []*UsageLog, init func(*UsageLog), assign func(*UsageLog, *Provider)) error {
 	ids := make([]int64, 0, len(nodes))
 	nodeids := make(map[int64][]*UsageLog)
 	for i := range nodes {
-		fk := nodes[i].AccountID
+		fk := nodes[i].ProviderID
 		if _, ok := nodeids[fk]; !ok {
 			ids = append(ids, fk)
 		}
@@ -692,7 +692,7 @@ func (_q *UsageLogQuery) loadAccount(ctx context.Context, query *AccountQuery, n
 	if len(ids) == 0 {
 		return nil
 	}
-	query.Where(account.IDIn(ids...))
+	query.Where(provider.IDIn(ids...))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err
@@ -700,7 +700,7 @@ func (_q *UsageLogQuery) loadAccount(ctx context.Context, query *AccountQuery, n
 	for _, n := range neighbors {
 		nodes, ok := nodeids[n.ID]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "account_id" returned %v`, n.ID)
+			return fmt.Errorf(`unexpected foreign-key "provider_id" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)
@@ -839,8 +839,8 @@ func (_q *UsageLogQuery) querySpec() *sqlgraph.QuerySpec {
 		if _q.withAPIKey != nil {
 			_spec.Node.AddColumnOnce(usagelog.FieldAPIKeyID)
 		}
-		if _q.withAccount != nil {
-			_spec.Node.AddColumnOnce(usagelog.FieldAccountID)
+		if _q.withProvider != nil {
+			_spec.Node.AddColumnOnce(usagelog.FieldProviderID)
 		}
 		if _q.withGroup != nil {
 			_spec.Node.AddColumnOnce(usagelog.FieldGroupID)

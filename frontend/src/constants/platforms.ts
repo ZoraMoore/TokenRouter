@@ -1,4 +1,4 @@
-import type { AccountPlatform, GroupPlatform } from '@/types'
+import type { ProviderPlatform } from '@/types'
 
 export interface PlatformOption<T extends string = string> {
   value: T
@@ -6,7 +6,7 @@ export interface PlatformOption<T extends string = string> {
   [key: string]: unknown
 }
 
-// 账号与请求路由支持的具体平台目录；各管理筛选器统一从此处派生。
+// 提供商与请求路由支持的具体平台目录；各管理筛选器统一从此处派生。
 export const CONCRETE_PLATFORM_OPTIONS = [
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'openai', label: 'OpenAI' },
@@ -17,7 +17,4 @@ export const CONCRETE_PLATFORM_OPTIONS = [
   { value: 'kimi', label: 'Kimi' },
   { value: 'zhipu', label: 'Zhipu' },
   { value: 'deepseek', label: 'DeepSeek' }
-] as const satisfies readonly PlatformOption<AccountPlatform>[]
-
-// fork 尚未引入 Composite 分组，分组选项与具体平台目录保持一致。
-export const GROUP_PLATFORM_OPTIONS = CONCRETE_PLATFORM_OPTIONS as readonly PlatformOption<GroupPlatform>[]
+] as const satisfies readonly PlatformOption<ProviderPlatform>[]

@@ -51,6 +51,15 @@ describe('AnnouncementBell', () => {
     setActivePinia(createPinia())
   })
 
+  it('顶栏标识展示公告文字并继续打开列表', async () => {
+    const wrapper = mount(AnnouncementBell, { props: { variant: 'status', showLabel: true }, attachTo: document.body })
+    expect(wrapper.find('button').text()).toContain('nav.announcements')
+    await wrapper.find('button').trigger('click')
+    await nextTick()
+    expect(document.body.querySelector('[data-testid="announcement-list-dialog"]')).not.toBeNull()
+    wrapper.unmount()
+  })
+
   afterEach(() => {
     document.body.innerHTML = ''
     document.body.style.overflow = ''

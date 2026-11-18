@@ -1,3 +1,13 @@
+import type { LocalizedUpdate } from '@/i18n/content'
+
+// 套餐文案按语言作为完整版本编辑。
+export type PlanCopy = {
+  name: string
+  description: string
+  features: string
+  product_name: string
+}
+
 /**
  * Payment System Type Definitions
  */
@@ -85,7 +95,7 @@ export interface CheckoutInfoResponse {
   help_text: string
   help_image_url: string
   stripe_publishable_key: string
-  /** 开启后支付宝移动端始终展示二维码，不再跳转手机网站支付。 */
+  /** 开启后支付宝移动端使用二维码支付流程。 */
   alipay_force_qrcode?: boolean
   /** 开启后官方支付宝移动端订单使用预下单，并通过深链接唤起支付宝客户端。 */
   alipay_mobile_precreate_deep_link?: boolean
@@ -131,13 +141,14 @@ export type PublicPaymentOrder = PaymentOrder
 // ==================== Plans & Channels ====================
 
 export interface SubscriptionPlan {
+  product_name?: string
+  localization?: LocalizedUpdate<PlanCopy>
   id: number
   group_id?: number
   group_ids?: number[]
   groups_restricted?: boolean
   applicable_groups?: Array<{ id: number; name: string }>
   group_rate_multipliers?: Record<string, number> | Record<number, number>
-  group_platform?: string
   group_name?: string
   rate_multiplier?: number
   peak_rate_enabled?: boolean

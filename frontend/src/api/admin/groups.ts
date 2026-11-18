@@ -6,7 +6,6 @@
 import { apiClient } from '../client'
 import type {
   AdminGroup,
-  GroupPlatform,
   CreateGroupRequest,
   UpdateGroupRequest,
   PaginatedResponse
@@ -29,7 +28,6 @@ export async function list(
   page: number = 1,
   pageSize: number = 20,
   filters?: {
-    platform?: GroupPlatform
     status?: 'active' | 'inactive'
     is_exclusive?: boolean
     search?: string
@@ -53,13 +51,10 @@ export async function list(
 
 /**
  * Get all active groups (without pagination)
- * @param platform - Optional platform filter
  * @returns List of all active groups
  */
-export async function getAll(platform?: GroupPlatform): Promise<AdminGroup[]> {
-  const { data } = await apiClient.get<AdminGroup[]>('/admin/groups/all', {
-    params: platform ? { platform } : undefined
-  })
+export async function getAll(): Promise<AdminGroup[]> {
+  const { data } = await apiClient.get<AdminGroup[]>('/admin/groups/all')
   return data
 }
 
@@ -73,15 +68,6 @@ export async function getAllIncludingInactive(): Promise<AdminGroup[]> {
   return data
 }
 
-/**
- * Get active groups by platform
- * @param platform - Platform to filter by
- * @returns List of groups for the specified platform
- */
-export async function getByPlatform(platform: GroupPlatform): Promise<AdminGroup[]> {
-  return getAll(platform)
-}
-
 /** 获取当前 TokenRouter 服务端的 Live 运行环境能力。 */
 export async function getLiveCapability(): Promise<LiveCapability> {
   const { data } = await apiClient.get<LiveCapability>('/admin/groups/live-capability')
@@ -89,28 +75,14 @@ export async function getLiveCapability(): Promise<LiveCapability> {
 }
 
 /**
- * Get group by ID
- * @param id - Group ID
- * @returns Group details
- */
-export async function getById(id: number): Promise<AdminGroup> {
-  const { data } = await apiClient.get<AdminGroup>(`/admin/groups/${id}`)
-  return data
-}
-
-/**
  * 获取自定义 /v1/models 列表的候选模型。
- * id=0 表示创建分组流程，仅返回平台默认模型。
+ * id=0 表示创建分组流程，返回通用候选模型。
  */
 export async function getModelsListCandidates(
-  id: number,
-  platform?: GroupPlatform
+  id: number
 ): Promise<string[]> {
   const { data } = await apiClient.get<{ models: string[] }>(
-    `/admin/groups/${id}/models-list-candidates`,
-    {
-      params: platform ? { platform } : undefined
-    }
+    `/admin/groups/${id}/models-list-candidates`
   )
   return data.models || []
 }
@@ -127,7 +99,7 @@ export async function create(groupData: CreateGroupRequest): Promise<AdminGroup>
 
 /**
  * 在服务端复制分组，确保列表响应未返回的配置也能完整保留。
- * 请求结果不明确时保留操作键，使重试复用原操作，避免重复创建分组。
+ * 请求结果未知时保留操作键，重试使用同一次分组复制操作。
  */
 const duplicateOperationKeys = new Map<string, string>()
 
@@ -226,54 +198,6 @@ export async function deleteGroup(id: number): Promise<{ message: string }> {
 }
 
 /**
- * Toggle group status
- * @param id - Group ID
- * @param status - New status
- * @returns Updated group
- */
-export async function toggleStatus(id: number, status: 'active' | 'inactive'): Promise<AdminGroup> {
-  return update(id, { status })
-}
-
-/**
- * Get group statistics
- * @param id - Group ID
- * @returns Group usage statistics
- */
-export async function getStats(id: number): Promise<{
-  total_api_keys: number
-  active_api_keys: number
-  total_requests: number
-  total_cost: number
-}> {
-  const { data } = await apiClient.get<{
-    total_api_keys: number
-    active_api_keys: number
-    total_requests: number
-    total_cost: number
-  }>(`/admin/groups/${id}/stats`)
-  return data
-}
-
-/**
- * Get API keys in a group
- * @param id - Group ID
- * @param page - Page number
- * @param pageSize - Items per page
- * @returns Paginated list of API keys in the group
- */
-export async function getGroupApiKeys(
-  id: number,
-  page: number = 1,
-  pageSize: number = 20
-): Promise<PaginatedResponse<any>> {
-  const { data } = await apiClient.get<PaginatedResponse<any>>(`/admin/groups/${id}/api-keys`, {
-    params: { page, page_size: pageSize }
-  })
-  return data
-}
-
-/**
  * Rate multiplier entry for a user in a group
  */
 export interface GroupRateMultiplierEntry {
@@ -309,16 +233,6 @@ export async function updateSortOrder(
   const { data } = await apiClient.put<{ message: string }>('/admin/groups/sort-order', {
     updates
   })
-  return data
-}
-
-/**
- * Clear all rate multipliers for a group
- * @param id - Group ID
- * @returns Success confirmation
- */
-export async function clearGroupRateMultipliers(id: number): Promise<{ message: string }> {
-  const { data } = await apiClient.delete<{ message: string }>(`/admin/groups/${id}/rate-multipliers`)
   return data
 }
 
@@ -418,20 +332,14 @@ export async function getCapacitySummary(): Promise<
 export const groupsAPI = {
   list,
   getAll,
-  getByPlatform,
   getAllIncludingInactive,
   getLiveCapability,
-  getById,
   getModelsListCandidates,
   create,
   duplicate,
   update,
   delete: deleteGroup,
-  toggleStatus,
-  getStats,
-  getGroupApiKeys,
   getGroupRateMultipliers,
-  clearGroupRateMultipliers,
   batchSetGroupRateMultipliers,
   getGroupRPMOverrides,
   clearGroupRPMOverrides,

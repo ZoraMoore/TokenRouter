@@ -8,11 +8,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/middleware"
-	"github.com/TokenFlux/TokenRouter/internal/service"
-
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
+
+	"github.com/TokenFlux/TokenRouter/internal/identity"
+	identityhttp "github.com/TokenFlux/TokenRouter/internal/identity/httpapi"
+	"github.com/TokenFlux/TokenRouter/internal/identity/httpapi/authctx"
+	"github.com/TokenFlux/TokenRouter/internal/server/httpx"
+	"github.com/TokenFlux/TokenRouter/internal/server/runtimeconfig"
 )
 
 // panelRateLimitWindow 面板限流固定窗口时长（所有档位均按每分钟计数）。
@@ -20,7 +22,7 @@ const panelRateLimitWindow = time.Minute
 
 // panelRateLimitAllower 抽象底层限流原语，便于单测注入。
 type panelRateLimitAllower interface {
-	Allow(ctx context.Context, key string, limit int, window time.Duration) (middleware.AllowResult, error)
+	Allow(ctx context.Context, key string, limit int, window time.Duration) (AllowResult, error)
 }
 
 // PanelRateLimiter 面板（管理面 /api/v1）API 限流器。
@@ -32,16 +34,22 @@ type panelRateLimitAllower interface {
 //     地址（反代内部转发地址）直接跳过，避免误拦整条反代链路的流量。
 //   - 配置走进程内缓存（60s TTL），热路径零 DB 访问。
 //   - Redis 异常一律 fail-open：限流是保护措施，不能反过来把面板打挂。
+//
+// PanelSettingsReader 是面板请求读取已发布配置的窄接口。
+type PanelSettingsReader interface {
+	GetPanelRateLimitSettingsCached(context.Context) runtimeconfig.PanelRateLimitSettings
+}
+
 type PanelRateLimiter struct {
 	limiter        panelRateLimitAllower
-	settingService *service.SettingService
+	settingService PanelSettingsReader
 }
 
 // NewPanelRateLimiter 创建面板限流器。
-func NewPanelRateLimiter(redisClient *redis.Client, settingService *service.SettingService) *PanelRateLimiter {
+func NewPanelRateLimiter(counter *RateLimiter, settingService PanelSettingsReader) *PanelRateLimiter {
 	limiter := &PanelRateLimiter{settingService: settingService}
-	if redisClient != nil {
-		limiter.limiter = middleware.NewRateLimiter(redisClient)
+	if counter != nil {
+		limiter.limiter = counter
 	}
 	// Redis 未初始化时保持 fail-open，避免可选依赖缺失导致面板请求空指针崩溃。
 	return limiter
@@ -49,16 +57,20 @@ func NewPanelRateLimiter(redisClient *redis.Client, settingService *service.Sett
 
 // Global 认证面板接口的全局按用户限流（宽松档，覆盖所有登录后端点）。
 func (p *PanelRateLimiter) Global() gin.HandlerFunc {
-	return p.userScoped("global", func(s service.PanelRateLimitSettings) int { return s.UserRPM })
+	return p.userScoped("global", func(s runtimeconfig.PanelRateLimitSettings) int {
+		return s.UserRPM
+	})
 }
 
 // Heavy 重查询接口的按用户限流（严格档，覆盖 usage/dashboard 等聚合统计端点）。
 // 与 Global 叠加计数：一次重查询同时消耗两档额度。
 func (p *PanelRateLimiter) Heavy() gin.HandlerFunc {
-	return p.userScoped("heavy", func(s service.PanelRateLimitSettings) int { return s.HeavyRPM })
+	return p.userScoped("heavy", func(s runtimeconfig.PanelRateLimitSettings) int {
+		return s.HeavyRPM
+	})
 }
 
-func (p *PanelRateLimiter) userScoped(scope string, limitOf func(service.PanelRateLimitSettings) int) gin.HandlerFunc {
+func (p *PanelRateLimiter) userScoped(scope string, limitOf func(runtimeconfig.PanelRateLimitSettings) int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if p == nil || p.limiter == nil || p.settingService == nil {
 			c.Next()
@@ -74,14 +86,14 @@ func (p *PanelRateLimiter) userScoped(scope string, limitOf func(service.PanelRa
 			c.Next()
 			return
 		}
-		subject, ok := GetAuthSubjectFromContext(c)
+		subject, ok := authctx.GetAuthSubjectFromContext(c)
 		if !ok || subject.UserID <= 0 {
 			// 无认证主体（认证中间件缺位时的防御分支）：放行，避免误伤
 			c.Next()
 			return
 		}
 		if settings.ExemptAdmin {
-			if role, hasRole := GetUserRoleFromContext(c); hasRole && role == service.RoleAdmin {
+			if role, hasRole := authctx.GetUserRoleFromContext(c); hasRole && role == identity.RoleAdmin {
 				c.Next()
 				return
 			}
@@ -118,7 +130,7 @@ func (p *PanelRateLimiter) PublicIP() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		clientIP := SecurityClientIP(c)
+		clientIP := identityhttp.SecurityClientIP(c)
 		if !isPubliclyRoutableClientIP(clientIP) {
 			c.Next()
 			return
@@ -161,5 +173,5 @@ func abortPanelRateLimited(c *gin.Context, retryAfter time.Duration) {
 		seconds++
 	}
 	c.Header("Retry-After", strconv.FormatInt(seconds, 10))
-	AbortWithError(c, http.StatusTooManyRequests, "RATE_LIMITED", "Too many requests, please slow down and try again later")
+	httpx.AbortWithError(c, http.StatusTooManyRequests, "RATE_LIMITED", "Too many requests, please slow down and try again later")
 }

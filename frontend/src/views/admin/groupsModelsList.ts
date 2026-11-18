@@ -110,15 +110,16 @@ export const buildModelsListConfig = (state: ModelsListState): ModelsListConfig 
 })
 
 export const getAvailabilityProbeCandidateModels = (state: ModelsListState): string[] => {
-  // 探测模型必须跟当前分组最终对外可见的模型保持一致；自定义列表开启时只允许已勾选模型。
+  // 后端候选已应用分组映射和白名单，历史自定义列表不能重新加入不可请求的模型。
   if (state.enabled) {
-    if (state.items.length > 0) {
-      return normalizeModels(state.items.filter(item => item.selected).map(item => item.id))
-    }
-    return [...state.savedModels]
+    const available = new Set(state.candidateModels)
+    const selected = state.items.length > 0
+      ? state.items.filter(item => item.selected).map(item => item.id)
+      : state.savedModels
+    return normalizeModels(selected).filter(model => available.has(model))
   }
 
-  // 自定义列表关闭时只信任后端本次返回的分组候选，避免历史保存模型或上游平台默认模型混入。
+  // 自定义列表关闭时，候选列表取本次后端返回值。
   return [...state.candidateModels]
 }
 

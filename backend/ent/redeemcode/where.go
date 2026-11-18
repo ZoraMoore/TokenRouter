@@ -75,6 +75,11 @@ func Status(v string) predicate.RedeemCode {
 	return predicate.RedeemCode(sql.FieldEQ(FieldStatus, v))
 }
 
+// RequiresPayment applies equality check predicate on the "requires_payment" field. It's identical to RequiresPaymentEQ.
+func RequiresPayment(v bool) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEQ(FieldRequiresPayment, v))
+}
+
 // MaxUses applies equality check predicate on the "max_uses" field. It's identical to MaxUsesEQ.
 func MaxUses(v int) predicate.RedeemCode {
 	return predicate.RedeemCode(sql.FieldEQ(FieldMaxUses, v))
@@ -348,6 +353,16 @@ func StatusEqualFold(v string) predicate.RedeemCode {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.RedeemCode {
 	return predicate.RedeemCode(sql.FieldContainsFold(FieldStatus, v))
+}
+
+// RequiresPaymentEQ applies the EQ predicate on the "requires_payment" field.
+func RequiresPaymentEQ(v bool) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldEQ(FieldRequiresPayment, v))
+}
+
+// RequiresPaymentNEQ applies the NEQ predicate on the "requires_payment" field.
+func RequiresPaymentNEQ(v bool) predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldNEQ(FieldRequiresPayment, v))
 }
 
 // MaxUsesEQ applies the EQ predicate on the "max_uses" field.

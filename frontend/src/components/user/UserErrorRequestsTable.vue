@@ -4,6 +4,8 @@
       <IpGeoBatchToolbar :ips="rows.map((r) => r.client_ip)" @failed="emit('ipGeoBatchFailed')" />
 
       <DataTable
+        class="min-h-0 flex-1 overflow-auto"
+        column-order-storage-key="user-error-requests-column-order"
         :columns="columns"
         :data="rows"
         :loading="loading"
@@ -14,6 +16,9 @@
         @sort="onSort"
         @rowClick="(row) => openDetail(row.id)"
       >
+        <template #cell-request_id="{ row }">
+          <RequestIdLink :value="row.request_id" />
+        </template>
         <template #cell-model="{ row }">
           <span v-if="row.model" class="text-sm font-medium text-gray-900 dark:text-white">{{ row.model }}</span>
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
@@ -24,7 +29,7 @@
             <span class="text-gray-900 dark:text-white">{{ row.key_name || '-' }}</span>
             <span
               v-if="row.key_deleted"
-              class="ml-1 inline-flex items-center rounded px-1 py-px text-[10px] font-medium leading-tight bg-rose-100 text-rose-600 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/20 dark:text-rose-400 dark:ring-rose-500/30"
+              class="ml-1 inline-flex items-center rounded-compact px-1 py-px text-xs font-medium leading-tight bg-rose-100 text-rose-600 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/20 dark:text-rose-400 dark:ring-rose-500/30"
             >{{ t('usage.errors.keyDeleted') }}</span>
           </div>
         </template>
@@ -39,7 +44,7 @@
         </template>
 
         <template #cell-status="{ row }">
-          <span class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium" :class="statusClass(row.status_code)">
+          <span class="inline-flex items-center rounded-compact px-2 py-0.5 text-xs font-medium" :class="statusClass(row.status_code)">
             {{ row.status_code || '-' }}
           </span>
         </template>
@@ -60,7 +65,7 @@
         <template #cell-group="{ row }">
           <span
             v-if="row.group_name"
-            class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+            class="inline-flex items-center rounded-compact px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
           >{{ row.group_name }}</span>
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
         </template>
@@ -68,7 +73,7 @@
         <template #cell-type="{ row }">
           <span
             v-if="requestTypeBadge(row)"
-            class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium"
+            class="inline-flex items-center rounded-compact px-2 py-0.5 text-xs font-medium"
             :class="requestTypeBadge(row)!.className"
           >{{ requestTypeBadge(row)!.label }}</span>
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
@@ -103,9 +108,7 @@
 
         <template #empty><EmptyState :message="t('usage.errors.empty')" /></template>
       </DataTable>
-    </div>
-
-    <div class="flex-shrink-0">
+      <!-- 分页留在表格外框内，不随表体滚动。 -->
       <Pagination
         v-if="total > 0"
         :page="page"
@@ -121,6 +124,7 @@
 </template>
 
 <script setup lang="ts">
+import RequestIdLink from '@/components/common/RequestIdLink.vue'
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import DataTable from '@/components/common/DataTable.vue'
@@ -164,7 +168,7 @@ function onSort(key: string, order: 'asc' | 'desc') {
 const { t } = useI18n()
 
 // 列序对齐用户端用量明细:Key → 模型 → 端点 → IP → 分组 → 类型 → 平台 → 分类
-// → 结果(状态→消息)→ 时间 → UA(用量明细 UA 同在时间之后的尾部)
+// → 结果(状态→消息)→ 时间 → 请求 ID → UA(用量明细的请求 ID 和 UA 同在时间之后的尾部)
 const allColumns = computed<Column[]>(() => [
   { key: 'key_name', label: t('usage.errors.keyName') },
   { key: 'model', label: t('usage.errors.model'), sortable: true },
@@ -177,6 +181,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'status', label: t('usage.errors.status'), sortable: true },
   { key: 'message', label: t('usage.errors.message') },
   { key: 'created_at', label: t('usage.errors.time'), sortable: true },
+  { key: 'request_id', label: t('requests.id') },
   { key: 'user_agent', label: t('usage.userAgent') },
 ])
 

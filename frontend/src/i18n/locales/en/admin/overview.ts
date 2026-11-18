@@ -6,9 +6,9 @@ export default {
       apiKeys: 'API Keys',
       totalApiKeys: 'Total API Keys',
       activeApiKeys: 'Active Keys',
-      accounts: 'Accounts',
-      totalAccounts: 'Total Accounts',
-      activeAccounts: 'Active Accounts',
+      providers: 'Providers',
+      totalProviders: 'Total Providers',
+      activeProviders: 'Active Providers',
       users: 'Users',
       totalUsers: 'Total Users',
       todayRequests: 'Today Requests',
@@ -47,10 +47,10 @@ export default {
       cache: 'Cache',
       actual: 'Actual',
       standard: 'Standard',
-      accountCost: 'Cost',
+      providerCost: 'Cost',
       actualDescription: 'The amount actually charged to the user. Calculated with the group multiplier and any user-specific multiplier, and used to deduct user balance or subscription quota.',
-      accountCostDescription: 'The account-side cost. Calculated with account-side pricing and the account billing multiplier, used for account quota statistics and cost analysis, and does not affect the user’s actual charge.',
-      standardDescription: 'The standard billed cost. Calculated from the current model or channel base pricing, and is not affected by group multipliers, user-specific multipliers, or account billing multipliers.',
+      providerCostDescription: 'The provider-side cost. Calculated with provider-side pricing and the provider billing multiplier, used for provider quota statistics and cost analysis, and does not affect the user’s actual charge.',
+      standardDescription: 'The standard billed cost. Calculated from the current model or shared configuration base pricing, and is not affected by group multipliers, user-specific multipliers, or provider billing multipliers.',
       noDataAvailable: 'No data available',
       recentUsage: 'Recent Usage',
       viewModelDistribution: 'Model Distribution',
@@ -72,8 +72,8 @@ export default {
       quickActions: 'Quick Actions',
       manageUsers: 'Manage Users',
       viewUserAccounts: 'View and manage user accounts',
-      manageAccounts: 'Manage Accounts',
-      configureAiAccounts: 'Configure AI platform accounts',
+      manageProviders: 'Manage Providers',
+      configureAiProviders: 'Configure AI platform providers',
       batchImage: 'Batch Image',
       batchImageDesc: 'Submit jobs and copy agent instructions',
       groupPricing: 'Group Pricing',
@@ -95,12 +95,10 @@ backup: {
         testConnection: 'Test Storage',
         testSuccess: 'Storage test successful',
         testFailed: 'Storage test failed',
-        saved: 'Backup storage configuration saved'
       },
       content: {
         title: 'Backup Content',
         description: 'Core business data is always backed up. Optionally include historical data that can grow quickly. Unchecked tables keep schema only and skip row data.',
-        saved: 'Backup content configuration saved',
         excludedCount: 'Data from {count} table or partition patterns will be skipped.',
         usageRecords: {
           title: 'Usage and Billing Records',
@@ -118,10 +116,6 @@ backup: {
           title: 'Runtime Jobs and Temporary Data',
           description: 'Includes idempotency cache, scheduler outbox, pending auth sessions, cleanup tasks, and scheduled test results.'
         },
-        dataShareSessions: {
-          title: 'Data Sharing Sessions',
-          description: 'Includes full Agent conversations and compressed payloads captured for data-sharing groups. This can grow quickly with request volume.'
-        }
       },
       s3: {
         title: 'S3 Storage Configuration',
@@ -156,7 +150,6 @@ backup: {
         retainDaysHint: 'Backup files auto-delete after this many days, 0 = never expire',
         retainCount: 'Max Retain Count',
         retainCountHint: 'Maximum number of backups to keep, 0 = unlimited',
-        saved: 'Schedule configuration saved'
       },
       operations: {
         title: 'Backup Records',
@@ -218,7 +211,7 @@ backup: {
         step1: {
           title: 'Create an R2 Bucket',
           line1: 'Log in to the Cloudflare Dashboard (dash.cloudflare.com), select "R2 Object Storage" from the sidebar',
-          line2: 'Click "Create bucket", enter a name (e.g. sub2api-backups), choose a region',
+          line2: 'Click "Create bucket", enter a name (e.g. tokenrouter-backups), choose a region',
           line3: 'Click create to finish'
         },
         step2: {
@@ -242,180 +235,6 @@ backup: {
           unchecked: 'Unchecked'
         },
         freeTier: 'R2 Free Tier: 10GB storage + 1M Class A requests + 10M Class B requests per month — more than enough for database backups.'
-      }
-    },
-dataManagement: {
-      title: 'Data Management',
-      description: 'Manage data management agent status, object storage settings, and backup jobs in one place',
-      agent: {
-        title: 'Data Management Agent Status',
-        description: 'The system probes a fixed Unix socket and enables data management only when reachable.',
-        enabled: 'Data management agent is ready. Data management operations are available.',
-        disabled: 'Data management agent is unavailable. Only diagnostic information is available now.',
-        socketPath: 'Socket Path',
-        version: 'Version',
-        status: 'Status',
-        uptime: 'Uptime',
-        reasonLabel: 'Unavailable Reason',
-        reason: {
-          DATA_MANAGEMENT_AGENT_SOCKET_MISSING: 'Data management socket file is missing',
-          DATA_MANAGEMENT_AGENT_UNAVAILABLE: 'Data management agent is unreachable',
-          BACKUP_AGENT_SOCKET_MISSING: 'Backup socket file is missing',
-          BACKUP_AGENT_UNAVAILABLE: 'Backup agent is unreachable',
-          UNKNOWN: 'Unknown reason'
-        }
-      },
-      sections: {
-        config: {
-          title: 'Backup Configuration',
-          description: 'Configure backup source, retention policy, and S3 settings.'
-        },
-        s3: {
-          title: 'S3 Object Storage',
-          description: 'Configure and test uploads of backup artifacts to a standard S3-compatible storage.'
-        },
-        backup: {
-          title: 'Backup Operations',
-          description: 'Trigger PostgreSQL, Redis, and full backup jobs.'
-        },
-        history: {
-          title: 'Backup History',
-          description: 'Review backup job status, errors, and artifact metadata.'
-        }
-      },
-      form: {
-        sourceMode: 'Source Mode',
-        backupRoot: 'Backup Root',
-        activePostgresProfile: 'Active PostgreSQL Profile',
-        activeRedisProfile: 'Active Redis Profile',
-        activeS3Profile: 'Active S3 Profile',
-        retentionDays: 'Retention Days',
-        keepLast: 'Keep Last Jobs',
-        uploadToS3: 'Upload to S3',
-        useActivePostgresProfile: 'Use Active PostgreSQL Profile',
-        useActiveRedisProfile: 'Use Active Redis Profile',
-        useActiveS3Profile: 'Use Active Profile',
-        idempotencyKey: 'Idempotency Key (Optional)',
-        secretConfigured: 'Configured already, leave empty to keep unchanged',
-        source: {
-          profileID: 'Profile ID (Unique)',
-          profileName: 'Profile Name',
-          setActive: 'Set as active after creation'
-        },
-        postgres: {
-          title: 'PostgreSQL',
-          host: 'Host',
-          port: 'Port',
-          user: 'User',
-          password: 'Password',
-          database: 'Database',
-          sslMode: 'SSL Mode',
-          containerName: 'Container Name (docker_exec mode)'
-        },
-        redis: {
-          title: 'Redis',
-          addr: 'Address (host:port)',
-          username: 'Username',
-          password: 'Password',
-          db: 'Database Index',
-          containerName: 'Container Name (docker_exec mode)'
-        },
-        s3: {
-          enabled: 'Enable S3 Upload',
-          profileID: 'Profile ID (Unique)',
-          profileName: 'Profile Name',
-          endpoint: 'Endpoint (Optional)',
-          region: 'Region',
-          bucket: 'Bucket',
-          accessKeyID: 'Access Key ID',
-          secretAccessKey: 'Secret Access Key',
-          prefix: 'Object Prefix',
-          forcePathStyle: 'Force Path Style',
-          useSSL: 'Use SSL',
-          setActive: 'Set as active after creation'
-        }
-      },
-      sourceProfiles: {
-        createTitle: 'Create Source Profile',
-        editTitle: 'Edit Source Profile',
-        empty: 'No source profiles yet, create one first',
-        deleteConfirm: 'Delete source profile {profileID}?',
-        columns: {
-          profile: 'Profile',
-          active: 'Active',
-          connection: 'Connection',
-          database: 'Database',
-          updatedAt: 'Updated At',
-          actions: 'Actions'
-        }
-      },
-      s3Profiles: {
-        createTitle: 'Create S3 Profile',
-        editTitle: 'Edit S3 Profile',
-        empty: 'No S3 profiles yet, create one first',
-        editHint: 'Click "Edit" to modify profile details in the right drawer.',
-        deleteConfirm: 'Delete S3 profile {profileID}?',
-        columns: {
-          profile: 'Profile',
-          active: 'Active',
-          storage: 'Storage',
-          updatedAt: 'Updated At',
-          actions: 'Actions'
-        }
-      },
-      history: {
-        total: '{count} jobs',
-        empty: 'No backup jobs yet',
-        columns: {
-          jobID: 'Job ID',
-          type: 'Type',
-          status: 'Status',
-          triggeredBy: 'Triggered By',
-          pgProfile: 'PostgreSQL Profile',
-          redisProfile: 'Redis Profile',
-          s3Profile: 'S3 Profile',
-          finishedAt: 'Finished At',
-          artifact: 'Artifact',
-          error: 'Error'
-        },
-        status: {
-          queued: 'Queued',
-          running: 'Running',
-          succeeded: 'Succeeded',
-          failed: 'Failed',
-          partial_succeeded: 'Partial Succeeded'
-        }
-      },
-      actions: {
-        refresh: 'Refresh Status',
-        disabledHint: 'Start datamanagementd first and ensure the socket is reachable.',
-        reloadConfig: 'Reload Config',
-        reloadSourceProfiles: 'Reload Source Profiles',
-        reloadProfiles: 'Reload Profiles',
-        newSourceProfile: 'New Source Profile',
-        saveConfig: 'Save Config',
-        configSaved: 'Configuration saved',
-        testS3: 'Test S3 Connection',
-        s3TestOK: 'S3 connection test succeeded',
-        s3TestFailed: 'S3 connection test failed',
-        newProfile: 'New Profile',
-        saveProfile: 'Save Profile',
-        activateProfile: 'Activate',
-        profileIDRequired: 'Profile ID is required',
-        profileNameRequired: 'Profile name is required',
-        profileSelectRequired: 'Select a profile to edit first',
-        profileCreated: 'S3 profile created',
-        profileSaved: 'S3 profile saved',
-        profileActivated: 'S3 profile activated',
-        profileDeleted: 'S3 profile deleted',
-        sourceProfileCreated: 'Source profile created',
-        sourceProfileSaved: 'Source profile saved',
-        sourceProfileActivated: 'Source profile activated',
-        sourceProfileDeleted: 'Source profile deleted',
-        createBackup: 'Create Backup Job',
-        jobCreated: 'Backup job created: {jobID} ({status})',
-        refreshJobs: 'Refresh Jobs',
-        loadMore: 'Load More'
       }
     },
 affiliates: {
@@ -462,6 +281,13 @@ affiliates: {
     },
 // Users
     users: {
+      recentAPIUsers: 'API users active in the last 5 minutes',
+      activityDefinition: 'Unique API callers across all servers, including ongoing requests. Updates every 15 seconds. Website browsing and login alone are excluded.',
+      activityUnavailable: 'Activity count unavailable',
+      activityApproximate: 'About',
+      activityPeople: 'users',
+      activitySyncing: 'Some nodes are syncing',
+
       title: 'User Management',
       description: 'Manage users and their permissions',
       createUser: 'Create User',
@@ -563,7 +389,6 @@ affiliates: {
         groups: 'Groups',
         subscriptions: 'Subscriptions',
         balance: 'Balance',
-        balancePlatformQuota: 'Balance (Platform Quota)',
         usage: 'Usage',
         usageAnthropic: 'Usage (Claude)',
         usageOpenAI: 'Usage (OpenAI)',
@@ -622,7 +447,7 @@ affiliates: {
       adjustConcurrency: 'Adjust Concurrency',
       adjustmentAmount: 'Adjustment Amount',
       adjustmentAmountHint: 'Positive to add, negative to subtract',
-      currentConcurrency: 'Current Concurrency',
+      currentConcurrency: 'Concurrency',
       saving: 'Saving...',
       noUsers: 'No users yet',
       noUsersDescription: 'Create your first user to get started.',
@@ -772,44 +597,68 @@ affiliates: {
         keyExists: 'Attribute key already exists',
         dragToReorder: 'Drag to reorder'
       },
-      platformQuota: {
-        menuItem: 'Platform Quotas',
-        title: 'Platform Quotas',
-        subtitle: 'Configure daily / weekly / monthly USD usage limits for each upstream platform for user {email}',
-        columns: {
-          platform: 'Platform',
-          daily: 'Daily (USD)',
-          weekly: 'Weekly (USD)',
-          monthly: 'Monthly (USD, 30-day rolling)',
-          usage: 'Current Usage',
-        },
-        placeholder: 'unlimited',
-        save: 'Save',
-        saving: 'Saving...',
-        cancel: 'Cancel',
-        clearAll: 'Clear All (remove all limits)',
-        clearAllConfirm: 'Clear daily / weekly / monthly limits for ALL platforms? All platforms will become "unlimited" with no local undo — you must manually re-enter values before saving.',
-        reset: {
-          button: 'Reset window',
-          confirm: 'Reset the {window} usage for {platform} for this user? This is effective immediately.',
-          success: 'Reset {platform} {window} usage',
-          failed: 'Reset failed',
-        },
-        updateSuccess: 'Platform quotas updated',
-        updateFailed: 'Save failed',
-        loadFailed: 'Load failed',
-        hint: 'Empty = no limit for that window.',
-        windowDaily: 'daily',
-        windowWeekly: 'weekly',
-        windowMonthly: 'monthly',
-        cellNotConfigured: 'Not configured',
-        cellColumnTooltip: 'Only platforms with a limit are shown',
-        subscriptionWarning: 'This user has an active subscription. Platform quotas only apply to balance (standard) mode requests; subscription mode requests are not subject to these limits.',
-        invalidNumber: 'The following fields contain invalid numbers. Please fix them before saving: {fields}',
-      }
     },
 // Groups
     groups: {
+      routingPolicy: {
+        "mapping": "Model mapping",
+        "mappingHint": "Group mapping runs before provider mapping. Exact names and trailing * wildcards are supported.",
+        "addMapping": "Add mapping",
+        "mappingEmpty": "No model mappings configured",
+        "source": "Source model",
+        "target": "Target model",
+        "restrict": "Enable model allowlist",
+        "allowlistHint": "Only listed models pass the selected check stage. The allowlist is independent of prices; enabling it with an empty list rejects every model.",
+        "webSearch": "Web search emulation",
+        "webSearchHint": "For requests containing only the web search tool, the gateway calls the configured search service and returns its results. Global web search emulation must be enabled; provider settings take priority.",
+        "bedrock": "Bedrock Claude Code compatibility",
+        "bedrockHint": "Adapts Claude Code requests for Bedrock by removing unsupported parameters and filling required fields. Enable for Bedrock or a compatible proxy.",
+        "incompleteMapping": "Enter both source and target models.",
+        "conflict": "Model rules overlap or contain duplicates.",
+        "basis": {
+          "requested": "Client request model",
+          "group_mapped": "Group-mapped model",
+          "upstream": "Final upstream model"
+        }
+      },
+      providerFilters: {
+        title: 'Provider filters',
+        oauthOnly: 'Only allow OAuth providers',
+        privacyRequired: 'Only allow providers with privacy protection configured'
+      },
+      settings: {
+        allowedModels: 'Allowed models',
+        billingAndStatus: 'Billing & status',
+        providerSelection: 'Provider sources & filters',
+        scheduling: 'Scheduling & sessions',
+        fallbacks: 'Group fallbacks',
+        reasoning: 'Reasoning policy',
+        compatibility: 'Compatibility',
+        restrictionSource: 'Allowlist check stage',
+        oauthHint: 'Exclude API Key providers and other non-OAuth providers when enabled.',
+        privacyHint: 'Only use providers with confirmed upstream privacy settings when enabled.',
+        selectedModels: 'Selected {selected} / {total}',
+        selectAll: 'Select all',
+        invertSelection: 'Invert selection',
+        moveUp: 'Move {name} up',
+        moveDown: 'Move {name} down',
+        removeItem: 'Remove {name}',
+        groupProviders: '{name} ({count} providers)',
+      },
+      tabs: {
+        models: 'Models',
+        request: 'Request policies',
+        routing: "Models and features",
+        label: 'Group settings',
+        general: 'Basic information',
+        features: 'Feature policies',
+        pricing: 'Billing & pricing',
+        protocol: 'Protocols & access',
+        identity: 'Basic information',
+        scheduling: 'Scheduling & recovery',
+        imageCapabilities: 'Image capabilities',
+        batchPricing: 'Batch image billing'
+      },
       title: 'Group Management',
       description: 'Manage API key groups and rate multipliers',
       searchGroups: 'Search groups...',
@@ -839,7 +688,6 @@ affiliates: {
         displayBrand: 'Brand Type',
         schedulerType: 'Scheduler',
         rateMultiplier: 'Rate Multiplier',
-        dataSharing: 'Data Sharing',
         sessionIsolation: 'Session Isolation',
         rpmOverride: 'RPM Override',
         rpmOverrideHint: 'Per-user RPM cap in this group; empty = group default; 0 = unlimited',
@@ -849,7 +697,7 @@ affiliates: {
         type: 'Type',
         priority: 'Priority',
         apiKeys: 'API Keys',
-        accounts: 'Accounts',
+        providers: 'Providers',
         capacity: 'Capacity',
         usage: 'Usage',
         status: 'Status',
@@ -863,12 +711,11 @@ affiliates: {
       usageToday: 'Today',
       usageYesterday: 'Yesterday',
       usageTotal: 'Total',
-      accountsAvailable: 'Avail:',
-      accountsRateLimited: 'Limited:',
-      accountsTotal: 'Total:',
-      accountsUnit: '',
-      rateAndAccounts: '{rate}x rate · {count} accounts',
-      accountsCount: '{count} accounts',
+      providersAvailable: 'Avail:',
+      providersRateLimited: 'Limited:',
+      providersTotal: 'Total:',
+      rateAndProviders: '{rate}x rate · {count} providers',
+      providersCount: '{count} providers',
       form: {
         name: 'Name',
         description: 'Description',
@@ -889,10 +736,26 @@ affiliates: {
         rpmLimitHint: 'Max requests per minute for each user in this group; 0 = unlimited. Once set, it takes over per-user rate limiting in this group (overrides the user-level rpm_limit fallback).',
         maxReasoningEffort: 'Max reasoning effort',
         maxReasoningEffortUnlimited: 'Unlimited (follow request)',
-        maxReasoningEffortHint: 'Limits explicit OpenAI reasoning effort requests only. Higher values are capped; omitted effort stays omitted. The ceiling takes precedence over reasoning effort mappings.',
+        maxReasoningEffortHint: 'Limits explicit OpenAI or Anthropic reasoning effort requests only. Omitted effort stays omitted. The ceiling takes precedence over reasoning effort mappings.',
+        maxReasoningEffortOverLimit: 'Over-limit access control',
+        maxReasoningEffortOverLimitDowngrade: 'Automatically downgrade when over limit',
+        maxReasoningEffortOverLimitDeny: 'Deny access',
+        maxReasoningEffortOverLimitHint: 'Applies after a ceiling is set. Downgrade rewrites values above the ceiling to the ceiling. Deny rejects the request.',
         reasoningEffortMappings: 'Reasoning effort mappings',
+        reasoningEffortMappingsHint: 'Type and model can both be left empty to match every model. One type and model can hold multiple request mappings, for example prefix gpt mapping both high and xhigh to medium. Exact matches beat affixes, and longer affixes beat shorter ones.',
         addReasoningEffortMapping: 'Add mapping',
+        reasoningEffortMappingIndex: 'Mapping #{index}',
+        reasoningEffortMappingsEmpty: 'No reasoning effort mappings configured',
+        addReasoningEffortPair: 'Add request value',
         removeReasoningEffortMapping: 'Remove mapping',
+        removeReasoningEffortPair: 'Remove request value',
+        reasoningEffortMatchType: 'Type',
+        reasoningEffortModel: 'Model',
+        reasoningEffortMatchExact: 'Exact',
+        reasoningEffortMatchPrefix: 'Prefix',
+        reasoningEffortMatchSuffix: 'Suffix',
+        reasoningEffortMatchTypePlaceholder: 'All models',
+        reasoningEffortModelPlaceholder: 'Empty = all / gpt / gpt-5.4',
         reasoningEffortFrom: 'Request value',
         reasoningEffortTo: 'Forwarded value',
         reasoningEffortFromPlaceholder: 'Select A',
@@ -901,15 +764,17 @@ affiliates: {
         toRequired: 'Select forwarded value B',
         unsupportedFrom: 'Request value is not supported by this platform',
         unsupportedTo: 'Forwarded value is not supported by this platform',
-        duplicateFrom: 'Request value A must be unique',
+        unsupportedMatchType: 'Match type must be exact, prefix, or suffix',
+        duplicateFrom: 'Request value A must be unique within the same model scope',
+        duplicateScope: 'Type and model combination must be unique',
         exclusiveLabel: 'Exclusive Group',
         exclusiveHint: 'Exclusive group, can be manually assigned to users',
         platformLabel: 'Platform Restriction',
         platformPlaceholder: 'Select platform (leave empty for no restriction)',
-        accountsLabel: 'Designated Accounts',
-        accountsPlaceholder: 'Select accounts (leave empty for no restriction)',
+        providersLabel: 'Designated Providers',
+        providersPlaceholder: 'Select providers (leave empty for no restriction)',
         priorityLabel: 'Priority',
-        priorityHint: 'Lower value means higher priority, used for account scheduling',
+        priorityHint: 'Lower value means higher priority, used for provider scheduling',
         statusLabel: 'Status'
       },
       exclusiveObj: {
@@ -920,9 +785,6 @@ affiliates: {
       optionalDescription: 'Optional description',
       displayBrandPlaceholder: 'e.g. DeepSeek / Claude / OpenAI',
       displayBrandCreatablePrefix: 'Use brand',
-      displayBrandHint: 'Only used in the model marketplace. It does not affect routing protocol, account scheduling, or format conversion. Empty uses the group name.',
-      platformHint: 'Select the upstream account and gateway routing format for this group. This is not the model brand.',
-      platformNotEditable: 'The upstream platform cannot be changed after creation; it only affects routing and account scheduling, not the model brand.',
       saving: 'Saving...',
       noGroups: 'No groups yet',
       noGroupsDescription: 'Create a group to better manage API keys and rates.',
@@ -930,25 +792,10 @@ affiliates: {
       groupUpdatedSuccess: 'Group updated successfully',
       groupDeletedSuccess: 'Group deleted successfully',
       rateMultiplierHint: 'Cost multiplier for this group (e.g., 1.5 = 150% of base cost)',
-      defaultGroup: {
-        title: 'Default Group',
-        badge: 'Default',
-        enabled: 'Use as default group',
-        disabled: 'Do not use as default group',
-        hint: 'When an API key has no valid group binding, requests fall back to the default group for that platform. Only one default group is kept per platform.'
-      },
       unavailableFallback: {
         title: 'Specific fallback group',
-        noFallback: 'Not specified (use default group)',
-        hint: 'When this group is disabled, API keys bound to it prefer this group as fallback. Leave empty to keep falling back to the platform default group.'
-      },
-      dataSharing: {
-        title: 'Data Sharing Group',
-        enabled: 'Enabled',
-        disabled: 'Disabled',
-        enabledText: 'Collect conversation data',
-        disabledText: 'Do not collect conversation data',
-        hint: 'When enabled, users must confirm the data sharing notice before switching an API key to this group.'
+        noFallback: 'No fallback',
+        hint: 'When this group is unavailable, keys with fallback enabled use this configured group. Leave empty to disable fallback.'
       },
       sessionIsolation: {
         title: 'Enable Session Isolation',
@@ -975,12 +822,13 @@ affiliates: {
         disabled: 'Disabled',
         stickyWeighted: 'Sticky weighting',
         subscriptionPriority: 'Subscription priority',
+        stickyEscapeEnabled: 'Forced sticky switching',
         weightsTitle: 'Candidate scoring and Top-K',
         weightsHint: 'Higher weights give that signal more influence. Leave a value blank to inherit it.',
         inheritPlaceholder: 'Inherit',
         inheritHint: 'Blank inherits',
         reset: 'Restore all inheritance',
-        invalidValue: 'Enter a non-negative number; Top-K must be a positive integer.',
+        invalidValue: 'Enter valid values; alpha must be greater than 0 and at most 1, error-rate thresholds must be 0-1, and Top-K/TTFT must be positive integers.',
         fields: {
           lbTopK: 'Top-K',
           weightPriority: 'Priority',
@@ -991,7 +839,11 @@ affiliates: {
           weightReset: 'Window reset',
           weightQuotaHeadroom: 'Quota headroom',
           weightPreviousResponse: 'Previous response affinity',
-          weightSessionSticky: 'Session affinity'
+          weightSessionSticky: 'Session affinity',
+          ewmaErrorRateAlpha: 'Error-rate EWMA factor',
+          ewmaTTFTAlpha: 'TTFT EWMA factor',
+          stickyEscapeTTFTMs: 'TTFT switch threshold (ms)',
+          stickyEscapeErrorRate: 'Error-rate switch threshold (0-1)'
         }
       },
       exclusiveHint: 'Exclusive group, manually assign to specific users',
@@ -1075,33 +927,12 @@ affiliates: {
         noLimit: 'No limit'
       },
       imagePricing: {
-        title: 'Image Generation Pricing',
-        description: 'Configure image generation access and base image prices. Leave empty to use default prices.',
         allowImageGeneration: 'Allow image generation for this group',
         allowBatchImageGeneration: 'Allow batch image generation for this group',
-        independentMultiplier: 'Use independent image multiplier',
-        imageMultiplier: 'Image multiplier',
         batchDiscountMultiplier: 'Batch image discount',
         batchHoldMultiplier: 'Batch hold price ratio',
         batchSectionHint: 'Batch image settings only apply to batch jobs: settlement applies the batch discount, and the upfront hold is normal image price × batch hold price ratio. Reference images also create upstream input-token usage, so a batch image discount above 0.5 is recommended.',
         batchDisabledHint: 'Enable image generation for this group before enabling batch image generation.',
-        batchGeminiOnlyHint: 'Batch image generation is currently available only for Gemini groups.',
-        modeHint: 'By default, image billing uses image price × current effective group multiplier. Independent mode uses image price × image multiplier.',
-        finalPricePreview: 'Final per-image price preview',
-        notConfigured: 'Not configured'
-      },
-      videoPricing: {
-        title: 'Video Generation Pricing',
-        description:
-          'Configure Grok video generation prices in USD per second of output video. Leave empty to use the default per-second rates (grok-imagine-video: $0.05/s 480p, $0.07/s 720p; video-1.5: $0.08/s 480p, $0.14/s 720p, $0.25/s 1080p).',
-        modelOverridesTitle: 'Per-model video price overrides',
-        modelOverridesDescription: 'Each populated cell overrides the flat resolution price for that model family. Preview and legacy aliases for video-1.5 use the same family; empty cells fall back to the flat resolution price.',
-        independentMultiplier: 'Use independent video multiplier',
-        videoMultiplier: 'Video multiplier',
-        modeHint:
-          'Videos are billed per second: per-second price × duration (1-15s, default 8s). By default the current effective group multiplier applies; independent mode uses the video multiplier instead.',
-        finalPricePreview: 'Final per-second price preview',
-        notConfigured: 'Not configured'
       },
       explicitPricing: {
         title: 'Grok Search & Voice Pricing',
@@ -1111,9 +942,9 @@ affiliates: {
       },
       modelPricing: {
         title: 'Per-model group pricing',
-        description: 'Overrides channel and built-in prices for matching models. Long-context tiers come from official presets — do not enter custom intervals. Use per-request tiers such as realtime, tts, and stt for audio.',
+        description: 'Explicit prices or context intervals override shared pricing. Fast/Flex, Max, or time multipliers alone inherit shared prices, falling back to built-in prices. Group multipliers override the same shared price settings. Audio supports realtime, tts, and stt per-request tiers.',
         longContext: 'Enable long-context tier pricing',
-        longContextHint: 'When checked, official/preset long-context tiers apply. When unchecked, token models stay on the first-tier base rate.',
+        longContextHint: 'Only controls built-in long-context tiers. Explicit group or shared configuration intervals always apply and never stack with built-in tiers.',
         add: 'Add model price'
       },
       voicePricing: {
@@ -1125,6 +956,7 @@ affiliates: {
         pricePlaceholder: 'optional'
       },
       webSearchPricing: {
+        notConfigured: 'Not configured',
         title: 'Codex Web Search Pricing',
         pricePerCall: 'Price per search call (USD)',
         pricePerCallHint:
@@ -1139,8 +971,8 @@ affiliates: {
         multiplierHint: 'Applies to token billing multiplier; image tokens in token billing are also affected. 0 means peak token requests are billed at 0x.'
       },
       modelsList: {
-        title: 'Custom /v1/models Model List',
-        hint: 'Only changes the /v1/models response. Whitelist model calls and account routing are unchanged.',
+        title: 'Custom {endpoint} Model List',
+        hint: 'Only changes the {endpoint} response. Whitelist model calls and provider routing are unchanged.',
         loading: 'Loading model list...',
         empty: 'No displayable models'
       },
@@ -1178,52 +1010,41 @@ affiliates: {
           gemini_generate_content: 'Gemini GenerateContent'
         }
       },
-      openaiMessages: {
-        title: 'OpenAI Messages Model Mapping',
-        allowDispatch: 'Allow /v1/messages dispatch',
-        allowDispatchHint: 'When enabled, API keys in this OpenAI group can dispatch requests through /v1/messages endpoint',
-        familyMappingTitle: 'Family Default Mapping',
-        familyMappingHint: 'Only families with an explicit target model are mapped; blank fields skip this mapping.',
-        opusModel: 'Opus Target Model',
-        opusModelPlaceholder: 'e.g., gpt-5.4',
-        sonnetModel: 'Sonnet Target Model',
-        sonnetModelPlaceholder: 'e.g., gpt-5.3-codex',
-        haikuModel: 'Haiku Target Model',
-        haikuModelPlaceholder: 'e.g., gpt-5.4-mini',
-        exactMappingTitle: 'Exact Model Overrides',
-        exactMappingHint: 'Exact Claude model overrides take priority over the family defaults and can route a specific Claude model to a different target model.',
-        noExactMappings: 'No exact model overrides yet',
-        addExactMapping: 'Add Exact Mapping',
-        claudeModel: 'Claude Model',
-        claudeModelPlaceholder: 'e.g., claude-sonnet-4-5-20250929',
-        targetModel: 'Target Model',
-        targetModelPlaceholder: 'e.g., gpt-5.4',
-        removeExactMapping: 'Remove Exact Mapping'
-      },
       openaiLive: {
         title: 'OpenAI Live',
         allow: 'Allow Live access',
-        hint: 'When enabled, API keys in this OpenAI group can create and control Live voice sessions. Disabled by default. The TokenRouter server must run on Apple Silicon macOS with the official ChatGPT app installed; client platforms are unrestricted.',
+        hint: 'When enabled, API keys in this group can create and control Live voice sessions. Disabled by default. The TokenRouter server must run on Apple Silicon macOS with the official ChatGPT app installed; client platforms are unrestricted.',
         unsupportedTitle: 'Current server does not support Live',
         unsupportedMessage: 'This TokenRouter server cannot generate the required Live attestation. Live will not work even if enabled. Continue anyway?',
         enableAnyway: 'Enable anyway'
+      },
+      openaiFast: {
+        title: 'OpenAI Fast',
+        policy: 'Request acceleration policy',
+        followRequest: 'Follow request',
+        force: 'Force Fast',
+        forceUltrafast: 'Force Ultra Fast',
+        forceOff: 'Force Fast / Ultra Fast off',
+        hint: 'Force off removes Fast and Ultra Fast and prevents API keys from re-enabling them. API keys may disable a group-forced tier. Global filter, block, and force rules take precedence.',
+        free: 'Free Fast',
+        freeHint: 'Fast requests still use the priority tier, but customers are charged the equivalent Standard price.'
       },
       invalidRequestFallback: {
         title: 'Invalid Request Fallback Group',
         hint: 'Triggered only when upstream explicitly returns prompt too long. Leave empty to disable fallback.',
         noFallback: 'No Fallback'
       },
-      copyAccounts: {
-        title: 'Copy Accounts from Groups',
-        tooltip: 'Select one or more groups of the same platform. After creation, all accounts from these groups will be automatically bound to the new group (deduplicated).',
-        tooltipEdit: 'Select one or more groups of the same platform. After saving, current group accounts will be replaced with accounts from these groups (deduplicated).',
-        selectPlaceholder: 'Select groups to copy accounts from...',
-        hint: 'Multiple groups can be selected, accounts will be deduplicated',
-        hintEdit: '⚠️ Warning: This will replace all existing account bindings'
+      copyProviders: {
+        title: 'Copy Providers from Groups',
+        tooltip: 'Select one or more groups. After creation, all providers from these groups will be automatically bound to the new group (deduplicated).',
+        tooltipEdit: 'Select one or more groups. After saving, current group providers will be replaced with providers from these groups (deduplicated).',
+        selectPlaceholder: 'Select groups to copy providers from...',
+        hint: 'Multiple groups can be selected, providers will be deduplicated',
+        hintEdit: 'Warning: This will replace all existing provider bindings'
       },
       modelRouting: {
         title: 'Model Routing',
-        tooltip: 'Configure specific model requests to be routed to designated accounts. Supports wildcard matching, e.g., claude-opus-* matches all opus models.',
+        tooltip: 'Configure specific model requests to be routed to designated providers. Supports wildcard matching, e.g., claude-opus-* matches all opus models.',
         enabled: 'Enabled',
         disabled: 'Disabled',
         disabledHint: 'Routing rules will only take effect when enabled',
@@ -1231,21 +1052,16 @@ affiliates: {
         modelPattern: 'Model Pattern',
         modelPatternPlaceholder: 'claude-opus-*',
         modelPatternHint: 'Supports * wildcard, e.g., claude-opus-* matches all opus models',
-        accounts: 'Priority Accounts',
-        selectAccounts: 'Select accounts',
-        noAccounts: 'No accounts in this group',
-        loadingAccounts: 'Loading accounts...',
+        providers: 'Priority Providers',
+        selectProviders: 'Select providers',
+        noProviders: 'No providers in this group',
+        loadingProviders: 'Loading providers...',
+        ruleIndex: 'Rule #{index}',
         removeRule: 'Remove Rule',
         noRules: 'No routing rules',
-        noRulesHint: 'Add routing rules to route specific model requests to designated accounts',
-        searchAccountPlaceholder: 'Search accounts...',
-        accountsHint: 'Select accounts to prioritize for this model pattern'
-      },
-      mcpXml: {
-        title: 'MCP XML Protocol Injection',
-        tooltip: 'When enabled, if the request contains MCP tools, an XML format call protocol prompt will be injected into the system prompt. Disable this to avoid interference with certain clients.',
-        enabled: 'Enabled',
-        disabled: 'Disabled'
+        noRulesHint: 'Add routing rules to route specific model requests to designated providers',
+        searchProviderPlaceholder: 'Search providers...',
+        providersHint: 'Select providers to prioritize for this model pattern'
       },
       claudeMaxSimulation: {
         title: 'Claude Max Usage Simulation',
@@ -1254,14 +1070,6 @@ affiliates: {
         enabled: 'Enabled (simulate 1h cache)',
         disabled: 'Disabled',
         hint: 'Only token categories in usage billing logs are adjusted. No per-request mapping state is persisted.'
-      },
-      supportedScopes: {
-        title: 'Supported Model Families',
-        tooltip: 'Select the model families this group supports. Unchecked families will not be routed to this group.',
-        claude: 'Claude',
-        geminiText: 'Gemini Text',
-        geminiImage: 'Gemini Image',
-        hint: 'Select at least one model family'
       }
     },
 }

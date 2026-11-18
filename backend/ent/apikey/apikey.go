@@ -57,6 +57,10 @@ const (
 	FieldQuotaUsed = "quota_used"
 	// FieldExpiresAt holds the string denoting the expires_at field in the database.
 	FieldExpiresAt = "expires_at"
+	// FieldConcurrencyLimit holds the string denoting the concurrency_limit field in the database.
+	FieldConcurrencyLimit = "concurrency_limit"
+	// FieldRpmLimit holds the string denoting the rpm_limit field in the database.
+	FieldRpmLimit = "rpm_limit"
 	// FieldRateLimit5h holds the string denoting the rate_limit_5h field in the database.
 	FieldRateLimit5h = "rate_limit_5h"
 	// FieldRateLimit1d holds the string denoting the rate_limit_1d field in the database.
@@ -75,14 +79,10 @@ const (
 	FieldWindow1dStart = "window_1d_start"
 	// FieldWindow7dStart holds the string denoting the window_7d_start field in the database.
 	FieldWindow7dStart = "window_7d_start"
-	// FieldDataSharingNoticeVersion holds the string denoting the data_sharing_notice_version field in the database.
-	FieldDataSharingNoticeVersion = "data_sharing_notice_version"
-	// FieldDataSharingConfirmedGroupID holds the string denoting the data_sharing_confirmed_group_id field in the database.
-	FieldDataSharingConfirmedGroupID = "data_sharing_confirmed_group_id"
-	// FieldDataSharingConfirmedAt holds the string denoting the data_sharing_confirmed_at field in the database.
-	FieldDataSharingConfirmedAt = "data_sharing_confirmed_at"
-	// FieldFallbackToDefaultGroupWhenUnavailable holds the string denoting the fallback_to_default_group_when_unavailable field in the database.
-	FieldFallbackToDefaultGroupWhenUnavailable = "fallback_to_default_group_when_unavailable"
+	// FieldFallbackWhenGroupUnavailable holds the string denoting the fallback_when_group_unavailable field in the database.
+	FieldFallbackWhenGroupUnavailable = "fallback_when_group_unavailable"
+	// FieldManagedBy holds the string denoting the managed_by field in the database.
+	FieldManagedBy = "managed_by"
 	// EdgeUser holds the string denoting the user edge name in mutations.
 	EdgeUser = "user"
 	// EdgeGroup holds the string denoting the group edge name in mutations.
@@ -156,6 +156,8 @@ var Columns = []string{
 	FieldQuota,
 	FieldQuotaUsed,
 	FieldExpiresAt,
+	FieldConcurrencyLimit,
+	FieldRpmLimit,
 	FieldRateLimit5h,
 	FieldRateLimit1d,
 	FieldRateLimit7d,
@@ -165,10 +167,8 @@ var Columns = []string{
 	FieldWindow5hStart,
 	FieldWindow1dStart,
 	FieldWindow7dStart,
-	FieldDataSharingNoticeVersion,
-	FieldDataSharingConfirmedGroupID,
-	FieldDataSharingConfirmedAt,
-	FieldFallbackToDefaultGroupWhenUnavailable,
+	FieldFallbackWhenGroupUnavailable,
+	FieldManagedBy,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -221,6 +221,14 @@ var (
 	DefaultQuota float64
 	// DefaultQuotaUsed holds the default value on creation for the "quota_used" field.
 	DefaultQuotaUsed float64
+	// DefaultConcurrencyLimit holds the default value on creation for the "concurrency_limit" field.
+	DefaultConcurrencyLimit int
+	// ConcurrencyLimitValidator is a validator for the "concurrency_limit" field. It is called by the builders before save.
+	ConcurrencyLimitValidator func(int) error
+	// DefaultRpmLimit holds the default value on creation for the "rpm_limit" field.
+	DefaultRpmLimit int
+	// RpmLimitValidator is a validator for the "rpm_limit" field. It is called by the builders before save.
+	RpmLimitValidator func(int) error
 	// DefaultRateLimit5h holds the default value on creation for the "rate_limit_5h" field.
 	DefaultRateLimit5h float64
 	// DefaultRateLimit1d holds the default value on creation for the "rate_limit_1d" field.
@@ -233,10 +241,10 @@ var (
 	DefaultUsage1d float64
 	// DefaultUsage7d holds the default value on creation for the "usage_7d" field.
 	DefaultUsage7d float64
-	// DefaultDataSharingNoticeVersion holds the default value on creation for the "data_sharing_notice_version" field.
-	DefaultDataSharingNoticeVersion int
-	// DefaultFallbackToDefaultGroupWhenUnavailable holds the default value on creation for the "fallback_to_default_group_when_unavailable" field.
-	DefaultFallbackToDefaultGroupWhenUnavailable bool
+	// DefaultFallbackWhenGroupUnavailable holds the default value on creation for the "fallback_when_group_unavailable" field.
+	DefaultFallbackWhenGroupUnavailable bool
+	// ManagedByValidator is a validator for the "managed_by" field. It is called by the builders before save.
+	ManagedByValidator func(string) error
 )
 
 // OrderOption defines the ordering options for the APIKey queries.
@@ -337,6 +345,16 @@ func ByExpiresAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldExpiresAt, opts...).ToFunc()
 }
 
+// ByConcurrencyLimit orders the results by the concurrency_limit field.
+func ByConcurrencyLimit(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldConcurrencyLimit, opts...).ToFunc()
+}
+
+// ByRpmLimit orders the results by the rpm_limit field.
+func ByRpmLimit(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRpmLimit, opts...).ToFunc()
+}
+
 // ByRateLimit5h orders the results by the rate_limit_5h field.
 func ByRateLimit5h(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRateLimit5h, opts...).ToFunc()
@@ -382,24 +400,14 @@ func ByWindow7dStart(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWindow7dStart, opts...).ToFunc()
 }
 
-// ByDataSharingNoticeVersion orders the results by the data_sharing_notice_version field.
-func ByDataSharingNoticeVersion(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldDataSharingNoticeVersion, opts...).ToFunc()
+// ByFallbackWhenGroupUnavailable orders the results by the fallback_when_group_unavailable field.
+func ByFallbackWhenGroupUnavailable(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFallbackWhenGroupUnavailable, opts...).ToFunc()
 }
 
-// ByDataSharingConfirmedGroupID orders the results by the data_sharing_confirmed_group_id field.
-func ByDataSharingConfirmedGroupID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldDataSharingConfirmedGroupID, opts...).ToFunc()
-}
-
-// ByDataSharingConfirmedAt orders the results by the data_sharing_confirmed_at field.
-func ByDataSharingConfirmedAt(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldDataSharingConfirmedAt, opts...).ToFunc()
-}
-
-// ByFallbackToDefaultGroupWhenUnavailable orders the results by the fallback_to_default_group_when_unavailable field.
-func ByFallbackToDefaultGroupWhenUnavailable(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldFallbackToDefaultGroupWhenUnavailable, opts...).ToFunc()
+// ByManagedBy orders the results by the managed_by field.
+func ByManagedBy(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldManagedBy, opts...).ToFunc()
 }
 
 // ByUserField orders the results by user field.

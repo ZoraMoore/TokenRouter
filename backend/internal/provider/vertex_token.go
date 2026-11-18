@@ -1,0 +1,79 @@
+package provider
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"strings"
+	"time"
+)
+
+const VertexLockWaitTime = 200 * time.Millisecond
+
+// VertexTokenOptions 提供本次请求的身份和 token 交换接口。
+type VertexTokenOptions struct {
+	ProviderID int64
+	CacheKey   string
+	Cache      AccessTokenCache
+	Exchange   func(context.Context) (string, time.Duration, error)
+	Warn       func(string, ...any)
+}
+
+func VertexServiceAccountCacheKey(providerID int64, email, keyID string, hasKey bool) string {
+	fingerprint := ""
+	if hasKey {
+		sum := sha256.Sum256([]byte(email + "\x00" + keyID))
+		fingerprint = hex.EncodeToString(sum[:8])
+	}
+	if fingerprint == "" {
+		fingerprint = fmt.Sprintf("provider:%d", providerID)
+	}
+	return "vertex:service_account:" + fingerprint
+}
+
+// GetVertexServiceAccountAccessToken 管理凭据缓存、刷新锁与故障降级，等锁响应 context 取消。
+// @project-doc docs/interfaces/gemini_upstream.md#vertex_service_account_execution
+func GetVertexServiceAccountAccessToken(ctx context.Context, options VertexTokenOptions) (string, error) {
+	if options.Cache != nil {
+		if token, err := options.Cache.GetAccessToken(ctx, options.CacheKey); err == nil && strings.TrimSpace(token) != "" {
+			return token, nil
+		}
+	}
+	locked := false
+	if options.Cache != nil {
+		var lockErr error
+		locked, lockErr = options.Cache.AcquireRefreshLock(ctx, options.CacheKey, 30*time.Second)
+		if lockErr == nil && locked {
+			defer func() { _ = options.Cache.ReleaseRefreshLock(ctx, options.CacheKey) }()
+		} else if lockErr != nil {
+			if options.Warn != nil {
+				options.Warn("vertex_service_account_token_lock_failed", "provider_id", options.ProviderID, "error", lockErr)
+			}
+		} else {
+			timer := time.NewTimer(VertexLockWaitTime)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return "", ctx.Err()
+			case <-timer.C:
+			}
+			// 即使定时器与取消同时就绪，也不能继续回读缓存或交换。
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
+			if token, err := options.Cache.GetAccessToken(ctx, options.CacheKey); err == nil && strings.TrimSpace(token) != "" {
+				return token, nil
+			}
+		}
+	}
+
+	accessToken, ttl, err := options.Exchange(ctx)
+	if err != nil {
+		return "", err
+	}
+	if options.Cache != nil {
+		_ = options.Cache.SetAccessToken(ctx, options.CacheKey, accessToken, ttl)
+	}
+	return accessToken, nil
+}

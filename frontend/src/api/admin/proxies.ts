@@ -6,7 +6,7 @@
 import { apiClient } from '../client'
 import type {
   Proxy,
-  ProxyAccountSummary,
+  ProxyProviderSummary,
   ProxyQualityCheckResult,
   CreateProxyRequest,
   UpdateProxyRequest,
@@ -57,23 +57,13 @@ export async function getAll(): Promise<Proxy[]> {
 }
 
 /**
- * Get all active proxies with account count (sorted by creation time desc)
- * @returns List of all active proxies with account count
+ * Get all active proxies with provider count (sorted by creation time desc)
+ * @returns List of all active proxies with provider count
  */
 export async function getAllWithCount(): Promise<Proxy[]> {
   const { data } = await apiClient.get<Proxy[]>('/admin/proxies/all', {
     params: { with_count: 'true' }
   })
-  return data
-}
-
-/**
- * Get proxy by ID
- * @param id - Proxy ID
- * @returns Proxy details
- */
-export async function getById(id: number): Promise<Proxy> {
-  const { data } = await apiClient.get<Proxy>(`/admin/proxies/${id}`)
   return data
 }
 
@@ -106,16 +96,6 @@ export async function update(id: number, updates: UpdateProxyRequest): Promise<P
 export async function deleteProxy(id: number): Promise<{ message: string }> {
   const { data } = await apiClient.delete<{ message: string }>(`/admin/proxies/${id}`)
   return data
-}
-
-/**
- * Toggle proxy status
- * @param id - Proxy ID
- * @param status - New status
- * @returns Updated proxy
- */
-export async function toggleStatus(id: number, status: 'active' | 'inactive'): Promise<Proxy> {
-  return update(id, { status })
 }
 
 /**
@@ -157,34 +137,12 @@ export async function checkProxyQuality(id: number): Promise<ProxyQualityCheckRe
 }
 
 /**
- * Get proxy usage statistics
+ * Get providers using a proxy
  * @param id - Proxy ID
- * @returns Proxy usage statistics
+ * @returns List of providers using the proxy
  */
-export async function getStats(id: number): Promise<{
-  total_accounts: number
-  active_accounts: number
-  total_requests: number
-  success_rate: number
-  average_latency: number
-}> {
-  const { data } = await apiClient.get<{
-    total_accounts: number
-    active_accounts: number
-    total_requests: number
-    success_rate: number
-    average_latency: number
-  }>(`/admin/proxies/${id}/stats`)
-  return data
-}
-
-/**
- * Get accounts using a proxy
- * @param id - Proxy ID
- * @returns List of accounts using the proxy
- */
-export async function getProxyAccounts(id: number): Promise<ProxyAccountSummary[]> {
-  const { data } = await apiClient.get<ProxyAccountSummary[]>(`/admin/proxies/${id}/accounts`)
+export async function getProxyProviders(id: number): Promise<ProxyProviderSummary[]> {
+  const { data } = await apiClient.get<ProxyProviderSummary[]>(`/admin/proxies/${id}/providers`)
   return data
 }
 
@@ -259,15 +217,12 @@ export const proxiesAPI = {
   list,
   getAll,
   getAllWithCount,
-  getById,
   create,
   update,
   delete: deleteProxy,
-  toggleStatus,
   testProxy,
   checkProxyQuality,
-  getStats,
-  getProxyAccounts,
+  getProxyProviders,
   batchCreate,
   batchDelete,
   exportData,

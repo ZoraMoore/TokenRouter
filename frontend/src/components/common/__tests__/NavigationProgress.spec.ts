@@ -1,83 +1,47 @@
-/**
- * NavigationProgress 组件单元测试
- */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { ref } from 'vue'
-import NavigationProgress from '../../common/NavigationProgress.vue'
+import { nextTick } from 'vue'
+import NavigationProgress from '../NavigationProgress.vue'
+import { _resetNavigationLoadingInstance, useNavigationLoadingState } from '@/composables/useNavigationLoading'
 
-// Mock useNavigationLoadingState
-const mockIsLoading = ref(false)
+vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: () => '加载中' }) }))
 
-vi.mock('@/composables/useNavigationLoading', () => ({
-  useNavigationLoadingState: () => ({
-    isLoading: mockIsLoading
-  })
-}))
+beforeEach(_resetNavigationLoadingInstance)
+afterEach(_resetNavigationLoadingInstance)
 
 describe('NavigationProgress', () => {
-  beforeEach(() => {
-    mockIsLoading.value = false
-  })
-
-  it('isLoading=false 时进度条应该隐藏', () => {
-    mockIsLoading.value = false
+  it('导航完成后由动画事件隐藏，快速切换也会显示完成反馈', async () => {
+    const state = useNavigationLoadingState()
     const wrapper = mount(NavigationProgress)
-
-    const progressBar = wrapper.find('.navigation-progress')
-    // v-show 会设置 display: none
-    expect(progressBar.isVisible()).toBe(false)
-  })
-
-  it('isLoading=true 时进度条应该可见', async () => {
-    mockIsLoading.value = true
-    const wrapper = mount(NavigationProgress)
-
-    await wrapper.vm.$nextTick()
-
-    const progressBar = wrapper.find('.navigation-progress')
-    expect(progressBar.exists()).toBe(true)
-    expect(progressBar.isVisible()).toBe(true)
-  })
-
-  it('应该有正确的 ARIA 属性', () => {
-    mockIsLoading.value = true
-    const wrapper = mount(NavigationProgress)
-
-    const progressBar = wrapper.find('.navigation-progress')
-    expect(progressBar.attributes('role')).toBe('progressbar')
-    expect(progressBar.attributes('aria-label')).toBe('Loading')
-    expect(progressBar.attributes('aria-valuemin')).toBe('0')
-    expect(progressBar.attributes('aria-valuemax')).toBe('100')
-  })
-
-  it('进度条应该有动画 class', () => {
-    mockIsLoading.value = true
-    const wrapper = mount(NavigationProgress)
-
-    const bar = wrapper.find('.navigation-progress-bar')
-    expect(bar.exists()).toBe(true)
-  })
-
-  it('应该正确响应 isLoading 状态变化', async () => {
-    // 测试初始状态为 false
-    mockIsLoading.value = false
-    const wrapper = mount(NavigationProgress)
-    await wrapper.vm.$nextTick()
-
-    // 初始状态隐藏
-    expect(wrapper.find('.navigation-progress').isVisible()).toBe(false)
-
-    // 卸载后重新挂载以测试 true 状态
+    expect(wrapper.find('[role="progressbar"]').exists()).toBe(false)
+    const id = state.startNavigation()
+    state.endNavigation(id)
+    await nextTick()
+    expect(wrapper.get('.navigation-progress').classes()).toContain('is-complete')
+    await wrapper.get('.navigation-progress-bar').trigger('animationend', {
+      animationName: 'navigation-complete-scoped'
+    })
+    expect(wrapper.find('[role="progressbar"]').exists()).toBe(false)
     wrapper.unmount()
+  })
 
-    // 改变为 true 后重新挂载
-    mockIsLoading.value = true
-    const wrapper2 = mount(NavigationProgress)
-    await wrapper2.vm.$nextTick()
-    expect(wrapper2.find('.navigation-progress').isVisible()).toBe(true)
+  it('推进动画结束不会提前隐藏仍在加载的导航', async () => {
+    const state = useNavigationLoadingState()
+    state.startNavigation()
+    const wrapper = mount(NavigationProgress)
+    await wrapper.get('.navigation-progress-bar').trigger('animationend', {
+      animationName: 'navigation-advance-scoped'
+    })
+    expect(wrapper.find('[role="progressbar"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
 
-    // 清理
-    wrapper2.unmount()
+  it('向辅助技术提供加载标签，不报告虚构百分比', () => {
+    useNavigationLoadingState().startNavigation()
+    const wrapper = mount(NavigationProgress)
+    const bar = wrapper.get('[role="progressbar"]')
+    expect(bar.attributes('aria-label')).toBe('加载中')
+    expect(bar.attributes('aria-valuenow')).toBeUndefined()
+    wrapper.unmount()
   })
 })

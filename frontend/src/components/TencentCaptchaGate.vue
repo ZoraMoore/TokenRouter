@@ -12,6 +12,7 @@
 </template>
 
 <script setup lang="ts">
+import { vendorLocale } from '@/i18n/catalog'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -37,7 +38,7 @@ let cachedProof: TencentCaptchaProof | null = null
 let cachedProofCreatedAt = 0
 let isMounted = false
 
-// 腾讯国际站票据官方有效期为 5 分钟，提前 1 分钟放弃缓存，避免提交时刚好过期。
+// 国际站票据有效期为 5 分钟，缓存使用 4 分钟。
 const cachedProofMaxAgeMs = 4 * 60 * 1000
 
 function createVerificationPromise(revealInternational: boolean = true): Promise<TencentCaptchaProof | null> {
@@ -68,7 +69,7 @@ function createVerificationPromise(revealInternational: boolean = true): Promise
       .then((TencentCaptcha) => {
         if (cancelPending !== cancel) return
 
-        const userLanguage = locale.value.toLowerCase().startsWith('zh') ? 'zh-cn' : 'en'
+        const userLanguage = vendorLocale('tencent', locale.value)
         const handleResult = (result: TencentCaptchaResult): void => {
           if (result.ret === 2) {
             finish(() => resolve(null))
@@ -82,7 +83,7 @@ function createVerificationPromise(revealInternational: boolean = true): Promise
             return
           }
 
-          // 国际站保留已勾选的控件，避免成功回调后页面出现跳动；登录流程结束时由 reset 清理。
+          // 国际站保留已勾选的控件，登录结束后由 reset 清理。
           finish(() => resolve({ ticket, randstr }), region === 'intl')
         }
 
@@ -118,7 +119,7 @@ function verify(): Promise<TencentCaptchaProof | null> {
       const proof = cachedProof
       cachedProof = null
       cachedProofCreatedAt = 0
-      // 预加载 promise 已经完成，消费缓存时同步清除引用，避免同一票据被并发复用。
+      // 消费已完成的缓存 promise 时同步清除引用，票据供本次验证使用。
       pending = null
       return Promise.resolve(proof)
     }
@@ -157,7 +158,7 @@ function verify(): Promise<TencentCaptchaProof | null> {
 function preload(): void {
   if (!isInternational.value || pending || cachedProof) return
 
-  // 国际站要求首屏直接展示 checkbox，避免用户点击登录后才看到验证码。
+  // 国际站首屏展示 checkbox，用户可在登录前完成验证。
   const verification = createVerificationPromise(true)
   pending = verification
   void verification
@@ -183,8 +184,8 @@ function reset(reinitialize: boolean = true): void {
   cachedProofCreatedAt = 0
   internationalContainerVisible.value = isInternational.value
 
-  // 国际站的票据一次性使用，登录失败后需要立即创建新的 checkbox，
-  // 不能等下一次点击登录才重新初始化。卸载阶段不再启动预加载。
+  // 国际站的票据一次性使用，登录失败后立即创建新的 checkbox。
+  // 预加载需要组件仍处于挂载状态。
   if (reinitialize && isMounted && isInternational.value) {
     void nextTick().then(() => {
       if (isMounted) preload()

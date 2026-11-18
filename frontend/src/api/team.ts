@@ -1,6 +1,6 @@
 import { apiClient } from './client'
 
-// 团队接口只返回当前角色有权查看的数据，Member 不会拿到其他成员的用量或密钥。
+// 团队接口按角色返回数据，Member 可读取自己的用量和密钥。
 export type TeamRole = 'owner' | 'member'
 
 export interface Team {

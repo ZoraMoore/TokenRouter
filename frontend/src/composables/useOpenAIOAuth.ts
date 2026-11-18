@@ -25,8 +25,6 @@ export interface OpenAITokenInfo {
   [key: string]: unknown
 }
 
-export type OpenAIOAuthPlatform = 'openai'
-
 export interface OpenAIOAuthSession {
   authUrl: string
   sessionId: string
@@ -73,7 +71,7 @@ export function useOpenAIOAuth() {
       payload.redirect_uri = redirectUri
     }
 
-    const response = await adminAPI.accounts.generateAuthUrl(
+    const response = await adminAPI.providers.generateAuthUrl(
       `${endpointPrefix}/generate-auth-url`,
       payload
     )
@@ -113,7 +111,7 @@ export function useOpenAIOAuth() {
       setCurrentAuthSession(session)
       return true
     } catch (err: any) {
-      error.value = extractApiErrorMessage(err, t('admin.accounts.oauth.openai.failedToGenerateUrl'))
+      error.value = extractApiErrorMessage(err, t('admin.providers.oauth.openai.failedToGenerateUrl'))
       appStore.showError(error.value)
       return false
     } finally {
@@ -136,7 +134,7 @@ export function useOpenAIOAuth() {
       setCurrentAuthSession(session)
       return session
     } catch (err: any) {
-      error.value = extractApiErrorMessage(err, t('admin.accounts.oauth.openai.failedToGenerateUrl'))
+      error.value = extractApiErrorMessage(err, t('admin.providers.oauth.openai.failedToGenerateUrl'))
       appStore.showError(error.value)
       return null
     } finally {
@@ -186,14 +184,14 @@ export function useOpenAIOAuth() {
         payload.tls_fingerprint_router_id = tlsFingerprintRouterId
       }
 
-      const tokenInfo = await adminAPI.accounts.exchangeCode(`${endpointPrefix}/exchange-code`, payload)
+      const tokenInfo = await adminAPI.providers.exchangeCode(`${endpointPrefix}/exchange-code`, payload)
       return tokenInfo as OpenAITokenInfo
     } catch (err: any) {
       error.value = extractI18nErrorMessage(
         err,
         t,
-        'admin.accounts.oauth.openai.errors',
-        t('admin.accounts.oauth.openai.failedToExchangeCode')
+        'admin.providers.oauth.openai.errors',
+        t('admin.providers.oauth.openai.failedToExchangeCode')
       )
       appStore.showError(error.value)
       return null
@@ -220,7 +218,7 @@ export function useOpenAIOAuth() {
 
     try {
       // Use dedicated refresh-token endpoint
-      const tokenInfo = await adminAPI.accounts.refreshOpenAIToken(
+      const tokenInfo = await adminAPI.providers.refreshOpenAIToken(
         refreshToken.trim(),
         proxyId,
         `${endpointPrefix}/refresh-token`,
@@ -232,8 +230,8 @@ export function useOpenAIOAuth() {
       error.value = extractI18nErrorMessage(
         err,
         t,
-        'admin.accounts.oauth.openai.errors',
-        t('admin.accounts.oauth.openai.failedToValidateRT')
+        'admin.providers.oauth.openai.errors',
+        t('admin.providers.oauth.openai.failedToValidateRT')
       )
       appStore.showError(error.value)
       return null
@@ -242,7 +240,7 @@ export function useOpenAIOAuth() {
     }
   }
 
-  // Build credentials for OpenAI OAuth account (aligned with backend BuildAccountCredentials)
+  // Build credentials for OpenAI OAuth provider (aligned with backend BuildProviderCredentials)
   const buildCredentials = (tokenInfo: OpenAITokenInfo): Record<string, unknown> => {
     const creds: Record<string, unknown> = {
       access_token: tokenInfo.access_token,

@@ -3,8 +3,14 @@ import { flushPromises, shallowMount } from '@vue/test-utils'
 import PaymentView from '../PaymentView.vue'
 import { PAYMENT_RECOVERY_STORAGE_KEY } from '@/components/payment/paymentFlow'
 import { formatPaymentAmount } from '@/components/payment/currency'
+import AmountInput from '@/components/payment/AmountInput.vue'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
+import en from '@/i18n/locales/en'
+import zh from '@/i18n/locales/zh'
 import type { CheckoutInfoResponse, MethodLimit, SubscriptionPlan } from '@/types/payment'
+
+// 支付测试保留动效容器的内容，浏览器过渡由实际页面验证。
+const motionTransitionStub = { inheritAttrs: false, template: '<slot />' }
 
 function createMemoryStorage(): Storage {
   let store: Record<string, string> = {}
@@ -63,6 +69,7 @@ const showInfo = vi.hoisted(() => vi.fn())
 const showWarning = vi.hoisted(() => vi.fn())
 const getCheckoutInfo = vi.hoisted(() => vi.fn())
 const bridgeInvoke = vi.hoisted(() => vi.fn())
+const translate = vi.hoisted(() => vi.fn((key: string) => key))
 
 vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')
@@ -82,7 +89,7 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string) => key,
+      t: translate,
     }),
   }
 })
@@ -324,6 +331,7 @@ async function mountSubscriptionConfirm(
   const wrapper = shallowMount(PaymentView, {
     global: {
       stubs: {
+        MotionTransition: motionTransitionStub,
         AppLayout: {
           template: '<div><slot /></div>',
         },
@@ -370,6 +378,7 @@ async function mountSubscriptionPlanList(planCount: number) {
   const wrapper = shallowMount(PaymentView, {
     global: {
       stubs: {
+        MotionTransition: motionTransitionStub,
         AppLayout: {
           template: '<div><slot /></div>',
         },
@@ -382,6 +391,35 @@ async function mountSubscriptionPlanList(planCount: number) {
   await flushPromises()
   return wrapper
 }
+
+describe('PaymentView 横向切换', () => {
+  it('同一页签输入不重建面板，往返切换保留已填金额和账单信息', async () => {
+    const wrapper = await mountSubscriptionPlanList(3)
+    const view = wrapper.vm as unknown as {
+      activeTab: 'recharge' | 'subscription'
+      amount: number | null
+      billingInfo: { name: string }
+    }
+    view.activeTab = 'recharge'
+    await flushPromises()
+    const panel = wrapper.get('.purchase-viewport > div').element
+    view.amount = 123
+    view.billingInfo.name = 'Kai'
+    await flushPromises()
+    expect(wrapper.get('.purchase-viewport > div').element).toBe(panel)
+
+    view.activeTab = 'subscription'
+    await flushPromises()
+    expect(wrapper.get('.purchase-viewport').attributes('style')).toContain('--purchase-direction: 1')
+    view.activeTab = 'recharge'
+    await flushPromises()
+    expect(wrapper.get('.purchase-viewport').attributes('style')).toContain('--purchase-direction: -1')
+    expect(view.amount).toBe(123)
+    expect(view.billingInfo.name).toBe('Kai')
+    expect(createOrder).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
 
 describe('PaymentView subscription plan group matching', () => {
   it('selects a plan when the route group is included in group_ids', async () => {
@@ -425,8 +463,47 @@ describe('PaymentView subscription plan grid', () => {
       'grid',
       'grid-cols-1',
       'sm:grid-cols-2',
-      'lg:grid-cols-3',
+      'xl:grid-cols-3',
     ]))
+  })
+})
+
+describe('PaymentView recharge rate preview', () => {
+  it('uses the selected payment method currency in both locale templates', async () => {
+    translate.mockClear()
+    routeState.path = '/purchase'
+    routeState.query = {}
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({
+      balance_recharge_multiplier: 0.5,
+      methods: {
+        stripe: {
+          ...checkoutInfoFixture().data.methods.wxpay,
+          currency: 'USD',
+        },
+      },
+    }))
+
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          MotionTransition: motionTransitionStub,
+          AppLayout: { template: '<div><slot /></div>' },
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+    wrapper.getComponent(AmountInput).vm.$emit('update:modelValue', 10)
+    await flushPromises()
+
+    expect(translate).toHaveBeenCalledWith('payment.rechargeRatePreview', {
+      currency: 'USD',
+      amount: '0.50',
+      unitName: 'USD',
+    })
+    expect(en.payment.rechargeRatePreview).toBe('Current rate: 1 {currency} = {amount} {unitName}')
+    expect(zh.payment.rechargeRatePreview).toBe('当前倍率：1 {currency} = {amount} {unitName}')
   })
 })
 
@@ -453,7 +530,7 @@ describe('PaymentView subscription confirmation amounts', () => {
     expect(text).toContain(convertedPrice)
     expect(text).toContain(convertedOriginalPrice)
     expect(text).not.toContain(formatPaymentAmount(9.99, 'CNY'))
-    // 换算必须使用订阅汇率（×7.15），而不是余额倍率（÷0.14 = 71.36）
+    // 订阅金额按汇率 ×7.15 换算。
     expect(text).not.toContain(formatPaymentAmount(71.36, 'CNY'))
     expect(wrapper.findAll('button').some(button => button.text().includes(convertedPrice))).toBe(true)
   })
@@ -579,6 +656,7 @@ describe('PaymentView payment recovery', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           AppLayout: {
             template: '<div><slot /></div>',
           },
@@ -642,6 +720,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
     shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           Teleport: true,
           Transition: false,
         },
@@ -671,6 +750,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
     shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           Teleport: true,
           Transition: false,
         },
@@ -692,6 +772,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           Teleport: true,
           Transition: false,
         },
@@ -736,6 +817,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
     shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           Teleport: true,
           Transition: false,
         },
@@ -774,6 +856,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
     shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           Teleport: true,
           Transition: false,
         },
@@ -822,6 +905,7 @@ describe('PaymentView WeChat JSAPI flow', () => {
     shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           Teleport: true,
           Transition: false,
         },
@@ -874,6 +958,7 @@ describe('PaymentView Stripe billing form', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           AppLayout: { template: '<main><slot /></main>' },
           Teleport: true,
           Transition: false,
@@ -906,6 +991,7 @@ describe('PaymentView Stripe billing form', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           AppLayout: { template: '<main><slot /></main>' },
           Teleport: true,
           Transition: false,
@@ -923,6 +1009,7 @@ describe('PaymentView Stripe billing form', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           AppLayout: { template: '<main><slot /></main>' },
           Teleport: true,
           Transition: false,
@@ -949,6 +1036,7 @@ describe('PaymentView Stripe billing form', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           AppLayout: { template: '<main><slot /></main>' },
           Teleport: true,
           Transition: false,
@@ -970,6 +1058,7 @@ describe('PaymentView Stripe billing form', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           AppLayout: { template: '<main><slot /></main>' },
           Teleport: true,
           Transition: false,
@@ -1019,6 +1108,7 @@ describe('PaymentView duplicate subscription notice', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           AppLayout: { template: '<main><slot /></main>' },
           Teleport: true,
           Transition: false,
@@ -1076,7 +1166,9 @@ describe('PaymentView payment help text', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          MotionTransition: motionTransitionStub,
           AppLayout: { template: '<main><slot /></main>' },
+          PaymentHelpNote: false,
           Teleport: true,
           Transition: false,
         },

@@ -31,7 +31,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   fallbackName: 'dollar',
   size: 'sm',
-  strokeWidth: 1.5,
+  strokeWidth: 2,
   useGlobalFallback: true
 })
 

@@ -51,7 +51,6 @@ function mountView() {
       stubs: {
         AppLayout: AppLayoutStub,
         DateRangePicker: true,
-        LoadingSpinner: true,
         Icon: true,
       },
     },

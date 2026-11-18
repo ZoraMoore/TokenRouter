@@ -2,16 +2,16 @@
   <AppLayout>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="relative w-full sm:w-72">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="input-icon-wrap w-full sm:w-72">
             <Icon
               name="search"
               size="md"
-              class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              class="input-icon text-gray-400"
             />
             <input
               v-model="searchQuery"
-              class="input pl-10"
+              class="input input-has-icon"
               type="text"
               :placeholder="t('team.searchPlaceholder')"
             />
@@ -19,14 +19,14 @@
 
           <div class="flex w-full items-center justify-end gap-2 sm:w-auto">
             <button
-              class="btn btn-secondary h-11 w-11 shrink-0 p-0"
+              class="btn btn-secondary shrink-0 btn-icon"
               :disabled="loading"
               :title="t('common.refresh')"
               @click="loadTeams"
             >
               <Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" />
             </button>
-            <button class="btn btn-primary h-11 whitespace-nowrap" @click="showCreate = true">
+            <button class="btn btn-primary whitespace-nowrap" @click="showCreate = true">
               <Icon name="plus" size="sm" />
               {{ t('team.create') }}
             </button>
@@ -36,6 +36,7 @@
 
       <template #table>
         <DataTable
+          column-order-storage-key="admin-teams-column-order"
           :columns="columns"
           :data="paginatedTeams"
           :loading="loading"
@@ -82,7 +83,8 @@
                   value === 'active' ? 'bg-green-500' : 'bg-red-500',
                 ]"
               ></span>
-              <span class="text-gray-700 dark:text-gray-300">
+              <!-- 状态文字加 self-baseline，移动卡片的标签对齐文字。 -->
+              <span class="self-baseline text-gray-700 dark:text-gray-300">
                 {{ value === 'active' ? t('team.statusActive') : t('team.statusSuspended') }}
               </span>
             </div>
@@ -205,11 +207,9 @@
       width="wide"
       @close="closeDetails"
     >
-      <div v-if="detailsLoading" class="flex justify-center py-12">
-        <LoadingSpinner />
-      </div>
+      <ContentSkeleton v-if="detailsLoading" variant="detail" :rows="6" class="py-4" />
       <div v-else-if="detailsTeam" class="space-y-6">
-        <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-dark-700 dark:bg-dark-800">
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-control border border-gray-200 bg-gray-50 px-4 py-3 dark:border-dark-700 dark:bg-dark-800">
           <div>
             <p class="font-semibold text-gray-900 dark:text-white">{{ detailsTeam.name }}</p>
             <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
@@ -223,7 +223,7 @@
 
         <div>
           <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('team.members') }}</h3>
-          <div class="mt-3 divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200 dark:divide-dark-700 dark:border-dark-600">
+          <div class="mt-3 divide-y divide-gray-100 overflow-hidden rounded-control border border-gray-200 dark:divide-dark-700 dark:border-dark-600">
             <div
               v-for="member in detailsMembers"
               :key="member.user_id"
@@ -283,6 +283,7 @@
 </template>
 
 <script setup lang="ts">
+import ContentSkeleton from '@/components/common/ContentSkeleton.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
@@ -295,7 +296,6 @@ import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -306,6 +306,7 @@ import { useStepUp, isStepUpCancelled } from '@/composables/useStepUp'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { useAppStore } from '@/stores/app'
 import { formatDateTime } from '@/utils/format'
+import { getFloatingPanelPosition } from '@/utils/floatingPanel'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -428,7 +429,7 @@ const saveEdit = async () => {
   }
 }
 
-// 状态是列表中的高频动作，不再与详情或编辑表单混在一起。
+// 团队状态可在列表中直接切换。
 const toggleStatus = async (team: AdminTeam) => {
   statusUpdatingID.value = team.id
   const status = team.status === 'active' ? 'suspended' : 'active'
@@ -451,14 +452,17 @@ const openActionMenu = (team: AdminTeam, event: MouseEvent) => {
   const target = event.currentTarget as HTMLElement | null
   if (!target) return
   const rect = target.getBoundingClientRect()
-  const width = 208
-  const height = 142
-  const padding = 8
-  const left = Math.max(padding, Math.min(rect.right - width, window.innerWidth - width - padding))
-  let top = rect.bottom + 4
-  if (top + height > window.innerHeight - padding) top = Math.max(padding, rect.top - height - 4)
+  // 固定高菜单:下方放不下即整体上翻;窄屏保持右缘对齐触发器,不钉视口左缘。
+  const position = getFloatingPanelPosition(rect, window.innerWidth, window.innerHeight, {
+    maxWidth: 208,
+    fixedHeight: 142,
+    viewportPadding: 8,
+    gap: 4,
+    pinLeftOnMobile: false
+  })
+  // fixedHeight 模式下 top 恒非空。
+  menuPosition.value = { top: position.top ?? 8, left: position.left }
   menuTeam.value = team
-  menuPosition.value = { top, left }
 }
 
 const closeActionMenu = () => {
@@ -532,6 +536,6 @@ onMounted(loadTeams)
 
 <style scoped>
 .row-action {
-  @apply flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-dark-700;
+  @apply flex flex-col items-center gap-0.5 rounded-control p-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-dark-700;
 }
 </style>

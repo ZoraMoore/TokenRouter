@@ -40,7 +40,7 @@ export function useGrokOAuth() {
       state.value = response.state
       return true
     } catch (err: any) {
-      error.value = extractApiErrorMessage(err, t('admin.accounts.oauth.grok.failedToGenerateUrl'))
+      error.value = extractApiErrorMessage(err, t('admin.providers.oauth.grok.failedToGenerateUrl'))
       appStore.showError(error.value)
       return false
     } finally {
@@ -56,7 +56,7 @@ export function useGrokOAuth() {
   }): Promise<GrokTokenInfo | null> => {
     const code = params.code?.trim()
     if (!code || !params.sessionId || !params.state) {
-      error.value = t('admin.accounts.oauth.grok.missingExchangeParams')
+      error.value = t('admin.providers.oauth.grok.missingExchangeParams')
       return null
     }
 
@@ -76,8 +76,8 @@ export function useGrokOAuth() {
       error.value = extractI18nErrorMessage(
         err,
         t,
-        'admin.accounts.oauth.grok.errors',
-        t('admin.accounts.oauth.grok.failedToExchangeCode')
+        'admin.providers.oauth.grok.errors',
+        t('admin.providers.oauth.grok.failedToExchangeCode')
       )
       appStore.showError(error.value)
       return null
@@ -91,7 +91,7 @@ export function useGrokOAuth() {
     proxyId?: number | null
   ): Promise<GrokTokenInfo | null> => {
     if (!refreshToken.trim()) {
-      error.value = t('admin.accounts.oauth.grok.pleaseEnterRefreshToken')
+      error.value = t('admin.providers.oauth.grok.pleaseEnterRefreshToken')
       return null
     }
 
@@ -104,8 +104,8 @@ export function useGrokOAuth() {
       error.value = extractI18nErrorMessage(
         err,
         t,
-        'admin.accounts.oauth.grok.errors',
-        t('admin.accounts.oauth.grok.failedToValidateRT')
+        'admin.providers.oauth.grok.errors',
+        t('admin.providers.oauth.grok.failedToValidateRT')
       )
       return null
     } finally {
@@ -113,7 +113,7 @@ export function useGrokOAuth() {
     }
   }
 
-  // 为创建账号或重新认证构建凭证。原始 SSO Cookie 与密码绝不持久化，
+  // 为创建提供商或重新认证构建凭证。原始 SSO Cookie 与密码绝不持久化，
   // 它们只存在于一次性认证 API 调用中。
   const buildCredentials = (tokenInfo: GrokTokenInfo): Record<string, unknown> => {
     const credentials: Record<string, unknown> = {
@@ -152,7 +152,7 @@ export function useGrokOAuth() {
     proxyId?: number | null
   ): Promise<GrokTokenInfo | null> => {
     if (!ssoToken.trim()) {
-      error.value = t('admin.accounts.oauth.grok.pleaseEnterSSOToken', 'Please enter an SSO token')
+      error.value = t('admin.providers.oauth.grok.pleaseEnterSSOToken', 'Please enter an SSO token')
       return null
     }
     loading.value = true
@@ -163,8 +163,8 @@ export function useGrokOAuth() {
       error.value = extractI18nErrorMessage(
         err,
         t,
-        'admin.accounts.oauth.grok.errors',
-        t('admin.accounts.oauth.grok.failedToValidateSSO', 'Failed to validate SSO token')
+        'admin.providers.oauth.grok.errors',
+        t('admin.providers.oauth.grok.failedToValidateSSO', 'Failed to validate SSO token')
       )
       appStore.showError(error.value)
       return null
@@ -178,7 +178,7 @@ export function useGrokOAuth() {
     proxyId?: number | null
   ): Promise<GrokTokenInfo | null> => {
     if (!emailAndPassword.trim()) {
-      error.value = t('admin.accounts.oauth.grok.pleaseEnterPassword', 'Please enter email----password')
+      error.value = t('admin.providers.oauth.grok.pleaseEnterPassword', 'Please enter email----password')
       return null
     }
     loading.value = true
@@ -189,8 +189,8 @@ export function useGrokOAuth() {
       error.value = extractI18nErrorMessage(
         err,
         t,
-        'admin.accounts.oauth.grok.errors',
-        t('admin.accounts.oauth.grok.failedToAuthorizePassword', 'Password authorization failed')
+        'admin.providers.oauth.grok.errors',
+        t('admin.providers.oauth.grok.failedToAuthorizePassword', 'Password authorization failed')
       )
       appStore.showError(error.value)
       return null

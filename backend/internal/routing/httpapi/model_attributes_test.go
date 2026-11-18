@@ -1,0 +1,85 @@
+package httpapi
+
+import (
+	"context"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+
+	"github.com/TokenFlux/TokenRouter/internal/modelcatalog"
+	"github.com/TokenFlux/TokenRouter/internal/routing"
+)
+
+type attributeHTTPStore struct{ saved *routing.ModelAttributeConfig }
+
+func (r *attributeHTTPStore) List(context.Context) ([]routing.ModelAttributeConfig, error) {
+	return []routing.ModelAttributeConfig{}, nil
+}
+
+func (r *attributeHTTPStore) Get(context.Context, int64) (*routing.ModelAttributeConfig, error) {
+	return r.saved, nil
+}
+
+func (r *attributeHTTPStore) ForGroup(context.Context, int64) (*routing.ModelAttributeConfig, error) {
+	return r.saved, nil
+}
+
+// ForGroups 为 HTTP 管理测试提供批量属性读取。
+func (r *attributeHTTPStore) ForGroups(_ context.Context, ids []int64) (map[int64]*routing.ModelAttributeConfig, error) {
+	result := make(map[int64]*routing.ModelAttributeConfig, len(ids))
+	for _, id := range ids {
+		result[id] = r.saved
+	}
+	return result, nil
+}
+
+func (r *attributeHTTPStore) Save(_ context.Context, c *routing.ModelAttributeConfig) error {
+	r.saved = c
+	return nil
+}
+func (r *attributeHTTPStore) Delete(context.Context, int64) error { return nil }
+
+func TestModelAttributeHTTPReadWriteAndAuthorization(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &attributeHTTPStore{}
+	updates := 0
+	service := &routing.ModelAttributeService{Repo: store, Catalog: routing.ModelAttributeCatalog{
+		Snapshot: func() routing.ModelAttributeSnapshot {
+			return routing.ModelAttributeSnapshot{Version: "one", Items: []modelcatalog.Entry{{Model: "custom", Provider: "original", Source: "models.dev"}}}
+		},
+		Lookup: func(string) modelcatalog.Attributes { return modelcatalog.Attributes{} },
+		Update: func() error { updates++; return nil },
+	}}
+	router := gin.New()
+	admin := router.Group("/admin", func(c *gin.Context) {
+		if c.GetHeader("X-Test-Admin") != "yes" {
+			c.AbortWithStatus(403)
+		}
+	})
+	RegisterModelAttributeRoutes(admin, NewModelAttributeHandler(service))
+	call := func(method, path, body string, authorized bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if authorized {
+			req.Header.Set("X-Test-Admin", "yes")
+		}
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, req)
+		return response
+	}
+	require.Equal(t, 403, call("GET", "/admin/model-attributes/defaults", "", false).Code)
+	query := call("GET", "/admin/model-attributes/defaults?search=custom", "", true)
+	require.Equal(t, 200, query.Code)
+	require.Contains(t, query.Body.String(), `"version":"one"`)
+	require.Zero(t, updates)
+	require.Equal(t, 200, call("POST", "/admin/model-attributes/defaults/update", "", true).Code)
+	require.Equal(t, 1, updates)
+	created := call("POST", "/admin/model-attributes/configs", `{"id":99,"name":"display","status":"active","group_ids":[1],"rules":[{"models":["custom"],"attributes":{"tool_call":false}}]}`, true)
+	require.Equal(t, 200, created.Code)
+	require.Zero(t, store.saved.ID)
+	require.False(t, *store.saved.Rules[0].Attributes.ToolCall)
+	require.Equal(t, 400, call("PUT", "/admin/model-attributes/configs/no", "{}", true).Code)
+}

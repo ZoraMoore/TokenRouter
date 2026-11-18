@@ -1,3 +1,4 @@
+import { useProtocolCatalogFixture } from '@/__tests__/helpers/protocolCatalog'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
@@ -11,7 +12,7 @@ const {
   getUsageSummary,
   getCapacitySummary,
   getLiveCapability,
-  listAccounts,
+  listProviders,
   showError,
   showSuccess,
   isCurrentStep,
@@ -23,7 +24,7 @@ const {
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
   getLiveCapability: vi.fn(),
-  listAccounts: vi.fn(),
+  listProviders: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
   isCurrentStep: vi.fn(),
@@ -39,9 +40,8 @@ const messages: Record<string, string> = {
   'admin.groups.columns.displayBrand': 'Brand Type',
   'admin.groups.columns.rateMultiplier': 'Rate Multiplier',
   'admin.groups.columns.exclusive': 'Exclusive',
-  'admin.groups.columns.dataSharing': 'Data Sharing',
   'admin.groups.columns.sessionIsolation': 'Session Isolation',
-  'admin.groups.columns.accounts': 'Accounts',
+  'admin.groups.columns.providers': 'Providers',
   'admin.groups.columns.capacity': 'Capacity',
   'admin.groups.columns.usage': 'Usage',
   'admin.groups.columns.status': 'Status',
@@ -62,8 +62,8 @@ vi.mock('@/api/admin', () => ({
       delete: vi.fn(),
       updateSortOrder: vi.fn(),
     },
-    accounts: {
-      list: listAccounts,
+    providers: {
+      list: listProviders,
     },
   },
 }))
@@ -103,22 +103,15 @@ const createGroup = (overrides: Partial<AdminGroup> = {}): AdminGroup => ({
   id: 1,
   name: 'Core Anthropic',
   description: null,
-  platform: 'anthropic',
   scheduler_type: 'basic',
   display_brand: '',
   rate_multiplier: 1,
   rpm_limit: 0,
   is_exclusive: false,
-  is_default: false,
-  data_sharing_enabled: false,
   session_isolation_enabled: false,
   status: 'active',
   allow_image_generation: false,
-  image_rate_independent: false,
-  image_rate_multiplier: 1,
-  image_price_1k: null,
-  image_price_2k: null,
-  image_price_4k: null,
+
   claude_code_only: false,
   fallback_group_id: null,
   fallback_group_id_on_invalid_request: null,
@@ -126,7 +119,6 @@ const createGroup = (overrides: Partial<AdminGroup> = {}): AdminGroup => ({
   allow_messages_dispatch: false,
   allow_live: false,
   default_mapped_model: '',
-  messages_dispatch_model_config: undefined,
   availability_probe_config: undefined,
   require_oauth_only: false,
   require_privacy_set: false,
@@ -136,9 +128,9 @@ const createGroup = (overrides: Partial<AdminGroup> = {}): AdminGroup => ({
   model_routing_enabled: false,
   mcp_xml_inject: true,
   supported_model_scopes: [],
-  account_count: 3,
-  active_account_count: 2,
-  rate_limited_account_count: 1,
+  provider_count: 3,
+  active_provider_count: 2,
+  rate_limited_provider_count: 1,
   models_list_config: undefined,
   sort_order: 10,
   ...overrides,
@@ -245,7 +237,7 @@ describe('admin GroupsView column settings', () => {
     getUsageSummary.mockReset()
     getCapacitySummary.mockReset()
     getLiveCapability.mockReset()
-    listAccounts.mockReset()
+    listProviders.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
     isCurrentStep.mockReset()
@@ -263,7 +255,7 @@ describe('admin GroupsView column settings', () => {
     getUsageSummary.mockResolvedValue([])
     getCapacitySummary.mockResolvedValue([])
     getLiveCapability.mockResolvedValue({ supported: false, reason: 'test server unsupported' })
-    listAccounts.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
+    listProviders.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
     isCurrentStep.mockReturnValue(false)
   })
 
@@ -284,7 +276,7 @@ describe('admin GroupsView column settings', () => {
     // 筛选项已聚合到按钮，展开后只保留平台和状态筛选。
     await wrapper.get('button[aria-label="common.filter"]').trigger('click')
     await flushPromises()
-    expect(wrapper.findAll('select')).toHaveLength(2)
+    expect(wrapper.findAll('select')).toHaveLength(1)
     expect(listGroups.mock.calls[0]?.[2]).not.toHaveProperty('is_exclusive')
   })
 
@@ -293,13 +285,11 @@ describe('admin GroupsView column settings', () => {
 
     expect(columnKeys(wrapper)).toEqual([
       'name',
-      'platform',
       'display_brand',
       'rate_multiplier',
       'is_exclusive',
-      'data_sharing_enabled',
       'session_isolation_enabled',
-      'account_count',
+      'provider_count',
       'capacity',
       'usage',
       'status',
@@ -329,13 +319,11 @@ describe('admin GroupsView column settings', () => {
     expect(columnKeys(wrapper)).toEqual([
       'name',
       'id',
-      'platform',
       'display_brand',
       'rate_multiplier',
       'is_exclusive',
-      'data_sharing_enabled',
       'session_isolation_enabled',
-      'account_count',
+      'provider_count',
       'status',
       'actions',
     ])
@@ -349,13 +337,11 @@ describe('admin GroupsView column settings', () => {
 
     expect(columnKeys(wrapper)).toEqual([
       'name',
-      'platform',
       'display_brand',
       'rate_multiplier',
       'is_exclusive',
-      'data_sharing_enabled',
       'session_isolation_enabled',
-      'account_count',
+      'provider_count',
       'capacity',
       'status',
       'actions',
@@ -385,13 +371,11 @@ describe('admin GroupsView column settings', () => {
 
     expect(columnKeys(wrapper)).toEqual([
       'name',
-      'platform',
       'display_brand',
       'rate_multiplier',
       'is_exclusive',
-      'data_sharing_enabled',
       'session_isolation_enabled',
-      'account_count',
+      'provider_count',
       'capacity',
       'status',
       'actions',
@@ -410,13 +394,11 @@ describe('admin GroupsView column settings', () => {
     expect(columnKeys(wrapper)).toEqual([
       'name',
       'id',
-      'platform',
       'display_brand',
       'rate_multiplier',
       'is_exclusive',
-      'data_sharing_enabled',
       'session_isolation_enabled',
-      'account_count',
+      'provider_count',
       'capacity',
       'usage',
       'status',
@@ -448,3 +430,5 @@ describe('admin GroupsView column settings', () => {
     expect(getCapacitySummary).toHaveBeenCalledTimes(1)
   })
 })
+
+useProtocolCatalogFixture()

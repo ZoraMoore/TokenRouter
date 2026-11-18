@@ -2,8 +2,8 @@
   <AppLayout>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-col gap-4">
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div class="flex flex-col gap-2">
+          <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div class="flex min-w-0 flex-1 items-center gap-2">
               <SearchInput
                 v-model="filterSearch"
@@ -11,87 +11,67 @@
                 class="min-w-0 flex-1 sm:w-56 sm:flex-none lg:w-48 xl:w-64"
                 @search="onFilterChange"
               />
-              <div ref="filterDropdownRef" class="relative shrink-0">
-                <button
-                  type="button"
-                  class="btn btn-secondary relative h-11 w-11 p-0"
-                  :aria-expanded="showFilterDropdown"
-                  :aria-label="t('common.filter')"
-                  :title="t('common.filter')"
-                  @click="showFilterDropdown = !showFilterDropdown"
-                >
-                  <Icon name="filter" size="sm" />
-                  <span v-if="activeFilterCount > 0" class="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-100 px-1.5 text-xs font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
-                    {{ activeFilterCount }}
-                  </span>
-                </button>
-                <div v-show="showFilterDropdown" class="absolute left-auto right-0 top-full z-[60] mt-2 w-[min(32rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-dark-600 dark:bg-dark-900" @click.stop>
-                  <div class="mb-3 flex items-center justify-between">
-                    <div class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('common.filter') }}</div>
-                    <button v-if="activeFilterCount > 0" type="button" class="text-xs font-medium text-primary-600 dark:text-primary-400" @click="resetKeyFilters">
-                      {{ t('common.reset') }}
-                    </button>
-                  </div>
-                  <div class="space-y-3">
-                    <div>
-                      <label class="input-label">{{ t('keys.allGroups') }}</label>
-                      <Select :model-value="filterGroupId" :options="groupFilterOptions" @update:model-value="onGroupFilterChange" />
-                    </div>
-                    <div>
-                      <label class="input-label">{{ t('keys.allStatus') }}</label>
-                      <Select :model-value="filterStatus" :options="statusFilterOptions" @update:model-value="onStatusFilterChange" />
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <FilterDropdown :active-count="activeFilterCount" :columns="2" keep-mounted @reset="resetKeyFilters">
+                <FilterField :label="t('keys.group')">
+                  <Select :model-value="filterGroupId" :options="groupFilterOptions" @update:model-value="onGroupFilterChange" />
+                </FilterField>
+                <FilterField :label="t('common.status')">
+                  <Select :model-value="filterStatus" :options="statusFilterOptions" @update:model-value="onStatusFilterChange" />
+                </FilterField>
+              </FilterDropdown>
             </div>
-            <div class="flex shrink-0 justify-end gap-3">
+            <div class="flex shrink-0 justify-end gap-2">
               <button
                 @click="loadApiKeys"
                 :disabled="loading"
-                class="btn btn-secondary h-11 w-11 shrink-0 p-0"
+                class="btn btn-secondary shrink-0 btn-icon"
                 :title="t('common.refresh')"
               >
-                <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
+                <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
               </button>
               <div class="relative" ref="columnDropdownRef">
                 <button
                   @click.stop="showColumnDropdown = !showColumnDropdown"
-                  class="btn btn-secondary h-11 w-11 shrink-0 p-0"
+                  class="btn btn-secondary shrink-0 btn-icon"
                   :title="t('keys.columnSettings')"
                 >
-                  <Icon name="grid" size="md" />
+                  <Icon name="grid" size="sm" />
                 </button>
-                <div
-                  v-if="showColumnDropdown"
-                  class="absolute right-0 top-full z-50 mt-2 max-h-80 w-52 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 shadow-xl dark:border-gray-700 dark:bg-gray-800"
-                >
-                  <button
-                    v-for="column in toggleableColumns"
-                    :key="column.key"
-                    @click="toggleColumn(column.key)"
-                    class="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                <MotionTransition name="dropdown-fade">
+                  <div
+                    v-if="showColumnDropdown" :inert="!(showColumnDropdown) || undefined"
+                    class="dropdown right-0 top-full z-50 mt-2 max-h-menu w-52 overflow-y-auto p-2"
                   >
-                    <span>{{ column.label }}</span>
-                    <Icon
-                      v-if="isColumnVisible(column.key)"
-                      name="check"
-                      size="sm"
-                      class="text-primary-500"
-                      :stroke-width="2"
-                    />
-                  </button>
-                </div>
+                    <button
+                      v-for="column in toggleableColumns"
+                      :key="column.key"
+                      @click="toggleColumn(column.key)"
+                      class="dropdown-item-sm justify-between rounded-control"
+                    >
+                      <span>{{ column.label }}</span>
+                      <Icon
+                        v-if="isColumnVisible(column.key)"
+                        name="check"
+                        size="sm"
+                        class="text-primary-500"
+                        :stroke-width="2"
+                        :animate-on-hover="false"
+                      />
+                    </button>
+                  </div>
+                </MotionTransition>
               </div>
               <ScopeDropdown v-if="teamFeatureEnabled" v-model="scope" @change="onScopeChange" />
               <button @click="openCreateModal" class="btn btn-primary" data-tour="keys-create-btn">
-                <Icon name="plus" size="md" class="mr-2" />
+                <Icon name="plus" size="sm" class="mr-2" />
                 {{ t('keys.createKey') }}
               </button>
             </div>
           </div>
+          <!-- 端点条和上方工具栏是一组，-mb-2 把它到表格的间距从布局默认的 16px 收到 8px，上下间距一致。 -->
           <EndpointPopover
             v-if="publicSettings?.api_base_url || (publicSettings?.custom_endpoints?.length ?? 0) > 0"
+            class="-mb-2"
             :api-base-url="publicSettings?.api_base_url || ''"
             :custom-endpoints="publicSettings?.custom_endpoints || []"
           />
@@ -100,6 +80,7 @@
 
       <template #table>
         <DataTable
+          column-order-storage-key="user-keys-column-order"
           :columns="columns"
           :data="apiKeys"
           :loading="loading"
@@ -119,7 +100,7 @@
               </code>
               <button
                 @click="copyToClipboard(value, row.id)"
-                class="rounded-lg p-1 transition-colors hover:bg-gray-100 dark:hover:bg-dark-700"
+                class="rounded-control p-1 transition-colors hover:bg-gray-100 dark:hover:bg-dark-700"
                 :class="
                   copiedKeyId === row.id
                     ? 'text-green-500'
@@ -132,6 +113,7 @@
                   name="check"
                   size="sm"
                   :stroke-width="2"
+                  :animate-on-hover="false"
                 />
                 <Icon v-else name="clipboard" size="sm" />
               </button>
@@ -148,6 +130,20 @@
                 class="text-blue-500"
                 :title="t('keys.ipRestrictionEnabled')"
               />
+              <!-- 并发大于 0 时，名称后面显示并发数和上限。 -->
+              <span
+                v-if="(row.current_concurrency ?? 0) > 0"
+                data-test="key-concurrency"
+                :class="['ml-1 inline-flex items-center gap-1 text-xs tabular-nums', concurrencyTone(row).text]"
+                :title="concurrencyTitle(row)"
+                :aria-label="concurrencyTitle(row)"
+              >
+                <span :class="['h-1.5 w-1.5 rounded-full', concurrencyTone(row).dot]" aria-hidden="true" />
+                <span>
+                  <span>{{ row.current_concurrency }}</span>
+                  <span v-if="(row.concurrency_limit ?? 0) > 0" class="text-gray-400 dark:text-dark-500">/{{ row.concurrency_limit }}</span>
+                </span>
+              </span>
             </div>
           </template>
 
@@ -156,94 +152,82 @@
               v-if="row.is_composite"
               type="button"
               data-test="composite-group-summary"
-              class="flex max-w-[22rem] flex-wrap items-center gap-1.5 rounded-md px-1 py-1 text-left hover:bg-gray-100 dark:hover:bg-dark-700"
+              class="-mx-1 -my-1 flex max-w-[22rem] flex-wrap items-center gap-1.5 rounded-control p-1 text-left transition duration-normal hover:bg-gray-100 dark:hover:bg-dark-700"
               :title="t('keys.composite.editMappings')"
               @click="editKey(row)"
             >
+              <!-- 复合 Key 用品牌色胶囊展示“前缀 / 分组”，超出部分折叠为计数胶囊。 -->
               <span
-                v-for="binding in row.composite_groups"
+                v-for="binding in visibleCompositeGroups(row)"
                 :key="`${row.id}-${binding.group_id}`"
-                class="inline-flex min-w-0 items-center gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1 dark:border-dark-600 dark:bg-dark-800"
+                :class="[
+                  'inline-flex min-w-0 items-center gap-1.5 rounded-compact px-2 py-0.5 text-xs leading-5',
+                  compositeGroupChipClass(binding.group?.display_brand)
+                ]"
               >
-                <span class="max-w-24 truncate font-mono text-xs font-semibold text-primary-700 dark:text-primary-300">{{ binding.prefix }}</span>
-                <span class="text-gray-300 dark:text-dark-500">/</span>
-                <span class="max-w-28 truncate text-xs text-gray-600 dark:text-dark-300">{{ binding.group?.name || `#${binding.group_id}` }}</span>
+                <span class="max-w-24 truncate font-mono font-medium">{{ binding.prefix }}</span>
+                <span class="opacity-40">/</span>
+                <span class="max-w-28 truncate opacity-75">{{ (binding.group?.display_name || binding.group?.name) || `#${binding.group_id}` }}</span>
+              </span>
+              <span
+                v-if="hiddenCompositeGroupCount(row) > 0"
+                class="inline-flex items-center rounded-compact bg-gray-100 px-2 py-0.5 text-xs leading-5 text-gray-500 dark:bg-dark-800 dark:text-dark-400"
+              >
+                {{ t('keys.composite.moreMappings', { count: hiddenCompositeGroupCount(row) }) }}
               </span>
             </button>
             <div v-else class="group/dropdown relative">
               <button
                 :ref="(el) => setGroupButtonRef(row.id, el)"
                 @click="openGroupSelector(row)"
-                class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-dark-700"
+                class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-control px-2 py-1 transition duration-normal hover:bg-gray-100 dark:hover:bg-dark-700"
                 :title="t('keys.clickToChangeGroup')"
               >
                 <GroupBadge
                   v-if="row.group"
-                  :name="row.group.name"
-                  :platform="row.group.platform"
+                  :name="(row.group.display_name || row.group.name)"
                   :display-brand="row.group.display_brand"
                   :rate-multiplier="row.group.rate_multiplier"
-                  :user-rate-multiplier="userGroupRates[row.group.id]"
-                  :peak-rate-enabled="row.group.peak_rate_enabled"
-                  :peak-start="row.group.peak_start"
-                  :peak-end="row.group.peak_end"
-                  :peak-rate-multiplier="row.group.peak_rate_multiplier"
+                  :user-rate-multiplier="displayUserGroupRates[row.group.id]"
                 />
                 <span v-else class="text-sm text-gray-400 dark:text-dark-500">{{
                   t('keys.noGroup')
                 }}</span>
-                <svg
+                <Icon
+                  name="sort"
+                  size="xs"
+                  :animate-on-hover="false"
                   class="h-3.5 w-3.5 text-gray-400 opacity-60 transition-opacity group-hover/dropdown:opacity-100"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  stroke-width="2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9"
-                  />
-                </svg>
+                />
               </button>
             </div>
           </template>
 
-          <template #cell-current_concurrency="{ value }">
-            <span
-              :class="[
-                'inline-flex min-w-8 items-center justify-center rounded px-2 py-1 text-sm font-semibold tabular-nums',
-                (value ?? 0) > 0
-                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-800'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-dark-400'
-              ]"
-            >
-              {{ value ?? 0 }}
-            </span>
-          </template>
-
           <template #cell-usage="{ row }">
+            <!-- 窄屏卡片的用量靠右排列，桌面表格保持左对齐。 -->
             <div class="text-sm">
-              <div v-if="usageLoading && !usageStats[row.id]" class="flex h-10 items-center text-gray-400">
-                <Icon name="refresh" size="sm" class="animate-spin" />
+              <div v-if="usageLoading && !usageStats[row.id]" class="flex h-10 flex-col items-end justify-center gap-2 lg:items-start" role="status" :aria-label="t('common.loading')" aria-busy="true" data-loading-skeleton>
+                <Skeleton :width="96" :height="12" />
+                <Skeleton :width="112" :height="12" />
               </div>
               <div v-else class="space-y-0.5">
-              <div class="flex items-center gap-1.5">
-                <span class="text-gray-500 dark:text-gray-400">{{ t('keys.today') }}:</span>
-                <span class="font-medium text-gray-900 dark:text-white">
-                  {{ formatBalanceAmount(usageStats[row.id]?.today_actual_cost ?? 0, { fractionDigits: 4 }) }}
-                </span>
-              </div>
-              <div class="mt-0.5 flex items-center gap-1.5">
-                <span class="text-gray-500 dark:text-gray-400">{{ t('keys.total') }}:</span>
-                <span class="font-medium text-gray-900 dark:text-white">
-                  {{ formatBalanceAmount(usageStats[row.id]?.total_actual_cost ?? 0, { fractionDigits: 4 }) }}
-                </span>
-              </div>
+                <div class="flex items-center justify-end gap-1.5 lg:justify-start">
+                  <span class="text-gray-500 dark:text-gray-400">{{ t('keys.today') }}:</span>
+                  <span class="font-medium text-gray-900 dark:text-white">
+                    {{ formatBalanceAmount(usageStats[row.id]?.today_actual_cost ?? 0, { fractionDigits: 4 }) }}
+                  </span>
+                </div>
+                <!-- 批量接口的 total_actual_cost 统计近 30 天，使用对应文案标明范围。 -->
+                <div class="flex items-center justify-end gap-1.5 lg:justify-start">
+                  <span class="text-gray-500 dark:text-gray-400">{{ t('keys.total') }}:</span>
+                  <span class="font-medium text-gray-900 dark:text-white">
+                    {{ formatBalanceAmount(usageStats[row.id]?.total_actual_cost ?? 0, { fractionDigits: 4 }) }}
+                  </span>
+                </div>
               </div>
               <!-- Quota progress (if quota is set) -->
               <div v-if="row.quota > 0" class="mt-1.5">
-                <div class="flex items-center gap-1.5">
+                <div class="flex items-center justify-end gap-1.5 lg:justify-start">
                   <span class="text-gray-500 dark:text-gray-400">{{ t('keys.quota') }}:</span>
                   <span :class="[
                     'font-medium',
@@ -257,7 +241,7 @@
                 <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'h-full rounded-full transition-[width,background-color]',
                       row.quota_used >= row.quota ? 'bg-red-500' :
                       row.quota_used >= row.quota * 0.8 ? 'bg-yellow-500' :
                       'bg-primary-500'
@@ -287,7 +271,7 @@
                 <div class="h-1 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'h-full rounded-full transition-[width,background-color]',
                       row.usage_5h >= row.rate_limit_5h ? 'bg-red-500' :
                       row.usage_5h >= row.rate_limit_5h * 0.8 ? 'bg-yellow-500' :
                       'bg-emerald-500'
@@ -295,7 +279,7 @@
                     :style="{ width: Math.min((row.usage_5h / row.rate_limit_5h) * 100, 100) + '%' }"
                   />
                 </div>
-                <div v-if="row.reset_5h_at && formatResetTime(row.reset_5h_at)" class="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+                <div v-if="row.reset_5h_at && formatResetTime(row.reset_5h_at)" class="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
                   ⟳ {{ formatResetTime(row.reset_5h_at) }}
                 </div>
               </div>
@@ -315,7 +299,7 @@
                 <div class="h-1 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'h-full rounded-full transition-[width,background-color]',
                       row.usage_1d >= row.rate_limit_1d ? 'bg-red-500' :
                       row.usage_1d >= row.rate_limit_1d * 0.8 ? 'bg-yellow-500' :
                       'bg-emerald-500'
@@ -323,7 +307,7 @@
                     :style="{ width: Math.min((row.usage_1d / row.rate_limit_1d) * 100, 100) + '%' }"
                   />
                 </div>
-                <div v-if="row.reset_1d_at && formatResetTime(row.reset_1d_at)" class="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+                <div v-if="row.reset_1d_at && formatResetTime(row.reset_1d_at)" class="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
                   ⟳ {{ formatResetTime(row.reset_1d_at) }}
                 </div>
               </div>
@@ -343,7 +327,7 @@
                 <div class="h-1 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'h-full rounded-full transition-[width,background-color]',
                       row.usage_7d >= row.rate_limit_7d ? 'bg-red-500' :
                       row.usage_7d >= row.rate_limit_7d * 0.8 ? 'bg-yellow-500' :
                       'bg-emerald-500'
@@ -351,7 +335,7 @@
                     :style="{ width: Math.min((row.usage_7d / row.rate_limit_7d) * 100, 100) + '%' }"
                   />
                 </div>
-                <div v-if="row.reset_7d_at && formatResetTime(row.reset_7d_at)" class="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+                <div v-if="row.reset_7d_at && formatResetTime(row.reset_7d_at)" class="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
                   ⟳ {{ formatResetTime(row.reset_7d_at) }}
                 </div>
               </div>
@@ -359,7 +343,7 @@
               <button
                 v-if="row.usage_5h > 0 || row.usage_1d > 0 || row.usage_7d > 0"
                 @click.stop="confirmResetRateLimitFromTable(row)"
-                class="mt-0.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+                class="mt-0.5 inline-flex items-center gap-1 rounded-compact px-1.5 py-0.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
                 :title="t('keys.resetRateLimitUsage')"
               >
                 <Icon name="refresh" size="xs" />
@@ -389,7 +373,8 @@
               'badge-gray'
             ]">
               <Icon v-if="row.team_owner_disabled" name="lock" size="xs" />
-              {{ row.team_owner_disabled ? t('keys.status.team_owner_disabled') : t('keys.status.' + value) }}
+              <!-- 状态文字加 self-baseline，前面有锁图标时，移动卡片的标签仍对齐文字。 -->
+              <span class="self-baseline">{{ row.team_owner_disabled ? t('keys.status.team_owner_disabled') : t('keys.status.' + value) }}</span>
             </span>
           </template>
 
@@ -416,15 +401,15 @@
               <!-- 高频操作固定展示，低频和危险操作收进更多菜单。 -->
               <button
                 @click="editKey(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+                class="flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
               >
                 <Icon name="edit" size="sm" />
                 <span class="text-xs">{{ t('common.edit') }}</span>
               </button>
-              <!-- Owner 锁定由团队管理员控制，成员侧不再提供无效的恢复入口。 -->
+              <!-- Owner 锁定由团队管理员解除。 -->
               <span
                 v-if="row.team_owner_disabled"
-                class="flex cursor-not-allowed flex-col items-center gap-0.5 rounded-lg p-1.5 text-amber-600 dark:text-amber-400"
+                class="flex cursor-not-allowed flex-col items-center gap-0.5 rounded-control p-1.5 text-amber-600 dark:text-amber-400"
                 :title="t('keys.teamOwnerDisabledHint')"
               >
                 <Icon name="lock" size="sm" />
@@ -435,19 +420,22 @@
                 v-else
                 @click="toggleKeyStatus(row)"
                 :class="[
-                  'flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors',
+                  'flex flex-col items-center gap-0.5 rounded-control p-1.5 transition-colors',
                   row.status === 'active'
                     ? 'text-gray-500 hover:bg-yellow-50 hover:text-yellow-600 dark:hover:bg-yellow-900/20 dark:hover:text-yellow-400'
                     : 'text-gray-500 hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/20 dark:hover:text-green-400'
                 ]"
               >
                 <Icon v-if="row.status === 'active'" name="ban" size="sm" />
-                <Icon v-else name="checkCircle" size="sm" />
+                <Icon v-else name="checkCircle" size="sm" :animate-on-hover="false" />
                 <span class="text-xs">{{ row.status === 'active' ? t('keys.disable') : t('keys.enable') }}</span>
               </button>
               <button
-                class="key-action-menu-trigger flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-dark-700 dark:hover:text-white"
+                class="key-action-menu-trigger flex flex-col items-center gap-0.5 rounded-control p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-dark-700 dark:hover:text-white"
                 :class="{ 'bg-gray-100 text-gray-900 dark:bg-dark-700 dark:text-white': actionMenuKey?.id === row.id }"
+                aria-haspopup="menu"
+                :aria-expanded="actionMenuKey?.id === row.id"
+                :aria-controls="actionMenuKey?.id === row.id ? `key-action-menu-${row.id}` : undefined"
                 @click="openKeyActionMenu(row, $event)"
               >
                 <Icon name="more" size="sm" />
@@ -479,14 +467,14 @@
       </template>
     </TablePageLayout>
 
-    <!-- 创建/编辑密钥共用弹窗；表单允许在窄屏内收缩，避免撑开页面。 -->
+    <!-- 创建和编辑密钥共用弹窗，表单随窄屏收缩。 -->
     <BaseDialog
       :show="showCreateModal || showEditModal"
       :title="showEditModal ? t('keys.editKey') : t('keys.createKey')"
       width="normal"
       @close="closeModals"
     >
-      <form id="key-form" @submit.prevent="handleSubmit" class="min-w-0 max-w-full space-y-5">
+      <form id="key-form" @submit.prevent="handleSubmit" class="key-form-controls min-w-0 max-w-full space-y-5">
         <div>
           <label class="input-label">{{ t('keys.nameLabel') }}</label>
           <input
@@ -552,28 +540,18 @@
               <GroupBadge
                 v-if="option"
                 :name="(option as unknown as GroupOption).label"
-                :platform="(option as unknown as GroupOption).platform"
                 :display-brand="(option as unknown as GroupOption).displayBrand"
                 :rate-multiplier="(option as unknown as GroupOption).rate"
                 :user-rate-multiplier="(option as unknown as GroupOption).userRate"
-                :peak-rate-enabled="(option as unknown as GroupOption).peakRateEnabled"
-                :peak-start="(option as unknown as GroupOption).peakStart"
-                :peak-end="(option as unknown as GroupOption).peakEnd"
-                :peak-rate-multiplier="(option as unknown as GroupOption).peakRateMultiplier"
               />
               <span v-else class="text-gray-400">{{ t('keys.selectGroup') }}</span>
             </template>
             <template #option="{ option, selected }">
               <GroupOptionItem
                 :name="(option as unknown as GroupOption).label"
-                :platform="(option as unknown as GroupOption).platform"
                 :display-brand="(option as unknown as GroupOption).displayBrand"
                 :rate-multiplier="(option as unknown as GroupOption).rate"
                 :user-rate-multiplier="(option as unknown as GroupOption).userRate"
-                :peak-rate-enabled="(option as unknown as GroupOption).peakRateEnabled"
-                :peak-start="(option as unknown as GroupOption).peakStart"
-                :peak-end="(option as unknown as GroupOption).peakEnd"
-                :peak-rate-multiplier="(option as unknown as GroupOption).peakRateMultiplier"
                 :description="(option as unknown as GroupOption).description"
                 :selected="selected"
               />
@@ -581,55 +559,46 @@
           </Select>
         </div>
 
-        <div v-else class="space-y-3" data-test="composite-group-editor">
-          <div
-            v-for="(binding, index) in formData.composite_groups"
-            :key="binding.local_id"
-            class="grid min-w-0 grid-cols-1 items-start gap-2 rounded-md border border-gray-200 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,0.65fr)_auto] dark:border-dark-600"
-          >
-            <Select
-              v-model="binding.group_id"
-              :options="formGroupOptions"
-              :placeholder="t('keys.selectGroup')"
-              :searchable="true"
-              :disabled="formGroupsLoading"
-              class="min-w-0"
-            />
-            <div class="min-w-0">
-              <input
-                v-model="binding.prefix"
-                type="text"
-                maxlength="32"
-                class="input min-w-0 font-mono"
-                :class="{ 'border-red-500 dark:border-red-500': compositeBindingError(index) }"
-                :placeholder="t('keys.composite.prefixPlaceholder')"
+        <RuleListEditor
+          v-else
+          :items="formData.composite_groups"
+          :item-key="(binding) => binding.local_id"
+          :add-label="t('keys.composite.addMapping')"
+          add-placement="footer"
+          :min="1"
+          :max="20"
+          reorderable
+          data-test="composite-group-editor"
+          @add="addCompositeBinding"
+          @remove="removeCompositeBinding"
+          @move="moveCompositeBinding"
+        >
+          <template #row="{ item: binding, index }">
+            <div class="grid min-w-0 grid-cols-1 items-start gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(7rem,0.65fr)]">
+              <Select
+                v-model="binding.group_id"
+                :options="formGroupOptions"
+                :placeholder="t('keys.selectGroup')"
+                :searchable="true"
+                :disabled="formGroupsLoading"
+                class="min-w-0"
               />
-              <p v-if="compositeBindingError(index)" class="mt-1 text-xs text-red-500">
-                {{ compositeBindingError(index) }}
-              </p>
+              <div class="min-w-0">
+                <input
+                  v-model="binding.prefix"
+                  type="text"
+                  maxlength="32"
+                  class="input min-w-0 font-mono"
+                  :class="{ 'input-error': compositeBindingError(index) }"
+                  :placeholder="t('keys.composite.prefixPlaceholder')"
+                />
+                <p v-if="compositeBindingError(index)" class="input-error-text">
+                  {{ compositeBindingError(index) }}
+                </p>
+              </div>
             </div>
-            <div class="flex items-center justify-end gap-1 sm:justify-start">
-              <button type="button" class="rounded p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:hover:bg-dark-700" :disabled="index === 0" :title="t('keys.composite.moveUp')" @click="moveCompositeBinding(index, -1)">
-                <Icon name="arrowUp" size="sm" />
-              </button>
-              <button type="button" class="rounded p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:hover:bg-dark-700" :disabled="index === formData.composite_groups.length - 1" :title="t('keys.composite.moveDown')" @click="moveCompositeBinding(index, 1)">
-                <Icon name="arrowDown" size="sm" />
-              </button>
-              <button type="button" class="rounded p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-30 dark:hover:bg-red-900/20" :disabled="formData.composite_groups.length <= 1" :title="t('common.delete')" @click="removeCompositeBinding(index)">
-                <Icon name="trash" size="sm" />
-              </button>
-            </div>
-          </div>
-          <button
-            type="button"
-            class="btn btn-secondary w-full"
-            :disabled="formData.composite_groups.length >= 20"
-            @click="addCompositeBinding"
-          >
-            <Icon name="plus" size="sm" class="mr-1.5" />
-            {{ t('keys.composite.addMapping') }}
-          </button>
-        </div>
+          </template>
+        </RuleListEditor>
 
         <!-- 单 Key Fast 策略使用项目统一选择框，系统策略仍在服务端最终裁决。 -->
         <div>
@@ -644,106 +613,36 @@
 
         <!-- 分组停用时的请求级自动降级开关。 -->
         <div class="flex items-center justify-between">
-          <label class="input-label mb-0">{{ t('keys.fallbackToDefaultGroupWhenUnavailable') }}</label>
-          <Toggle v-model="formData.fallback_to_default_group_when_unavailable" size="sm" />
+          <label class="input-label mb-0">{{ t('keys.fallbackWhenGroupUnavailable') }}</label>
+          <Toggle v-model="formData.fallback_when_group_unavailable" size="sm" />
         </div>
 
         <!-- 模型重定向按行编辑，删除全部行会在更新时提交空对象。 -->
-        <div class="space-y-3" data-test="model-mapping-editor">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <label class="input-label mb-0">{{ t('keys.modelRedirect.label') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
-                {{ t('keys.modelRedirect.hint') }}
-              </p>
-            </div>
-            <button
-              type="button"
-              class="btn btn-secondary shrink-0"
-              :disabled="formData.model_mapping_rows.length >= 100"
-              :title="t('keys.modelRedirect.addRule')"
-              data-test="model-mapping-add"
-              @click="addModelMappingRow"
-            >
-              <Icon name="plus" size="sm" class="mr-1.5" />
-              {{ t('keys.modelRedirect.addRule') }}
-            </button>
-          </div>
-
-          <p
-            v-if="formData.model_mapping_rows.length === 0"
-            class="rounded-md border border-dashed border-gray-200 px-3 py-4 text-center text-sm text-gray-500 dark:border-dark-600 dark:text-dark-400"
-          >
-            {{ t('keys.modelRedirect.empty') }}
-          </p>
-
-          <div
-            v-for="(row, index) in formData.model_mapping_rows"
-            :key="row.local_id"
-            class="grid min-w-0 grid-cols-1 items-start gap-2 border-b border-gray-200 pb-3 last:border-b-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] dark:border-dark-600"
-            data-test="model-mapping-row"
-          >
-            <div class="min-w-0">
-              <input
-                v-model="row.source"
-                type="text"
-                class="input min-w-0 font-mono"
-                :class="{ 'border-red-500 dark:border-red-500': modelMappingRowErrors[row.local_id]?.source }"
-                :placeholder="t('keys.modelRedirect.sourcePlaceholder')"
-                :aria-label="t('keys.modelRedirect.source')"
-                :data-test="`model-mapping-source-${index}`"
-              />
-              <p v-if="modelMappingRowErrors[row.local_id]?.source" class="mt-1 text-xs text-red-500" role="alert">
-                {{ modelMappingRowErrors[row.local_id]?.source }}
-              </p>
-            </div>
-            <Icon name="arrowRight" size="sm" class="hidden text-gray-400 sm:mt-3 sm:block" />
-            <div class="min-w-0">
-              <input
-                v-model="row.target"
-                type="text"
-                class="input min-w-0 font-mono"
-                :class="{ 'border-red-500 dark:border-red-500': modelMappingRowErrors[row.local_id]?.target }"
-                :placeholder="t('keys.modelRedirect.targetPlaceholder')"
-                :aria-label="t('keys.modelRedirect.target')"
-                :data-test="`model-mapping-target-${index}`"
-              />
-              <p v-if="modelMappingRowErrors[row.local_id]?.target" class="mt-1 text-xs text-red-500" role="alert">
-                {{ modelMappingRowErrors[row.local_id]?.target }}
-              </p>
-            </div>
-            <button
-              type="button"
-              class="flex h-10 w-10 items-center justify-center rounded text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
-              :title="t('common.delete')"
-              :aria-label="t('common.delete')"
-              :data-test="`model-mapping-remove-${index}`"
-              @click="removeModelMappingRow(index)"
-            >
-              <Icon name="trash" size="sm" />
-            </button>
-          </div>
-        </div>
+        <ModelMappingEditor
+          v-model="formData.model_mapping_rows"
+          :title="t('keys.modelRedirect.label')"
+          :hint="t('keys.modelRedirect.hint')"
+          :add-label="t('keys.modelRedirect.addRule')"
+          :empty-text="t('keys.modelRedirect.empty')"
+          :max="MODEL_REDIRECT_MAX_RULES"
+          :source-label="t('keys.modelRedirect.source')"
+          :target-label="t('keys.modelRedirect.target')"
+          :source-placeholder="t('keys.modelRedirect.sourcePlaceholder')"
+          :target-placeholder="t('keys.modelRedirect.targetPlaceholder')"
+          :field-errors="modelMappingFieldErrors"
+          test-id="model-mapping"
+          data-test="model-mapping-editor"
+        >
+          <template #title-suffix>
+            <ModelRedirectHelp />
+          </template>
+        </ModelMappingEditor>
 
         <!-- Custom Key Section (only for create) -->
         <div v-if="!showEditModal" class="space-y-3">
           <div class="flex items-center justify-between">
             <label class="input-label mb-0">{{ t('keys.customKeyLabel') }}</label>
-            <button
-              type="button"
-              @click="formData.use_custom_key = !formData.use_custom_key"
-              :class="[
-                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                formData.use_custom_key ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-              ]"
-            >
-              <span
-                :class="[
-                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                  formData.use_custom_key ? 'translate-x-4' : 'translate-x-0'
-                ]"
-              />
-            </button>
+            <Toggle v-model="formData.use_custom_key" size="sm" off-tone="soft" />
           </div>
           <div v-if="formData.use_custom_key">
             <input
@@ -773,7 +672,7 @@
           <p
             v-if="selectedKey?.team_owner_disabled"
             id="team-owner-disabled-hint"
-            class="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-300"
+            class="mt-2 flex items-start gap-2 rounded-control border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-300"
           >
             <Icon name="lock" size="sm" class="mt-0.5 shrink-0" />
             <span>{{ t('keys.teamOwnerDisabledHint') }}</span>
@@ -784,21 +683,7 @@
         <div class="space-y-3">
           <div class="flex items-center justify-between">
             <label class="input-label mb-0">{{ t('keys.ipRestriction') }}</label>
-            <button
-              type="button"
-              @click="formData.enable_ip_restriction = !formData.enable_ip_restriction"
-              :class="[
-                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                formData.enable_ip_restriction ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-              ]"
-            >
-              <span
-                :class="[
-                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                  formData.enable_ip_restriction ? 'translate-x-4' : 'translate-x-0'
-                ]"
-              />
-            </button>
+            <Toggle v-model="formData.enable_ip_restriction" size="sm" off-tone="soft" />
           </div>
 
           <div v-if="formData.enable_ip_restriction" class="space-y-4 pt-2">
@@ -832,34 +717,20 @@
           <!-- Switch commented out - always show input, 0 = unlimited
           <div class="flex items-center justify-between">
             <label class="input-label mb-0">{{ t('keys.quotaLimit') }}</label>
-            <button
-              type="button"
-              @click="formData.enable_quota = !formData.enable_quota"
-              :class="[
-                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                formData.enable_quota ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-              ]"
-            >
-              <span
-                :class="[
-                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                  formData.enable_quota ? 'translate-x-4' : 'translate-x-0'
-                ]"
-              />
-            </button>
+            <Toggle v-model="formData.enable_quota" size="sm" off-tone="soft" />
           </div>
           -->
 
           <div class="space-y-4">
             <div>
               <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">{{ balanceUnitSymbol }}</span>
+                <span class="input-icon text-gray-500">{{ balanceUnitSymbol }}</span>
                 <input
                   v-model.number="formData.quota"
                   type="number"
                   step="0.01"
                   min="0"
-                  class="input pl-7"
+                  class="input input-has-icon input-icon-text"
                   :placeholder="t('keys.quotaAmountPlaceholder')"
                 />
               </div>
@@ -870,7 +741,7 @@
             <div v-if="showEditModal && selectedKey && selectedKey.quota > 0">
               <label class="input-label">{{ t('keys.quotaUsed') }}</label>
               <div class="flex items-center gap-2">
-                <div class="flex-1 rounded-lg bg-gray-100 px-3 py-2 dark:bg-dark-700">
+                <div class="flex-1 h-9 rounded-control bg-gray-100 px-3 py-1.5 dark:bg-dark-700">
                   <span class="font-medium text-gray-900 dark:text-white">
                     {{ formatBalanceAmount(selectedKey.quota_used, { fractionDigits: 4 }) }}
                   </span>
@@ -892,25 +763,26 @@
           </div>
         </div>
 
+        <!-- Key 请求限制与金额限额分别配置。 -->
+        <div class="space-y-3">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label for="key-concurrency-limit" class="input-label">{{ t('keys.concurrencyLimit') }}</label>
+              <input id="key-concurrency-limit" v-model.number="formData.concurrency_limit" type="number" min="0" max="2147483647" step="1" class="input" placeholder="0" />
+            </div>
+            <div>
+              <label for="key-rpm-limit" class="input-label">{{ t('keys.rpmLimit') }}</label>
+              <input id="key-rpm-limit" v-model.number="formData.rpm_limit" type="number" min="0" max="2147483647" step="1" class="input" placeholder="0" />
+            </div>
+          </div>
+          <p class="input-hint">{{ t('keys.requestLimitsHint') }}</p>
+        </div>
+
         <!-- Rate Limit Section -->
         <div class="space-y-3">
           <div class="flex items-center justify-between">
             <label class="input-label mb-0">{{ t('keys.rateLimitSection') }}</label>
-            <button
-              type="button"
-              @click="formData.enable_rate_limit = !formData.enable_rate_limit"
-              :class="[
-                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                formData.enable_rate_limit ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-              ]"
-            >
-              <span
-                :class="[
-                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                  formData.enable_rate_limit ? 'translate-x-4' : 'translate-x-0'
-                ]"
-              />
-            </button>
+            <Toggle v-model="formData.enable_rate_limit" size="sm" off-tone="soft" />
           </div>
 
           <div v-if="formData.enable_rate_limit" class="space-y-4 pt-2">
@@ -919,20 +791,20 @@
             <div>
               <label class="input-label">{{ t('keys.rateLimit5h') }}</label>
               <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">{{ balanceUnitSymbol }}</span>
+                <span class="input-icon text-gray-500">{{ balanceUnitSymbol }}</span>
                 <input
                   v-model.number="formData.rate_limit_5h"
                   type="number"
                   step="0.01"
                   min="0"
-                  class="input pl-7"
+                  class="input input-has-icon input-icon-text"
                   :placeholder="'0'"
                 />
               </div>
               <!-- Usage info (edit mode only) -->
               <div v-if="showEditModal && selectedKey && selectedKey.rate_limit_5h > 0" class="mt-2">
                 <div class="flex items-center gap-2">
-                  <div class="flex-1 rounded-lg bg-gray-100 px-3 py-2 dark:bg-dark-700 text-sm">
+                  <div class="flex-1 h-9 rounded-control bg-gray-100 px-3 py-1.5 text-sm dark:bg-dark-700">
                     <span :class="[
                       'font-medium',
                       selectedKey.usage_5h >= selectedKey.rate_limit_5h ? 'text-red-500' :
@@ -950,7 +822,7 @@
                 <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'h-full rounded-full transition-[width,background-color]',
                       selectedKey.usage_5h >= selectedKey.rate_limit_5h ? 'bg-red-500' :
                       selectedKey.usage_5h >= selectedKey.rate_limit_5h * 0.8 ? 'bg-yellow-500' :
                       'bg-green-500'
@@ -965,20 +837,20 @@
             <div>
               <label class="input-label">{{ t('keys.rateLimit1d') }}</label>
               <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">{{ balanceUnitSymbol }}</span>
+                <span class="input-icon text-gray-500">{{ balanceUnitSymbol }}</span>
                 <input
                   v-model.number="formData.rate_limit_1d"
                   type="number"
                   step="0.01"
                   min="0"
-                  class="input pl-7"
+                  class="input input-has-icon input-icon-text"
                   :placeholder="'0'"
                 />
               </div>
               <!-- Usage info (edit mode only) -->
               <div v-if="showEditModal && selectedKey && selectedKey.rate_limit_1d > 0" class="mt-2">
                 <div class="flex items-center gap-2">
-                  <div class="flex-1 rounded-lg bg-gray-100 px-3 py-2 dark:bg-dark-700 text-sm">
+                  <div class="flex-1 h-9 rounded-control bg-gray-100 px-3 py-1.5 text-sm dark:bg-dark-700">
                     <span :class="[
                       'font-medium',
                       selectedKey.usage_1d >= selectedKey.rate_limit_1d ? 'text-red-500' :
@@ -996,7 +868,7 @@
                 <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'h-full rounded-full transition-[width,background-color]',
                       selectedKey.usage_1d >= selectedKey.rate_limit_1d ? 'bg-red-500' :
                       selectedKey.usage_1d >= selectedKey.rate_limit_1d * 0.8 ? 'bg-yellow-500' :
                       'bg-green-500'
@@ -1011,20 +883,20 @@
             <div>
               <label class="input-label">{{ t('keys.rateLimit7d') }}</label>
               <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">{{ balanceUnitSymbol }}</span>
+                <span class="input-icon text-gray-500">{{ balanceUnitSymbol }}</span>
                 <input
                   v-model.number="formData.rate_limit_7d"
                   type="number"
                   step="0.01"
                   min="0"
-                  class="input pl-7"
+                  class="input input-has-icon input-icon-text"
                   :placeholder="'0'"
                 />
               </div>
               <!-- Usage info (edit mode only) -->
               <div v-if="showEditModal && selectedKey && selectedKey.rate_limit_7d > 0" class="mt-2">
                 <div class="flex items-center gap-2">
-                  <div class="flex-1 rounded-lg bg-gray-100 px-3 py-2 dark:bg-dark-700 text-sm">
+                  <div class="flex-1 h-9 rounded-control bg-gray-100 px-3 py-1.5 text-sm dark:bg-dark-700">
                     <span :class="[
                       'font-medium',
                       selectedKey.usage_7d >= selectedKey.rate_limit_7d ? 'text-red-500' :
@@ -1042,7 +914,7 @@
                 <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
                   <div
                     :class="[
-                      'h-full rounded-full transition-all',
+                      'h-full rounded-full transition-[width,background-color]',
                       selectedKey.usage_7d >= selectedKey.rate_limit_7d ? 'bg-red-500' :
                       selectedKey.usage_7d >= selectedKey.rate_limit_7d * 0.8 ? 'bg-yellow-500' :
                       'bg-green-500'
@@ -1070,21 +942,7 @@
         <div class="space-y-3">
           <div class="flex items-center justify-between">
             <label class="input-label mb-0">{{ t('keys.expiration') }}</label>
-            <button
-              type="button"
-              @click="formData.enable_expiration = !formData.enable_expiration"
-              :class="[
-                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
-                formData.enable_expiration ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-              ]"
-            >
-              <span
-                :class="[
-                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                  formData.enable_expiration ? 'translate-x-4' : 'translate-x-0'
-                ]"
-              />
-            </button>
+            <Toggle v-model="formData.enable_expiration" size="sm" off-tone="soft" />
           </div>
 
           <div v-if="formData.enable_expiration" class="space-y-4 pt-2">
@@ -1096,9 +954,9 @@
                 type="button"
                 @click="setExpirationDays(parseInt(days))"
                 :class="[
-                  'rounded-lg px-3 py-1.5 text-sm transition-colors',
+                  'rounded-control px-3 py-1.5 text-sm transition-colors',
                   formData.expiration_preset === days
-                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-500/8 dark:text-primary-500'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-400 dark:hover:bg-dark-600'
                 ]"
               >
@@ -1108,9 +966,9 @@
                 type="button"
                 @click="formData.expiration_preset = 'custom'"
                 :class="[
-                  'rounded-lg px-3 py-1.5 text-sm transition-colors',
+                  'rounded-control px-3 py-1.5 text-sm transition-colors',
                   formData.expiration_preset === 'custom'
-                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-500/8 dark:text-primary-500'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-400 dark:hover:bg-dark-600'
                 ]"
               >
@@ -1141,36 +999,23 @@
       </form>
       <template #footer>
         <div class="flex justify-end gap-3">
-          <button @click="closeModals" type="button" class="btn btn-secondary">
+          <button @click="closeModals" type="button" class="btn btn-secondary py-1.5">
             {{ t('common.cancel') }}
           </button>
           <button
             form="key-form"
             type="submit"
             :disabled="submitting"
-            class="btn btn-primary"
+            class="btn btn-primary py-1.5"
             data-tour="key-form-submit"
           >
-            <svg
+            <Icon
+              name="loader"
+              size="sm"
+              :animate-on-hover="false"
               v-if="submitting"
               class="-ml-1 mr-2 h-4 w-4 animate-spin"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                class="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                stroke-width="4"
-              ></circle>
-              <path
-                class="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
+            />
             {{
               submitting
                 ? t('keys.saving')
@@ -1178,6 +1023,47 @@
                   ? t('common.update')
                   : t('common.create')
             }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
+
+    <!-- 轮换前明确告知旧凭据失效，提交期间保留弹窗以防重复操作。 -->
+    <ConfirmDialog
+      :show="rotationKey !== null"
+      :title="t('keys.rotateKey')"
+      :message="t('keys.rotateConfirmMessage', { name: rotationKey?.name })"
+      :confirm-text="t('keys.confirmRotate')"
+      :danger="true"
+      :loading="rotatingKey"
+      @confirm="handleRotate"
+      @cancel="cancelRotate"
+    />
+
+    <!-- 轮换成功后展示新凭据，便于立即复制到客户端。 -->
+    <BaseDialog
+      :show="rotatedKey !== null"
+      :title="t('keys.keyRotatedSuccess')"
+      width="narrow"
+      @close="rotatedKey = null"
+    >
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600 dark:text-gray-400">{{ t('keys.rotatedKeyHint') }}</p>
+        <code class="block break-all rounded-surface bg-gray-50 p-4 text-sm text-gray-900 dark:bg-dark-800 dark:text-gray-100">
+          {{ rotatedKey?.key }}
+        </code>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <button type="button" class="btn btn-secondary" @click="rotatedKey = null">
+            {{ t('common.close') }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            @click="rotatedKey && copyToClipboard(rotatedKey.key, rotatedKey.id)"
+          >
+            {{ t('common.copy') }}
           </button>
         </div>
       </template>
@@ -1199,7 +1085,7 @@
     <ConfirmDialog
       :show="showResetQuotaDialog"
       :title="t('keys.resetQuotaTitle')"
-      :message="t('keys.resetQuotaConfirmMessage', { name: selectedKey?.name, used: selectedKey?.quota_used?.toFixed(4) })"
+      :message="t('keys.resetQuotaConfirmMessage', { name: selectedKey?.name, used: formatBalanceAmount(selectedKey?.quota_used, { fractionDigits: 4 }) })"
       :confirm-text="t('keys.reset')"
       :cancel-text="t('common.cancel')"
       :danger="true"
@@ -1224,10 +1110,15 @@
       :show="showUseKeyModal"
       :api-key="selectedKey?.key || ''"
       :base-url="publicSettings?.api_base_url || ''"
-      :platform="selectedKey?.group?.platform || null"
-      :allowed-client-protocols="selectedKey?.group?.allowed_client_protocols"
-      :composite-groups="selectedKey?.composite_groups || []"
+      :group="selectedKeyGroup"
+      :composite-groups="selectedCompositeGroups"
       @close="closeUseKeyModal"
+    />
+
+    <TfCliImportDialog
+      :show="showTfCliImportDialog"
+      :api-key="tfImportKey"
+      @close="closeTfCliImportDialog"
     />
 
     <KeyActionMenu
@@ -1237,11 +1128,13 @@
       :allow-import="!publicSettings?.hide_ccs_import_button"
       @close="closeKeyActionMenu"
       @use="openUseKeyModal"
+      @import-tf="openTfCliImportDialog"
       @import="importToCcswitch"
+      @rotate="confirmRotate"
       @delete="confirmDelete"
     />
 
-    <!-- CCS Client Selection Dialog for Antigravity -->
+    <!-- 按可用协议选择客户端和模型。 -->
     <BaseDialog
       :show="showCcsClientSelect"
       :title="t('keys.ccsClientSelect.title')"
@@ -1249,36 +1142,12 @@
       @close="closeCcsClientSelect"
     >
       <div class="space-y-4">
-        <p class="text-sm text-gray-600 dark:text-gray-400">
-          {{ t('keys.ccsClientSelect.description') }}
-	        </p>
-	        <div class="grid grid-cols-2 gap-3">
-	          <button
-	            @click="handleCcsClientSelect('claude')"
-	            class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 dark:border-dark-600 hover:border-primary-500 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all"
-	          >
-	            <Icon name="terminal" size="xl" class="text-gray-600 dark:text-gray-400" />
-	            <span class="font-medium text-gray-900 dark:text-white">{{
-	              t('keys.ccsClientSelect.claudeCode')
-	            }}</span>
-	            <span class="text-xs text-gray-500 dark:text-gray-400">{{
-	              t('keys.ccsClientSelect.claudeCodeDesc')
-	            }}</span>
-	          </button>
-	          <button
-	            @click="handleCcsClientSelect('gemini')"
-	            class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 dark:border-dark-600 hover:border-primary-500 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all"
-	          >
-	            <Icon name="sparkles" size="xl" class="text-gray-600 dark:text-gray-400" />
-	            <span class="font-medium text-gray-900 dark:text-white">{{
-	              t('keys.ccsClientSelect.geminiCli')
-	            }}</span>
-	            <span class="text-xs text-gray-500 dark:text-gray-400">{{
-	              t('keys.ccsClientSelect.geminiCliDesc')
-	            }}</span>
-	          </button>
-	        </div>
-	      </div>
+        <p class="text-sm text-gray-600 dark:text-gray-400">{{ t('keys.ccsClientSelect.description') }}</p>
+        <Select v-model="ccClient" :options="ccClientOptions" />
+        <Select v-model="ccModel" :options="ccModelOptions" searchable :placeholder="t('keys.useKeyModal.selectModel')" />
+        <p v-if="!ccModelOptions.length" class="input-hint">{{ t('keys.useKeyModal.noModels') }}</p>
+        <button type="button" class="btn btn-primary" :disabled="!ccModel" @click="handleCcsClientSelect(ccClient)">{{ t('common.confirm') }}</button>
+      </div>
       <template #footer>
         <div class="flex justify-end">
           <button @click="closeCcsClientSelect" class="btn btn-secondary">
@@ -1288,126 +1157,85 @@
       </template>
     </BaseDialog>
 
-    <BaseDialog
-      :show="dataSharingNoticeDialog.show"
-      title="数据共享须知"
-      width="normal"
-      :close-on-click-outside="false"
-      @close="closeDataSharingNotice"
-    >
-      <div class="space-y-4">
-        <div class="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm leading-6 text-gray-700 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-200">
-          {{ dataSharingNoticeDialog.notice?.content || '正在加载数据共享须知...' }}
-        </div>
-        <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-          只有点击确认后，API Key 才会切换到该数据共享分组。
-        </div>
-      </div>
-      <template #footer>
-        <div class="flex justify-end gap-3">
-          <button type="button" class="btn btn-secondary" @click="closeDataSharingNotice">
-            {{ t('common.cancel') }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="dataSharingNoticeDialog.loading || dataSharingNoticeDialog.countdown > 0"
-            @click="confirmDataSharingNotice"
-          >
-            <Icon v-if="dataSharingNoticeDialog.countdown <= 0" name="check" size="md" class="mr-2" />
-            {{
-              dataSharingNoticeDialog.countdown > 0
-                ? `请等待 ${dataSharingNoticeDialog.countdown}s`
-                : '我已阅读并确认'
-            }}
-          </button>
-        </div>
-      </template>
-    </BaseDialog>
-
     <!-- Group Selector Dropdown (Teleported to body to avoid overflow clipping) -->
     <Teleport to="body">
-      <div
-        v-if="groupSelectorKeyId !== null && dropdownPosition"
-        ref="dropdownRef"
-        class="animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-max max-w-[calc(100vw-16px)] overflow-hidden rounded-control bg-white shadow-lg ring-1 ring-black/5 duration-200 sm:min-w-[380px] dark:bg-dark-800 dark:ring-white/10"
-        style="pointer-events: auto !important;"
-        :style="{
-          top: dropdownPosition.top !== undefined ? dropdownPosition.top + 'px' : undefined,
-          bottom: dropdownPosition.bottom !== undefined ? dropdownPosition.bottom + 'px' : undefined,
-          left: dropdownPosition.left + 'px'
-        }"
-      >
-        <!-- Search box -->
-        <div class="border-b border-gray-100 p-2 dark:border-dark-700">
-          <div class="relative">
-            <svg class="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
+      <MotionTransition name="dropdown-fade">
+        <div
+          v-if="groupSelectorKeyId !== null && dropdownPosition" :inert="!(groupSelectorKeyId !== null && dropdownPosition) || undefined"
+          ref="dropdownRef"
+          class="dropdown animate-in fade-in slide-in-from-top-2 fixed z-teleport-dropdown w-max max-w-[calc(100vw-16px)] overflow-hidden duration-normal sm:min-w-[380px] py-0"
+          style="pointer-events: auto !important;"
+          :style="{
+            top: dropdownPosition.top !== undefined ? dropdownPosition.top + 'px' : undefined,
+            bottom: dropdownPosition.bottom !== undefined ? dropdownPosition.bottom + 'px' : undefined,
+            left: dropdownPosition.left + 'px'
+          }"
+        >
+          <!-- 分组搜索与页头共用输入框组件，背景和焦点样式随全局主题更新。 -->
+          <div class="border-b border-gray-100 p-2 dark:border-dark-700">
+            <SearchInput
               v-model="groupSearchQuery"
-              type="text"
-              class="w-full rounded-lg border border-primary-900/10 bg-gray-50 py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-primary-900/10 focus:ring-2 focus:ring-black/10 dark:border-dark-600 dark:bg-dark-700 dark:text-white dark:placeholder-gray-500 dark:focus:border-primary-600 dark:focus:ring-primary-600"
               :placeholder="t('keys.searchGroup')"
               @click.stop
             />
           </div>
-        </div>
-        <!-- Group list -->
-        <div class="max-h-80 overflow-y-auto p-1.5">
-          <button
-            v-for="option in filteredGroupOptions"
-            :key="option.value ?? 'null'"
-            @click="changeGroup(selectedKeyForGroup!, option.value)"
-            :class="[
-              'flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors',
-              'border-b border-gray-100 last:border-0 dark:border-dark-700',
-              selectedKeyForGroup?.group_id === option.value ||
-              (!selectedKeyForGroup?.group_id && option.value === null)
-                ? 'bg-primary-50 dark:bg-primary-900/20'
-                : 'hover:bg-gray-100 dark:hover:bg-dark-700'
-            ]"
-            :title="option.description || undefined"
-          >
-            <GroupOptionItem
-              :name="option.label"
-              :platform="option.platform"
-              :display-brand="option.displayBrand"
-              :rate-multiplier="option.rate"
-              :user-rate-multiplier="option.userRate"
-              :peak-rate-enabled="option.peakRateEnabled"
-              :peak-start="option.peakStart"
-              :peak-end="option.peakEnd"
-              :peak-rate-multiplier="option.peakRateMultiplier"
-              :description="option.description"
-              :selected="
+          <!-- Group list -->
+          <div class="max-h-80 overflow-y-auto p-1.5">
+            <button
+              v-for="option in filteredGroupOptions"
+              :key="option.value ?? 'null'"
+              @click="changeGroup(selectedKeyForGroup!, option.value)"
+              :class="[
+                'flex w-full items-center justify-between rounded-control px-3 py-2.5 text-sm transition-colors',
+                'border-b border-gray-100 last:border-0 dark:border-dark-700',
                 selectedKeyForGroup?.group_id === option.value ||
                 (!selectedKeyForGroup?.group_id && option.value === null)
-              "
-            />
-          </button>
-          <!-- Empty state when search has no results -->
-          <div v-if="filteredGroupOptions.length === 0" class="py-4 text-center text-sm text-gray-400 dark:text-gray-500">
-            {{ t('keys.noGroupFound') }}
+                  ? 'bg-primary-50 dark:bg-primary-500/8 dark:text-primary-500'
+                  : 'hover:bg-gray-100 dark:hover:bg-dark-700'
+              ]"
+              :title="option.description || undefined"
+            >
+              <GroupOptionItem
+                :name="option.label"
+                :display-brand="option.displayBrand"
+                :rate-multiplier="option.rate"
+                :user-rate-multiplier="option.userRate"
+                :description="option.description"
+                :selected="
+                  selectedKeyForGroup?.group_id === option.value ||
+                  (!selectedKeyForGroup?.group_id && option.value === null)
+                "
+              />
+            </button>
+            <!-- Empty state when search has no results -->
+            <div v-if="filteredGroupOptions.length === 0" class="py-4 text-center text-sm text-gray-400 dark:text-gray-500">
+              {{ t('keys.noGroupFound') }}
+            </div>
           </div>
         </div>
-      </div>
+      </MotionTransition>
     </Teleport>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-	import { ref, reactive, computed, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
+import { useLocaleRefresh } from '@/composables/useLocaleRefresh'
+import Skeleton from '@/components/common/Skeleton.vue'
+import MotionTransition from '@/components/common/MotionTransition.vue'
+	import { watch, ref, reactive, computed, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
 	import { useI18n } from 'vue-i18n'
 	import { useRoute } from 'vue-router'
 	import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useClipboard } from '@/composables/useClipboard'
+import { COPY_FEEDBACK_MS } from '@/constants/ui'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
 
 const { t } = useI18n()
-import { keysAPI, authAPI, usageAPI, userGroupsAPI, dataSharingAPI } from '@/api'
+import { keysAPI, authAPI, usageAPI, userGroupsAPI } from '@/api'
+import { teamAPI } from '@/api/team'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import DataTable from '@/components/common/DataTable.vue'
@@ -1416,11 +1244,17 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 	import EmptyState from '@/components/common/EmptyState.vue'
 	import Select from '@/components/common/Select.vue'
+	import FilterDropdown from '@/components/common/FilterDropdown.vue'
+	import FilterField from '@/components/common/FilterField.vue'
 	import Toggle from '@/components/common/Toggle.vue'
 	import SearchInput from '@/components/common/SearchInput.vue'
+	import RuleListEditor from '@/components/common/RuleListEditor.vue'
+	import ModelMappingEditor from '@/components/common/ModelMappingEditor.vue'
 	import Icon from '@/components/icons/Icon.vue'
 	import KeyActionMenu from '@/components/keys/KeyActionMenu.vue'
 	import UseKeyModal from '@/components/keys/UseKeyModal.vue'
+	import ModelRedirectHelp from '@/components/keys/ModelRedirectHelp.vue'
+	import TfCliImportDialog from '@/components/keys/TfCliImportDialog.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 	import GroupBadge from '@/components/common/GroupBadge.vue'
 	import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
@@ -1433,18 +1267,27 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	  CreateApiKeyRequest,
 	  Group,
 	  PublicSettings,
-	  GroupPlatform,
 	  UpdateApiKeyRequest
 	} from '@/types'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
-import type { DataShareNotice } from '@/api/dataSharing'
 import { formatDateTime } from '@/utils/format'
+import {
+  KEY_REDIRECT_RULES,
+  firstModelMappingIssue,
+  mappingRowsToRecord,
+  validateModelMappingRows,
+  type ModelMappingRow
+} from '@/utils/modelMappingRules'
+import { resolveProviderBrand } from '@/utils/providerBrand'
+import { getFloatingPanelPosition } from '@/utils/floatingPanel'
+import { getUserDisplayRateMultiplier } from '@/utils/userRatePreview'
 import {
   buildCcSwitchImportDeeplink,
   buildCcSwitchUsageScript,
   type CcSwitchClientType
 } from '@/utils/ccswitchImport'
+import { availableClients, CLIENT_LABELS, clientProtocol, modelsForProtocol, groupForKeyConfig } from '@/utils/clientConfig'
 
 // Helper to format date for datetime-local input
 const formatDateTimeLocal = (isoDate: string): string => {
@@ -1454,21 +1297,17 @@ const formatDateTimeLocal = (isoDate: string): string => {
 }
 
 interface GroupOption {
+  search_terms?: string[]
   value: number
   label: string
   description: string | null
   displayBrand: string | null
   rate: number
   userRate: number | null
-  peakRateEnabled: boolean
-  peakStart: string
-  peakEnd: string
-  peakRateMultiplier: number
-  platform: GroupPlatform
-  dataSharingEnabled?: boolean
 }
 
 const appStore = useAppStore()
+const authStore = useAuthStore()
 const route = useRoute()
 const scope = ref<DataScope>(route?.query?.scope === 'team' ? 'team' : 'personal')
 const onboardingStore = useOnboardingStore()
@@ -1486,12 +1325,61 @@ const formatBalancePair = (
   return `${formatBalanceAmount(used, { fractionDigits: usedDigits })}${separator}${formatBalanceAmount(limit, { fractionDigits: limitDigits })}`
 }
 
+// COMPOSITE_GROUP_PREVIEW_LIMIT 是列表中复合 Key 直接展示的映射胶囊数量上限。
+const COMPOSITE_GROUP_PREVIEW_LIMIT = 4
+
+// visibleCompositeGroups 返回表格中需要直接展示的复合映射。
+// 比预览上限多一条时展示全部映射。
+const visibleCompositeGroups = (row: ApiKey) => {
+  const groups = row.composite_groups ?? []
+  if (groups.length <= COMPOSITE_GROUP_PREVIEW_LIMIT + 1) {
+    return groups
+  }
+  return groups.slice(0, COMPOSITE_GROUP_PREVIEW_LIMIT)
+}
+
+// compositeGroupChipClass 返回复合映射胶囊的配色，与 GroupBadge 共用分组展示品牌的色板。
+// 未配置展示品牌时使用中性底色和内描边，与普通分组徽章保持一致。
+const compositeGroupChipClass = (displayBrand?: string | null) => {
+  const brand = displayBrand?.trim()
+  if (!brand) {
+    return 'ring-1 ring-inset bg-gray-100 text-gray-900 ring-gray-200 dark:bg-dark-800 dark:text-dark-50 dark:ring-dark-600'
+  }
+  return `ring-1 ring-inset ${resolveProviderBrand(brand).badgeClass}`
+}
+
+// concurrencyTone 按 Key 并发上限的占用比例取颜色：用满为红，达到八成为琥珀，其余为绿点灰字。
+const concurrencyTone = (row: ApiKey) => {
+  const current = row.current_concurrency ?? 0
+  const limit = row.concurrency_limit ?? 0
+  if (limit > 0 && current >= limit) {
+    return { dot: 'bg-red-500', text: 'font-medium text-red-600 dark:text-red-400' }
+  }
+  if (limit > 0 && current >= limit * 0.8) {
+    return { dot: 'bg-amber-500', text: 'font-medium text-amber-600 dark:text-amber-400' }
+  }
+  return { dot: 'bg-emerald-500', text: 'text-gray-500 dark:text-dark-300' }
+}
+
+// concurrencyTitle 返回并发标记的悬停说明。
+const concurrencyTitle = (row: ApiKey) => {
+  const current = row.current_concurrency ?? 0
+  const limit = row.concurrency_limit ?? 0
+  return limit > 0
+    ? t('keys.concurrencyInUse', { current, limit })
+    : t('keys.concurrencyInUseUnlimited', { current })
+}
+
+// hiddenCompositeGroupCount 返回被折叠的复合映射数量。
+const hiddenCompositeGroupCount = (row: ApiKey) => {
+  return (row.composite_groups?.length ?? 0) - visibleCompositeGroups(row).length
+}
+
 const allColumns = computed<Column[]>(() => [
   { key: 'name', label: t('common.name'), sortable: true },
   { key: 'id', label: t('keys.id'), sortable: true },
   { key: 'key', label: t('keys.apiKey'), sortable: false },
   { key: 'group', label: t('keys.group'), sortable: false },
-  { key: 'current_concurrency', label: t('keys.currentConcurrency'), sortable: true },
   { key: 'usage', label: t('keys.usage'), sortable: true },
   { key: 'rate_limit', label: t('keys.rateLimitColumn'), sortable: false },
   { key: 'expires_at', label: t('keys.expiresAt'), sortable: true },
@@ -1533,7 +1421,7 @@ const loadSavedColumns = () => {
         )
         .forEach((key) => hiddenColumns.add(key))
       const rawStoredVersion = Number(localStorage.getItem(COLUMN_SETTINGS_VERSION_KEY) ?? '1')
-      // 版本值被损坏时按最旧版处理，避免新的低频列意外显示。
+      // 无效版本值按版本 1 处理，低频列按版本迁移规则隐藏。
       const storedVersion = Number.isInteger(rawStoredVersion) && rawStoredVersion >= 1
         ? rawStoredVersion
         : 1
@@ -1591,7 +1479,7 @@ const formGroups = ref<Group[]>([])
 const billingSubscriptions = ref<ApiKeyBillingSubscriptionOption[]>([])
 const billingOptionsLoading = ref(false)
 const formGroupsLoading = ref(false)
-// 首次 Key 请求开始前也保持加载态，避免公共设置请求期间误显示空列表。
+// 加载态从公共设置请求开始，持续到首次 Key 请求完成。
 const loading = ref(true)
 const usageLoading = ref(false)
 const submitting = ref(false)
@@ -1599,6 +1487,19 @@ const now = ref(new Date())
 let resetTimer: ReturnType<typeof setInterval> | null = null
 const usageStats = ref<Record<string, BatchApiKeyUsageStats>>({})
 const userGroupRates = ref<Record<number, number>>({})
+const teamRateOwnerID = ref<number | null>(null)
+// 个人密钥和本人付款的团队密钥按查看者与分组计算预览倍率。
+const displayUserGroupRates = computed<Record<number, number>>(() => {
+  if (scope.value === 'team' && teamRateOwnerID.value !== authStore.user?.id) {
+    return userGroupRates.value
+  }
+  return Object.fromEntries(
+    Object.entries(userGroupRates.value).map(([groupID, rate]) => [
+      groupID,
+      getUserDisplayRateMultiplier(authStore.user?.id, Number(groupID), rate),
+    ])
+  )
+})
 
 const pagination = ref({
   page: 1,
@@ -1615,18 +1516,21 @@ const sortState = ref({
 const filterSearch = ref('')
 const filterStatus = ref('')
 const filterGroupId = ref<string | number>('')
-const showFilterDropdown = ref(false)
-const filterDropdownRef = ref<HTMLElement | null>(null)
 
 const showCreateModal = ref(false)
 const showEditModal = ref(false)
 const showDeleteDialog = ref(false)
+const rotationKey = ref<ApiKey | null>(null)
+const rotatedKey = ref<ApiKey | null>(null)
+const rotatingKey = ref(false)
 const showResetQuotaDialog = ref(false)
 const showResetRateLimitDialog = ref(false)
 const showUseKeyModal = ref(false)
+const showTfCliImportDialog = ref(false)
 const showCcsClientSelect = ref(false)
 const showColumnDropdown = ref(false)
 const pendingCcsRow = ref<ApiKey | null>(null)
+const tfImportKey = ref<ApiKey | null>(null)
 const selectedKey = ref<ApiKey | null>(null)
 const actionMenuKey = ref<ApiKey | null>(null)
 const actionMenuPosition = ref<{ top: number; left: number } | null>(null)
@@ -1639,9 +1543,7 @@ const columnDropdownRef = ref<HTMLElement | null>(null)
 const dropdownPosition = ref<{ top?: number; bottom?: number; left: number } | null>(null)
 const groupButtonRefs = ref<Map<number, HTMLElement>>(new Map())
 let abortController: AbortController | null = null
-let dataSharingCountdownTimer: number | null = null
 let compositeBindingSequence = 0
-let modelMappingSequence = 0
 let formGroupsRequestID = 0
 
 // 新建本地映射行时使用稳定 ID，排序不会导致输入框重建。
@@ -1649,31 +1551,6 @@ const newCompositeBinding = (groupId: number | null = null, prefix = '') => ({
   local_id: ++compositeBindingSequence,
   group_id: groupId,
   prefix
-})
-
-// 模型重定向行使用稳定 ID，输入校验更新时不会重建相邻输入框。
-const newModelMappingRow = (source = '', target = '') => ({
-  local_id: ++modelMappingSequence,
-  source,
-  target
-})
-
-const dataSharingNoticeDialog = ref<{
-  show: boolean
-  loading: boolean
-  countdown: number
-  notice: DataShareNotice | null
-  key: ApiKey | null
-  targetGroupId: number | null
-  mode: 'row' | 'form' | null
-}>({
-  show: false,
-  loading: false,
-  countdown: 0,
-  notice: null,
-  key: null,
-  targetGroupId: null,
-  mode: null
 })
 
 // 获取当前正在切换分组的 API Key。
@@ -1699,7 +1576,7 @@ const formData = ref({
   fast_mode_policy: 'follow_request' as ApiKeyFastModePolicy,
   billing_mode: 'auto' as ApiKeyBillingMode,
   preferred_subscription_id: null as number | null,
-  model_mapping_rows: [] as Array<ReturnType<typeof newModelMappingRow>>,
+  model_mapping_rows: [] as ModelMappingRow[],
   use_custom_key: false,
   custom_key: '',
   enable_ip_restriction: false,
@@ -1710,82 +1587,38 @@ const formData = ref({
   quota: null as number | null,
   // Rate limit settings
   enable_rate_limit: false,
+  concurrency_limit: 0,
+  rpm_limit: 0,
   rate_limit_5h: null as number | null,
   rate_limit_1d: null as number | null,
   rate_limit_7d: null as number | null,
   enable_expiration: false,
   expiration_preset: '30' as '7' | '30' | '90' | 'custom',
   expiration_date: '',
-  fallback_to_default_group_when_unavailable: true
+  fallback_when_group_unavailable: true
 })
 
-type ModelMappingRowError = { source?: string; target?: string }
+const MODEL_REDIRECT_MAX_RULES = 100
 
 // 前端与后端共享相同的大小写敏感、单尾通配符和长度约束。
-const modelMappingRowErrors = computed<Record<number, ModelMappingRowError>>(() => {
-  const errors: Record<number, ModelMappingRowError> = {}
-  const sourceCounts = new Map<string, number>()
-  for (const row of formData.value.model_mapping_rows) {
-    const source = row.source.trim()
-    if (source) sourceCounts.set(source, (sourceCounts.get(source) ?? 0) + 1)
-  }
+const modelMappingIssues = computed(() =>
+  validateModelMappingRows(formData.value.model_mapping_rows, KEY_REDIRECT_RULES)
+)
 
-  for (const row of formData.value.model_mapping_rows) {
-    const source = row.source.trim()
-    const target = row.target.trim()
-    const rowError: ModelMappingRowError = {}
-    if (!source) {
-      rowError.source = t('keys.modelRedirect.sourceRequired')
-    } else if ([...source].length > 100) {
-      rowError.source = t('keys.modelRedirect.nameTooLong')
-    } else {
-      const wildcardCount = (source.match(/\*/g) ?? []).length
-      if (wildcardCount > 1 || (wildcardCount === 1 && !source.endsWith('*'))) {
-        rowError.source = t('keys.modelRedirect.sourceWildcardInvalid')
-      } else if ((sourceCounts.get(source) ?? 0) > 1) {
-        rowError.source = t('keys.modelRedirect.duplicateSource')
-      }
-    }
-
-    if (!target) {
-      rowError.target = t('keys.modelRedirect.targetRequired')
-    } else if ([...target].length > 100) {
-      rowError.target = t('keys.modelRedirect.nameTooLong')
-    } else if (target.includes('*')) {
-      rowError.target = t('keys.modelRedirect.targetWildcardInvalid')
-    } else if (source && source === target) {
-      rowError.target = t('keys.modelRedirect.selfMapping')
-    }
-    if (rowError.source || rowError.target) errors[row.local_id] = rowError
-  }
-  return errors
-})
+const modelMappingFieldErrors = computed(() =>
+  modelMappingIssues.value.map((issue) => ({
+    from: issue.from ? t(`keys.modelRedirect.${issue.from}`) : undefined,
+    to: issue.to ? t(`keys.modelRedirect.${issue.to}`) : undefined
+  }))
+)
 
 const modelMappingFormError = computed(() => {
-  if (formData.value.model_mapping_rows.length > 100) {
+  if (formData.value.model_mapping_rows.length > MODEL_REDIRECT_MAX_RULES) {
     return t('keys.modelRedirect.tooManyRules')
   }
-  for (const row of formData.value.model_mapping_rows) {
-    const error = modelMappingRowErrors.value[row.local_id]
-    if (error?.source) return error.source
-    if (error?.target) return error.target
-  }
-  return ''
+  const issue = firstModelMappingIssue(modelMappingIssues.value)
+  return issue ? t(`keys.modelRedirect.${issue}`) : ''
 })
-
-const addModelMappingRow = () => {
-  if (formData.value.model_mapping_rows.length >= 100) return
-  formData.value.model_mapping_rows.push(newModelMappingRow())
-}
-
-const removeModelMappingRow = (index: number) => {
-  formData.value.model_mapping_rows.splice(index, 1)
-}
-
-const buildModelMappingPayload = (): Record<string, string> =>
-  Object.fromEntries(
-    formData.value.model_mapping_rows.map((row) => [row.source.trim(), row.target.trim()])
-  )
 
 // 自定义Key验证
 const customKeyError = computed(() => {
@@ -1877,15 +1710,7 @@ const resetKeyFilters = () => {
   filterGroupId.value = ''
   filterStatus.value = ''
   pagination.value.page = 1
-  showFilterDropdown.value = false
   loadApiKeys()
-}
-
-const handleFilterClickOutside = (event: MouseEvent) => {
-  const target = event.target
-  if (target instanceof Node && filterDropdownRef.value?.contains(target)) return
-  if (target instanceof Element && target.closest('.select-dropdown-portal')) return
-  showFilterDropdown.value = false
 }
 
 const onFilterChange = () => {
@@ -1903,21 +1728,16 @@ const onStatusFilterChange = (value: string | number | boolean | null) => {
   onFilterChange()
 }
 
-// 用户侧分组选项只投影选择所需信息，不传递管理员使用的容量数据。
+// 用户侧分组选项包含名称、描述、品牌和倍率。
 const buildGroupOptions = (source: Group[]) =>
   source.map((group) => ({
     value: group.id,
-    label: group.name,
+    label: group.display_name || group.name,
+    search_terms: group.search_terms,
     description: group.description,
     displayBrand: group.display_brand?.trim() || null,
     rate: group.rate_multiplier,
-    userRate: userGroupRates.value[group.id] ?? null,
-    peakRateEnabled: group.peak_rate_enabled,
-    peakStart: group.peak_start,
-    peakEnd: group.peak_end,
-    peakRateMultiplier: group.peak_rate_multiplier,
-    platform: group.platform,
-    dataSharingEnabled: group.data_sharing_enabled
+    userRate: displayUserGroupRates.value[group.id] ?? null,
   }))
 
 // 指定订阅时仅使用服务端返回的权限与套餐分组交集。
@@ -1951,8 +1771,7 @@ const removeCompositeBinding = (index: number) => {
   formData.value.composite_groups.splice(index, 1)
 }
 
-const moveCompositeBinding = (index: number, offset: -1 | 1) => {
-  const target = index + offset
+const moveCompositeBinding = (index: number, target: number) => {
   if (target < 0 || target >= formData.value.composite_groups.length) return
   const [binding] = formData.value.composite_groups.splice(index, 1)
   if (binding) formData.value.composite_groups.splice(target, 0, binding)
@@ -1993,7 +1812,7 @@ const filteredGroupOptions = computed(() => {
   const query = groupSearchQuery.value.trim().toLowerCase()
   if (!query) return allGroupOptions.value
   return allGroupOptions.value.filter((opt) => {
-    return opt.label.toLowerCase().includes(query) ||
+    return opt.search_terms?.some(text => text.toLowerCase().includes(query)) || opt.label.toLowerCase().includes(query) ||
       (opt.displayBrand && opt.displayBrand.toLowerCase().includes(query)) ||
       (opt.description && opt.description.toLowerCase().includes(query))
   })
@@ -2018,7 +1837,7 @@ const onBillingModeChange = (value: string | number | boolean | null) => {
     return
   }
 
-  // 选定订阅后再裁剪不兼容分组，避免丢失仍可用的现有映射。
+  // 选定订阅后按兼容性裁剪分组，仍可用的映射继续保留。
   formData.value.preferred_subscription_id = null
   formGroups.value = []
 }
@@ -2044,7 +1863,7 @@ const copyToClipboard = async (text: string, keyId: number) => {
     copiedKeyId.value = keyId
     setTimeout(() => {
       copiedKeyId.value = null
-    }, 800)
+    }, COPY_FEEDBACK_MS)
   }
 }
 
@@ -2129,7 +1948,7 @@ const loadGroups = async () => {
   try {
     const available = await userGroupsAPI.getAvailable(scope.value)
     groups.value = available
-    // 自动与余额模式沿用用户原有分组，避免表单打开时的重复请求清空已有选择。
+    // 自动与余额模式使用用户已选分组，表单打开时的重复请求也保留该选择。
     if (formData.value.billing_mode !== 'subscription') {
       formGroups.value = available
     }
@@ -2185,8 +2004,18 @@ const loadBillingOptions = async () => {
 }
 
 const loadUserGroupRates = async () => {
+  const requestedScope = scope.value
   try {
-    userGroupRates.value = await userGroupsAPI.getUserGroupRates(scope.value)
+    // 团队倍率归付款的 owner，身份查询失败时使用接口返回的倍率。
+    const [rates, ownerID] = await Promise.all([
+      userGroupsAPI.getUserGroupRates(requestedScope),
+      authStore.user?.id === 233 && requestedScope === 'team'
+        ? teamAPI.current().then((context) => context.owner.user_id).catch(() => null)
+        : Promise.resolve(null),
+    ])
+    if (scope.value !== requestedScope) return
+    userGroupRates.value = rates
+    teamRateOwnerID.value = ownerID
   } catch (error) {
     console.error('Failed to load user group rates:', error)
   }
@@ -2209,6 +2038,16 @@ const openUseKeyModal = (key: ApiKey) => {
 const closeUseKeyModal = () => {
   showUseKeyModal.value = false
   selectedKey.value = null
+}
+
+const openTfCliImportDialog = (key: ApiKey) => {
+  tfImportKey.value = key
+  showTfCliImportDialog.value = true
+}
+
+const closeTfCliImportDialog = () => {
+  showTfCliImportDialog.value = false
+  tfImportKey.value = null
 }
 
 const handlePageChange = (page: number) => {
@@ -2252,7 +2091,7 @@ const editKey = (key: ApiKey) => {
     preferred_subscription_id: key.preferred_subscription_id ?? null,
     model_mapping_rows: Object.entries(key.model_mapping ?? {})
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([source, target]) => newModelMappingRow(source, target)),
+      .map(([from, to]) => ({ from, to })),
     use_custom_key: false,
     custom_key: '',
     enable_ip_restriction: hasIPRestriction,
@@ -2261,13 +2100,15 @@ const editKey = (key: ApiKey) => {
     enable_quota: key.quota > 0,
     quota: key.quota > 0 ? key.quota : null,
     enable_rate_limit: (key.rate_limit_5h > 0) || (key.rate_limit_1d > 0) || (key.rate_limit_7d > 0),
+    concurrency_limit: key.concurrency_limit ?? 0,
+    rpm_limit: key.rpm_limit ?? 0,
     rate_limit_5h: key.rate_limit_5h || null,
     rate_limit_1d: key.rate_limit_1d || null,
     rate_limit_7d: key.rate_limit_7d || null,
     enable_expiration: hasExpiration,
     expiration_preset: 'custom',
     expiration_date: key.expires_at ? formatDateTimeLocal(key.expires_at) : '',
-    fallback_to_default_group_when_unavailable: key.fallback_to_default_group_when_unavailable ?? false
+    fallback_when_group_unavailable: key.fallback_when_group_unavailable ?? false
   }
   formGroups.value = []
   showEditModal.value = true
@@ -2293,12 +2134,12 @@ const toggleKeyStatus = async (key: ApiKey) => {
       newStatus === 'active' ? t('keys.keyEnabledSuccess') : t('keys.keyDisabledSuccess')
     )
     loadApiKeys()
-  } catch (error) {
+  } catch {
     appStore.showError(t('keys.failedToUpdateStatus'))
   }
 }
 
-// 更多菜单使用视口坐标并传送到 body，避免被固定操作列的 overflow 裁切。
+// 更多菜单按视口坐标定位并挂载到 body，脱离固定操作列的裁剪区域。
 const openKeyActionMenu = (key: ApiKey, event: MouseEvent) => {
   if (actionMenuKey.value?.id === key.id) {
     closeKeyActionMenu()
@@ -2307,14 +2148,17 @@ const openKeyActionMenu = (key: ApiKey, event: MouseEvent) => {
   const target = event.currentTarget as HTMLElement | null
   if (!target) return
   const rect = target.getBoundingClientRect()
-  const width = 192
-  const height = publicSettings.value?.hide_ccs_import_button ? 102 : 142
-  const padding = 8
-  const left = Math.max(padding, Math.min(rect.right - width, window.innerWidth - width - padding))
-  let top = rect.bottom + 4
-  if (top + height > window.innerHeight - padding) top = Math.max(padding, rect.top - height - 4)
+  // 固定高菜单(高度随 CCS 导入项显隐):下方放不下即整体上翻;窄屏保持右缘对齐触发器。
+  const position = getFloatingPanelPosition(rect, window.innerWidth, window.innerHeight, {
+    maxWidth: 192,
+    fixedHeight: publicSettings.value?.hide_ccs_import_button ? 178 : 218,
+    viewportPadding: 8,
+    gap: 4,
+    pinLeftOnMobile: false
+  })
+  // fixedHeight 模式下 top 恒非空。
+  actionMenuPosition.value = { top: position.top ?? 8, left: position.left }
   actionMenuKey.value = key
-  actionMenuPosition.value = { top, left }
 }
 
 const closeKeyActionMenu = () => {
@@ -2334,25 +2178,21 @@ const openGroupSelector = (key: ApiKey) => {
     const buttonEl = groupButtonRefs.value.get(key.id)
     if (buttonEl) {
       const rect = buttonEl.getBoundingClientRect()
-      const dropdownEstHeight = 400 // 预估下拉框最大高度
-      const dropdownEstWidth = Math.min(380, window.innerWidth - 16)
-      const spaceBelow = window.innerHeight - rect.bottom
-      const spaceAbove = rect.top
-      // 夹取 left，避免窄屏下浮层超出视口右缘
-      const left = Math.max(8, Math.min(rect.left, window.innerWidth - dropdownEstWidth - 8))
-
-      if (spaceBelow < dropdownEstHeight && spaceAbove > spaceBelow) {
+      // 面板左缘对齐触发器,预估最大高度 400 决定翻转;窄屏面板近满宽,钉到视口左缘。
+      const position = getFloatingPanelPosition(rect, window.innerWidth, window.innerHeight, {
+        align: 'left',
+        maxWidth: 380,
+        viewportPadding: 8,
+        gap: 4,
+        maxHeightRatio: 1,
+        minComfortableHeight: 400
+      })
+      if (position.bottom !== null) {
         // 下方空间不足时向上弹出。
-        dropdownPosition.value = {
-          bottom: window.innerHeight - rect.top + 4,
-          left
-        }
+        dropdownPosition.value = { bottom: position.bottom, left: position.left }
       } else {
         // 默认向下弹出。
-        dropdownPosition.value = {
-          top: rect.bottom + 4,
-          left
-        }
+        dropdownPosition.value = { top: position.top ?? undefined, left: position.left }
       }
     }
     groupSelectorKeyId.value = key.id
@@ -2360,105 +2200,11 @@ const openGroupSelector = (key: ApiKey) => {
   }
 }
 
-const getGroupById = (groupId: number | null) => {
-  if (!groupId) return null
-  return groups.value.find(group => group.id === groupId) || null
-}
-
-const groupRequiresDataSharingNotice = (groupId: number | null) => {
-  return getGroupById(groupId)?.data_sharing_enabled === true
-}
-
-const clearDataSharingCountdown = () => {
-  if (dataSharingCountdownTimer) {
-    window.clearInterval(dataSharingCountdownTimer)
-    dataSharingCountdownTimer = null
-  }
-}
-
-const startDataSharingCountdown = () => {
-  clearDataSharingCountdown()
-  dataSharingNoticeDialog.value.countdown = 10
-  dataSharingCountdownTimer = window.setInterval(() => {
-    dataSharingNoticeDialog.value.countdown = Math.max(0, dataSharingNoticeDialog.value.countdown - 1)
-    if (dataSharingNoticeDialog.value.countdown <= 0) {
-      clearDataSharingCountdown()
-    }
-  }, 1000)
-}
-
-const closeDataSharingNotice = () => {
-  clearDataSharingCountdown()
-  dataSharingNoticeDialog.value = {
-    show: false,
-    loading: false,
-    countdown: 0,
-    notice: null,
-    key: null,
-    targetGroupId: null,
-    mode: null
-  }
-}
-
-const openDataSharingNotice = async (
-  targetGroupId: number,
-  mode: 'row' | 'form',
-  key: ApiKey | null = null
-) => {
-  dataSharingNoticeDialog.value = {
-    show: true,
-    loading: true,
-    countdown: 10,
-    notice: null,
-    key,
-    targetGroupId,
-    mode
-  }
-  startDataSharingCountdown()
-  try {
-    const notice = await dataSharingAPI.getNotice(targetGroupId)
-    dataSharingNoticeDialog.value.notice = notice
-  } catch (error) {
-    closeDataSharingNotice()
-    appStore.showError('加载数据共享须知失败')
-  } finally {
-    dataSharingNoticeDialog.value.loading = false
-  }
-}
-
-const confirmDataSharingNotice = async () => {
-  const state = dataSharingNoticeDialog.value
-  if (!state.notice || !state.targetGroupId || state.countdown > 0) return
-
-  state.loading = true
-  try {
-    await dataSharingAPI.confirmNotice(state.targetGroupId, state.notice.version)
-    if (state.mode === 'row' && state.key) {
-      await submitGroupChange(state.key, state.targetGroupId, {
-        data_sharing_confirmed: true,
-        data_sharing_notice_version: state.notice.version
-      })
-    } else if (state.mode === 'form') {
-      await submitKeyForm({
-        data_sharing_confirmed: true,
-        data_sharing_notice_version: state.notice.version
-      })
-    }
-    closeDataSharingNotice()
-  } catch (error: any) {
-    const errorMsg = error?.message || '确认数据共享须知失败'
-    appStore.showError(errorMsg)
-  } finally {
-    state.loading = false
-  }
-}
-
 const submitGroupChange = async (
   key: ApiKey,
-  newGroupId: number | null,
-  consent?: { data_sharing_confirmed: boolean; data_sharing_notice_version: number }
+  newGroupId: number | null
 ) => {
-  await keysAPI.update(key.id, { group_id: newGroupId, ...consent })
+  await keysAPI.update(key.id, { group_id: newGroupId })
   appStore.showSuccess(t('keys.groupChangedSuccess'))
   loadApiKeys()
 }
@@ -2467,14 +2213,10 @@ const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
   groupSelectorKeyId.value = null
   dropdownPosition.value = null
   if (key.group_id === newGroupId) return
-  if (groupRequiresDataSharingNotice(newGroupId)) {
-    await openDataSharingNotice(newGroupId!, 'row', key)
-    return
-  }
 
   try {
     await submitGroupChange(key, newGroupId)
-  } catch (error) {
+  } catch {
     appStore.showError(t('keys.failedToChangeGroup'))
   }
 }
@@ -2494,6 +2236,38 @@ const closeGroupSelector = (event: MouseEvent) => {
 const confirmDelete = (key: ApiKey) => {
   selectedKey.value = key
   showDeleteDialog.value = true
+}
+
+const confirmRotate = (key: ApiKey) => {
+  rotationKey.value = key
+}
+
+const cancelRotate = () => {
+  if (!rotatingKey.value) rotationKey.value = null
+}
+
+const handleRotate = async () => {
+  if (!rotationKey.value || rotatingKey.value) return
+  rotatingKey.value = true
+  try {
+    const updated = await keysAPI.rotate(rotationKey.value.id)
+    // 先将页面凭据替换为新值，列表刷新失败时复制功能也能取得新凭据。
+    apiKeys.value = apiKeys.value.map(key =>
+      key.id === updated.id ? { ...key, key: updated.key, updated_at: updated.updated_at } : key
+    )
+    if (selectedKey.value?.id === updated.id) selectedKey.value = updated
+    if (copiedKeyId.value === updated.id) copiedKeyId.value = null
+    rotationKey.value = null
+    rotatedKey.value = updated
+    void loadApiKeys()
+  } catch (error: unknown) {
+    const message = error instanceof Error
+      ? error.message
+      : (error as { message?: string } | null)?.message
+    appStore.showError(message || t('keys.failedToRotate'))
+  } finally {
+    rotatingKey.value = false
+  }
 }
 
 const buildKeyFormPayload = () => {
@@ -2539,13 +2313,11 @@ const buildKeyFormPayload = () => {
     expiresInDays,
     expiresAt,
     rateLimitData,
-    modelMapping: buildModelMappingPayload()
+    modelMapping: mappingRowsToRecord(formData.value.model_mapping_rows)
   }
 }
 
-const submitKeyForm = async (
-  consent?: { data_sharing_confirmed: boolean; data_sharing_notice_version: number }
-) => {
+const submitKeyForm = async () => {
   const { ipWhitelist, ipBlacklist, quota, expiresInDays, expiresAt, rateLimitData, modelMapping } = buildKeyFormPayload()
   submitting.value = true
   try {
@@ -2566,11 +2338,12 @@ const submitKeyForm = async (
         ip_blacklist: ipBlacklist,
         quota: quota,
         expires_at: expiresAt,
+        concurrency_limit: Number(formData.value.concurrency_limit || 0),
+        rpm_limit: Number(formData.value.rpm_limit || 0),
         rate_limit_5h: rateLimitData.rate_limit_5h,
         rate_limit_1d: rateLimitData.rate_limit_1d,
         rate_limit_7d: rateLimitData.rate_limit_7d,
-        fallback_to_default_group_when_unavailable: formData.value.fallback_to_default_group_when_unavailable,
-        ...consent
+        fallback_when_group_unavailable: formData.value.fallback_when_group_unavailable
       }
       const originalBillingMode = selectedKey.value.billing_mode ?? 'auto'
       const originalPreferredSubscriptionID = selectedKey.value.preferred_subscription_id ?? null
@@ -2612,11 +2385,12 @@ const submitKeyForm = async (
         ip_blacklist: ipBlacklist,
         quota,
         expires_in_days: expiresInDays,
+        concurrency_limit: Number(formData.value.concurrency_limit || 0),
+        rpm_limit: Number(formData.value.rpm_limit || 0),
         rate_limit_5h: rateLimitData.rate_limit_5h,
         rate_limit_1d: rateLimitData.rate_limit_1d,
         rate_limit_7d: rateLimitData.rate_limit_7d,
-        fallback_to_default_group_when_unavailable: formData.value.fallback_to_default_group_when_unavailable,
-        ...consent
+        fallback_when_group_unavailable: formData.value.fallback_when_group_unavailable
       }
       await keysAPI.createWithPayload(payload)
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
@@ -2649,6 +2423,13 @@ const onScopeChange = () => {
 }
 
 const handleSubmit = async () => {
+  // 空输入按 0 提交，其余值需满足数据库整数范围。
+  const requestLimits = [formData.value.concurrency_limit, formData.value.rpm_limit]
+  if (requestLimits.some(value => !Number.isInteger(Number(value || 0)) || Number(value || 0) < 0 || Number(value || 0) > 2147483647)) {
+    appStore.showError(t('keys.requestLimitsInvalid'))
+    return
+  }
+
 	if (modelMappingFormError.value) {
 		appStore.showError(modelMappingFormError.value)
 		return
@@ -2680,26 +2461,6 @@ const handleSubmit = async () => {
       appStore.showError(customKeyError.value)
       return
     }
-  }
-
-	const existingCompositeGroups = new Set(
-		selectedKey.value?.is_composite
-			? (selectedKey.value.composite_groups || []).map((binding) => binding.group_id)
-			: []
-	)
-	const newDataSharingGroup = formData.value.is_composite
-		? formData.value.composite_groups.find(
-			(binding) => !existingCompositeGroups.has(binding.group_id!) && groupRequiresDataSharingNotice(binding.group_id)
-		)
-		: null
-	const changingGroup = !showEditModal.value || selectedKey.value?.group_id !== formData.value.group_id
-  if (newDataSharingGroup?.group_id) {
-		await openDataSharingNotice(newDataSharingGroup.group_id, 'form', selectedKey.value)
-		return
-	}
-	if (!formData.value.is_composite && changingGroup && groupRequiresDataSharingNotice(formData.value.group_id)) {
-		await openDataSharingNotice(formData.value.group_id!, 'form', selectedKey.value)
-    return
   }
 
   await submitKeyForm()
@@ -2749,13 +2510,15 @@ const closeModals = () => {
     enable_quota: false,
     quota: null,
     enable_rate_limit: false,
+    concurrency_limit: 0,
+    rpm_limit: 0,
     rate_limit_5h: null,
     rate_limit_1d: null,
     rate_limit_7d: null,
     enable_expiration: false,
     expiration_preset: '30',
     expiration_date: '',
-    fallback_to_default_group_when_unavailable: true
+    fallback_when_group_unavailable: true
   }
 }
 
@@ -2820,29 +2583,39 @@ const resetRateLimitUsage = async () => {
   }
 }
 
+// Key 内嵌分组缺少目录时，从已加载的可见分组中读取。
+const groupWithModels = (key: ApiKey | null): Group | undefined => {
+  if (!key?.group_id) return undefined
+  const available = groups.value.find(group => group.id === key.group_id)
+  return groupForKeyConfig(available ? { ...key.group, ...available } : key.group ?? undefined, key.model_mapping)
+}
+const selectedKeyGroup = computed(() => groupWithModels(selectedKey.value))
+const selectedCompositeGroups = computed(() => (selectedKey.value?.composite_groups ?? []).map(binding => ({
+  ...binding, group: groupForKeyConfig(groups.value.find(group => group.id === binding.group_id) ?? binding.group, selectedKey.value?.model_mapping),
+})))
+const ccClient = ref<CcSwitchClientType>('claude')
+const ccModel = ref('')
+const ccGroup = computed(() => groupWithModels(pendingCcsRow.value))
+const ccClientOptions = computed(() => availableClients(ccGroup.value?.allowed_protocols ?? []).filter(client => client !== 'opencode').map(client => ({ value: client, label: CLIENT_LABELS[client] })))
+const ccModelOptions = computed(() => {
+  const protocol = clientProtocol(ccClient.value, ccGroup.value?.allowed_protocols ?? [])
+  return protocol ? modelsForProtocol(ccGroup.value, protocol).map(model => ({ value: model, label: model })) : []
+})
+watch(ccClientOptions, options => { if (!options.some(option => option.value === ccClient.value)) ccClient.value = options[0]?.value as CcSwitchClientType ?? 'claude' })
+watch(ccModelOptions, options => { if (!options.some(option => option.value === ccModel.value)) ccModel.value = options[0]?.value ?? '' })
 const importToCcswitch = (row: ApiKey) => {
-  const platform = row.group?.platform || 'anthropic'
-
-  // Antigravity 平台需要先选择客户端。
-  if (platform === 'antigravity') {
-    pendingCcsRow.value = row
-    showCcsClientSelect.value = true
-    return
-  }
-
-  // 其他平台直接执行导入。
-  executeCcsImport(row, platform === 'gemini' ? 'gemini' : 'claude')
+  pendingCcsRow.value = row
+  showCcsClientSelect.value = true
 }
 
 const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType) => {
   const baseUrl = publicSettings.value?.api_base_url || window.location.origin
-  const platform = row.group?.platform || 'anthropic'
 
   const usageScript = buildCcSwitchUsageScript(baseUrl, balanceUnitName.value)
-  const providerName = (publicSettings.value?.site_name || 'sub2api').trim() || 'sub2api'
+  const providerName = (publicSettings.value?.site_name || 'tokenrouter').trim() || 'tokenrouter'
   const deeplink = buildCcSwitchImportDeeplink({
     baseUrl,
-    platform,
+    model: ccModel.value,
     clientType,
     providerName,
     apiKey: row.key,
@@ -2859,13 +2632,13 @@ const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType) => {
         appStore.showError(t('keys.ccSwitchNotInstalled'))
       }
     }, 100)
-  } catch (error) {
+  } catch {
     appStore.showError(t('keys.ccSwitchNotInstalled'))
   }
 }
 
 const handleCcsClientSelect = (clientType: CcSwitchClientType) => {
-  if (pendingCcsRow.value) {
+  if (pendingCcsRow.value && ccModelOptions.value.some(option => option.value === ccModel.value)) {
     executeCcsImport(pendingCcsRow.value, clientType)
   }
   showCcsClientSelect.value = false
@@ -2892,7 +2665,6 @@ function formatResetTime(resetAt: string | null): string {
 onMounted(async () => {
   loadSavedColumns()
   document.addEventListener('click', closeGroupSelector)
-  document.addEventListener('click', handleFilterClickOutside)
   resetTimer = setInterval(() => { now.value = new Date() }, 60000)
   await loadPublicSettings()
   await Promise.all([loadApiKeys(), loadGroups(), loadUserGroupRates(), loadBillingOptions(), loadFormGroups()])
@@ -2900,9 +2672,24 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('click', closeGroupSelector)
-  document.removeEventListener('click', handleFilterClickOutside)
   abortController?.abort()
-  clearDataSharingCountdown()
-  if (resetTimer) clearInterval(resetTimer)
+	if (resetTimer) clearInterval(resetTimer)
 })
+useLocaleRefresh(() => Promise.all([loadApiKeys(), loadGroups(), loadFormGroups(), loadBillingOptions(), loadPublicSettings()]))
 </script>
+
+<style scoped>
+/* 创建密钥弹窗的单行控件统一为 36px，多行文本域保留自然高度。
+   下拉触发器已由 .input 基线(min-h-9、py-1.5)提供同一尺寸，不再单列。 */
+.key-form-controls :deep(input.input),
+.key-form-controls :deep(.btn) {
+  height: 2.25rem;
+  min-height: 0;
+}
+
+.key-form-controls :deep(input.input),
+.key-form-controls :deep(.btn) {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+</style>

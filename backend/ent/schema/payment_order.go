@@ -10,13 +10,14 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
-	"github.com/TokenFlux/TokenRouter/internal/domain"
+
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 // PaymentOrder holds the schema definition for the PaymentOrder entity.
 //
 // 删除策略：硬删除
-// PaymentOrder 使用硬删除而非软删除，原因如下：
+// PaymentOrder 使用硬删除：
 //   - 订单通过 status 字段追踪完整生命周期，无需依赖软删除
 //   - 订单审计通过 PaymentAuditLog 表记录，删除前可归档
 //   - 减少查询复杂度，避免软删除过滤开销
@@ -115,7 +116,7 @@ func (PaymentOrder) Fields() []ent.Field {
 		field.Int64("plan_id").
 			Optional().
 			Nillable(),
-		field.JSON("plan_snapshot", domain.SubscriptionPlanSnapshot{}).
+		field.JSON("plan_snapshot", billing.SubscriptionPlanSnapshot{}).
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 		field.String("provider_instance_id").

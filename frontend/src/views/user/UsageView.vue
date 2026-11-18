@@ -1,7 +1,7 @@
 <template>
   <AppLayout>
-    <div class="space-y-6">
-      <UsageStatsCards :stats="usageStats" :show-account-cost="false" :show-standard-cost="false" />
+    <div class="space-y-4">
+      <UsageStatsCards :stats="usageStats" :show-provider-cost="false" :show-standard-cost="false" />
 
       <div class="space-y-4">
         <div class="card p-4">
@@ -23,7 +23,8 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <!-- 按请求 ID 筛选时只看统计卡和表格，分布图和趋势图隐藏，也不请求图表数据 -->
+        <div v-if="!filters.request_id" class="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <ModelDistributionChart
             v-model:metric="modelDistributionMetric"
             :model-stats="requestedModelStats"
@@ -31,7 +32,7 @@
             :show-source-toggle="false"
             :show-metric-toggle="true"
             :enable-breakdown="false"
-            :show-account-cost="false"
+            :show-provider-cost="false"
             :show-standard-cost="false"
             :start-date="startDate"
             :end-date="endDate"
@@ -43,14 +44,14 @@
             chart-type="bar"
             :show-metric-toggle="true"
             :enable-breakdown="false"
-            :show-account-cost="false"
+            :show-provider-cost="false"
             :show-standard-cost="false"
             :start-date="startDate"
             :end-date="endDate"
           />
         </div>
 
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div v-if="!filters.request_id" class="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <EndpointDistributionChart
             v-model:source="endpointDistributionSource"
             v-model:metric="endpointDistributionMetric"
@@ -70,7 +71,7 @@
           <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" :granularity="granularity" :show-standard-cost="false" />
         </div>
 
-        <div v-if="isTeamOwner" data-tour="team-member-usage-charts">
+        <div v-if="isTeamOwner && !filters.request_id" data-tour="team-member-usage-charts">
           <TeamMemberUsageCharts
             :series="teamMemberSeries"
             :loading="teamChartsLoading"
@@ -78,109 +79,99 @@
         </div>
       </div>
 
-      <div class="card p-4 sm:p-6">
-        <div class="flex items-center justify-between gap-3">
-          <div ref="filterPanelRef" class="relative shrink-0">
-            <button
-              type="button"
-              class="btn btn-secondary relative h-11 w-11 p-0"
-              :aria-expanded="showFilterDropdown"
-              :aria-label="t('common.filter')"
-              :title="t('common.filter')"
-              @click="showFilterDropdown = !showFilterDropdown"
-            >
-              <Icon name="filter" size="sm" />
-              <span v-if="activeFilterCount > 0" class="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-100 px-1.5 text-xs font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
-                {{ activeFilterCount }}
-              </span>
-            </button>
-
-            <div v-show="showFilterDropdown" class="absolute left-0 top-full z-[60] mt-2 max-h-[min(70vh,42rem)] w-[min(48rem,calc(100vw-3rem))] overflow-y-auto rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-dark-600 dark:bg-dark-900" @click.stop>
-              <div class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{{ t('common.filter') }}</div>
-              <div v-if="activeTab === 'errors'" class="flex flex-wrap items-end gap-4">
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
-              <label class="input-label">{{ t('usage.errors.keyName') }}</label>
-              <Select v-model="errorFilter.api_key_id" :options="errorKeyOptions" @change="applyErrorFilters" />
-            </div>
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
-              <label class="input-label">{{ t('usage.errors.model') }}</label>
-              <Select
-                v-model="errorFilter.model"
-                :options="errorModelOptions"
-                searchable
-                creatable
-                clearable
-                :placeholder="t('usage.errors.modelPlaceholder')"
-                @change="applyErrorFilters"
-              />
-            </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
-              <label class="input-label">{{ t('usage.errors.category') }}</label>
-              <Select v-model="errorFilter.category" :options="errorCategoryOptions" @change="applyErrorFilters" />
-            </div>
-            <div class="w-full sm:w-auto sm:min-w-[180px]">
-              <label class="input-label">{{ t('usage.errors.status') }}</label>
-              <Select v-model="errorFilter.status_code" :options="errorStatusOptions" @change="applyErrorFilters" />
-            </div>
-          </div>
-              <div v-else class="flex flex-wrap items-end gap-4">
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
-              <label class="input-label">{{ t('usage.apiKeyFilter') }}</label>
-              <Select v-model="filters.api_key_id" :options="apiKeyOptions" @change="applyFilters" />
-            </div>
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
-              <label class="input-label">{{ t('usage.model') }}</label>
-              <Select v-model="filters.model" :options="modelOptions" searchable @change="applyFilters" />
-            </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
-              <label class="input-label">{{ t('admin.usage.group') }}</label>
-              <Select v-model="filters.group_id" :options="groupOptions" searchable @change="applyFilters" />
-            </div>
-            <div class="w-full sm:w-auto sm:min-w-[180px]">
-              <label class="input-label">{{ t('usage.type') }}</label>
-              <Select v-model="filters.request_type" :options="requestTypeOptions" @change="applyFilters" />
-            </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
-              <label class="input-label">{{ t('admin.usage.billingType') }}</label>
-              <Select v-model="filters.billing_type" :options="billingTypeOptions" @change="applyFilters" />
-            </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
-              <label class="input-label">{{ t('admin.usage.billingMode') }}</label>
-              <Select v-model="filters.billing_mode" :options="billingModeOptions" @change="applyFilters" />
-            </div>
-              </div>
-            </div>
-          </div>
+      <div class="card p-4">
+        <div class="flex items-center justify-between gap-2">
+          <FilterDropdown :active-count="activeFilterCount" :columns="3" keep-mounted @reset="resetCurrentFilters">
+            <!-- 请求 ID 同时筛选使用记录和错误请求，生效后查询不限日期范围 -->
+            <RequestIdFilterField v-model="filters.request_id" @search="applyFilters" />
+            <template v-if="activeTab === 'errors'">
+              <FilterField :label="t('usage.errors.keyName')">
+                <Select v-model="errorFilter.api_key_id" :options="errorKeyOptions" @change="applyErrorFilters" />
+              </FilterField>
+              <FilterField :label="t('usage.errors.model')">
+                <Select
+                  v-model="errorFilter.model"
+                  :options="errorModelOptions"
+                  searchable
+                  creatable
+                  clearable
+                  :placeholder="t('usage.errors.modelPlaceholder')"
+                  @change="applyErrorFilters"
+                />
+              </FilterField>
+              <FilterField :label="t('usage.errors.category')">
+                <Select v-model="errorFilter.category" :options="errorCategoryOptions" @change="applyErrorFilters" />
+              </FilterField>
+              <FilterField :label="t('usage.errors.status')">
+                <Select v-model="errorFilter.status_code" :options="errorStatusOptions" @change="applyErrorFilters" />
+              </FilterField>
+            </template>
+            <template v-else>
+              <FilterField :label="t('usage.apiKeyFilter')">
+                <Select v-model="filters.api_key_id" :options="apiKeyOptions" @change="applyFilters" />
+              </FilterField>
+              <FilterField :label="t('usage.model')">
+                <Select v-model="filters.model" :options="modelOptions" searchable @change="applyFilters" />
+              </FilterField>
+              <FilterField :label="t('admin.usage.group')">
+                <Select v-model="filters.group_id" :options="groupOptions" searchable @change="applyFilters" />
+              </FilterField>
+              <FilterField :label="t('usage.type')">
+                <Select v-model="filters.request_type" :options="requestTypeOptions" @change="applyFilters" />
+              </FilterField>
+              <FilterField :label="t('admin.usage.billingType')">
+                <Select v-model="filters.billing_type" :options="billingTypeOptions" @change="applyFilters" />
+              </FilterField>
+              <FilterField :label="t('admin.usage.billingMode')">
+                <Select v-model="filters.billing_mode" :options="billingModeOptions" @change="applyFilters" />
+              </FilterField>
+              <FilterField :label="t('usage.compactionFilter')">
+                <Select v-model="filters.native_compaction_v2" :options="compactionOptions" @change="applyFilters" />
+              </FilterField>
+            </template>
+          </FilterDropdown>
 
           <div class="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" @click="refreshData" :disabled="activeTab === 'errors' ? errorLoading : loading" class="btn btn-secondary h-11 w-11 p-0" :title="t('common.refresh')">
-              <Icon name="refresh" size="sm" :class="(activeTab === 'errors' ? errorLoading : loading) ? 'animate-spin' : ''" />
+            <button type="button" @click="refreshData" :disabled="activeTab === 'errors' ? errorLoading : loading" class="btn btn-secondary btn-icon" :title="t('common.refresh')">
+              <Icon
+                name="refresh"
+                size="sm"
+                :class="(activeTab === 'errors' ? errorLoading : loading) ? 'animate-spin' : ''"
+              />
             </button>
             <div class="relative" ref="columnDropdownRef">
               <button
                 type="button"
                 @click="showColumnDropdown = !showColumnDropdown"
-                class="btn btn-secondary h-11 w-11 shrink-0 p-0"
+                class="btn btn-secondary shrink-0 btn-icon"
                 :title="t('admin.users.columnSettings')"
               >
                 <Icon name="grid" size="sm" />
                 <span class="hidden">{{ t('admin.users.columnSettings') }}</span>
               </button>
-              <div
-                v-if="showColumnDropdown"
-                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800"
-              >
-                <button
-                  v-for="col in currentToggleableColumns"
-                  :key="col.key"
-                  type="button"
-                  @click="toggleCurrentColumn(col.key)"
-                  class="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+              <MotionTransition name="dropdown-fade">
+                <div
+                  v-if="showColumnDropdown" :inert="!(showColumnDropdown) || undefined"
+                  class="dropdown right-0 top-full z-50 mt-1 max-h-menu w-48 overflow-y-auto"
                 >
-                  <span>{{ col.label }}</span>
-                  <Icon v-if="isCurrentColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
-                </button>
-              </div>
+                  <button
+                    v-for="col in currentToggleableColumns"
+                    :key="col.key"
+                    type="button"
+                    @click="toggleCurrentColumn(col.key)"
+                    class="dropdown-item justify-between"
+                  >
+                    <span>{{ col.label }}</span>
+                    <Icon
+                      v-if="isCurrentColumnVisible(col.key)"
+                      name="check"
+                      size="sm"
+                      class="text-primary-500"
+                      :animate-on-hover="false"
+                    />
+                  </button>
+                </div>
+              </MotionTransition>
             </div>
             <IpGeoBatchToolbar
               v-if="activeTab === 'usage'"
@@ -188,7 +179,7 @@
               inline
               @failed="handleIpGeoBatchFailed"
             />
-            <button v-if="activeTab !== 'errors'" type="button" @click="exportToCSV" :disabled="exporting" class="btn btn-primary h-11 whitespace-nowrap px-3 sm:px-4">
+            <button v-if="activeTab !== 'errors'" type="button" @click="exportToCSV" :disabled="exporting" class="btn btn-primary whitespace-nowrap px-3 sm:px-4">
               {{ exporting ? t('usage.exporting') : t('usage.exportCsv') }}
             </button>
           </div>
@@ -204,13 +195,16 @@
         </button>
       </div>
 
-      <div v-if="activeTab === 'usage'" data-tour="team-usage-records">
+      <!-- 表格与分页共用外框，底部分隔线和圆角由卡片统一收口。 -->
+      <div v-if="activeTab === 'usage'" v-content-reveal class="card overflow-hidden" data-tour="team-usage-records">
         <UsageTable
-          :data="usageLogs"
+          flat
+          column-order-storage-key="user-usage-column-order"
+          :data="displayedUsageLogs"
           :loading="loading"
           :columns="visibleColumns"
           :server-side-sort="true"
-          :show-account-billing="false"
+          :show-provider-billing="false"
           :show-standard-cost="false"
           :show-upstream-endpoint="false"
           :user-clickable="false"
@@ -250,15 +244,23 @@
 </template>
 
 <script setup lang="ts">
+import RequestIdFilterField from '@/components/common/RequestIdFilterField.vue'
+import { useLocaleRefresh } from '@/composables/useLocaleRefresh'
+import MotionTransition from '@/components/common/MotionTransition.vue'
+import { vContentReveal } from '@/directives/contentReveal'
+
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { keysAPI, usageAPI, userGroupsAPI } from '@/api'
 import { teamAPI, type TeamAPIKey, type TeamContext, type TeamMembership, type TeamUsageSummary } from '@/api/team'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import FilterDropdown from '@/components/common/FilterDropdown.vue'
+import FilterField from '@/components/common/FilterField.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
 import IpGeoBatchToolbar from '@/components/common/IpGeoBatchToolbar.vue'
@@ -270,9 +272,11 @@ import TeamMemberUsageCharts from '@/components/charts/TeamMemberUsageCharts.vue
 import Icon from '@/components/icons/Icon.vue'
 import UserErrorRequestsTable from '@/components/user/UserErrorRequestsTable.vue'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
-import { formatReasoningEffort } from '@/utils/format'
+import { formatReasoningEffortMapping } from '@/utils/format'
 import { getBillingModeLabel, getDisplayBillingMode as resolveDisplayBillingMode } from '@/utils/billingMode'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
+import { calculateUsageTps } from '@/utils/usageTps'
+import { getUserDisplayRateMultiplier } from '@/utils/userRatePreview'
 import type {
   EndpointStat,
   GroupStat,
@@ -280,6 +284,7 @@ import type {
   TrendDataPoint,
   UsageLog,
   UsageQueryParams,
+  UsageRequestType,
   UsageStatsResponse,
   UserErrorRequest,
 } from '@/types'
@@ -288,12 +293,25 @@ import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const authStore = useAuthStore()
 
 type DistributionMetric = 'tokens' | 'actual_cost'
 type EndpointSource = 'inbound' | 'upstream' | 'path'
 
 const usageStats = ref<UsageStatsResponse | null>(null)
 const usageLogs = ref<UsageLog[]>([])
+// 使用记录与 CSV 按付款用户选择倍率预览，金额字段使用查询结果。
+function getDisplayUsageRateMultiplier(log: UsageLog): number {
+  const viewerID = authStore.user?.id
+  if (log.user_id !== viewerID) return log.rate_multiplier
+  return getUserDisplayRateMultiplier(viewerID, log.group_id, log.rate_multiplier)
+}
+
+const displayedUsageLogs = computed(() => usageLogs.value.map((log) => {
+  const rate = getDisplayUsageRateMultiplier(log)
+  // 浮层用行对象判断悬停目标，展示记录需要先成为响应式对象。
+  return rate === log.rate_multiplier ? log : reactive({ ...log, rate_multiplier: rate })
+}))
 const trendData = ref<TrendDataPoint[]>([])
 const requestedModelStats = ref<ModelStat[]>([])
 const groupStats = ref<GroupStat[]>([])
@@ -323,11 +341,11 @@ const errorFilter = ref<{ model: string | null; category: string; api_key_id: nu
   api_key_id: null,
   status_code: null,
 })
-const showFilterDropdown = ref(false)
-const filterPanelRef = ref<HTMLElement | null>(null)
+// 请求 ID 两个标签页共用，错误请求标签页另外加上它。
 const activeFilterCount = computed(() => {
   const source = activeTab.value === 'errors' ? errorFilter.value : filters.value
-  return Object.entries(source).filter(([key, value]) => !['start_date', 'end_date'].includes(key) && value !== null && value !== undefined && String(value) !== '').length
+  const count = Object.entries(source).filter(([key, value]) => !['start_date', 'end_date'].includes(key) && value !== null && value !== undefined && String(value) !== '').length
+  return activeTab.value === 'errors' && filters.value.request_id ? count + 1 : count
 })
 
 const errorKeyOptions = computed<SelectOption[]>(() => [
@@ -400,12 +418,24 @@ const endpointDistributionSource = ref<EndpointSource>('inbound')
 const activeTab = ref<'usage' | 'errors'>('usage')
 const errorViewEnabled = computed(() => appStore.cachedPublicSettings?.allow_user_view_error_requests ?? false)
 
-const filters = ref<UsageQueryParams>({
+// 筛选框的“全部”选项值为 null，这几项必须初始化为 null 才能显示对应文案，发请求前再去掉。
+type UsageFilterState = Omit<UsageQueryParams, 'api_key_id' | 'group_id' | 'model' | 'request_type'> & {
+  api_key_id: number | null
+  group_id: number | null
+  model: string | null
+  request_type: UsageRequestType | null
+}
+
+const filters = ref<UsageFilterState>({
   start_date: startDate.value,
   end_date: endDate.value,
-  request_type: undefined,
+  api_key_id: null,
+  group_id: null,
+  model: null,
+  request_type: null,
   billing_type: null,
   billing_mode: null,
+  native_compaction_v2: null,
 })
 
 const pagination = reactive({
@@ -441,6 +471,11 @@ const billingModeOptions = computed<SelectOption[]>(() => [
   { value: 'image', label: t('admin.usage.billingModeImage') },
   { value: 'video', label: t('admin.usage.billingModeVideo') },
 ])
+const compactionOptions = computed<SelectOption[]>(() => [
+  { value: null, label: t('usage.allCompactions') },
+  { value: true, label: t('usage.nativeCompactionV2') },
+  { value: false, label: t('usage.legacyCompaction') },
+])
 
 type UsageKeyOption = Pick<TeamAPIKey, 'id' | 'name'>
 type UsageGroupOption = { id: number; name: string }
@@ -467,8 +502,12 @@ const normalizedFilters = computed<UsageQueryParams>(() => {
   const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
   return {
     ...filters.value,
-    start_date: startDate.value,
-    end_date: endDate.value,
+    api_key_id: filters.value.api_key_id ?? undefined,
+    group_id: filters.value.group_id ?? undefined,
+    model: filters.value.model || undefined,
+    request_type: requestType ?? undefined,
+    start_date: filters.value.request_id ? undefined : startDate.value,
+    end_date: filters.value.request_id ? undefined : endDate.value,
     stream: legacyStream === null ? undefined : legacyStream,
   }
 })
@@ -525,6 +564,7 @@ const loadStats = async () => {
 }
 
 const loadModelStats = async () => {
+  if (filters.value.request_id?.trim()) return
   const seq = ++modelStatsReqSeq
   modelStatsLoading.value = true
   try {
@@ -545,6 +585,7 @@ const loadModelStats = async () => {
 }
 
 const loadChartData = async () => {
+  if (filters.value.request_id?.trim()) return
   const seq = ++chartReqSeq
   chartsLoading.value = true
   try {
@@ -586,6 +627,32 @@ const applyFilters = () => {
   void loadChartData()
   void loadTeamMemberUsage()
   resetErrorRows()
+}
+
+// 重置只清空当前标签页的筛选条件，日期范围保持不变。
+const resetCurrentFilters = () => {
+  if (activeTab.value === 'errors') {
+    errorFilter.value = { model: '', category: '', api_key_id: null, status_code: null }
+    if (filters.value.request_id) {
+      filters.value.request_id = undefined
+      applyFilters()
+      return
+    }
+    applyErrorFilters()
+    return
+  }
+  filters.value = {
+    ...filters.value,
+    request_id: undefined,
+    api_key_id: null,
+    group_id: null,
+    model: null,
+    request_type: null,
+    billing_type: null,
+    billing_mode: null,
+    native_compaction_v2: null,
+  }
+  applyFilters()
 }
 
 const refreshData = () => {
@@ -630,12 +697,12 @@ const handleIpGeoBatchFailed = () => {
 
 const getRequestTypeExportText = (log: UsageLog): string => {
   const requestType = resolveUsageRequestType(log)
-  if (requestType === 'cyber') return 'Cyber'
-  if (requestType === 'live') return 'Live'
-  if (requestType === 'ws_v2') return 'WS'
-  if (requestType === 'stream') return 'Stream'
-  if (requestType === 'sync') return 'Sync'
-  return 'Unknown'
+  if (requestType === 'cyber') return t('usage.cyber')
+  if (requestType === 'live') return t('usage.live')
+  if (requestType === 'ws_v2') return t('usage.ws')
+  if (requestType === 'stream') return t('usage.stream')
+  if (requestType === 'sync') return t('usage.sync')
+  return t('usage.unknown')
 }
 
 const getDisplayBillingMode = (
@@ -671,29 +738,30 @@ const exportToCSV = async () => {
       return
     }
     const headers = [
-      'Time',
-      'API Key Name',
-      'Model',
-      'Reasoning Effort',
-      'Inbound Endpoint',
-      'IP Address',
-      'Type',
-      'Billing Mode',
-      'Input Tokens',
-      'Output Tokens',
-      'Cache Read Tokens',
-      'Cache Creation Tokens',
-      'Rate Multiplier',
-      'Billed Cost',
-      'Original Cost',
-      'First Token (ms)',
-      'Duration (ms)',
+      t('usage.time'),
+      t('usage.apiKeyFilter'),
+      t('usage.model'),
+      t('usage.reasoningEffort'),
+      t('usage.inboundEndpoint'),
+      t('admin.usage.ipAddress'),
+      t('usage.type'),
+      t('admin.usage.billingMode'),
+      t('admin.usage.inputTokens'),
+      t('admin.usage.outputTokens'),
+      t('admin.usage.cacheReadTokens'),
+      t('admin.usage.cacheCreationTokens'),
+      t('usage.rate'),
+      t('usage.userBilled'),
+      t('usage.original'),
+      t('usage.firstToken'),
+      t('usage.duration'),
+      t('usage.tpsExport'),
     ]
     const rows = allLogs.map((log) => [
       log.created_at,
       log.api_key?.name || '',
       log.model,
-      formatReasoningEffort(log.reasoning_effort),
+      formatReasoningEffortMapping(log.requested_reasoning_effort, log.reasoning_effort),
       log.inbound_endpoint || '',
       log.ip_address || '',
       getRequestTypeExportText(log),
@@ -702,11 +770,12 @@ const exportToCSV = async () => {
       log.output_tokens,
       log.cache_read_tokens,
       log.cache_creation_tokens,
-      log.rate_multiplier,
+      getDisplayUsageRateMultiplier(log),
       log.actual_cost.toFixed(8),
       log.total_cost.toFixed(8),
       log.first_token_ms ?? '',
       log.duration_ms ?? '',
+      calculateUsageTps(log)?.toFixed(1) ?? '',
     ].map(escapeCSVValue))
     const csvContent = [
       headers.map(escapeCSVValue).join(','),
@@ -745,7 +814,9 @@ const allColumns = computed<Column[]>(() => [
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
   { key: 'latency', label: t('usage.latency'), sortable: false },
+  { key: 'tps', label: t('usage.tps'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
+  { key: 'request_id', label: t('requests.id'), sortable: false },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
 ])
 
@@ -788,6 +859,7 @@ const errAllColumns = computed<Column[]>(() => [
   { key: 'status', label: t('usage.errors.status') },
   { key: 'message', label: t('usage.errors.message') },
   { key: 'created_at', label: t('usage.errors.time') },
+  { key: 'request_id', label: t('requests.id') },
   { key: 'user_agent', label: t('usage.userAgent') },
 ])
 
@@ -834,18 +906,12 @@ const handleColumnClickOutside = (event: MouseEvent) => {
     showColumnDropdown.value = false
   }
 }
-const handleFilterClickOutside = (event: MouseEvent) => {
-  const target = event.target
-  if (target instanceof Node && filterPanelRef.value?.contains(target)) return
-  if (target instanceof Element && target.closest('.select-dropdown-portal')) return
-  showFilterDropdown.value = false
-}
 
 const loadFilterOptions = async () => {
   try {
     const [personalKeys, availableGroups] = await Promise.all([
       keysAPI.list(1, 100, { scope: 'personal' }),
-      userGroupsAPI.getAvailable(),
+      userGroupsAPI.getAvailable('personal', undefined, false),
     ])
     let teamKeys: TeamAPIKey[] = []
     try {
@@ -868,7 +934,7 @@ const loadFilterOptions = async () => {
     for (const key of [...personalKeys.items, ...teamKeys]) uniqueKeys.set(key.id, { id: key.id, name: key.name })
     apiKeys.value = [...uniqueKeys.values()]
     const uniqueGroups = new Map<number, UsageGroupOption>()
-    for (const group of availableGroups) uniqueGroups.set(group.id, { id: group.id, name: group.name })
+    for (const group of availableGroups) uniqueGroups.set(group.id, { id: group.id, name: group.display_name || group.name })
     for (const key of teamKeys) {
       if (key.group_id && key.group_name) uniqueGroups.set(key.group_id, { id: key.group_id, name: key.group_name })
     }
@@ -879,8 +945,9 @@ const loadFilterOptions = async () => {
   }
 }
 
-// Owner 使用聚合接口一次读取当前和历史成员，避免离队后图表总额与团队总额不一致。
+// Owner 通过聚合接口读取当前和历史成员，图表总额包含离队成员的用量。
 const loadTeamMemberUsage = async () => {
+  if (filters.value.request_id?.trim()) return
   if (!isTeamOwner.value) {
     teamMemberSeries.value = []
     return
@@ -923,8 +990,9 @@ const loadErrors = async () => {
     const resp = await usageAPI.listMyErrorRequests({
       page: errorPage.value,
       page_size: errorPageSize.value,
-      start_date: startDate.value,
-      end_date: endDate.value,
+      request_id: filters.value.request_id?.trim() || undefined,
+      start_date: filters.value.request_id ? undefined : startDate.value,
+      end_date: filters.value.request_id ? undefined : endDate.value,
       model: (errorFilter.value.model ?? '').trim() || undefined,
       category: errorFilter.value.category || undefined,
       api_key_id: errorFilter.value.api_key_id ?? undefined,
@@ -969,7 +1037,6 @@ onMounted(() => {
   loadSavedColumns()
   loadSavedErrColumns()
   document.addEventListener('click', handleColumnClickOutside)
-  document.addEventListener('click', handleFilterClickOutside)
   void loadFilterOptions()
   refreshData()
 })
@@ -977,10 +1044,10 @@ onMounted(() => {
 onUnmounted(() => {
   abortController?.abort()
   document.removeEventListener('click', handleColumnClickOutside)
-  document.removeEventListener('click', handleFilterClickOutside)
 })
 
 watch(endpointDistributionSource, () => {
   // Endpoint 来源切换由图表组件基于已加载统计数据处理。
 })
+useLocaleRefresh(() => Promise.all([loadFilterOptions(), loadLogs(), loadErrors()]))
 </script>

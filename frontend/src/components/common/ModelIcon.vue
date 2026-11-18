@@ -6,6 +6,7 @@
     viewBox="0 0 24 24"
     xmlns="http://www.w3.org/2000/svg"
     class="model-icon"
+    :class="iconKey === 'openai' ? 'text-black dark:text-white' : undefined"
     fill="currentColor"
     fill-rule="evenodd"
   >
@@ -48,7 +49,7 @@ const iconKey = computed(() => {
   // Google Gemini 模型
   if (modelLower.includes('gemini') || modelLower.includes('gemma') ||
       modelLower.includes('learnlm') || modelLower.includes('imagen-') ||
-      modelLower.includes('veo-')) return 'gemini'
+      modelLower.includes('veo-') || modelLower.includes('nano-banana')) return 'gemini'
 
   // 智谱 GLM 模型
   if (modelLower.includes('glm') || modelLower.includes('chatglm') ||
@@ -133,6 +134,12 @@ const iconInfo = computed(() => iconKey.value ? modelIconData[iconKey.value] : n
 </script>
 
 <style scoped>
+/* 品牌图形与字母占位都作为图标展示，拖选文字时跳过它们。 */
+.model-icon,
+.model-icon-fallback {
+  @apply select-none;
+}
+
 .model-icon {
   flex-shrink: 0;
 }
@@ -140,7 +147,7 @@ const iconInfo = computed(() => iconKey.value ? modelIconData[iconKey.value] : n
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--radius-compact);
   background: linear-gradient(135deg, #6366f1, #8b5cf6);
   color: white;
   font-weight: 600;

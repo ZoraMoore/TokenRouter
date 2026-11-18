@@ -5,12 +5,10 @@
     width="narrow"
     @close="emit('close')"
   >
-    <div v-if="loading" class="flex min-h-48 items-center justify-center" data-testid="invitation-loading">
-      <LoadingSpinner />
-    </div>
+    <ContentSkeleton v-if="loading" data-testid="invitation-loading" variant="detail" :rows="4" class="min-h-48 py-4" />
 
     <div v-else-if="error" class="py-4" data-testid="invitation-error">
-      <div class="flex items-start gap-3 rounded-md bg-red-50 p-4 text-red-700 dark:bg-red-950/30 dark:text-red-300">
+      <div class="flex items-start gap-3 rounded-control bg-red-50 p-4 text-red-700 dark:bg-red-950/30 dark:text-red-300">
         <Icon name="exclamationTriangle" size="md" class="mt-0.5 shrink-0" />
         <p class="min-w-0 text-sm leading-6">{{ error }}</p>
       </div>
@@ -18,7 +16,7 @@
 
     <div v-else-if="preview" data-testid="invitation-details">
       <div class="pb-5 text-center">
-        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-md bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">
+        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-control bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">
           <Icon name="users" size="lg" />
         </div>
         <p class="mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400">
@@ -76,7 +74,7 @@
             :disabled="loading || resolving || !preview"
             @click="emit('resolve', 'accepted')"
           >
-            <Icon name="check" size="sm" />
+            <Icon name="check" size="sm" :animate-on-hover="false" />
             {{ t('team.accept') }}
           </button>
         </template>
@@ -86,10 +84,10 @@
 </template>
 
 <script setup lang="ts">
+import ContentSkeleton from '@/components/common/ContentSkeleton.vue'
 import { useI18n } from 'vue-i18n'
 import type { TeamInvitationPreview } from '@/api/team'
 import BaseDialog from '@/components/common/BaseDialog.vue'
-import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { formatDateTime } from '@/utils/format'
 

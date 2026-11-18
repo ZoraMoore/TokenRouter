@@ -25,7 +25,6 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/usagelog"
 	"github.com/TokenFlux/TokenRouter/ent/user"
 	"github.com/TokenFlux/TokenRouter/ent/userattributevalue"
-	"github.com/TokenFlux/TokenRouter/ent/userplatformquota"
 	"github.com/TokenFlux/TokenRouter/ent/usersubscription"
 )
 
@@ -184,6 +183,26 @@ func (_u *UserUpdate) SetNillableStatus(v *string) *UserUpdate {
 	if v != nil {
 		_u.SetStatus(*v)
 	}
+	return _u
+}
+
+// SetPreferredLocale sets the "preferred_locale" field.
+func (_u *UserUpdate) SetPreferredLocale(v string) *UserUpdate {
+	_u.mutation.SetPreferredLocale(v)
+	return _u
+}
+
+// SetNillablePreferredLocale sets the "preferred_locale" field if the given value is not nil.
+func (_u *UserUpdate) SetNillablePreferredLocale(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetPreferredLocale(*v)
+	}
+	return _u
+}
+
+// ClearPreferredLocale clears the value of the "preferred_locale" field.
+func (_u *UserUpdate) ClearPreferredLocale() *UserUpdate {
+	_u.mutation.ClearPreferredLocale()
 	return _u
 }
 
@@ -665,21 +684,6 @@ func (_u *UserUpdate) AddPendingAuthSessions(v ...*PendingAuthSession) *UserUpda
 	return _u.AddPendingAuthSessionIDs(ids...)
 }
 
-// AddPlatformQuotaIDs adds the "platform_quotas" edge to the UserPlatformQuota entity by IDs.
-func (_u *UserUpdate) AddPlatformQuotaIDs(ids ...int64) *UserUpdate {
-	_u.mutation.AddPlatformQuotaIDs(ids...)
-	return _u
-}
-
-// AddPlatformQuotas adds the "platform_quotas" edges to the UserPlatformQuota entity.
-func (_u *UserUpdate) AddPlatformQuotas(v ...*UserPlatformQuota) *UserUpdate {
-	ids := make([]int64, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddPlatformQuotaIDs(ids...)
-}
-
 // AddTeamMembershipIDs adds the "team_memberships" edge to the TeamMembership entity by IDs.
 func (_u *UserUpdate) AddTeamMembershipIDs(ids ...int64) *UserUpdate {
 	_u.mutation.AddTeamMembershipIDs(ids...)
@@ -994,27 +998,6 @@ func (_u *UserUpdate) RemovePendingAuthSessions(v ...*PendingAuthSession) *UserU
 	return _u.RemovePendingAuthSessionIDs(ids...)
 }
 
-// ClearPlatformQuotas clears all "platform_quotas" edges to the UserPlatformQuota entity.
-func (_u *UserUpdate) ClearPlatformQuotas() *UserUpdate {
-	_u.mutation.ClearPlatformQuotas()
-	return _u
-}
-
-// RemovePlatformQuotaIDs removes the "platform_quotas" edge to UserPlatformQuota entities by IDs.
-func (_u *UserUpdate) RemovePlatformQuotaIDs(ids ...int64) *UserUpdate {
-	_u.mutation.RemovePlatformQuotaIDs(ids...)
-	return _u
-}
-
-// RemovePlatformQuotas removes "platform_quotas" edges to UserPlatformQuota entities.
-func (_u *UserUpdate) RemovePlatformQuotas(v ...*UserPlatformQuota) *UserUpdate {
-	ids := make([]int64, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemovePlatformQuotaIDs(ids...)
-}
-
 // ClearTeamMemberships clears all "team_memberships" edges to the TeamMembership entity.
 func (_u *UserUpdate) ClearTeamMemberships() *UserUpdate {
 	_u.mutation.ClearTeamMemberships()
@@ -1100,6 +1083,11 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "User.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.PreferredLocale(); ok {
+		if err := user.PreferredLocaleValidator(v); err != nil {
+			return &ValidationError{Name: "preferred_locale", err: fmt.Errorf(`ent: validator failed for field "User.preferred_locale": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Username(); ok {
 		if err := user.UsernameValidator(v); err != nil {
 			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
@@ -1168,6 +1156,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(user.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PreferredLocale(); ok {
+		_spec.SetField(user.FieldPreferredLocale, field.TypeString, value)
+	}
+	if _u.mutation.PreferredLocaleCleared() {
+		_spec.ClearField(user.FieldPreferredLocale, field.TypeString)
 	}
 	if value, ok := _u.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
@@ -1895,51 +1889,6 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.PlatformQuotasCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.PlatformQuotasTable,
-			Columns: []string{user.PlatformQuotasColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userplatformquota.FieldID, field.TypeInt64),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedPlatformQuotasIDs(); len(nodes) > 0 && !_u.mutation.PlatformQuotasCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.PlatformQuotasTable,
-			Columns: []string{user.PlatformQuotasColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userplatformquota.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.PlatformQuotasIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.PlatformQuotasTable,
-			Columns: []string{user.PlatformQuotasColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userplatformquota.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
 	if _u.mutation.TeamMembershipsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -2147,6 +2096,26 @@ func (_u *UserUpdateOne) SetNillableStatus(v *string) *UserUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
 	}
+	return _u
+}
+
+// SetPreferredLocale sets the "preferred_locale" field.
+func (_u *UserUpdateOne) SetPreferredLocale(v string) *UserUpdateOne {
+	_u.mutation.SetPreferredLocale(v)
+	return _u
+}
+
+// SetNillablePreferredLocale sets the "preferred_locale" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillablePreferredLocale(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetPreferredLocale(*v)
+	}
+	return _u
+}
+
+// ClearPreferredLocale clears the value of the "preferred_locale" field.
+func (_u *UserUpdateOne) ClearPreferredLocale() *UserUpdateOne {
+	_u.mutation.ClearPreferredLocale()
 	return _u
 }
 
@@ -2628,21 +2597,6 @@ func (_u *UserUpdateOne) AddPendingAuthSessions(v ...*PendingAuthSession) *UserU
 	return _u.AddPendingAuthSessionIDs(ids...)
 }
 
-// AddPlatformQuotaIDs adds the "platform_quotas" edge to the UserPlatformQuota entity by IDs.
-func (_u *UserUpdateOne) AddPlatformQuotaIDs(ids ...int64) *UserUpdateOne {
-	_u.mutation.AddPlatformQuotaIDs(ids...)
-	return _u
-}
-
-// AddPlatformQuotas adds the "platform_quotas" edges to the UserPlatformQuota entity.
-func (_u *UserUpdateOne) AddPlatformQuotas(v ...*UserPlatformQuota) *UserUpdateOne {
-	ids := make([]int64, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddPlatformQuotaIDs(ids...)
-}
-
 // AddTeamMembershipIDs adds the "team_memberships" edge to the TeamMembership entity by IDs.
 func (_u *UserUpdateOne) AddTeamMembershipIDs(ids ...int64) *UserUpdateOne {
 	_u.mutation.AddTeamMembershipIDs(ids...)
@@ -2957,27 +2911,6 @@ func (_u *UserUpdateOne) RemovePendingAuthSessions(v ...*PendingAuthSession) *Us
 	return _u.RemovePendingAuthSessionIDs(ids...)
 }
 
-// ClearPlatformQuotas clears all "platform_quotas" edges to the UserPlatformQuota entity.
-func (_u *UserUpdateOne) ClearPlatformQuotas() *UserUpdateOne {
-	_u.mutation.ClearPlatformQuotas()
-	return _u
-}
-
-// RemovePlatformQuotaIDs removes the "platform_quotas" edge to UserPlatformQuota entities by IDs.
-func (_u *UserUpdateOne) RemovePlatformQuotaIDs(ids ...int64) *UserUpdateOne {
-	_u.mutation.RemovePlatformQuotaIDs(ids...)
-	return _u
-}
-
-// RemovePlatformQuotas removes "platform_quotas" edges to UserPlatformQuota entities.
-func (_u *UserUpdateOne) RemovePlatformQuotas(v ...*UserPlatformQuota) *UserUpdateOne {
-	ids := make([]int64, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemovePlatformQuotaIDs(ids...)
-}
-
 // ClearTeamMemberships clears all "team_memberships" edges to the TeamMembership entity.
 func (_u *UserUpdateOne) ClearTeamMemberships() *UserUpdateOne {
 	_u.mutation.ClearTeamMemberships()
@@ -3076,6 +3009,11 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "User.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.PreferredLocale(); ok {
+		if err := user.PreferredLocaleValidator(v); err != nil {
+			return &ValidationError{Name: "preferred_locale", err: fmt.Errorf(`ent: validator failed for field "User.preferred_locale": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Username(); ok {
 		if err := user.UsernameValidator(v); err != nil {
 			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
@@ -3161,6 +3099,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(user.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PreferredLocale(); ok {
+		_spec.SetField(user.FieldPreferredLocale, field.TypeString, value)
+	}
+	if _u.mutation.PreferredLocaleCleared() {
+		_spec.ClearField(user.FieldPreferredLocale, field.TypeString)
 	}
 	if value, ok := _u.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
@@ -3881,51 +3825,6 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(pendingauthsession.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.PlatformQuotasCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.PlatformQuotasTable,
-			Columns: []string{user.PlatformQuotasColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userplatformquota.FieldID, field.TypeInt64),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedPlatformQuotasIDs(); len(nodes) > 0 && !_u.mutation.PlatformQuotasCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.PlatformQuotasTable,
-			Columns: []string{user.PlatformQuotasColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userplatformquota.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.PlatformQuotasIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.PlatformQuotasTable,
-			Columns: []string{user.PlatformQuotasColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userplatformquota.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {

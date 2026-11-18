@@ -273,6 +273,34 @@ func (_c *APIKeyCreate) SetNillableExpiresAt(v *time.Time) *APIKeyCreate {
 	return _c
 }
 
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (_c *APIKeyCreate) SetConcurrencyLimit(v int) *APIKeyCreate {
+	_c.mutation.SetConcurrencyLimit(v)
+	return _c
+}
+
+// SetNillableConcurrencyLimit sets the "concurrency_limit" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableConcurrencyLimit(v *int) *APIKeyCreate {
+	if v != nil {
+		_c.SetConcurrencyLimit(*v)
+	}
+	return _c
+}
+
+// SetRpmLimit sets the "rpm_limit" field.
+func (_c *APIKeyCreate) SetRpmLimit(v int) *APIKeyCreate {
+	_c.mutation.SetRpmLimit(v)
+	return _c
+}
+
+// SetNillableRpmLimit sets the "rpm_limit" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableRpmLimit(v *int) *APIKeyCreate {
+	if v != nil {
+		_c.SetRpmLimit(*v)
+	}
+	return _c
+}
+
 // SetRateLimit5h sets the "rate_limit_5h" field.
 func (_c *APIKeyCreate) SetRateLimit5h(v float64) *APIKeyCreate {
 	_c.mutation.SetRateLimit5h(v)
@@ -399,58 +427,30 @@ func (_c *APIKeyCreate) SetNillableWindow7dStart(v *time.Time) *APIKeyCreate {
 	return _c
 }
 
-// SetDataSharingNoticeVersion sets the "data_sharing_notice_version" field.
-func (_c *APIKeyCreate) SetDataSharingNoticeVersion(v int) *APIKeyCreate {
-	_c.mutation.SetDataSharingNoticeVersion(v)
+// SetFallbackWhenGroupUnavailable sets the "fallback_when_group_unavailable" field.
+func (_c *APIKeyCreate) SetFallbackWhenGroupUnavailable(v bool) *APIKeyCreate {
+	_c.mutation.SetFallbackWhenGroupUnavailable(v)
 	return _c
 }
 
-// SetNillableDataSharingNoticeVersion sets the "data_sharing_notice_version" field if the given value is not nil.
-func (_c *APIKeyCreate) SetNillableDataSharingNoticeVersion(v *int) *APIKeyCreate {
+// SetNillableFallbackWhenGroupUnavailable sets the "fallback_when_group_unavailable" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableFallbackWhenGroupUnavailable(v *bool) *APIKeyCreate {
 	if v != nil {
-		_c.SetDataSharingNoticeVersion(*v)
+		_c.SetFallbackWhenGroupUnavailable(*v)
 	}
 	return _c
 }
 
-// SetDataSharingConfirmedGroupID sets the "data_sharing_confirmed_group_id" field.
-func (_c *APIKeyCreate) SetDataSharingConfirmedGroupID(v int64) *APIKeyCreate {
-	_c.mutation.SetDataSharingConfirmedGroupID(v)
+// SetManagedBy sets the "managed_by" field.
+func (_c *APIKeyCreate) SetManagedBy(v string) *APIKeyCreate {
+	_c.mutation.SetManagedBy(v)
 	return _c
 }
 
-// SetNillableDataSharingConfirmedGroupID sets the "data_sharing_confirmed_group_id" field if the given value is not nil.
-func (_c *APIKeyCreate) SetNillableDataSharingConfirmedGroupID(v *int64) *APIKeyCreate {
+// SetNillableManagedBy sets the "managed_by" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableManagedBy(v *string) *APIKeyCreate {
 	if v != nil {
-		_c.SetDataSharingConfirmedGroupID(*v)
-	}
-	return _c
-}
-
-// SetDataSharingConfirmedAt sets the "data_sharing_confirmed_at" field.
-func (_c *APIKeyCreate) SetDataSharingConfirmedAt(v time.Time) *APIKeyCreate {
-	_c.mutation.SetDataSharingConfirmedAt(v)
-	return _c
-}
-
-// SetNillableDataSharingConfirmedAt sets the "data_sharing_confirmed_at" field if the given value is not nil.
-func (_c *APIKeyCreate) SetNillableDataSharingConfirmedAt(v *time.Time) *APIKeyCreate {
-	if v != nil {
-		_c.SetDataSharingConfirmedAt(*v)
-	}
-	return _c
-}
-
-// SetFallbackToDefaultGroupWhenUnavailable sets the "fallback_to_default_group_when_unavailable" field.
-func (_c *APIKeyCreate) SetFallbackToDefaultGroupWhenUnavailable(v bool) *APIKeyCreate {
-	_c.mutation.SetFallbackToDefaultGroupWhenUnavailable(v)
-	return _c
-}
-
-// SetNillableFallbackToDefaultGroupWhenUnavailable sets the "fallback_to_default_group_when_unavailable" field if the given value is not nil.
-func (_c *APIKeyCreate) SetNillableFallbackToDefaultGroupWhenUnavailable(v *bool) *APIKeyCreate {
-	if v != nil {
-		_c.SetFallbackToDefaultGroupWhenUnavailable(*v)
+		_c.SetManagedBy(*v)
 	}
 	return _c
 }
@@ -586,6 +586,14 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultQuotaUsed
 		_c.mutation.SetQuotaUsed(v)
 	}
+	if _, ok := _c.mutation.ConcurrencyLimit(); !ok {
+		v := apikey.DefaultConcurrencyLimit
+		_c.mutation.SetConcurrencyLimit(v)
+	}
+	if _, ok := _c.mutation.RpmLimit(); !ok {
+		v := apikey.DefaultRpmLimit
+		_c.mutation.SetRpmLimit(v)
+	}
 	if _, ok := _c.mutation.RateLimit5h(); !ok {
 		v := apikey.DefaultRateLimit5h
 		_c.mutation.SetRateLimit5h(v)
@@ -610,13 +618,9 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultUsage7d
 		_c.mutation.SetUsage7d(v)
 	}
-	if _, ok := _c.mutation.DataSharingNoticeVersion(); !ok {
-		v := apikey.DefaultDataSharingNoticeVersion
-		_c.mutation.SetDataSharingNoticeVersion(v)
-	}
-	if _, ok := _c.mutation.FallbackToDefaultGroupWhenUnavailable(); !ok {
-		v := apikey.DefaultFallbackToDefaultGroupWhenUnavailable
-		_c.mutation.SetFallbackToDefaultGroupWhenUnavailable(v)
+	if _, ok := _c.mutation.FallbackWhenGroupUnavailable(); !ok {
+		v := apikey.DefaultFallbackWhenGroupUnavailable
+		_c.mutation.SetFallbackWhenGroupUnavailable(v)
 	}
 	return nil
 }
@@ -687,6 +691,22 @@ func (_c *APIKeyCreate) check() error {
 	if _, ok := _c.mutation.QuotaUsed(); !ok {
 		return &ValidationError{Name: "quota_used", err: errors.New(`ent: missing required field "APIKey.quota_used"`)}
 	}
+	if _, ok := _c.mutation.ConcurrencyLimit(); !ok {
+		return &ValidationError{Name: "concurrency_limit", err: errors.New(`ent: missing required field "APIKey.concurrency_limit"`)}
+	}
+	if v, ok := _c.mutation.ConcurrencyLimit(); ok {
+		if err := apikey.ConcurrencyLimitValidator(v); err != nil {
+			return &ValidationError{Name: "concurrency_limit", err: fmt.Errorf(`ent: validator failed for field "APIKey.concurrency_limit": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.RpmLimit(); !ok {
+		return &ValidationError{Name: "rpm_limit", err: errors.New(`ent: missing required field "APIKey.rpm_limit"`)}
+	}
+	if v, ok := _c.mutation.RpmLimit(); ok {
+		if err := apikey.RpmLimitValidator(v); err != nil {
+			return &ValidationError{Name: "rpm_limit", err: fmt.Errorf(`ent: validator failed for field "APIKey.rpm_limit": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.RateLimit5h(); !ok {
 		return &ValidationError{Name: "rate_limit_5h", err: errors.New(`ent: missing required field "APIKey.rate_limit_5h"`)}
 	}
@@ -705,11 +725,13 @@ func (_c *APIKeyCreate) check() error {
 	if _, ok := _c.mutation.Usage7d(); !ok {
 		return &ValidationError{Name: "usage_7d", err: errors.New(`ent: missing required field "APIKey.usage_7d"`)}
 	}
-	if _, ok := _c.mutation.DataSharingNoticeVersion(); !ok {
-		return &ValidationError{Name: "data_sharing_notice_version", err: errors.New(`ent: missing required field "APIKey.data_sharing_notice_version"`)}
+	if _, ok := _c.mutation.FallbackWhenGroupUnavailable(); !ok {
+		return &ValidationError{Name: "fallback_when_group_unavailable", err: errors.New(`ent: missing required field "APIKey.fallback_when_group_unavailable"`)}
 	}
-	if _, ok := _c.mutation.FallbackToDefaultGroupWhenUnavailable(); !ok {
-		return &ValidationError{Name: "fallback_to_default_group_when_unavailable", err: errors.New(`ent: missing required field "APIKey.fallback_to_default_group_when_unavailable"`)}
+	if v, ok := _c.mutation.ManagedBy(); ok {
+		if err := apikey.ManagedByValidator(v); err != nil {
+			return &ValidationError{Name: "managed_by", err: fmt.Errorf(`ent: validator failed for field "APIKey.managed_by": %w`, err)}
+		}
 	}
 	if len(_c.mutation.UserIDs()) == 0 {
 		return &ValidationError{Name: "user", err: errors.New(`ent: missing required edge "APIKey.user"`)}
@@ -813,6 +835,14 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 		_spec.SetField(apikey.FieldExpiresAt, field.TypeTime, value)
 		_node.ExpiresAt = &value
 	}
+	if value, ok := _c.mutation.ConcurrencyLimit(); ok {
+		_spec.SetField(apikey.FieldConcurrencyLimit, field.TypeInt, value)
+		_node.ConcurrencyLimit = value
+	}
+	if value, ok := _c.mutation.RpmLimit(); ok {
+		_spec.SetField(apikey.FieldRpmLimit, field.TypeInt, value)
+		_node.RpmLimit = value
+	}
 	if value, ok := _c.mutation.RateLimit5h(); ok {
 		_spec.SetField(apikey.FieldRateLimit5h, field.TypeFloat64, value)
 		_node.RateLimit5h = value
@@ -849,21 +879,13 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 		_spec.SetField(apikey.FieldWindow7dStart, field.TypeTime, value)
 		_node.Window7dStart = &value
 	}
-	if value, ok := _c.mutation.DataSharingNoticeVersion(); ok {
-		_spec.SetField(apikey.FieldDataSharingNoticeVersion, field.TypeInt, value)
-		_node.DataSharingNoticeVersion = value
+	if value, ok := _c.mutation.FallbackWhenGroupUnavailable(); ok {
+		_spec.SetField(apikey.FieldFallbackWhenGroupUnavailable, field.TypeBool, value)
+		_node.FallbackWhenGroupUnavailable = value
 	}
-	if value, ok := _c.mutation.DataSharingConfirmedGroupID(); ok {
-		_spec.SetField(apikey.FieldDataSharingConfirmedGroupID, field.TypeInt64, value)
-		_node.DataSharingConfirmedGroupID = &value
-	}
-	if value, ok := _c.mutation.DataSharingConfirmedAt(); ok {
-		_spec.SetField(apikey.FieldDataSharingConfirmedAt, field.TypeTime, value)
-		_node.DataSharingConfirmedAt = &value
-	}
-	if value, ok := _c.mutation.FallbackToDefaultGroupWhenUnavailable(); ok {
-		_spec.SetField(apikey.FieldFallbackToDefaultGroupWhenUnavailable, field.TypeBool, value)
-		_node.FallbackToDefaultGroupWhenUnavailable = value
+	if value, ok := _c.mutation.ManagedBy(); ok {
+		_spec.SetField(apikey.FieldManagedBy, field.TypeString, value)
+		_node.ManagedBy = &value
 	}
 	if nodes := _c.mutation.UserIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -1306,6 +1328,42 @@ func (u *APIKeyUpsert) ClearExpiresAt() *APIKeyUpsert {
 	return u
 }
 
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (u *APIKeyUpsert) SetConcurrencyLimit(v int) *APIKeyUpsert {
+	u.Set(apikey.FieldConcurrencyLimit, v)
+	return u
+}
+
+// UpdateConcurrencyLimit sets the "concurrency_limit" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateConcurrencyLimit() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldConcurrencyLimit)
+	return u
+}
+
+// AddConcurrencyLimit adds v to the "concurrency_limit" field.
+func (u *APIKeyUpsert) AddConcurrencyLimit(v int) *APIKeyUpsert {
+	u.Add(apikey.FieldConcurrencyLimit, v)
+	return u
+}
+
+// SetRpmLimit sets the "rpm_limit" field.
+func (u *APIKeyUpsert) SetRpmLimit(v int) *APIKeyUpsert {
+	u.Set(apikey.FieldRpmLimit, v)
+	return u
+}
+
+// UpdateRpmLimit sets the "rpm_limit" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateRpmLimit() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldRpmLimit)
+	return u
+}
+
+// AddRpmLimit adds v to the "rpm_limit" field.
+func (u *APIKeyUpsert) AddRpmLimit(v int) *APIKeyUpsert {
+	u.Add(apikey.FieldRpmLimit, v)
+	return u
+}
+
 // SetRateLimit5h sets the "rate_limit_5h" field.
 func (u *APIKeyUpsert) SetRateLimit5h(v float64) *APIKeyUpsert {
 	u.Set(apikey.FieldRateLimit5h, v)
@@ -1468,75 +1526,33 @@ func (u *APIKeyUpsert) ClearWindow7dStart() *APIKeyUpsert {
 	return u
 }
 
-// SetDataSharingNoticeVersion sets the "data_sharing_notice_version" field.
-func (u *APIKeyUpsert) SetDataSharingNoticeVersion(v int) *APIKeyUpsert {
-	u.Set(apikey.FieldDataSharingNoticeVersion, v)
+// SetFallbackWhenGroupUnavailable sets the "fallback_when_group_unavailable" field.
+func (u *APIKeyUpsert) SetFallbackWhenGroupUnavailable(v bool) *APIKeyUpsert {
+	u.Set(apikey.FieldFallbackWhenGroupUnavailable, v)
 	return u
 }
 
-// UpdateDataSharingNoticeVersion sets the "data_sharing_notice_version" field to the value that was provided on create.
-func (u *APIKeyUpsert) UpdateDataSharingNoticeVersion() *APIKeyUpsert {
-	u.SetExcluded(apikey.FieldDataSharingNoticeVersion)
+// UpdateFallbackWhenGroupUnavailable sets the "fallback_when_group_unavailable" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateFallbackWhenGroupUnavailable() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldFallbackWhenGroupUnavailable)
 	return u
 }
 
-// AddDataSharingNoticeVersion adds v to the "data_sharing_notice_version" field.
-func (u *APIKeyUpsert) AddDataSharingNoticeVersion(v int) *APIKeyUpsert {
-	u.Add(apikey.FieldDataSharingNoticeVersion, v)
+// SetManagedBy sets the "managed_by" field.
+func (u *APIKeyUpsert) SetManagedBy(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldManagedBy, v)
 	return u
 }
 
-// SetDataSharingConfirmedGroupID sets the "data_sharing_confirmed_group_id" field.
-func (u *APIKeyUpsert) SetDataSharingConfirmedGroupID(v int64) *APIKeyUpsert {
-	u.Set(apikey.FieldDataSharingConfirmedGroupID, v)
+// UpdateManagedBy sets the "managed_by" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateManagedBy() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldManagedBy)
 	return u
 }
 
-// UpdateDataSharingConfirmedGroupID sets the "data_sharing_confirmed_group_id" field to the value that was provided on create.
-func (u *APIKeyUpsert) UpdateDataSharingConfirmedGroupID() *APIKeyUpsert {
-	u.SetExcluded(apikey.FieldDataSharingConfirmedGroupID)
-	return u
-}
-
-// AddDataSharingConfirmedGroupID adds v to the "data_sharing_confirmed_group_id" field.
-func (u *APIKeyUpsert) AddDataSharingConfirmedGroupID(v int64) *APIKeyUpsert {
-	u.Add(apikey.FieldDataSharingConfirmedGroupID, v)
-	return u
-}
-
-// ClearDataSharingConfirmedGroupID clears the value of the "data_sharing_confirmed_group_id" field.
-func (u *APIKeyUpsert) ClearDataSharingConfirmedGroupID() *APIKeyUpsert {
-	u.SetNull(apikey.FieldDataSharingConfirmedGroupID)
-	return u
-}
-
-// SetDataSharingConfirmedAt sets the "data_sharing_confirmed_at" field.
-func (u *APIKeyUpsert) SetDataSharingConfirmedAt(v time.Time) *APIKeyUpsert {
-	u.Set(apikey.FieldDataSharingConfirmedAt, v)
-	return u
-}
-
-// UpdateDataSharingConfirmedAt sets the "data_sharing_confirmed_at" field to the value that was provided on create.
-func (u *APIKeyUpsert) UpdateDataSharingConfirmedAt() *APIKeyUpsert {
-	u.SetExcluded(apikey.FieldDataSharingConfirmedAt)
-	return u
-}
-
-// ClearDataSharingConfirmedAt clears the value of the "data_sharing_confirmed_at" field.
-func (u *APIKeyUpsert) ClearDataSharingConfirmedAt() *APIKeyUpsert {
-	u.SetNull(apikey.FieldDataSharingConfirmedAt)
-	return u
-}
-
-// SetFallbackToDefaultGroupWhenUnavailable sets the "fallback_to_default_group_when_unavailable" field.
-func (u *APIKeyUpsert) SetFallbackToDefaultGroupWhenUnavailable(v bool) *APIKeyUpsert {
-	u.Set(apikey.FieldFallbackToDefaultGroupWhenUnavailable, v)
-	return u
-}
-
-// UpdateFallbackToDefaultGroupWhenUnavailable sets the "fallback_to_default_group_when_unavailable" field to the value that was provided on create.
-func (u *APIKeyUpsert) UpdateFallbackToDefaultGroupWhenUnavailable() *APIKeyUpsert {
-	u.SetExcluded(apikey.FieldFallbackToDefaultGroupWhenUnavailable)
+// ClearManagedBy clears the value of the "managed_by" field.
+func (u *APIKeyUpsert) ClearManagedBy() *APIKeyUpsert {
+	u.SetNull(apikey.FieldManagedBy)
 	return u
 }
 
@@ -1942,6 +1958,48 @@ func (u *APIKeyUpsertOne) ClearExpiresAt() *APIKeyUpsertOne {
 	})
 }
 
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (u *APIKeyUpsertOne) SetConcurrencyLimit(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetConcurrencyLimit(v)
+	})
+}
+
+// AddConcurrencyLimit adds v to the "concurrency_limit" field.
+func (u *APIKeyUpsertOne) AddConcurrencyLimit(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddConcurrencyLimit(v)
+	})
+}
+
+// UpdateConcurrencyLimit sets the "concurrency_limit" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateConcurrencyLimit() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateConcurrencyLimit()
+	})
+}
+
+// SetRpmLimit sets the "rpm_limit" field.
+func (u *APIKeyUpsertOne) SetRpmLimit(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetRpmLimit(v)
+	})
+}
+
+// AddRpmLimit adds v to the "rpm_limit" field.
+func (u *APIKeyUpsertOne) AddRpmLimit(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddRpmLimit(v)
+	})
+}
+
+// UpdateRpmLimit sets the "rpm_limit" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateRpmLimit() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateRpmLimit()
+	})
+}
+
 // SetRateLimit5h sets the "rate_limit_5h" field.
 func (u *APIKeyUpsertOne) SetRateLimit5h(v float64) *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
@@ -2131,87 +2189,38 @@ func (u *APIKeyUpsertOne) ClearWindow7dStart() *APIKeyUpsertOne {
 	})
 }
 
-// SetDataSharingNoticeVersion sets the "data_sharing_notice_version" field.
-func (u *APIKeyUpsertOne) SetDataSharingNoticeVersion(v int) *APIKeyUpsertOne {
+// SetFallbackWhenGroupUnavailable sets the "fallback_when_group_unavailable" field.
+func (u *APIKeyUpsertOne) SetFallbackWhenGroupUnavailable(v bool) *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
-		s.SetDataSharingNoticeVersion(v)
+		s.SetFallbackWhenGroupUnavailable(v)
 	})
 }
 
-// AddDataSharingNoticeVersion adds v to the "data_sharing_notice_version" field.
-func (u *APIKeyUpsertOne) AddDataSharingNoticeVersion(v int) *APIKeyUpsertOne {
+// UpdateFallbackWhenGroupUnavailable sets the "fallback_when_group_unavailable" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateFallbackWhenGroupUnavailable() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
-		s.AddDataSharingNoticeVersion(v)
+		s.UpdateFallbackWhenGroupUnavailable()
 	})
 }
 
-// UpdateDataSharingNoticeVersion sets the "data_sharing_notice_version" field to the value that was provided on create.
-func (u *APIKeyUpsertOne) UpdateDataSharingNoticeVersion() *APIKeyUpsertOne {
+// SetManagedBy sets the "managed_by" field.
+func (u *APIKeyUpsertOne) SetManagedBy(v string) *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
-		s.UpdateDataSharingNoticeVersion()
+		s.SetManagedBy(v)
 	})
 }
 
-// SetDataSharingConfirmedGroupID sets the "data_sharing_confirmed_group_id" field.
-func (u *APIKeyUpsertOne) SetDataSharingConfirmedGroupID(v int64) *APIKeyUpsertOne {
+// UpdateManagedBy sets the "managed_by" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateManagedBy() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
-		s.SetDataSharingConfirmedGroupID(v)
+		s.UpdateManagedBy()
 	})
 }
 
-// AddDataSharingConfirmedGroupID adds v to the "data_sharing_confirmed_group_id" field.
-func (u *APIKeyUpsertOne) AddDataSharingConfirmedGroupID(v int64) *APIKeyUpsertOne {
+// ClearManagedBy clears the value of the "managed_by" field.
+func (u *APIKeyUpsertOne) ClearManagedBy() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
-		s.AddDataSharingConfirmedGroupID(v)
-	})
-}
-
-// UpdateDataSharingConfirmedGroupID sets the "data_sharing_confirmed_group_id" field to the value that was provided on create.
-func (u *APIKeyUpsertOne) UpdateDataSharingConfirmedGroupID() *APIKeyUpsertOne {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.UpdateDataSharingConfirmedGroupID()
-	})
-}
-
-// ClearDataSharingConfirmedGroupID clears the value of the "data_sharing_confirmed_group_id" field.
-func (u *APIKeyUpsertOne) ClearDataSharingConfirmedGroupID() *APIKeyUpsertOne {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.ClearDataSharingConfirmedGroupID()
-	})
-}
-
-// SetDataSharingConfirmedAt sets the "data_sharing_confirmed_at" field.
-func (u *APIKeyUpsertOne) SetDataSharingConfirmedAt(v time.Time) *APIKeyUpsertOne {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.SetDataSharingConfirmedAt(v)
-	})
-}
-
-// UpdateDataSharingConfirmedAt sets the "data_sharing_confirmed_at" field to the value that was provided on create.
-func (u *APIKeyUpsertOne) UpdateDataSharingConfirmedAt() *APIKeyUpsertOne {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.UpdateDataSharingConfirmedAt()
-	})
-}
-
-// ClearDataSharingConfirmedAt clears the value of the "data_sharing_confirmed_at" field.
-func (u *APIKeyUpsertOne) ClearDataSharingConfirmedAt() *APIKeyUpsertOne {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.ClearDataSharingConfirmedAt()
-	})
-}
-
-// SetFallbackToDefaultGroupWhenUnavailable sets the "fallback_to_default_group_when_unavailable" field.
-func (u *APIKeyUpsertOne) SetFallbackToDefaultGroupWhenUnavailable(v bool) *APIKeyUpsertOne {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.SetFallbackToDefaultGroupWhenUnavailable(v)
-	})
-}
-
-// UpdateFallbackToDefaultGroupWhenUnavailable sets the "fallback_to_default_group_when_unavailable" field to the value that was provided on create.
-func (u *APIKeyUpsertOne) UpdateFallbackToDefaultGroupWhenUnavailable() *APIKeyUpsertOne {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.UpdateFallbackToDefaultGroupWhenUnavailable()
+		s.ClearManagedBy()
 	})
 }
 
@@ -2783,6 +2792,48 @@ func (u *APIKeyUpsertBulk) ClearExpiresAt() *APIKeyUpsertBulk {
 	})
 }
 
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (u *APIKeyUpsertBulk) SetConcurrencyLimit(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetConcurrencyLimit(v)
+	})
+}
+
+// AddConcurrencyLimit adds v to the "concurrency_limit" field.
+func (u *APIKeyUpsertBulk) AddConcurrencyLimit(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddConcurrencyLimit(v)
+	})
+}
+
+// UpdateConcurrencyLimit sets the "concurrency_limit" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateConcurrencyLimit() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateConcurrencyLimit()
+	})
+}
+
+// SetRpmLimit sets the "rpm_limit" field.
+func (u *APIKeyUpsertBulk) SetRpmLimit(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetRpmLimit(v)
+	})
+}
+
+// AddRpmLimit adds v to the "rpm_limit" field.
+func (u *APIKeyUpsertBulk) AddRpmLimit(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddRpmLimit(v)
+	})
+}
+
+// UpdateRpmLimit sets the "rpm_limit" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateRpmLimit() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateRpmLimit()
+	})
+}
+
 // SetRateLimit5h sets the "rate_limit_5h" field.
 func (u *APIKeyUpsertBulk) SetRateLimit5h(v float64) *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
@@ -2972,87 +3023,38 @@ func (u *APIKeyUpsertBulk) ClearWindow7dStart() *APIKeyUpsertBulk {
 	})
 }
 
-// SetDataSharingNoticeVersion sets the "data_sharing_notice_version" field.
-func (u *APIKeyUpsertBulk) SetDataSharingNoticeVersion(v int) *APIKeyUpsertBulk {
+// SetFallbackWhenGroupUnavailable sets the "fallback_when_group_unavailable" field.
+func (u *APIKeyUpsertBulk) SetFallbackWhenGroupUnavailable(v bool) *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
-		s.SetDataSharingNoticeVersion(v)
+		s.SetFallbackWhenGroupUnavailable(v)
 	})
 }
 
-// AddDataSharingNoticeVersion adds v to the "data_sharing_notice_version" field.
-func (u *APIKeyUpsertBulk) AddDataSharingNoticeVersion(v int) *APIKeyUpsertBulk {
+// UpdateFallbackWhenGroupUnavailable sets the "fallback_when_group_unavailable" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateFallbackWhenGroupUnavailable() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
-		s.AddDataSharingNoticeVersion(v)
+		s.UpdateFallbackWhenGroupUnavailable()
 	})
 }
 
-// UpdateDataSharingNoticeVersion sets the "data_sharing_notice_version" field to the value that was provided on create.
-func (u *APIKeyUpsertBulk) UpdateDataSharingNoticeVersion() *APIKeyUpsertBulk {
+// SetManagedBy sets the "managed_by" field.
+func (u *APIKeyUpsertBulk) SetManagedBy(v string) *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
-		s.UpdateDataSharingNoticeVersion()
+		s.SetManagedBy(v)
 	})
 }
 
-// SetDataSharingConfirmedGroupID sets the "data_sharing_confirmed_group_id" field.
-func (u *APIKeyUpsertBulk) SetDataSharingConfirmedGroupID(v int64) *APIKeyUpsertBulk {
+// UpdateManagedBy sets the "managed_by" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateManagedBy() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
-		s.SetDataSharingConfirmedGroupID(v)
+		s.UpdateManagedBy()
 	})
 }
 
-// AddDataSharingConfirmedGroupID adds v to the "data_sharing_confirmed_group_id" field.
-func (u *APIKeyUpsertBulk) AddDataSharingConfirmedGroupID(v int64) *APIKeyUpsertBulk {
+// ClearManagedBy clears the value of the "managed_by" field.
+func (u *APIKeyUpsertBulk) ClearManagedBy() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
-		s.AddDataSharingConfirmedGroupID(v)
-	})
-}
-
-// UpdateDataSharingConfirmedGroupID sets the "data_sharing_confirmed_group_id" field to the value that was provided on create.
-func (u *APIKeyUpsertBulk) UpdateDataSharingConfirmedGroupID() *APIKeyUpsertBulk {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.UpdateDataSharingConfirmedGroupID()
-	})
-}
-
-// ClearDataSharingConfirmedGroupID clears the value of the "data_sharing_confirmed_group_id" field.
-func (u *APIKeyUpsertBulk) ClearDataSharingConfirmedGroupID() *APIKeyUpsertBulk {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.ClearDataSharingConfirmedGroupID()
-	})
-}
-
-// SetDataSharingConfirmedAt sets the "data_sharing_confirmed_at" field.
-func (u *APIKeyUpsertBulk) SetDataSharingConfirmedAt(v time.Time) *APIKeyUpsertBulk {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.SetDataSharingConfirmedAt(v)
-	})
-}
-
-// UpdateDataSharingConfirmedAt sets the "data_sharing_confirmed_at" field to the value that was provided on create.
-func (u *APIKeyUpsertBulk) UpdateDataSharingConfirmedAt() *APIKeyUpsertBulk {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.UpdateDataSharingConfirmedAt()
-	})
-}
-
-// ClearDataSharingConfirmedAt clears the value of the "data_sharing_confirmed_at" field.
-func (u *APIKeyUpsertBulk) ClearDataSharingConfirmedAt() *APIKeyUpsertBulk {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.ClearDataSharingConfirmedAt()
-	})
-}
-
-// SetFallbackToDefaultGroupWhenUnavailable sets the "fallback_to_default_group_when_unavailable" field.
-func (u *APIKeyUpsertBulk) SetFallbackToDefaultGroupWhenUnavailable(v bool) *APIKeyUpsertBulk {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.SetFallbackToDefaultGroupWhenUnavailable(v)
-	})
-}
-
-// UpdateFallbackToDefaultGroupWhenUnavailable sets the "fallback_to_default_group_when_unavailable" field to the value that was provided on create.
-func (u *APIKeyUpsertBulk) UpdateFallbackToDefaultGroupWhenUnavailable() *APIKeyUpsertBulk {
-	return u.Update(func(s *APIKeyUpsert) {
-		s.UpdateFallbackToDefaultGroupWhenUnavailable()
+		s.ClearManagedBy()
 	})
 }
 

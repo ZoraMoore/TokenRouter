@@ -1,16 +1,14 @@
-/* Sub2API Interactive Tour Styles - DOM Restructured Version */
+/* TokenRouter 交互导览样式 */
 
 /* 1. Overlay & Highlight */
 .driver-overlay {
   position: fixed !important;
   inset: 0 !important;
-  z-index: 99999998 !important;
+  z-index: 99999998 !important; /* check-ui-allow: driver.js 第三方覆盖,层级受外部约束 */
   background-color: transparent !important;
   /*
-   * 关键修复：让 overlay 不拦截点击事件
-   * 因为已设置 allowClose: false，用户不能通过点击遮罩关闭引导
-   * 这样 Select 下拉菜单等脱离高亮区域的元素才能正常交互
-   * 视觉遮罩效果保持不变（SVG 仍然渲染，pointer-events 只影响交互不影响渲染）
+   * 遮罩让点击穿透至 Select 下拉菜单等高亮区域外的控件。
+   * allowClose: false 让引导保持打开，SVG 继续绘制遮罩。
    */
   pointer-events: none !important;
 }
@@ -21,15 +19,23 @@
 
 .driver-active-element {
   position: relative !important;
-  z-index: 99999999 !important;
+  z-index: 99999999 !important; /* check-ui-allow: driver.js 第三方覆盖,层级受外部约束 */
   outline: 4px solid rgba(0, 210, 255, 0.24) !important;
-  border-radius: 4px !important;
+  border-radius: var(--radius-compact) !important;
 }
 
 /* 2. Popover Container */
+/* 宽度 440px 与内边距均落在 4px 网格上;!important 用于覆盖 driver.js 的内联默认样式,属合法例外。 */
 .driver-popover.theme-tour-popover {
+  /* 中英文引导 HTML 共用这些颜色，提示框随弹窗主题切换。 */
+  --tour-success-bg: theme('colors.green.50');
+  --tour-info-bg: theme('colors.blue.50');
+  --tour-warning-bg: theme('colors.amber.100');
+  --tour-danger-bg: theme('colors.red.100');
+  --tour-action-color: theme('colors.primary.700');
+  --tour-muted-color: theme('colors.gray.500');
   position: fixed !important;
-  z-index: 100000000 !important;
+  z-index: 100000000 !important; /* check-ui-allow: driver.js 第三方覆盖,层级受外部约束 */
   box-sizing: border-box !important;
   display: flex !important;
   flex-direction: column !important;
@@ -40,7 +46,7 @@
   background-color: #ffffff !important;
   border: 1px solid #CDEFFD !important;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
-  border-radius: 12px !important;
+  border-radius: var(--radius-dialog) !important;
   padding: 0 !important;
   color: #2D4F68 !important;
   font-family: inherit !important;
@@ -48,9 +54,15 @@
 }
 
 .dark .driver-popover.theme-tour-popover {
-  background-color: #121215 !important;
-  border-color: #29292E !important;
-  color: #F0F0F1 !important;
+  --tour-success-bg: theme('colors.emerald.500 / 12%');
+  --tour-info-bg: theme('colors.blue.500 / 12%');
+  --tour-warning-bg: theme('colors.amber.500 / 12%');
+  --tour-danger-bg: theme('colors.red.500 / 12%');
+  --tour-action-color: theme('colors.primary.500');
+  --tour-muted-color: theme('colors.dark.300');
+  background-color: #0F0F10 !important;
+  border-color: theme('borderColor.dark.600') !important;
+  color: #DEE0E2 !important;
 }
 
 /* 3. Header Area */
@@ -84,14 +96,14 @@
   color: #9ca3af !important;
   background-color: transparent !important;
   border: none !important;
-  z-index: 20 !important;
-  border-radius: 4px !important;
+  z-index: 20 !important; /* check-ui-allow: driver.js 第三方覆盖,层级受外部约束 */
+  border-radius: var(--radius-compact) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
 }
 .theme-tour-popover .driver-popover-close-btn:hover { background-color: #f3f4f6 !important; color: #4b5563 !important; }
-.dark .theme-tour-popover .driver-popover-close-btn:hover { background-color: #29292E !important; }
+.dark .theme-tour-popover .driver-popover-close-btn:hover { background-color: #27272A !important; }
 
 /* 4. Body Content */
 .theme-tour-popover .driver-popover-description {
@@ -107,9 +119,13 @@
   line-height: 1.6 !important;
   background-color: transparent !important;
 }
-.dark .theme-tour-popover .driver-popover-description { color: #F0F0F1 !important; }
+.dark .theme-tour-popover .driver-popover-description { color: #DEE0E2 !important; }
 
-/* 5. 底部保留页码和操作按钮，键盘提示不再注入。 */
+.theme-tour-popover .driver-popover-description-hint {
+  color: var(--tour-muted-color);
+}
+
+/* 5. 底部展示页码和操作按钮。 */
 .theme-tour-popover .driver-popover-footer {
   display: flex !important;
   flex: 0 0 auto !important;
@@ -123,8 +139,8 @@
   margin: 0 !important;
 }
 .dark .theme-tour-popover .driver-popover-footer {
-  background-color: #18181B !important;
-  border-top-color: #29292E !important;
+  background-color: #141416 !important;
+  border-top-color: theme('borderColor.dark.700') !important;
 }
 
 .theme-tour-popover .driver-popover-progress-text {
@@ -136,7 +152,7 @@
   font-weight: 500 !important;
   white-space: nowrap !important;
 }
-.dark .theme-tour-popover .driver-popover-progress-text { color: #F0F0F1 !important; }
+.dark .theme-tour-popover .driver-popover-progress-text { color: #DEE0E2 !important; }
 
 .theme-tour-popover .driver-popover-navigation-btns {
   display: flex !important;
@@ -163,7 +179,7 @@
   padding: 8px 16px !important;
   font-size: 13px !important;
   font-weight: 500 !important;
-  border-radius: 6px !important;
+  border-radius: var(--radius-control) !important;
   cursor: pointer !important;
   transition: background-color 0.2s, border-color 0.2s !important;
   border: 1px solid transparent !important;
@@ -176,11 +192,11 @@
 }
 
 .theme-tour-popover .driver-popover-next-btn {
-  background-color: #00D2FF !important;
+  background-color: #12A7E8 !important;
   color: #ffffff !important;
   box-shadow: none !important;
 }
-.theme-tour-popover .driver-popover-next-btn:hover { background-color: #12A7E8 !important; }
+.theme-tour-popover .driver-popover-next-btn:hover { background-color: #0B8FD8 !important; }
 
 .theme-tour-popover .driver-popover-prev-btn {
   background-color: white !important;
@@ -190,9 +206,9 @@
 }
 .theme-tour-popover .driver-popover-prev-btn:hover { background-color: #F6FCFF !important; color: #2D4F68 !important; }
 .dark .theme-tour-popover .driver-popover-prev-btn {
-  background-color: #121215 !important;
-  border-color: #29292E !important;
-  color: #F0F0F1 !important;
+  background-color: #0F0F10 !important;
+  border-color: theme('borderColor.dark.600') !important;
+  color: #DEE0E2 !important;
 }
 
 @media (max-width: 480px) {
@@ -220,13 +236,13 @@
 }
 
 /* Arrows */
-.driver-popover-arrow { z-index: 100000001 !important; }
+.driver-popover-arrow { z-index: 100000001 !important; } /* check-ui-allow: driver.js 第三方覆盖,层级受外部约束 */
 .driver-popover-arrow-side-left.driver-popover-arrow { border-left-color: #ffffff !important; }
 .driver-popover-arrow-side-right.driver-popover-arrow { border-right-color: #ffffff !important; }
 .driver-popover-arrow-side-top.driver-popover-arrow { border-top-color: #ffffff !important; }
 .driver-popover-arrow-side-bottom.driver-popover-arrow { border-bottom-color: #ffffff !important; }
 
-.dark .driver-popover-arrow-side-left.driver-popover-arrow { border-left-color: #121215 !important; }
-.dark .driver-popover-arrow-side-right.driver-popover-arrow { border-right-color: #121215 !important; }
-.dark .driver-popover-arrow-side-top.driver-popover-arrow { border-top-color: #121215 !important; }
-.dark .driver-popover-arrow-side-bottom.driver-popover-arrow { border-bottom-color: #121215 !important; }
+.dark .driver-popover-arrow-side-left.driver-popover-arrow { border-left-color: #0F0F10 !important; }
+.dark .driver-popover-arrow-side-right.driver-popover-arrow { border-right-color: #0F0F10 !important; }
+.dark .driver-popover-arrow-side-top.driver-popover-arrow { border-top-color: #0F0F10 !important; }
+.dark .driver-popover-arrow-side-bottom.driver-popover-arrow { border-bottom-color: #0F0F10 !important; }

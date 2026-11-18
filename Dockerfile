@@ -1,15 +1,15 @@
 # syntax=docker/dockerfile:1.7
 # =============================================================================
-# Sub2API Multi-Stage Dockerfile
+# TokenRouter Multi-Stage Dockerfile
 # =============================================================================
 # Stage 1: Build frontend
 # Stage 2: Build Go backend with embedded frontend
 # Stage 3: Final minimal image
 # =============================================================================
 
-ARG NODE_IMAGE=node:24-alpine
-ARG GOLANG_IMAGE=golang:1.27.0-alpine
-ARG ALPINE_IMAGE=alpine:3.21
+ARG NODE_IMAGE=node:26.12.1-alpine
+ARG GOLANG_IMAGE=golang:1.27.3-alpine
+ARG ALPINE_IMAGE=alpine:3.24.2
 ARG POSTGRES_IMAGE=postgres:18-alpine
 ARG GOPROXY=https://goproxy.cn,direct
 ARG GOSUMDB=sum.golang.google.cn
@@ -24,20 +24,22 @@ ARG NPM_CONFIG_REGISTRY
 
 WORKDIR /app/frontend
 
-# 安装 pnpm，并固定到 v9 以匹配 CI、保证镜像构建可复现
-RUN corepack enable && corepack prepare pnpm@9 --activate
+# Node 版本需要与 .node-version 一致，镜像覆盖值同样检查；pnpm 版本取 package.json 的 packageManager。
+COPY .node-version /app/
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
+RUN test "$(node -p 'process.versions.node')" = "$(cat /app/.node-version)" && \
+    npm install --global "$(node -p 'require("./package.json").packageManager')"
 
-# Install dependencies first (better caching)
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
-RUN --mount=type=cache,id=sub2api-pnpm-store,target=/root/.local/share/pnpm/store \
+# 源码变化时复用已安装的依赖层。
+RUN --mount=type=cache,id=tokenrouter-pnpm-store,target=/root/.local/share/pnpm/store \
     if [ -n "${NPM_CONFIG_REGISTRY}" ]; then pnpm config set registry "${NPM_CONFIG_REGISTRY}"; fi && \
     pnpm install --frozen-lockfile --prefer-offline
 
-# 复制前端源码并构建。
-# LegalDocumentView.vue 构建时会通过 ../../../../docs/legal/*.md?raw
-# 读取法律文档，因此 docs/legal/ 需要与 frontend/ 同级放在 /app/docs/legal/。
+# 复制前端源码、法律文档和共享语言资源后构建。
 COPY frontend/ ./
+COPY backend/internal/provider/openai_defaults.json /app/backend/internal/provider/openai_defaults.json
 COPY docs/legal/ /app/docs/legal/
+COPY backend/internal/pkg/locale/*.json /app/backend/internal/pkg/locale/
 RUN pnpm run build
 
 # -----------------------------------------------------------------------------
@@ -68,7 +70,7 @@ WORKDIR /app/backend
 # Copy go mod files first (better caching)
 COPY backend/go.mod backend/go.sum ./
 # 跨构建保留模块缓存，重试临时下载故障时无需重新获取全部依赖。
-RUN --mount=type=cache,id=sub2api-gomod,target=/go/pkg/mod \
+RUN --mount=type=cache,id=tokenrouter-gomod,target=/go/pkg/mod \
     go mod download
 
 # 先复制后端源码
@@ -79,8 +81,8 @@ COPY --from=frontend-builder /app/backend/internal/web/dist ./internal/web/dist
 
 # 构建 release 二进制，并嵌入前端资源
 # 版本优先级：构建参数 VERSION > 精确 Git tag > cmd/server/VERSION
-RUN --mount=type=cache,id=sub2api-gomod,target=/go/pkg/mod \
-    --mount=type=cache,id=sub2api-gobuild,target=/root/.cache/go-build \
+RUN --mount=type=cache,id=tokenrouter-gomod,target=/go/pkg/mod \
+    --mount=type=cache,id=tokenrouter-gobuild,target=/root/.cache/go-build \
     VERSION_VALUE="${VERSION}" && \
     if [ -z "${VERSION_VALUE}" ]; then VERSION_VALUE="$(./scripts/resolve-version.sh)"; fi && \
     DATE_VALUE="${DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" && \
@@ -88,7 +90,7 @@ RUN --mount=type=cache,id=sub2api-gomod,target=/go/pkg/mod \
     -tags embed \
     -ldflags="-s -w -X main.Version=${VERSION_VALUE} -X main.Commit=${COMMIT} -X main.Date=${DATE_VALUE} -X main.BuildType=release" \
     -trimpath \
-    -o /app/sub2api \
+    -o /app/tokenrouter \
     ./cmd/server
 
 # -----------------------------------------------------------------------------
@@ -103,7 +105,7 @@ FROM ${ALPINE_IMAGE}
 
 # Labels
 LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
-LABEL description="Sub2API - AI API Gateway Platform"
+LABEL description="TokenRouter - AI API Gateway Platform"
 LABEL org.opencontainers.image.source="https://github.com/TokenFlux/TokenRouter"
 
 # Install runtime dependencies
@@ -126,20 +128,19 @@ COPY --from=pg-client /usr/local/bin/psql /usr/local/bin/psql
 COPY --from=pg-client /usr/local/lib/libpq.so.5* /usr/local/lib/
 
 # Create non-root user
-RUN addgroup -g 1000 sub2api && \
-    adduser -u 1000 -G sub2api -s /bin/sh -D sub2api
+RUN addgroup -g 1000 tokenrouter && \
+    adduser -u 1000 -G tokenrouter -s /bin/sh -D tokenrouter
 
 # Set working directory
 WORKDIR /app
 
-# Copy binary/resources with ownership to avoid extra full-layer chown copy
-COPY --from=backend-builder --chown=sub2api:sub2api /app/sub2api /app/sub2api
-COPY --from=backend-builder --chown=sub2api:sub2api /app/backend/resources /app/resources
+# 复制已内嵌默认价格补充的二进制，并设置运行用户。
+COPY --from=backend-builder --chown=tokenrouter:tokenrouter /app/tokenrouter /app/tokenrouter
 
 # Create data directory
-RUN mkdir -p /app/data && chown sub2api:sub2api /app/data
+RUN mkdir -p /app/data && chown tokenrouter:tokenrouter /app/data
 
-# Copy entrypoint script (fixes volume permissions then drops to sub2api)
+# Copy entrypoint script (fixes volume permissions then drops to tokenrouter)
 COPY deploy/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
@@ -150,6 +151,8 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD wget -q -T 5 -O /dev/null http://localhost:${SERVER_PORT:-8080}/health || exit 1
 
-# Run the application (entrypoint fixes /app/data ownership then execs as sub2api)
+# Run the application (entrypoint fixes /app/data ownership then execs as tokenrouter)
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["/app/sub2api"]
+# 旧 Compose 可继续调用原可执行路径。
+RUN ln -s /app/tokenrouter /app/sub2api
+CMD ["/app/tokenrouter"]

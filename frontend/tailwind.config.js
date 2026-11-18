@@ -1,26 +1,67 @@
+// 边线透明度与 /70 等修饰符相乘，避免修饰符把低对比边框重新提亮。
+const darkEdgeColor = (opacity) => ({ opacityValue = '1' }) =>
+  `rgb(252 252 254 / calc(${opacity} * ${opacityValue}))`
+
+// 深色边线独立于文字和表面色阶，border、divide、ring 共用同一强度。
+const darkEdges = {
+  400: darkEdgeColor(0.3),
+  500: darkEdgeColor(0.125),
+  600: darkEdgeColor(0.078),
+  700: darkEdgeColor(0.04),
+  800: darkEdgeColor(0.031),
+  900: darkEdgeColor(0.02)
+}
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{vue,js,ts,jsx,tsx}'],
   darkMode: 'class',
   theme: {
-    // 对齐 OpenRouter 的圆角层级：紧凑元素、控件、内容表面和桌面弹窗。
+    // 语义圆角档位:紧凑元素、控件、内容表面、桌面弹窗。
+    // 数值统一由 style.css 的 :root --radius-* 变量定义,raw CSS 与工具类同源。
+    // 旧尺度 key(sm/md/lg/xl…)已删除,check:ui 门禁阻止其复活。
     borderRadius: {
       none: '0px',
-      sm: '4px',
-      DEFAULT: '4px',
-      md: '6px',
-      lg: '6px',
-      xl: '8px',
-      '2xl': '8px',
-      '3xl': '8px',
-      '4xl': '8px',
-      full: '9999px',
-      compact: '4px',
-      control: '6px',
-      surface: '8px',
-      dialog: '12px'
+      compact: 'var(--radius-compact)',
+      control: 'var(--radius-control)',
+      surface: 'var(--radius-surface)',
+      dialog: 'var(--radius-dialog)',
+      full: '9999px'
     },
     extend: {
+      borderColor: { dark: darkEdges },
+      divideColor: { dark: darkEdges },
+      ringColor: { dark: darkEdges },
+      opacity: {
+        6: '0.06',
+        8: '0.08'
+      },
+      // 浮层层级语义档:数值唯一来源是 style.css :root 的 --z-* 变量,这里只做 var() 引用。
+      // --z-tour(driver.js 外部约束)有意不暴露为工具类,防止业务代码依附第三方层级。
+      zIndex: {
+        'chart-tooltip': 'var(--z-chart-tooltip)',
+        'sidebar-overlay': 'var(--z-sidebar-overlay)',
+        sidebar: 'var(--z-sidebar)',
+        header: 'var(--z-header)',
+        modal: 'var(--z-modal)',
+        'modal-nested': 'var(--z-modal-nested)',
+        tooltip: 'var(--z-tooltip)',
+        announcement: 'var(--z-announcement)',
+        'announcement-raised': 'var(--z-announcement-raised)',
+        'announcement-top': 'var(--z-announcement-top)',
+        'menu-overlay': 'var(--z-menu-overlay)',
+        toast: 'var(--z-toast)',
+        'action-menu': 'var(--z-action-menu)',
+        'teleport-tooltip': 'var(--z-teleport-tooltip)',
+        'help-tooltip': 'var(--z-help-tooltip)',
+        'teleport-dropdown': 'var(--z-teleport-dropdown)'
+      },
+      // 浮层面板最大高度三档,数值同样由 style.css :root 变量承载。
+      maxHeight: {
+        'menu-sm': 'var(--max-h-menu-sm)',
+        menu: 'var(--max-h-menu)',
+        panel: 'var(--max-h-panel)'
+      },
       colors: {
         // 主色调 - Blue Archive 蓝白主题
         primary: {
@@ -78,26 +119,29 @@ export default {
           900: '#18181B',
           950: '#09090B'
         },
-        // 深色模式背景 - 成熟黑色系(zinc 中性色相),品牌蓝仅作强调色
-        // 注意:950 比 900 略亮,历史上作为"提升面"(elevated surface)使用,保持该关系
+        // @project-doc docs/architecture/frontend_ui_conventions.md#dark_colors
+        // 深色文字与表面色阶；边框强度由 darkEdges 单独定义。
         dark: {
-          50: '#FAFAFA',
-          100: '#F0F0F1',
-          200: '#D9D9DE',
-          300: '#A6A6AF',
-          400: '#77777F',
-          500: '#55555C',
-          600: '#333338',
-          700: '#29292E',
-          800: '#1F1F23',
-          900: '#121215',
-          950: '#18181B'
+          50: '#FAFAFA', // 标题与强调文字
+          100: '#DEE0E2', // 正文文字、侧栏导航与顶栏图标默认色
+          200: '#D4D4D8', // 次强文字、占位文字底色
+          300: '#A1A1AA', // 次要文字
+          400: '#8B8B94', // 辅助文字、表头文字
+          500: '#5F5F67', // 图标、禁用文字
+          600: '#3D3D42', // 较强中性填充
+          700: '#27272A', // 中性填充：chip、禁用控件
+          800: '#17171A', // 弱填充：表格行 hover、嵌套面板
+          900: '#0F0F10', // 卡片、弹窗、下拉面板
+          950: '#141416' // 控件底：输入框、次级按钮、Tab 轨道、行内代码
         }
       },
       fontFamily: {
-        // 英文使用 OpenRouter 的开源字体，中文继续按现有系统字体顺序回退。
+        // 英文用 OpenRouter 的开源字体 Plus Jakarta Sans。
+        // 中文在苹果设备上用系统自带的苹方，其他设备用字形接近的思源黑体网页字体。
         sans: [
           '"Plus Jakarta Sans Variable"',
+          '"PingFang SC"',
+          '"Noto Sans SC Variable"',
           'system-ui',
           '-apple-system',
           'BlinkMacSystemFont',
@@ -105,7 +149,6 @@ export default {
           'Roboto',
           'Helvetica Neue',
           'Arial',
-          'PingFang SC',
           'Hiragino Sans GB',
           'Microsoft YaHei',
           'sans-serif'
@@ -135,11 +178,23 @@ export default {
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-primary': 'linear-gradient(135deg, #00D2FF 0%, #0B8FD8 100%)',
-        'gradient-dark': 'linear-gradient(135deg, #1F1F23 0%, #0F0F11 100%)',
+        'gradient-dark': 'linear-gradient(135deg, #17171A 0%, #0A0A0B 100%)',
         'gradient-glass':
           'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
         'mesh-gradient':
           'radial-gradient(at 40% 20%, rgba(0, 210, 255, 0.14) 0px, transparent 50%), radial-gradient(at 80% 0%, rgba(139, 221, 248, 0.12) 0px, transparent 50%), radial-gradient(at 0% 50%, rgba(18, 167, 232, 0.1) 0px, transparent 50%)'
+      },
+      // 动效变量由 style.css 持有，工具类只负责引用。
+      transitionDuration: {
+        DEFAULT: 'var(--motion-fast)',
+        fast: 'var(--motion-fast)',
+        normal: 'var(--motion-normal)',
+        layout: 'var(--motion-layout)',
+      },
+      transitionTimingFunction: {
+        DEFAULT: 'var(--motion-ease)',
+        standard: 'var(--motion-ease)',
+        exit: 'var(--motion-ease-exit)',
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out',

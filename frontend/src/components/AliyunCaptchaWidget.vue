@@ -7,32 +7,15 @@
       :class="state === 'verified' ? 'aliyun-captcha-button--verified' : ''"
       :disabled="state === 'verified'"
     >
-      <svg
+      <Icon
+        name="checkCircle"
+        size="sm"
+        :animate-on-hover="false"
         v-if="state === 'verified'"
         class="aliyun-captcha-icon"
-        viewBox="0 0 20 20"
-        fill="currentColor"
         aria-hidden="true"
-      >
-        <path
-          fill-rule="evenodd"
-          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-          clip-rule="evenodd"
-        />
-      </svg>
-      <svg
-        v-else
-        class="aliyun-captcha-icon"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        aria-hidden="true"
-      >
-        <path
-          fill-rule="evenodd"
-          d="M9.661 2.237a.531.531 0 01.678 0 11.947 11.947 0 007.078 2.749.5.5 0 01.479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 01-.332 0C5.26 16.564 2 12.163 2 7c0-.538.035-1.069.104-1.589a.5.5 0 01.48-.425 11.947 11.947 0 007.077-2.75z"
-          clip-rule="evenodd"
-        />
-      </svg>
+      />
+      <Icon name="shieldCheck" size="sm" v-else class="aliyun-captcha-icon" aria-hidden="true" />
       <span>{{ buttonText }}</span>
     </button>
     <div :id="elementId"></div>
@@ -40,6 +23,8 @@
 </template>
 
 <script setup lang="ts">
+import { vendorLocale } from '@/i18n/catalog'
+import Icon from '@/components/icons/Icon.vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -168,7 +153,7 @@ function initCaptcha(): void {
     onBizResultCallback: () => {},
     getInstance: () => {},
     slideStyle: { width: 360, height: 40 },
-    language: locale.value.toLowerCase().startsWith('zh') ? 'cn' : 'en'
+    language: vendorLocale('aliyun', locale.value)
   })
 }
 
@@ -311,7 +296,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-control);
   border: 1px solid rgb(209 213 219);
   background-color: rgb(249 250 251);
   padding: 0.5rem 0.75rem;
@@ -319,9 +304,9 @@ onUnmounted(() => {
   font-weight: 500;
   color: rgb(55 65 81);
   transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease,
-    color 0.15s ease;
+    border-color var(--motion-fast) var(--motion-ease),
+    background-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
 }
 
 .aliyun-captcha-button:hover:not(:disabled) {
@@ -337,15 +322,15 @@ onUnmounted(() => {
 
 :root.dark .aliyun-captcha-button,
 .dark .aliyun-captcha-button {
-  border-color: rgb(55 65 81);
-  background-color: rgb(31 41 55);
-  color: rgb(209 213 219);
+  border-color: theme('borderColor.dark.600');
+  background-color: rgb(20 20 22);
+  color: rgb(212 212 216);
 }
 
 :root.dark .aliyun-captcha-button:hover:not(:disabled),
 .dark .aliyun-captcha-button:hover:not(:disabled) {
-  border-color: rgb(75 85 99);
-  background-color: rgb(55 65 81);
+  border-color: theme('borderColor.dark.500');
+  background-color: rgb(39 39 42);
 }
 
 :root.dark .aliyun-captcha-button--verified,

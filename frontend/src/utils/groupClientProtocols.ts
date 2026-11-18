@@ -1,101 +1,51 @@
-import type { GroupClientProtocol, GroupPlatform } from '@/types'
+import type { ProtocolID } from '@/types'
+import { protocolCatalog } from '@/api/admin/protocolCapabilities'
 
-export const GROUP_CLIENT_PROTOCOL_ORDER: readonly GroupClientProtocol[] = [
-  'anthropic_messages',
-  'openai_responses',
-  'openai_chat_completions',
-  'gemini_generate_content'
-]
-
-interface GroupClientProtocolPolicy {
-  supported: readonly GroupClientProtocol[]
-  defaults: readonly GroupClientProtocol[]
-}
-
-const GROUP_CLIENT_PROTOCOL_POLICIES: Record<GroupPlatform, GroupClientProtocolPolicy> = {
-  anthropic: {
-    supported: ['anthropic_messages', 'openai_responses', 'openai_chat_completions'],
-    defaults: ['anthropic_messages']
-  },
-  openai: {
-    supported: ['anthropic_messages', 'openai_responses', 'openai_chat_completions'],
-    defaults: ['openai_responses', 'openai_chat_completions']
-  },
-  gemini: {
-    supported: GROUP_CLIENT_PROTOCOL_ORDER,
-    defaults: ['gemini_generate_content']
-  },
-  antigravity: {
-    supported: GROUP_CLIENT_PROTOCOL_ORDER,
-    defaults: ['anthropic_messages', 'gemini_generate_content']
-  },
-  qoder: {
-    supported: ['anthropic_messages', 'openai_responses', 'openai_chat_completions'],
-    defaults: []
-  },
-  grok: {
-    supported: ['anthropic_messages', 'openai_responses', 'openai_chat_completions'],
-    defaults: ['openai_responses', 'openai_chat_completions']
-  },
-  kimi: {
-    supported: ['anthropic_messages', 'openai_responses', 'openai_chat_completions'],
-    defaults: ['anthropic_messages', 'openai_responses', 'openai_chat_completions']
-  },
-  zhipu: {
-    supported: ['anthropic_messages', 'openai_responses', 'openai_chat_completions'],
-    defaults: ['anthropic_messages', 'openai_responses', 'openai_chat_completions']
-  },
-  deepseek: {
-    supported: ['anthropic_messages', 'openai_responses', 'openai_chat_completions'],
-    defaults: ['anthropic_messages', 'openai_responses', 'openai_chat_completions']
-  }
-}
-
-function orderedProtocols(protocols: Iterable<GroupClientProtocol>): GroupClientProtocol[] {
+// 分组共用入口目录，提供商原生能力在选号时检查。
+function orderedProtocols(protocols: Iterable<ProtocolID>): ProtocolID[] {
   const selected = new Set(protocols)
-  return GROUP_CLIENT_PROTOCOL_ORDER.filter((protocol) => selected.has(protocol))
+  return (protocolCatalog.value?.protocols ?? []).filter(protocol => !protocol.upstream_only && selected.has(protocol.id)).map(protocol => protocol.id)
 }
 
-export function supportedGroupClientProtocols(platform: GroupPlatform): GroupClientProtocol[] {
-  return orderedProtocols(GROUP_CLIENT_PROTOCOL_POLICIES[platform].supported)
+export function supportedGroupClientProtocols(): ProtocolID[] {
+  return orderedProtocols(protocolCatalog.value?.groups[0]?.protocols ?? [])
 }
 
-export function defaultGroupClientProtocols(platform: GroupPlatform): GroupClientProtocol[] {
-  return orderedProtocols(GROUP_CLIENT_PROTOCOL_POLICIES[platform].defaults)
+export function defaultGroupClientProtocols(): ProtocolID[] {
+  return orderedProtocols(protocolCatalog.value?.groups[0]?.defaults ?? [])
 }
 
-// 过滤不受平台支持的值，并保持公共契约规定的固定顺序。
-export function effectiveGroupClientProtocols(
-  platform: GroupPlatform,
-  protocols: readonly GroupClientProtocol[] | null | undefined
-): GroupClientProtocol[] {
-  const supported = new Set(GROUP_CLIENT_PROTOCOL_POLICIES[platform].supported)
-  return orderedProtocols((protocols ?? []).filter((protocol) => supported.has(protocol)))
+export function effectiveGroupClientProtocols(protocols: readonly ProtocolID[] | null | undefined): ProtocolID[] {
+  if (!protocolCatalog.value) return [...(protocols ?? [])]
+  const supported = new Set(protocolCatalog.value.groups[0]?.protocols ?? [])
+  return orderedProtocols((protocols ?? []).filter(protocol => supported.has(protocol)))
 }
 
-export function hasGroupClientProtocol(
-  protocols: readonly GroupClientProtocol[],
-  protocol: GroupClientProtocol
-): boolean {
-  return protocols.includes(protocol)
-}
-
-export function setGroupClientProtocol(
-  platform: GroupPlatform,
-  protocols: readonly GroupClientProtocol[],
-  protocol: GroupClientProtocol,
-  enabled: boolean
-): GroupClientProtocol[] {
-  const policy = GROUP_CLIENT_PROTOCOL_POLICIES[platform]
-  if (!policy.supported.includes(protocol)) {
-    return effectiveGroupClientProtocols(platform, [...protocols])
-  }
-
+export function setGroupClientProtocol(protocols: readonly ProtocolID[], protocol: ProtocolID, enabled: boolean): ProtocolID[] {
   const next = new Set(protocols)
-  if (enabled) {
-    next.add(protocol)
-  } else {
-    next.delete(protocol)
+  if (enabled && supportedGroupClientProtocols().includes(protocol)) next.add(protocol)
+  else next.delete(protocol)
+  return effectiveGroupClientProtocols([...next])
+}
+
+// 历史分组可能残留目录收缩前的转换源（如调整为仅上游的协议），提交前按目录剔除，
+// 目标列表同步去重并过滤非法边；显式空数组保留“仅原生”语义。
+export function sanitizeGroupProtocolFallbacks(
+  fallbacks: Partial<Record<ProtocolID, ProtocolID[]>> | null | undefined,
+): Partial<Record<ProtocolID, ProtocolID[]>> {
+  const next: Partial<Record<ProtocolID, ProtocolID[]>> = { ...(fallbacks ?? {}) }
+  const profile = protocolCatalog.value?.groups[0]
+  if (!profile) return next
+  const sources = new Set(profile.protocols)
+  for (const source of Object.keys(next) as ProtocolID[]) {
+    if (!sources.has(source)) {
+      delete next[source]
+      continue
+    }
+    const allowed = new Set(profile.fallback_targets[source] ?? [])
+    next[source] = (next[source] ?? []).filter(
+      (target, index, list) => allowed.has(target) && list.indexOf(target) === index,
+    )
   }
-  return effectiveGroupClientProtocols(platform, [...next])
+  return next
 }

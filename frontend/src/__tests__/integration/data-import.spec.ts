@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
+import ImportDataModal from '@/components/admin/provider/ImportDataModal.vue'
 import { adminAPI } from '@/api/admin'
 import zhMessages from '@/i18n/locales/zh'
 
@@ -18,17 +18,13 @@ vi.mock('@/stores/app', () => ({
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
-    accounts: {
+    providers: {
       importData: vi.fn()
-    },
-    settings: {
-      getOpenAIOAuthImportDefaults: vi.fn(),
-      updateOpenAIOAuthImportDefaults: vi.fn()
     }
   }
 }))
 
-vi.mock('@/api/admin/accounts', () => ({
+vi.mock('@/api/admin/providers', () => ({
   getAntigravityDefaultModelMapping: vi.fn()
 }))
 
@@ -55,7 +51,7 @@ const setInputFiles = (element: Element, files: File[]) => {
 }
 
 describe('ImportDataModal', () => {
-  const importData = vi.mocked(adminAPI.accounts.importData)
+  const importData = vi.mocked(adminAPI.providers.importData)
 
   beforeEach(() => {
     showError.mockReset()
@@ -79,8 +75,8 @@ describe('ImportDataModal', () => {
     proxy_created: 0,
     proxy_reused: 0,
     proxy_failed: 0,
-    account_created: 1,
-    account_failed: 0,
+    provider_created: 1,
+    provider_failed: 0,
     errors: []
   }
 
@@ -90,7 +86,7 @@ describe('ImportDataModal', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(showError).toHaveBeenCalledWith('admin.accounts.dataImportSelectSource')
+    expect(showError).toHaveBeenCalledWith('admin.providers.dataImportSelectSource')
     expect(importData).not.toHaveBeenCalled()
   })
 
@@ -101,7 +97,7 @@ describe('ImportDataModal', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(showError).toHaveBeenCalledWith('admin.accounts.dataImportParseFailed')
+    expect(showError).toHaveBeenCalledWith('admin.providers.dataImportParseFailed')
     expect(importData).not.toHaveBeenCalled()
   })
 
@@ -115,13 +111,13 @@ describe('ImportDataModal', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(showError).toHaveBeenCalledWith('admin.accounts.dataImportParseFailedFile')
+    expect(showError).toHaveBeenCalledWith('admin.providers.dataImportParseFailedFile')
     expect(importData).not.toHaveBeenCalled()
   })
 
-  it('粘贴有效 JSON 时提交解析后的数据', async () => {
+  it.each(['tokenrouter-data', 'sub2api-data'])('粘贴 %s 版本 2 数据时提交解析后的数据', async (type) => {
     const wrapper = mountModal()
-    const payload = { accounts: [{ name: 'pasted-account' }], proxies: [] }
+    const payload = { type, version: 2, providers: [{ name: 'pasted-provider' }], proxies: [] }
     importData.mockResolvedValue(successResult)
 
     await wrapper.find('textarea').setValue(JSON.stringify(payload))
@@ -130,15 +126,63 @@ describe('ImportDataModal', () => {
 
     expect(importData).toHaveBeenCalledWith({
       data: payload,
-      skip_default_group_bind: true
     })
-    expect(showSuccess).toHaveBeenCalledWith('admin.accounts.dataImportSuccess')
+    expect(showSuccess).toHaveBeenCalledWith('admin.providers.dataImportSuccess')
+  })
+
+  it.each(['file', 'paste', 'drop'])('通过 %s 导入旧版 Sub2API 账号文件', async (source) => {
+    const wrapper = mountModal()
+    const account = { name: 'legacy', platform: 'openai', type: 'oauth', credentials: { access_token: 'fixture-token' }, concurrency: 10, priority: 1, plan_type: 'plus' }
+    const payload = { exported_at: '2026-10-11T07:26:23Z', proxies: [], accounts: [account] }
+    importData.mockResolvedValue(successResult)
+    if (source === 'paste') {
+      await wrapper.find('textarea').setValue(JSON.stringify(payload))
+    } else if (source === 'file') {
+      const input = wrapper.find('input[type="file"]')
+      setInputFiles(input.element, [makeJsonFile('sub2api-batch-001.json', payload)])
+      await input.trigger('change')
+    } else {
+      await wrapper.find('.border-dashed').trigger('drop', { dataTransfer: { files: [makeJsonFile('sub2api-batch-001.json', payload)] } })
+    }
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(importData).toHaveBeenCalledWith({ data: { type: 'tokenrouter-data', version: 2, exported_at: payload.exported_at, proxies: [], providers: [account] } })
+    expect(showError).not.toHaveBeenCalled()
+  })
+
+  it('混合导入旧版与新版文件时统一提供商集合', async () => {
+    const wrapper = mountModal()
+    const input = wrapper.find('input[type="file"]')
+    importData.mockResolvedValue({ ...successResult, provider_created: 2 })
+    setInputFiles(input.element, [
+      makeJsonFile('old.json', { type: 'sub2api-data', version: 1, accounts: [{ name: 'old' }] }),
+      makeJsonFile('new.json', { type: 'tokenrouter-data', version: 2, providers: [{ name: 'new' }], proxies: [] })
+    ])
+    await input.trigger('change')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(importData).toHaveBeenCalledWith({ data: expect.objectContaining({ type: 'tokenrouter-data', version: 2, providers: [{ name: 'old' }, { name: 'new' }] }) })
+  })
+
+  it.each([
+    { accounts: [], providers: [], proxies: [] },
+    { type: 'sub2api-data', version: 2, accounts: [], proxies: [] },
+    { type: 'unknown', accounts: [], proxies: [] },
+    { accounts: null, proxies: [] },
+    { accounts: [], proxies: [], unexpected: true }
+  ])('拒绝含歧义或不支持字段的旧格式 %j', async (payload) => {
+    const wrapper = mountModal()
+    await wrapper.find('textarea').setValue(JSON.stringify(payload))
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(showError).toHaveBeenCalledWith('admin.providers.dataImportInvalidFile')
+    expect(importData).not.toHaveBeenCalled()
   })
 
   it('同时存在文件和粘贴内容时优先使用粘贴内容', async () => {
     const wrapper = mountModal()
-    const filePayload = { accounts: [{ name: 'file-account' }], proxies: [] }
-    const pastedPayload = { accounts: [{ name: 'pasted-account' }], proxies: [] }
+    const filePayload = { type: 'tokenrouter-data', version: 2, providers: [{ name: 'file-provider' }], proxies: [] }
+    const pastedPayload = { type: 'tokenrouter-data', version: 2, providers: [{ name: 'pasted-provider' }], proxies: [] }
     importData.mockResolvedValue(successResult)
 
     const input = wrapper.find('input[type="file"]')
@@ -157,7 +201,6 @@ describe('ImportDataModal', () => {
 
     expect(importData).toHaveBeenCalledWith({
       data: pastedPayload,
-      skip_default_group_bind: true
     })
   })
 
@@ -170,14 +213,14 @@ describe('ImportDataModal', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(showError).toHaveBeenCalledWith('admin.accounts.dataImportInvalidFile')
+    expect(showError).toHaveBeenCalledWith('admin.providers.dataImportInvalidFile')
     expect(importData).not.toHaveBeenCalled()
   })
 
   it('无有效 JSON 的新选择不会清空已有文件', async () => {
     const wrapper = mountModal()
     const input = wrapper.find('input[type="file"]')
-    const payload = { accounts: [{ name: 'kept-account' }], proxies: [] }
+    const payload = { type: 'tokenrouter-data', version: 2, providers: [{ name: 'kept-provider' }], proxies: [] }
     importData.mockResolvedValue(successResult)
 
     setInputFiles(input.element, [makeJsonFile('valid.json', payload)])
@@ -185,30 +228,33 @@ describe('ImportDataModal', () => {
     setInputFiles(input.element, [makeJsonFile('notes.txt', 'hello', 'text/plain')])
     await input.trigger('change')
 
-    expect(showError).toHaveBeenCalledWith('admin.accounts.dataImportSelectFile')
+    expect(showError).toHaveBeenCalledWith('admin.providers.dataImportSelectFile')
 
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
     expect(importData).toHaveBeenCalledWith({
       data: payload,
-      skip_default_group_bind: true
     })
   })
 
-  it('选择多个 JSON 文件时合并账号、代理和跳过计数', async () => {
+  it('选择多个 JSON 文件时合并提供商、代理和跳过计数', async () => {
     const wrapper = mountModal()
     const input = wrapper.find('input[type="file"]')
-    importData.mockResolvedValue({ ...successResult, account_created: 2 })
+    importData.mockResolvedValue({ ...successResult, provider_created: 2 })
 
     setInputFiles(input.element, [
       makeJsonFile('first.json', {
-        accounts: [{ name: 'account-a' }],
+        type: 'tokenrouter-data',
+        version: 2,
+        providers: [{ name: 'provider-a' }],
         proxies: [],
         skipped_shadows: 1
       }),
       makeJsonFile('second.json', {
-        accounts: [{ name: 'account-b' }],
+        type: 'tokenrouter-data',
+        version: 2,
+        providers: [{ name: 'provider-b' }],
         proxies: [{ proxy_key: 'proxy-b' }],
         skipped_shadows: 2
       })
@@ -220,17 +266,18 @@ describe('ImportDataModal', () => {
 
     expect(importData).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        accounts: [{ name: 'account-a' }, { name: 'account-b' }],
+        type: 'tokenrouter-data',
+        version: 2,
+        providers: [{ name: 'provider-a' }, { name: 'provider-b' }],
         proxies: [{ proxy_key: 'proxy-b' }],
         skipped_shadows: 3
       }),
-      skip_default_group_bind: true
     })
   })
 
   it('拖入 JSON 文件后可以直接导入', async () => {
     const wrapper = mountModal()
-    const payload = { accounts: [{ name: 'dropped-account' }], proxies: [] }
+    const payload = { type: 'tokenrouter-data', version: 2, providers: [{ name: 'dropped-provider' }], proxies: [] }
     importData.mockResolvedValue(successResult)
 
     await wrapper.find('.border-dashed').trigger('drop', {
@@ -241,7 +288,6 @@ describe('ImportDataModal', () => {
 
     expect(importData).toHaveBeenCalledWith({
       data: payload,
-      skip_default_group_bind: true
     })
   })
 
@@ -250,12 +296,14 @@ describe('ImportDataModal', () => {
     const input = wrapper.find('input[type="file"]')
     importData.mockResolvedValue({
       ...successResult,
-      account_created: 1,
-      account_failed: 1
+      provider_created: 1,
+      provider_failed: 1
     })
     setInputFiles(input.element, [
       makeJsonFile('mixed.json', {
-        accounts: [{ name: 'created' }, { name: 'failed' }],
+        type: 'tokenrouter-data',
+        version: 2,
+        providers: [{ name: 'created' }, { name: 'failed' }],
         proxies: []
       })
     ])
@@ -290,6 +338,6 @@ describe('ImportDataModal', () => {
       }
     })
 
-    expect(wrapper.find('textarea').attributes('placeholder')).toContain('"accounts"')
+    expect(wrapper.find('textarea').attributes('placeholder')).toContain('"providers"')
   })
 })

@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Sub2API Docker Deployment Preparation Script
+# TokenRouter Docker Deployment Preparation Script
 # =============================================================================
 # This script prepares deployment files for TokenRouter:
 #   - Downloads docker-compose.local.yml and .env.example
@@ -157,7 +157,7 @@ main() {
     echo "     docker-compose up -d"
     echo ""
     echo "  3. View logs:"
-    echo "     docker-compose logs -f sub2api"
+    echo "     docker-compose logs -f tokenrouter"
     echo ""
     echo "  4. Access Web UI:"
     echo "     http://localhost:8080"

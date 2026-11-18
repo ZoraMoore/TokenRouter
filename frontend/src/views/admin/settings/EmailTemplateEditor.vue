@@ -1,20 +1,13 @@
 <template>
-  <div class="card">
-    <div
-      class="flex flex-col gap-3 border-b border-gray-100 px-6 py-4 dark:border-dark-700 lg:flex-row lg:items-start lg:justify-between"
-    >
-      <div>
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-          {{ t("admin.settings.emailTemplates.title") }}
-        </h2>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {{ t("admin.settings.emailTemplates.description") }}
-        </p>
-      </div>
+  <SettingsCard
+    :title="t('admin.settings.emailTemplates.title')"
+    :description="t('admin.settings.emailTemplates.description')"
+  >
+    <template #actions>
       <div class="flex flex-wrap gap-2">
         <button
           type="button"
-          class="btn btn-secondary btn-sm"
+          class="btn btn-secondary btn-sm h-9"
           :disabled="loadingTemplate || previewing || !canPreview"
           @click="refreshPreview"
         >
@@ -22,33 +15,17 @@
         </button>
         <button
           type="button"
-          class="btn btn-secondary btn-sm"
+          class="btn btn-secondary btn-sm h-9"
           :disabled="loadingTemplate || restoring || !selectedEvent || !selectedLocale"
           @click="restoreOfficial"
         >
           {{ restoring ? t("admin.settings.emailTemplates.restoring") : t("admin.settings.emailTemplates.restoreOfficial") }}
         </button>
-        <button
-          type="button"
-          class="btn btn-primary btn-sm"
-          :disabled="loadingTemplate || saving || !canSave"
-          @click="saveTemplate"
-        >
-          {{ saving ? t("admin.settings.emailTemplates.saving") : t("admin.settings.emailTemplates.save") }}
-        </button>
       </div>
-    </div>
+    </template>
 
-    <div class="space-y-6 p-6">
-      <div
-        v-if="loadingList"
-        class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400"
-      >
-        <span
-          class="h-4 w-4 animate-spin rounded-full border-b-2 border-primary-600"
-        ></span>
-        {{ t("common.loading") }}
-      </div>
+    <div class="space-y-6">
+      <ContentSkeleton v-if="loadingList" variant="form" :rows="4" class="py-4" />
 
       <template v-else>
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -78,7 +55,7 @@
 
         <div
           v-if="selectedEventMeta"
-          class="rounded-lg border border-primary-100 bg-primary-50/70 p-4 dark:border-primary-900/50 dark:bg-primary-950/20"
+          class="rounded-surface border border-primary-100 bg-primary-50/70 p-4 dark:border-primary-900/50 dark:bg-primary-950/20"
         >
           <div class="flex flex-wrap items-center gap-2">
             <div class="text-sm font-semibold text-gray-900 dark:text-white">
@@ -113,7 +90,7 @@
 
         <div
           v-if="!eventOptions.length || !localeOptions.length"
-          class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+          class="rounded-control border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
         >
           {{ t("admin.settings.emailTemplates.empty") }}
         </div>
@@ -149,7 +126,7 @@
             </div>
 
             <div
-              class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/60"
+              class="rounded-surface border border-gray-200 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/60"
             >
               <div class="text-sm font-medium text-gray-900 dark:text-white">
                 {{ t("admin.settings.emailTemplates.placeholders") }}
@@ -173,7 +150,7 @@
 
           <div class="space-y-4">
             <div
-              class="rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800"
+              class="rounded-control border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800"
             >
               <div
                 class="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-dark-700"
@@ -195,7 +172,7 @@
               </div>
               <div class="bg-gray-100 p-3 dark:bg-dark-900">
                 <iframe
-                  class="h-[36rem] w-full rounded-md border border-gray-200 bg-white dark:border-dark-700"
+                  class="h-[36rem] w-full rounded-control border border-gray-200 bg-white dark:border-dark-700"
                   sandbox=""
                   :srcdoc="previewHtml"
                   :title="t('admin.settings.emailTemplates.livePreview')"
@@ -210,10 +187,11 @@
         </div>
       </template>
     </div>
-  </div>
+  </SettingsCard>
 </template>
 
 <script setup lang="ts">
+import ContentSkeleton from '@/components/common/ContentSkeleton.vue'
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { adminAPI } from "@/api";
@@ -222,6 +200,9 @@ import type {
   EmailTemplateOption,
 } from "@/api/admin/settings";
 import Select from "@/components/common/Select.vue";
+import SettingsCard from "@/components/common/settings/SettingsCard.vue";
+import { useDirtyTracker } from "@/composables/useDirtyTracker";
+import { useSettingsSaveTarget } from "@/composables/useSettingsSaveRegistry";
 import { useAppStore } from "@/stores";
 import { extractApiErrorMessage } from "@/utils/apiError";
 
@@ -248,8 +229,8 @@ const fallbackPlaceholders = [
   "{{recharge_amount}}",
   "{{order_id}}",
   "{{unsubscribe_url}}",
-  "{{account_id}}",
-  "{{account_name}}",
+  "{{provider_id}}",
+  "{{provider_name}}",
   "{{platform}}",
   "{{quota_dimension}}",
   "{{quota_used}}",
@@ -302,7 +283,6 @@ const fallbackPlaceholders = [
 
 const loadingList = ref(true);
 const loadingTemplate = ref(false);
-const saving = ref(false);
 const previewing = ref(false);
 const restoring = ref(false);
 const eventOptions = ref<EmailTemplateOption[]>([]);
@@ -343,6 +323,11 @@ const eventDisplayMeta: Record<string, EventDisplayMeta> = {
     timing: "用户添加并验证额外通知邮箱时发送。",
     categoryLabel: "认证安全",
   },
+  "team.ownership_transfer": {
+    label: "团队所有权转让",
+    timing: "团队所有者发起所有权转让时发送。",
+    categoryLabel: "团队",
+  },
   "team.invitation": {
     label: "团队邀请",
     timing: "团队所有者邀请指定邮箱加入团队，或重新发送团队邀请时发送。",
@@ -368,9 +353,9 @@ const eventDisplayMeta: Record<string, EventDisplayMeta> = {
     timing: "余额充值订单支付完成并入账后发送。",
     categoryLabel: "计费",
   },
-  "account.quota_alert": {
-    label: "账号限额告警",
-    timing: "上游账号的用量达到配置的额度告警阈值时发送给管理员通知邮箱。",
+  "provider.quota_alert": {
+    label: "提供商限额告警",
+    timing: "上游提供商的用量达到配置的额度告警阈值时发送给管理员通知邮箱。",
     categoryLabel: "管理告警",
   },
   "content_moderation.violation_notice": {
@@ -390,7 +375,7 @@ const eventDisplayMeta: Record<string, EventDisplayMeta> = {
   },
   "ops.scheduled_report": {
     label: "运维定时报表",
-    timing: "运维日报、周报、错误摘要或账号健康报表到达配置的发送时间时发送；日报和周报的完整指标均可在模板中编辑。",
+    timing: "运维日报、周报、错误摘要或提供商健康报表到达配置的发送时间时发送；日报和周报的完整指标均可在模板中编辑。",
     categoryLabel: "运维",
   },
 };
@@ -410,6 +395,11 @@ const eventDisplayMetaEn: Record<string, EventDisplayMeta> = {
     label: "Notification Email Verification",
     timing: "Sent when a user adds and verifies an extra notification email address.",
     categoryLabel: "Auth",
+  },
+  "team.ownership_transfer": {
+    label: "Team Ownership Transfer",
+    timing: "Sent when the team owner requests an ownership transfer.",
+    categoryLabel: "Team",
   },
   "team.invitation": {
     label: "Team Invitation",
@@ -436,14 +426,14 @@ const eventDisplayMetaEn: Record<string, EventDisplayMeta> = {
     timing: "Sent after a balance recharge order is paid and credited.",
     categoryLabel: "Billing",
   },
-  "account.quota_alert": {
-    label: "Account Quota Alert",
-    timing: "Sent to admin notification emails when an upstream account reaches the configured quota alert threshold.",
+  "provider.quota_alert": {
+    label: "Provider Quota Alert",
+    timing: "Sent to admin notification emails when an upstream provider reaches the configured quota alert threshold.",
     categoryLabel: "Admin",
   },
   "content_moderation.violation_notice": {
     label: "Risk Control Violation Notice",
-    timing: "Sent when a user request triggers content moderation or risk-control rules but the account is not disabled yet.",
+    timing: "Sent when a user request triggers content moderation or risk-control rules but the user account is not disabled yet.",
     categoryLabel: "Risk Control",
   },
   "content_moderation.account_disabled": {
@@ -458,7 +448,7 @@ const eventDisplayMetaEn: Record<string, EventDisplayMeta> = {
   },
   "ops.scheduled_report": {
     label: "Ops Scheduled Report",
-    timing: "Sent when a configured daily, weekly, error digest, or account health report reaches its scheduled send time. Every daily and weekly summary metric is editable in this template.",
+    timing: "Sent when a configured daily, weekly, error digest, or provider health report reaches its scheduled send time. Every daily and weekly summary metric is editable in this template.",
     categoryLabel: "Ops",
   },
 };
@@ -608,6 +598,8 @@ function applyTemplate(template: {
   html.value = template.html;
   isCustomTemplate.value = template.is_custom === true;
   placeholders.value = template.placeholders || [];
+  // 模板内容和服务端一致，记录为未修改。
+  markClean();
 }
 
 async function loadTemplate() {
@@ -647,12 +639,12 @@ async function loadTemplateList() {
   }
 }
 
-async function saveTemplate() {
+// saveTemplate 保存当前事件和语言的模板，返回是否保存成功；由吸底保存条统一调用。
+async function saveTemplate(): Promise<boolean> {
   if (!canSave.value) {
     appStore.showError(t("admin.settings.emailTemplates.validationRequired"));
-    return;
+    return false;
   }
-  saving.value = true;
   try {
     const template = await adminAPI.settings.updateEmailTemplate(
       selectedEvent.value,
@@ -664,11 +656,10 @@ async function saveTemplate() {
     );
     applyTemplate(template);
     await refreshPreview();
-    appStore.showSuccess(t("admin.settings.emailTemplates.saveSuccess"));
+    return true;
   } catch (err: unknown) {
     appStore.showError(extractApiErrorMessage(err, t("common.error")));
-  } finally {
-    saving.value = false;
+    return false;
   }
 }
 
@@ -723,6 +714,12 @@ async function copyPlaceholder(placeholder: string) {
     appStore.showError(t("common.error"));
   }
 }
+
+// 吸底保存条比较当前模板的主题和 HTML 与上次载入或保存时的快照。
+const { dirty, markClean } = useDirtyTracker({
+  template: () => ({ subject: subject.value, html: html.value }),
+});
+useSettingsSaveTarget("emailTemplate", { dirty, save: saveTemplate, discard: loadTemplate });
 
 watch([selectedEvent, selectedLocale], ([eventValue, localeValue], [oldEvent, oldLocale]) => {
   if (initializingSelection.value) return;

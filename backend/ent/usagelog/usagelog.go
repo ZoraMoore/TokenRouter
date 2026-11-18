@@ -22,8 +22,12 @@ const (
 	FieldTeamID = "team_id"
 	// FieldAPIKeyID holds the string denoting the api_key_id field in the database.
 	FieldAPIKeyID = "api_key_id"
-	// FieldAccountID holds the string denoting the account_id field in the database.
-	FieldAccountID = "account_id"
+	// FieldProviderID holds the string denoting the provider_id field in the database.
+	FieldProviderID = "provider_id"
+	// FieldPlatform holds the string denoting the platform field in the database.
+	FieldPlatform = "platform"
+	// FieldBillingKey holds the string denoting the billing_key field in the database.
+	FieldBillingKey = "billing_key"
 	// FieldRequestID holds the string denoting the request_id field in the database.
 	FieldRequestID = "request_id"
 	// FieldModel holds the string denoting the model field in the database.
@@ -32,8 +36,12 @@ const (
 	FieldRequestedModel = "requested_model"
 	// FieldUpstreamModel holds the string denoting the upstream_model field in the database.
 	FieldUpstreamModel = "upstream_model"
-	// FieldChannelID holds the string denoting the channel_id field in the database.
-	FieldChannelID = "channel_id"
+	// FieldUpstreamResponseModel holds the string denoting the upstream_response_model field in the database.
+	FieldUpstreamResponseModel = "upstream_response_model"
+	// FieldUpstreamModelMismatch holds the string denoting the upstream_model_mismatch field in the database.
+	FieldUpstreamModelMismatch = "upstream_model_mismatch"
+	// FieldPricingConfigID holds the string denoting the pricing_config_id field in the database.
+	FieldPricingConfigID = "pricing_config_id"
 	// FieldModelMappingChain holds the string denoting the model_mapping_chain field in the database.
 	FieldModelMappingChain = "model_mapping_chain"
 	// FieldBillingTier holds the string denoting the billing_tier field in the database.
@@ -78,8 +86,8 @@ const (
 	FieldRateMultiplier = "rate_multiplier"
 	// FieldLongContextBillingApplied holds the string denoting the long_context_billing_applied field in the database.
 	FieldLongContextBillingApplied = "long_context_billing_applied"
-	// FieldAccountRateMultiplier holds the string denoting the account_rate_multiplier field in the database.
-	FieldAccountRateMultiplier = "account_rate_multiplier"
+	// FieldProviderRateMultiplier holds the string denoting the provider_rate_multiplier field in the database.
+	FieldProviderRateMultiplier = "provider_rate_multiplier"
 	// FieldBillingType holds the string denoting the billing_type field in the database.
 	FieldBillingType = "billing_type"
 	// FieldStream holds the string denoting the stream field in the database.
@@ -118,8 +126,8 @@ const (
 	EdgeUser = "user"
 	// EdgeAPIKey holds the string denoting the api_key edge name in mutations.
 	EdgeAPIKey = "api_key"
-	// EdgeAccount holds the string denoting the account edge name in mutations.
-	EdgeAccount = "account"
+	// EdgeProvider holds the string denoting the provider edge name in mutations.
+	EdgeProvider = "provider"
 	// EdgeGroup holds the string denoting the group edge name in mutations.
 	EdgeGroup = "group"
 	// EdgeSubscription holds the string denoting the subscription edge name in mutations.
@@ -142,13 +150,13 @@ const (
 	APIKeyInverseTable = "api_keys"
 	// APIKeyColumn is the table column denoting the api_key relation/edge.
 	APIKeyColumn = "api_key_id"
-	// AccountTable is the table that holds the account relation/edge.
-	AccountTable = "usage_logs"
-	// AccountInverseTable is the table name for the Account entity.
-	// It exists in this package in order to avoid circular dependency with the "account" package.
-	AccountInverseTable = "accounts"
-	// AccountColumn is the table column denoting the account relation/edge.
-	AccountColumn = "account_id"
+	// ProviderTable is the table that holds the provider relation/edge.
+	ProviderTable = "usage_logs"
+	// ProviderInverseTable is the table name for the Provider entity.
+	// It exists in this package in order to avoid circular dependency with the "provider" package.
+	ProviderInverseTable = "providers"
+	// ProviderColumn is the table column denoting the provider relation/edge.
+	ProviderColumn = "provider_id"
 	// GroupTable is the table that holds the group relation/edge.
 	GroupTable = "usage_logs"
 	// GroupInverseTable is the table name for the Group entity.
@@ -179,12 +187,16 @@ var Columns = []string{
 	FieldBillingUserID,
 	FieldTeamID,
 	FieldAPIKeyID,
-	FieldAccountID,
+	FieldProviderID,
+	FieldPlatform,
+	FieldBillingKey,
 	FieldRequestID,
 	FieldModel,
 	FieldRequestedModel,
 	FieldUpstreamModel,
-	FieldChannelID,
+	FieldUpstreamResponseModel,
+	FieldUpstreamModelMismatch,
+	FieldPricingConfigID,
 	FieldModelMappingChain,
 	FieldBillingTier,
 	FieldBillingMode,
@@ -207,7 +219,7 @@ var Columns = []string{
 	FieldBillingAllocations,
 	FieldRateMultiplier,
 	FieldLongContextBillingApplied,
-	FieldAccountRateMultiplier,
+	FieldProviderRateMultiplier,
 	FieldBillingType,
 	FieldStream,
 	FieldDurationMs,
@@ -238,6 +250,12 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultPlatform holds the default value on creation for the "platform" field.
+	DefaultPlatform string
+	// PlatformValidator is a validator for the "platform" field. It is called by the builders before save.
+	PlatformValidator func(string) error
+	// BillingKeyValidator is a validator for the "billing_key" field. It is called by the builders before save.
+	BillingKeyValidator func(string) error
 	// RequestIDValidator is a validator for the "request_id" field. It is called by the builders before save.
 	RequestIDValidator func(string) error
 	// ModelValidator is a validator for the "model" field. It is called by the builders before save.
@@ -246,6 +264,8 @@ var (
 	RequestedModelValidator func(string) error
 	// UpstreamModelValidator is a validator for the "upstream_model" field. It is called by the builders before save.
 	UpstreamModelValidator func(string) error
+	// UpstreamResponseModelValidator is a validator for the "upstream_response_model" field. It is called by the builders before save.
+	UpstreamResponseModelValidator func(string) error
 	// ModelMappingChainValidator is a validator for the "model_mapping_chain" field. It is called by the builders before save.
 	ModelMappingChainValidator func(string) error
 	// BillingTierValidator is a validator for the "billing_tier" field. It is called by the builders before save.
@@ -340,9 +360,19 @@ func ByAPIKeyID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAPIKeyID, opts...).ToFunc()
 }
 
-// ByAccountID orders the results by the account_id field.
-func ByAccountID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldAccountID, opts...).ToFunc()
+// ByProviderID orders the results by the provider_id field.
+func ByProviderID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProviderID, opts...).ToFunc()
+}
+
+// ByPlatform orders the results by the platform field.
+func ByPlatform(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPlatform, opts...).ToFunc()
+}
+
+// ByBillingKey orders the results by the billing_key field.
+func ByBillingKey(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBillingKey, opts...).ToFunc()
 }
 
 // ByRequestID orders the results by the request_id field.
@@ -365,9 +395,19 @@ func ByUpstreamModel(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpstreamModel, opts...).ToFunc()
 }
 
-// ByChannelID orders the results by the channel_id field.
-func ByChannelID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldChannelID, opts...).ToFunc()
+// ByUpstreamResponseModel orders the results by the upstream_response_model field.
+func ByUpstreamResponseModel(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamResponseModel, opts...).ToFunc()
+}
+
+// ByUpstreamModelMismatch orders the results by the upstream_model_mismatch field.
+func ByUpstreamModelMismatch(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamModelMismatch, opts...).ToFunc()
+}
+
+// ByPricingConfigID orders the results by the pricing_config_id field.
+func ByPricingConfigID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPricingConfigID, opts...).ToFunc()
 }
 
 // ByModelMappingChain orders the results by the model_mapping_chain field.
@@ -475,9 +515,9 @@ func ByLongContextBillingApplied(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLongContextBillingApplied, opts...).ToFunc()
 }
 
-// ByAccountRateMultiplier orders the results by the account_rate_multiplier field.
-func ByAccountRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldAccountRateMultiplier, opts...).ToFunc()
+// ByProviderRateMultiplier orders the results by the provider_rate_multiplier field.
+func ByProviderRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProviderRateMultiplier, opts...).ToFunc()
 }
 
 // ByBillingType orders the results by the billing_type field.
@@ -574,10 +614,10 @@ func ByAPIKeyField(field string, opts ...sql.OrderTermOption) OrderOption {
 	}
 }
 
-// ByAccountField orders the results by account field.
-func ByAccountField(field string, opts ...sql.OrderTermOption) OrderOption {
+// ByProviderField orders the results by provider field.
+func ByProviderField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newAccountStep(), sql.OrderByField(field, opts...))
+		sqlgraph.OrderByNeighborTerms(s, newProviderStep(), sql.OrderByField(field, opts...))
 	}
 }
 
@@ -615,11 +655,11 @@ func newAPIKeyStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.M2O, true, APIKeyTable, APIKeyColumn),
 	)
 }
-func newAccountStep() *sqlgraph.Step {
+func newProviderStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(AccountInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.M2O, true, AccountTable, AccountColumn),
+		sqlgraph.To(ProviderInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, ProviderTable, ProviderColumn),
 	)
 }
 func newGroupStep() *sqlgraph.Step {

@@ -2,6 +2,10 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PreAggregationSettings from "../PreAggregationSettings.vue";
+import {
+  createSettingsSaveRegistry,
+  settingsSaveRegistryKey,
+} from "@/composables/useSettingsSaveRegistry";
 
 const { getSettings, updateSettings, backfill, showError, showSuccess } = vi.hoisted(() => ({
   getSettings: vi.fn(),
@@ -61,9 +65,19 @@ describe("PreAggregationSettings", () => {
     backfill.mockResolvedValue({ status: "accepted", days: 3 });
   });
 
+  // 组件把修改状态和保存函数登记到系统设置页的吸底保存条，测试里直接提供登记表。
+  function mountWithSaveRegistry() {
+    const saveRegistry = createSettingsSaveRegistry();
+    const wrapper = mount(PreAggregationSettings, {
+      global: { provide: { [settingsSaveRegistryKey as symbol]: saveRegistry.registry } },
+    });
+    return { wrapper, saveRegistry };
+  }
+
   it("加载并保存唯一的预聚合运行时配置", async () => {
-    const wrapper = mount(PreAggregationSettings);
+    const { wrapper, saveRegistry } = mountWithSaveRegistry();
     await flushPromises();
+    expect(saveRegistry.dirty.value).toBe(false);
 
     const switches = wrapper.findAll('button[role="switch"]');
     expect(switches).toHaveLength(2);
@@ -73,16 +87,29 @@ describe("PreAggregationSettings", () => {
     await switches[0].trigger("click");
     await switches[1].trigger("click");
     await wrapper.findAll('input[type="number"]')[0].setValue("120");
-    const save = wrapper.findAll("button").find((button) => button.text().includes("preAggregation.save"));
-    expect(save).toBeDefined();
-    await save!.trigger("click");
+    expect(saveRegistry.dirty.value).toBe(true);
+
+    await expect(saveRegistry.saveDirty()).resolves.toBe(true);
     await flushPromises();
 
     expect(updateSettings).toHaveBeenCalledWith({
       usage: { enabled: false, interval_seconds: 120 },
       ops: { enabled: true },
     });
-    expect(showSuccess).toHaveBeenCalled();
+    expect(saveRegistry.dirty.value).toBe(false);
+  });
+
+  it("刷新运行状态时保留未保存的修改", async () => {
+    const { wrapper, saveRegistry } = mountWithSaveRegistry();
+    await flushPromises();
+
+    await wrapper.findAll('input[type="number"]')[0].setValue("120");
+    await wrapper.get(`button[title="common.refresh"]`).trigger("click");
+    await flushPromises();
+
+    expect(getSettings).toHaveBeenCalledTimes(2);
+    expect((wrapper.findAll('input[type="number"]')[0].element as HTMLInputElement).value).toBe("120");
+    expect(saveRegistry.dirty.value).toBe(true);
   });
 
   it("提交受限天数的异步历史回填", async () => {

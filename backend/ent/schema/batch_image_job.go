@@ -3,14 +3,14 @@ package schema
 import (
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/domain"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 // BatchImageJob 定义异步批量图片任务的数据结构。
@@ -36,11 +36,11 @@ func (BatchImageJob) Fields() []ent.Field {
 		field.Int64("billing_user_id").Optional(),
 		field.Int64("team_id").Optional().Nillable(),
 		field.Int64("api_key_id").Optional().Nillable(),
-		field.Int64("account_id").Optional().Nillable(),
+		field.Int64("provider_id").Optional().Nillable(),
 		// 批任务会冻结 API Key 提交时的结算来源，避免异步结算读取到后续编辑后的配置。
 		field.String("billing_mode").MaxLen(32).Default("auto"),
 		field.Int64("preferred_subscription_id").Optional().Nillable(),
-		field.String("provider").MaxLen(32),
+		field.String("platform").MaxLen(32),
 		field.String("model").MaxLen(128),
 		field.String("task_name").MaxLen(255).Default(""),
 		field.String("status").MaxLen(32).Default("created"),
@@ -58,8 +58,8 @@ func (BatchImageJob) Fields() []ent.Field {
 		field.Float("actual_cost").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
 		// 批量任务先占订阅、再冻结余额；这两个字段共同构成完整预占快照。
 		field.Float("balance_hold_amount").SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}).Default(0),
-		field.JSON("subscription_hold_allocations", []domain.BillingAllocation{}).
-			Default(func() []domain.BillingAllocation { return []domain.BillingAllocation{} }).
+		field.JSON("subscription_hold_allocations", []billing.BillingAllocation{}).
+			Default(func() []billing.BillingAllocation { return []billing.BillingAllocation{} }).
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 		// 分别快照订阅默认倍率和按量倍率，供混合结算按来源还原价格。
 		field.Float("subscription_rate_multiplier").SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}).Default(1),
@@ -97,7 +97,7 @@ func (BatchImageJob) Indexes() []ent.Index {
 		index.Fields("billing_user_id", "created_at"),
 		index.Fields("team_id", "created_at"),
 		index.Fields("status"),
-		index.Fields("provider", "status"),
+		index.Fields("platform", "status"),
 		index.Fields("idempotency_key").Annotations(entsql.IndexWhere("idempotency_key IS NOT NULL AND idempotency_key <> ''")),
 		index.Fields("manifest_hash").Unique().Annotations(entsql.IndexWhere("manifest_hash IS NOT NULL AND manifest_hash <> ''")),
 		index.Fields("output_expires_at"),

@@ -1,14 +1,14 @@
 package schema
 
 import (
-	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	"github.com/TokenFlux/TokenRouter/ent/schema/mixins"
 )
 
 // Proxy holds the schema definition for the Proxy entity.
@@ -70,8 +70,8 @@ func (Proxy) Fields() []ent.Field {
 // Edges 定义代理实体的关联关系。
 func (Proxy) Edges() []ent.Edge {
 	return []ent.Edge{
-		// accounts: 使用此代理的账户（反向边）
-		edge.From("accounts", Account.Type).
+		// providers: 使用此代理的提供商（反向边）
+		edge.From("providers", Provider.Type).
 			Ref("proxy"),
 		edge.To("backup_proxy", Proxy.Type).
 			Field("backup_proxy_id").

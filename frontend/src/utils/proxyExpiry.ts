@@ -1,4 +1,4 @@
-// 代理有效期展示逻辑(ProxiesView 与 AccountsView 共用)。
+// 代理有效期展示逻辑(ProxiesView 与 ProvidersView 共用)。
 // 到期紧迫度固定两档:剩余 ≤3 天红、≤7 天黄(不读 per-proxy expiry_warn_days)。
 export const EXPIRY_WARN_DAYS = 7
 export const EXPIRY_DANGER_DAYS = 3
@@ -16,7 +16,7 @@ export function proxyExpiryBadgeClass(expiresAt: string | null, status?: string)
   return 'text-gray-500'
 }
 
-// 倒计时文案的 i18n key + 参数(返回 key 而非已翻译文本,便于单测且不耦合 i18n)。
+// 返回倒计时文案的 i18n key 和参数，调用方负责翻译，测试可直接检查返回值。
 export function proxyExpiryLabelKey(
   expiresAt: string | null,
   status?: string,

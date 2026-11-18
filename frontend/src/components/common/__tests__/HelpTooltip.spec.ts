@@ -1,3 +1,4 @@
+import { nextMotionFrame } from '@/__tests__/helpers/motion'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
@@ -17,6 +18,54 @@ describe('HelpTooltip', () => {
     document.body.innerHTML = ''
   })
 
+  it.each(['pointerdown', 'touchstart', 'click', 'Escape'])('手动提示受控显示，并通过外部 %s 关闭', async (eventName) => {
+    const wrapper = mount(HelpTooltip, {
+      attachTo: document.body,
+      props: { trigger: 'manual', open: false, closable: false, content: '请同意条款' },
+      slots: { trigger: '<input type="checkbox" />' },
+    })
+    const trigger = wrapper.get('.group')
+    await trigger.trigger('mouseenter')
+    await trigger.trigger('click')
+    await nextMotionFrame()
+    expect(getTooltipElement().style.display).toBe('none')
+    await wrapper.setProps({ open: true })
+    await nextTick()
+    expect(getTooltipElement().style.display).not.toBe('none')
+    expect(getTooltipElement().querySelector('button')).toBeNull()
+    if (eventName === 'Escape') {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    } else {
+      document.body.dispatchEvent(new Event(eventName, { bubbles: true }))
+    }
+    expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
+    await wrapper.setProps({ open: false })
+    await nextMotionFrame()
+    expect(getTooltipElement().style.display).toBe('none')
+    await wrapper.setProps({ open: true })
+    expect(getTooltipElement().style.display).not.toBe('none')
+    wrapper.unmount()
+  })
+
+  it('提示框在左侧边缘避让时，箭头仍指向复选框', async () => {
+    const wrapper = mount(HelpTooltip, {
+      attachTo: document.body,
+      props: { trigger: 'manual', open: false },
+    })
+    wrapper.get('.group').element.getBoundingClientRect = vi.fn(() => ({
+      left: 30, top: 200, width: 16, height: 16, right: 46, bottom: 216,
+    } as DOMRect))
+    const tooltip = getTooltipElement()
+    tooltip.getBoundingClientRect = vi.fn(() => ({ width: 288, height: 60 } as DOMRect))
+    await wrapper.setProps({ open: true })
+    await nextTick()
+    await nextTick()
+    const center = Number.parseFloat(tooltip.style.left)
+    const arrow = tooltip.lastElementChild as HTMLElement
+    expect(center - 144 + Number.parseFloat(arrow.style.left)).toBe(38)
+    wrapper.unmount()
+  })
+
   it('keeps the existing hover interaction by default', async () => {
     const wrapper = mount(HelpTooltip, {
       attachTo: document.body,
@@ -28,6 +77,8 @@ describe('HelpTooltip', () => {
     const trigger = wrapper.get('.group')
     const tooltip = getTooltipElement()
 
+    await nextMotionFrame()
+
     expect(tooltip.style.display).toBe('none')
 
     await trigger.trigger('mouseenter')
@@ -36,6 +87,38 @@ describe('HelpTooltip', () => {
 
     await trigger.trigger('mouseleave')
     await nextTick()
+    await nextMotionFrame()
+    expect(tooltip.style.display).toBe('none')
+
+    wrapper.unmount()
+  })
+
+  it('keeps a hover tooltip open while the pointer moves between the trigger and the tooltip', async () => {
+    const wrapper = mount(HelpTooltip, {
+      attachTo: document.body,
+      props: {
+        content: 'copyable details',
+      },
+    })
+
+    const trigger = wrapper.get('.group')
+    const tooltip = getTooltipElement()
+
+    await trigger.trigger('mouseenter')
+    await nextTick()
+    expect(tooltip.style.display).not.toBe('none')
+
+    await trigger.trigger('mouseleave', { relatedTarget: tooltip })
+    await nextTick()
+    expect(tooltip.style.display).not.toBe('none')
+
+    tooltip.dispatchEvent(new MouseEvent('mouseleave', { relatedTarget: trigger.element }))
+    await nextTick()
+    expect(tooltip.style.display).not.toBe('none')
+
+    tooltip.dispatchEvent(new MouseEvent('mouseleave', { relatedTarget: null }))
+    await nextTick()
+    await nextMotionFrame()
     expect(tooltip.style.display).toBe('none')
 
     wrapper.unmount()
@@ -53,6 +136,8 @@ describe('HelpTooltip', () => {
     const trigger = wrapper.get('.group')
     const tooltip = getTooltipElement()
 
+    await nextMotionFrame()
+
     expect(tooltip.style.display).toBe('none')
 
     await trigger.trigger('click')
@@ -66,6 +151,7 @@ describe('HelpTooltip', () => {
     }
     closeButton.click()
     await nextTick()
+    await nextMotionFrame()
     expect(tooltip.style.display).toBe('none')
 
     await trigger.trigger('click')
@@ -74,6 +160,7 @@ describe('HelpTooltip', () => {
 
     document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await nextTick()
+    await nextMotionFrame()
     expect(tooltip.style.display).toBe('none')
 
     wrapper.unmount()
@@ -98,6 +185,7 @@ describe('HelpTooltip', () => {
 
     await trigger.trigger('mouseleave')
     await nextTick()
+    await nextMotionFrame()
     expect(tooltip.style.display).toBe('none')
 
     await trigger.trigger('click')
@@ -110,6 +198,7 @@ describe('HelpTooltip', () => {
 
     document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await nextTick()
+    await nextMotionFrame()
     expect(tooltip.style.display).toBe('none')
 
     wrapper.unmount()

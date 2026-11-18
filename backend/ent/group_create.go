@@ -12,13 +12,15 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/TokenFlux/TokenRouter/ent/account"
 	"github.com/TokenFlux/TokenRouter/ent/apikey"
 	"github.com/TokenFlux/TokenRouter/ent/apikeycompositegroup"
 	"github.com/TokenFlux/TokenRouter/ent/group"
+	"github.com/TokenFlux/TokenRouter/ent/provider"
 	"github.com/TokenFlux/TokenRouter/ent/usagelog"
 	"github.com/TokenFlux/TokenRouter/ent/user"
-	"github.com/TokenFlux/TokenRouter/internal/domain"
+	"github.com/TokenFlux/TokenRouter/internal/protocol"
+	"github.com/TokenFlux/TokenRouter/internal/routing/accessview"
+	"github.com/TokenFlux/TokenRouter/internal/scheduler/policy"
 )
 
 // GroupCreate is the builder for creating a Group entity.
@@ -71,6 +73,20 @@ func (_c *GroupCreate) SetNillableDeletedAt(v *time.Time) *GroupCreate {
 	return _c
 }
 
+// SetLocalization sets the "localization" field.
+func (_c *GroupCreate) SetLocalization(v accessview.GroupLocalization) *GroupCreate {
+	_c.mutation.SetLocalization(v)
+	return _c
+}
+
+// SetNillableLocalization sets the "localization" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableLocalization(v *accessview.GroupLocalization) *GroupCreate {
+	if v != nil {
+		_c.SetLocalization(*v)
+	}
+	return _c
+}
+
 // SetName sets the "name" field.
 func (_c *GroupCreate) SetName(v string) *GroupCreate {
 	_c.mutation.SetName(v)
@@ -105,62 +121,6 @@ func (_c *GroupCreate) SetNillableRateMultiplier(v *float64) *GroupCreate {
 	return _c
 }
 
-// SetPeakRateEnabled sets the "peak_rate_enabled" field.
-func (_c *GroupCreate) SetPeakRateEnabled(v bool) *GroupCreate {
-	_c.mutation.SetPeakRateEnabled(v)
-	return _c
-}
-
-// SetNillablePeakRateEnabled sets the "peak_rate_enabled" field if the given value is not nil.
-func (_c *GroupCreate) SetNillablePeakRateEnabled(v *bool) *GroupCreate {
-	if v != nil {
-		_c.SetPeakRateEnabled(*v)
-	}
-	return _c
-}
-
-// SetPeakStart sets the "peak_start" field.
-func (_c *GroupCreate) SetPeakStart(v string) *GroupCreate {
-	_c.mutation.SetPeakStart(v)
-	return _c
-}
-
-// SetNillablePeakStart sets the "peak_start" field if the given value is not nil.
-func (_c *GroupCreate) SetNillablePeakStart(v *string) *GroupCreate {
-	if v != nil {
-		_c.SetPeakStart(*v)
-	}
-	return _c
-}
-
-// SetPeakEnd sets the "peak_end" field.
-func (_c *GroupCreate) SetPeakEnd(v string) *GroupCreate {
-	_c.mutation.SetPeakEnd(v)
-	return _c
-}
-
-// SetNillablePeakEnd sets the "peak_end" field if the given value is not nil.
-func (_c *GroupCreate) SetNillablePeakEnd(v *string) *GroupCreate {
-	if v != nil {
-		_c.SetPeakEnd(*v)
-	}
-	return _c
-}
-
-// SetPeakRateMultiplier sets the "peak_rate_multiplier" field.
-func (_c *GroupCreate) SetPeakRateMultiplier(v float64) *GroupCreate {
-	_c.mutation.SetPeakRateMultiplier(v)
-	return _c
-}
-
-// SetNillablePeakRateMultiplier sets the "peak_rate_multiplier" field if the given value is not nil.
-func (_c *GroupCreate) SetNillablePeakRateMultiplier(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetPeakRateMultiplier(*v)
-	}
-	return _c
-}
-
 // SetIsExclusive sets the "is_exclusive" field.
 func (_c *GroupCreate) SetIsExclusive(v bool) *GroupCreate {
 	_c.mutation.SetIsExclusive(v)
@@ -171,20 +131,6 @@ func (_c *GroupCreate) SetIsExclusive(v bool) *GroupCreate {
 func (_c *GroupCreate) SetNillableIsExclusive(v *bool) *GroupCreate {
 	if v != nil {
 		_c.SetIsExclusive(*v)
-	}
-	return _c
-}
-
-// SetIsDefault sets the "is_default" field.
-func (_c *GroupCreate) SetIsDefault(v bool) *GroupCreate {
-	_c.mutation.SetIsDefault(v)
-	return _c
-}
-
-// SetNillableIsDefault sets the "is_default" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableIsDefault(v *bool) *GroupCreate {
-	if v != nil {
-		_c.SetIsDefault(*v)
 	}
 	return _c
 }
@@ -217,20 +163,6 @@ func (_c *GroupCreate) SetNillableDuplicateOperationID(v *string) *GroupCreate {
 	return _c
 }
 
-// SetPlatform sets the "platform" field.
-func (_c *GroupCreate) SetPlatform(v string) *GroupCreate {
-	_c.mutation.SetPlatform(v)
-	return _c
-}
-
-// SetNillablePlatform sets the "platform" field if the given value is not nil.
-func (_c *GroupCreate) SetNillablePlatform(v *string) *GroupCreate {
-	if v != nil {
-		_c.SetPlatform(*v)
-	}
-	return _c
-}
-
 // SetSchedulerType sets the "scheduler_type" field.
 func (_c *GroupCreate) SetSchedulerType(v string) *GroupCreate {
 	_c.mutation.SetSchedulerType(v)
@@ -246,13 +178,13 @@ func (_c *GroupCreate) SetNillableSchedulerType(v *string) *GroupCreate {
 }
 
 // SetAdvancedSchedulerOverrides sets the "advanced_scheduler_overrides" field.
-func (_c *GroupCreate) SetAdvancedSchedulerOverrides(v domain.GroupAdvancedSchedulerOverrides) *GroupCreate {
+func (_c *GroupCreate) SetAdvancedSchedulerOverrides(v policy.GroupAdvancedSchedulerOverrides) *GroupCreate {
 	_c.mutation.SetAdvancedSchedulerOverrides(v)
 	return _c
 }
 
 // SetNillableAdvancedSchedulerOverrides sets the "advanced_scheduler_overrides" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableAdvancedSchedulerOverrides(v *domain.GroupAdvancedSchedulerOverrides) *GroupCreate {
+func (_c *GroupCreate) SetNillableAdvancedSchedulerOverrides(v *policy.GroupAdvancedSchedulerOverrides) *GroupCreate {
 	if v != nil {
 		_c.SetAdvancedSchedulerOverrides(*v)
 	}
@@ -301,267 +233,9 @@ func (_c *GroupCreate) SetNillableAllowBatchImageGeneration(v *bool) *GroupCreat
 	return _c
 }
 
-// SetImageRateIndependent sets the "image_rate_independent" field.
-func (_c *GroupCreate) SetImageRateIndependent(v bool) *GroupCreate {
-	_c.mutation.SetImageRateIndependent(v)
-	return _c
-}
-
-// SetNillableImageRateIndependent sets the "image_rate_independent" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableImageRateIndependent(v *bool) *GroupCreate {
-	if v != nil {
-		_c.SetImageRateIndependent(*v)
-	}
-	return _c
-}
-
-// SetImageRateMultiplier sets the "image_rate_multiplier" field.
-func (_c *GroupCreate) SetImageRateMultiplier(v float64) *GroupCreate {
-	_c.mutation.SetImageRateMultiplier(v)
-	return _c
-}
-
-// SetNillableImageRateMultiplier sets the "image_rate_multiplier" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableImageRateMultiplier(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetImageRateMultiplier(*v)
-	}
-	return _c
-}
-
-// SetImagePrice1k sets the "image_price_1k" field.
-func (_c *GroupCreate) SetImagePrice1k(v float64) *GroupCreate {
-	_c.mutation.SetImagePrice1k(v)
-	return _c
-}
-
-// SetNillableImagePrice1k sets the "image_price_1k" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableImagePrice1k(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetImagePrice1k(*v)
-	}
-	return _c
-}
-
-// SetImagePrice2k sets the "image_price_2k" field.
-func (_c *GroupCreate) SetImagePrice2k(v float64) *GroupCreate {
-	_c.mutation.SetImagePrice2k(v)
-	return _c
-}
-
-// SetNillableImagePrice2k sets the "image_price_2k" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableImagePrice2k(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetImagePrice2k(*v)
-	}
-	return _c
-}
-
-// SetImagePrice4k sets the "image_price_4k" field.
-func (_c *GroupCreate) SetImagePrice4k(v float64) *GroupCreate {
-	_c.mutation.SetImagePrice4k(v)
-	return _c
-}
-
-// SetNillableImagePrice4k sets the "image_price_4k" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableImagePrice4k(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetImagePrice4k(*v)
-	}
-	return _c
-}
-
-// SetBatchImageDiscountMultiplier sets the "batch_image_discount_multiplier" field.
-func (_c *GroupCreate) SetBatchImageDiscountMultiplier(v float64) *GroupCreate {
-	_c.mutation.SetBatchImageDiscountMultiplier(v)
-	return _c
-}
-
-// SetNillableBatchImageDiscountMultiplier sets the "batch_image_discount_multiplier" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableBatchImageDiscountMultiplier(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetBatchImageDiscountMultiplier(*v)
-	}
-	return _c
-}
-
-// SetBatchImageHoldMultiplier sets the "batch_image_hold_multiplier" field.
-func (_c *GroupCreate) SetBatchImageHoldMultiplier(v float64) *GroupCreate {
-	_c.mutation.SetBatchImageHoldMultiplier(v)
-	return _c
-}
-
-// SetNillableBatchImageHoldMultiplier sets the "batch_image_hold_multiplier" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableBatchImageHoldMultiplier(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetBatchImageHoldMultiplier(*v)
-	}
-	return _c
-}
-
-// SetVideoRateIndependent sets the "video_rate_independent" field.
-func (_c *GroupCreate) SetVideoRateIndependent(v bool) *GroupCreate {
-	_c.mutation.SetVideoRateIndependent(v)
-	return _c
-}
-
-// SetNillableVideoRateIndependent sets the "video_rate_independent" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableVideoRateIndependent(v *bool) *GroupCreate {
-	if v != nil {
-		_c.SetVideoRateIndependent(*v)
-	}
-	return _c
-}
-
-// SetVideoRateMultiplier sets the "video_rate_multiplier" field.
-func (_c *GroupCreate) SetVideoRateMultiplier(v float64) *GroupCreate {
-	_c.mutation.SetVideoRateMultiplier(v)
-	return _c
-}
-
-// SetNillableVideoRateMultiplier sets the "video_rate_multiplier" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableVideoRateMultiplier(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetVideoRateMultiplier(*v)
-	}
-	return _c
-}
-
-// SetVideoPrice480p sets the "video_price_480p" field.
-func (_c *GroupCreate) SetVideoPrice480p(v float64) *GroupCreate {
-	_c.mutation.SetVideoPrice480p(v)
-	return _c
-}
-
-// SetNillableVideoPrice480p sets the "video_price_480p" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableVideoPrice480p(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetVideoPrice480p(*v)
-	}
-	return _c
-}
-
-// SetVideoPrice720p sets the "video_price_720p" field.
-func (_c *GroupCreate) SetVideoPrice720p(v float64) *GroupCreate {
-	_c.mutation.SetVideoPrice720p(v)
-	return _c
-}
-
-// SetNillableVideoPrice720p sets the "video_price_720p" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableVideoPrice720p(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetVideoPrice720p(*v)
-	}
-	return _c
-}
-
-// SetVideoPrice1080p sets the "video_price_1080p" field.
-func (_c *GroupCreate) SetVideoPrice1080p(v float64) *GroupCreate {
-	_c.mutation.SetVideoPrice1080p(v)
-	return _c
-}
-
-// SetNillableVideoPrice1080p sets the "video_price_1080p" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableVideoPrice1080p(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetVideoPrice1080p(*v)
-	}
-	return _c
-}
-
-// SetVideoModelPrices sets the "video_model_prices" field.
-func (_c *GroupCreate) SetVideoModelPrices(v map[string]map[string]float64) *GroupCreate {
-	_c.mutation.SetVideoModelPrices(v)
-	return _c
-}
-
-// SetWebSearchPricePerCall sets the "web_search_price_per_call" field.
-func (_c *GroupCreate) SetWebSearchPricePerCall(v float64) *GroupCreate {
-	_c.mutation.SetWebSearchPricePerCall(v)
-	return _c
-}
-
-// SetNillableWebSearchPricePerCall sets the "web_search_price_per_call" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableWebSearchPricePerCall(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetWebSearchPricePerCall(*v)
-	}
-	return _c
-}
-
-// SetSearchPricePer1k sets the "search_price_per_1k" field.
-func (_c *GroupCreate) SetSearchPricePer1k(v float64) *GroupCreate {
-	_c.mutation.SetSearchPricePer1k(v)
-	return _c
-}
-
-// SetNillableSearchPricePer1k sets the "search_price_per_1k" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableSearchPricePer1k(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetSearchPricePer1k(*v)
-	}
-	return _c
-}
-
-// SetAudioRealtimePricePerMin sets the "audio_realtime_price_per_min" field.
-func (_c *GroupCreate) SetAudioRealtimePricePerMin(v float64) *GroupCreate {
-	_c.mutation.SetAudioRealtimePricePerMin(v)
-	return _c
-}
-
-// SetNillableAudioRealtimePricePerMin sets the "audio_realtime_price_per_min" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableAudioRealtimePricePerMin(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetAudioRealtimePricePerMin(*v)
-	}
-	return _c
-}
-
-// SetAudioTtsPricePerMillionChars sets the "audio_tts_price_per_million_chars" field.
-func (_c *GroupCreate) SetAudioTtsPricePerMillionChars(v float64) *GroupCreate {
-	_c.mutation.SetAudioTtsPricePerMillionChars(v)
-	return _c
-}
-
-// SetNillableAudioTtsPricePerMillionChars sets the "audio_tts_price_per_million_chars" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableAudioTtsPricePerMillionChars(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetAudioTtsPricePerMillionChars(*v)
-	}
-	return _c
-}
-
-// SetAudioSttPricePerHour sets the "audio_stt_price_per_hour" field.
-func (_c *GroupCreate) SetAudioSttPricePerHour(v float64) *GroupCreate {
-	_c.mutation.SetAudioSttPricePerHour(v)
-	return _c
-}
-
-// SetNillableAudioSttPricePerHour sets the "audio_stt_price_per_hour" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableAudioSttPricePerHour(v *float64) *GroupCreate {
-	if v != nil {
-		_c.SetAudioSttPricePerHour(*v)
-	}
-	return _c
-}
-
-// SetLongContextPricingEnabled sets the "long_context_pricing_enabled" field.
-func (_c *GroupCreate) SetLongContextPricingEnabled(v bool) *GroupCreate {
-	_c.mutation.SetLongContextPricingEnabled(v)
-	return _c
-}
-
-// SetNillableLongContextPricingEnabled sets the "long_context_pricing_enabled" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableLongContextPricingEnabled(v *bool) *GroupCreate {
-	if v != nil {
-		_c.SetLongContextPricingEnabled(*v)
-	}
-	return _c
-}
-
-// SetModelPricing sets the "model_pricing" field.
-func (_c *GroupCreate) SetModelPricing(v jsontext.Value) *GroupCreate {
-	_c.mutation.SetModelPricing(v)
+// SetRoutingPolicy sets the "routing_policy" field.
+func (_c *GroupCreate) SetRoutingPolicy(v jsontext.Value) *GroupCreate {
+	_c.mutation.SetRoutingPolicy(v)
 	return _c
 }
 
@@ -689,9 +363,29 @@ func (_c *GroupCreate) SetNillableAllowMessagesDispatch(v *bool) *GroupCreate {
 	return _c
 }
 
-// SetAllowedClientProtocols sets the "allowed_client_protocols" field.
-func (_c *GroupCreate) SetAllowedClientProtocols(v []domain.GroupClientProtocol) *GroupCreate {
-	_c.mutation.SetAllowedClientProtocols(v)
+// SetAllowedProtocols sets the "allowed_protocols" field.
+func (_c *GroupCreate) SetAllowedProtocols(v []protocol.ProtocolID) *GroupCreate {
+	_c.mutation.SetAllowedProtocols(v)
+	return _c
+}
+
+// SetProtocolFallbacks sets the "protocol_fallbacks" field.
+func (_c *GroupCreate) SetProtocolFallbacks(v map[protocol.ProtocolID][]protocol.ProtocolID) *GroupCreate {
+	_c.mutation.SetProtocolFallbacks(v)
+	return _c
+}
+
+// SetResponsesImagePolicy sets the "responses_image_policy" field.
+func (_c *GroupCreate) SetResponsesImagePolicy(v string) *GroupCreate {
+	_c.mutation.SetResponsesImagePolicy(v)
+	return _c
+}
+
+// SetNillableResponsesImagePolicy sets the "responses_image_policy" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableResponsesImagePolicy(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetResponsesImagePolicy(*v)
+	}
 	return _c
 }
 
@@ -705,6 +399,34 @@ func (_c *GroupCreate) SetAllowLive(v bool) *GroupCreate {
 func (_c *GroupCreate) SetNillableAllowLive(v *bool) *GroupCreate {
 	if v != nil {
 		_c.SetAllowLive(*v)
+	}
+	return _c
+}
+
+// SetOpenaiFastPolicy sets the "openai_fast_policy" field.
+func (_c *GroupCreate) SetOpenaiFastPolicy(v string) *GroupCreate {
+	_c.mutation.SetOpenaiFastPolicy(v)
+	return _c
+}
+
+// SetNillableOpenaiFastPolicy sets the "openai_fast_policy" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableOpenaiFastPolicy(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetOpenaiFastPolicy(*v)
+	}
+	return _c
+}
+
+// SetForceOpenaiFast sets the "force_openai_fast" field.
+func (_c *GroupCreate) SetForceOpenaiFast(v bool) *GroupCreate {
+	_c.mutation.SetForceOpenaiFast(v)
+	return _c
+}
+
+// SetNillableForceOpenaiFast sets the "force_openai_fast" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableForceOpenaiFast(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetForceOpenaiFast(*v)
 	}
 	return _c
 }
@@ -751,28 +473,14 @@ func (_c *GroupCreate) SetNillableDefaultMappedModel(v *string) *GroupCreate {
 	return _c
 }
 
-// SetMessagesDispatchModelConfig sets the "messages_dispatch_model_config" field.
-func (_c *GroupCreate) SetMessagesDispatchModelConfig(v domain.OpenAIMessagesDispatchModelConfig) *GroupCreate {
-	_c.mutation.SetMessagesDispatchModelConfig(v)
-	return _c
-}
-
-// SetNillableMessagesDispatchModelConfig sets the "messages_dispatch_model_config" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableMessagesDispatchModelConfig(v *domain.OpenAIMessagesDispatchModelConfig) *GroupCreate {
-	if v != nil {
-		_c.SetMessagesDispatchModelConfig(*v)
-	}
-	return _c
-}
-
 // SetModelsListConfig sets the "models_list_config" field.
-func (_c *GroupCreate) SetModelsListConfig(v domain.GroupModelsListConfig) *GroupCreate {
+func (_c *GroupCreate) SetModelsListConfig(v accessview.GroupModelsListConfig) *GroupCreate {
 	_c.mutation.SetModelsListConfig(v)
 	return _c
 }
 
 // SetNillableModelsListConfig sets the "models_list_config" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableModelsListConfig(v *domain.GroupModelsListConfig) *GroupCreate {
+func (_c *GroupCreate) SetNillableModelsListConfig(v *accessview.GroupModelsListConfig) *GroupCreate {
 	if v != nil {
 		_c.SetModelsListConfig(*v)
 	}
@@ -780,13 +488,13 @@ func (_c *GroupCreate) SetNillableModelsListConfig(v *domain.GroupModelsListConf
 }
 
 // SetAvailabilityProbeConfig sets the "availability_probe_config" field.
-func (_c *GroupCreate) SetAvailabilityProbeConfig(v domain.GroupAvailabilityProbeConfig) *GroupCreate {
+func (_c *GroupCreate) SetAvailabilityProbeConfig(v accessview.GroupAvailabilityProbeConfig) *GroupCreate {
 	_c.mutation.SetAvailabilityProbeConfig(v)
 	return _c
 }
 
 // SetNillableAvailabilityProbeConfig sets the "availability_probe_config" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableAvailabilityProbeConfig(v *domain.GroupAvailabilityProbeConfig) *GroupCreate {
+func (_c *GroupCreate) SetNillableAvailabilityProbeConfig(v *accessview.GroupAvailabilityProbeConfig) *GroupCreate {
 	if v != nil {
 		_c.SetAvailabilityProbeConfig(*v)
 	}
@@ -821,23 +529,23 @@ func (_c *GroupCreate) SetNillableMaxReasoningEffort(v *string) *GroupCreate {
 	return _c
 }
 
-// SetReasoningEffortMappings sets the "reasoning_effort_mappings" field.
-func (_c *GroupCreate) SetReasoningEffortMappings(v []domain.ReasoningEffortMapping) *GroupCreate {
-	_c.mutation.SetReasoningEffortMappings(v)
+// SetMaxReasoningEffortOverLimit sets the "max_reasoning_effort_over_limit" field.
+func (_c *GroupCreate) SetMaxReasoningEffortOverLimit(v string) *GroupCreate {
+	_c.mutation.SetMaxReasoningEffortOverLimit(v)
 	return _c
 }
 
-// SetDataSharingEnabled sets the "data_sharing_enabled" field.
-func (_c *GroupCreate) SetDataSharingEnabled(v bool) *GroupCreate {
-	_c.mutation.SetDataSharingEnabled(v)
-	return _c
-}
-
-// SetNillableDataSharingEnabled sets the "data_sharing_enabled" field if the given value is not nil.
-func (_c *GroupCreate) SetNillableDataSharingEnabled(v *bool) *GroupCreate {
+// SetNillableMaxReasoningEffortOverLimit sets the "max_reasoning_effort_over_limit" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableMaxReasoningEffortOverLimit(v *string) *GroupCreate {
 	if v != nil {
-		_c.SetDataSharingEnabled(*v)
+		_c.SetMaxReasoningEffortOverLimit(*v)
 	}
+	return _c
+}
+
+// SetReasoningEffortMappings sets the "reasoning_effort_mappings" field.
+func (_c *GroupCreate) SetReasoningEffortMappings(v []accessview.ReasoningEffortMapping) *GroupCreate {
+	_c.mutation.SetReasoningEffortMappings(v)
 	return _c
 }
 
@@ -900,19 +608,19 @@ func (_c *GroupCreate) AddUsageLogs(v ...*UsageLog) *GroupCreate {
 	return _c.AddUsageLogIDs(ids...)
 }
 
-// AddAccountIDs adds the "accounts" edge to the Account entity by IDs.
-func (_c *GroupCreate) AddAccountIDs(ids ...int64) *GroupCreate {
-	_c.mutation.AddAccountIDs(ids...)
+// AddProviderIDs adds the "providers" edge to the Provider entity by IDs.
+func (_c *GroupCreate) AddProviderIDs(ids ...int64) *GroupCreate {
+	_c.mutation.AddProviderIDs(ids...)
 	return _c
 }
 
-// AddAccounts adds the "accounts" edges to the Account entity.
-func (_c *GroupCreate) AddAccounts(v ...*Account) *GroupCreate {
+// AddProviders adds the "providers" edges to the Provider entity.
+func (_c *GroupCreate) AddProviders(v ...*Provider) *GroupCreate {
 	ids := make([]int64, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddAccountIDs(ids...)
+	return _c.AddProviderIDs(ids...)
 }
 
 // AddAllowedUserIDs adds the "allowed_users" edge to the User entity by IDs.
@@ -1000,37 +708,13 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultRateMultiplier
 		_c.mutation.SetRateMultiplier(v)
 	}
-	if _, ok := _c.mutation.PeakRateEnabled(); !ok {
-		v := group.DefaultPeakRateEnabled
-		_c.mutation.SetPeakRateEnabled(v)
-	}
-	if _, ok := _c.mutation.PeakStart(); !ok {
-		v := group.DefaultPeakStart
-		_c.mutation.SetPeakStart(v)
-	}
-	if _, ok := _c.mutation.PeakEnd(); !ok {
-		v := group.DefaultPeakEnd
-		_c.mutation.SetPeakEnd(v)
-	}
-	if _, ok := _c.mutation.PeakRateMultiplier(); !ok {
-		v := group.DefaultPeakRateMultiplier
-		_c.mutation.SetPeakRateMultiplier(v)
-	}
 	if _, ok := _c.mutation.IsExclusive(); !ok {
 		v := group.DefaultIsExclusive
 		_c.mutation.SetIsExclusive(v)
 	}
-	if _, ok := _c.mutation.IsDefault(); !ok {
-		v := group.DefaultIsDefault
-		_c.mutation.SetIsDefault(v)
-	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := group.DefaultStatus
 		_c.mutation.SetStatus(v)
-	}
-	if _, ok := _c.mutation.Platform(); !ok {
-		v := group.DefaultPlatform
-		_c.mutation.SetPlatform(v)
 	}
 	if _, ok := _c.mutation.SchedulerType(); !ok {
 		v := group.DefaultSchedulerType
@@ -1051,34 +735,6 @@ func (_c *GroupCreate) defaults() error {
 	if _, ok := _c.mutation.AllowBatchImageGeneration(); !ok {
 		v := group.DefaultAllowBatchImageGeneration
 		_c.mutation.SetAllowBatchImageGeneration(v)
-	}
-	if _, ok := _c.mutation.ImageRateIndependent(); !ok {
-		v := group.DefaultImageRateIndependent
-		_c.mutation.SetImageRateIndependent(v)
-	}
-	if _, ok := _c.mutation.ImageRateMultiplier(); !ok {
-		v := group.DefaultImageRateMultiplier
-		_c.mutation.SetImageRateMultiplier(v)
-	}
-	if _, ok := _c.mutation.BatchImageDiscountMultiplier(); !ok {
-		v := group.DefaultBatchImageDiscountMultiplier
-		_c.mutation.SetBatchImageDiscountMultiplier(v)
-	}
-	if _, ok := _c.mutation.BatchImageHoldMultiplier(); !ok {
-		v := group.DefaultBatchImageHoldMultiplier
-		_c.mutation.SetBatchImageHoldMultiplier(v)
-	}
-	if _, ok := _c.mutation.VideoRateIndependent(); !ok {
-		v := group.DefaultVideoRateIndependent
-		_c.mutation.SetVideoRateIndependent(v)
-	}
-	if _, ok := _c.mutation.VideoRateMultiplier(); !ok {
-		v := group.DefaultVideoRateMultiplier
-		_c.mutation.SetVideoRateMultiplier(v)
-	}
-	if _, ok := _c.mutation.LongContextPricingEnabled(); !ok {
-		v := group.DefaultLongContextPricingEnabled
-		_c.mutation.SetLongContextPricingEnabled(v)
 	}
 	if _, ok := _c.mutation.ClaudeCodeOnly(); !ok {
 		v := group.DefaultClaudeCodeOnly
@@ -1104,13 +760,29 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultAllowMessagesDispatch
 		_c.mutation.SetAllowMessagesDispatch(v)
 	}
-	if _, ok := _c.mutation.AllowedClientProtocols(); !ok {
-		v := group.DefaultAllowedClientProtocols
-		_c.mutation.SetAllowedClientProtocols(v)
+	if _, ok := _c.mutation.AllowedProtocols(); !ok {
+		v := group.DefaultAllowedProtocols
+		_c.mutation.SetAllowedProtocols(v)
+	}
+	if _, ok := _c.mutation.ProtocolFallbacks(); !ok {
+		v := group.DefaultProtocolFallbacks
+		_c.mutation.SetProtocolFallbacks(v)
+	}
+	if _, ok := _c.mutation.ResponsesImagePolicy(); !ok {
+		v := group.DefaultResponsesImagePolicy
+		_c.mutation.SetResponsesImagePolicy(v)
 	}
 	if _, ok := _c.mutation.AllowLive(); !ok {
 		v := group.DefaultAllowLive
 		_c.mutation.SetAllowLive(v)
+	}
+	if _, ok := _c.mutation.OpenaiFastPolicy(); !ok {
+		v := group.DefaultOpenaiFastPolicy
+		_c.mutation.SetOpenaiFastPolicy(v)
+	}
+	if _, ok := _c.mutation.ForceOpenaiFast(); !ok {
+		v := group.DefaultForceOpenaiFast
+		_c.mutation.SetForceOpenaiFast(v)
 	}
 	if _, ok := _c.mutation.RequireOauthOnly(); !ok {
 		v := group.DefaultRequireOauthOnly
@@ -1123,10 +795,6 @@ func (_c *GroupCreate) defaults() error {
 	if _, ok := _c.mutation.DefaultMappedModel(); !ok {
 		v := group.DefaultDefaultMappedModel
 		_c.mutation.SetDefaultMappedModel(v)
-	}
-	if _, ok := _c.mutation.MessagesDispatchModelConfig(); !ok {
-		v := group.DefaultMessagesDispatchModelConfig
-		_c.mutation.SetMessagesDispatchModelConfig(v)
 	}
 	if _, ok := _c.mutation.ModelsListConfig(); !ok {
 		v := group.DefaultModelsListConfig
@@ -1144,13 +812,13 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultMaxReasoningEffort
 		_c.mutation.SetMaxReasoningEffort(v)
 	}
+	if _, ok := _c.mutation.MaxReasoningEffortOverLimit(); !ok {
+		v := group.DefaultMaxReasoningEffortOverLimit
+		_c.mutation.SetMaxReasoningEffortOverLimit(v)
+	}
 	if _, ok := _c.mutation.ReasoningEffortMappings(); !ok {
 		v := group.DefaultReasoningEffortMappings
 		_c.mutation.SetReasoningEffortMappings(v)
-	}
-	if _, ok := _c.mutation.DataSharingEnabled(); !ok {
-		v := group.DefaultDataSharingEnabled
-		_c.mutation.SetDataSharingEnabled(v)
 	}
 	if _, ok := _c.mutation.SessionIsolationEnabled(); !ok {
 		v := group.DefaultSessionIsolationEnabled
@@ -1178,33 +846,8 @@ func (_c *GroupCreate) check() error {
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "Group.rate_multiplier"`)}
 	}
-	if _, ok := _c.mutation.PeakRateEnabled(); !ok {
-		return &ValidationError{Name: "peak_rate_enabled", err: errors.New(`ent: missing required field "Group.peak_rate_enabled"`)}
-	}
-	if _, ok := _c.mutation.PeakStart(); !ok {
-		return &ValidationError{Name: "peak_start", err: errors.New(`ent: missing required field "Group.peak_start"`)}
-	}
-	if v, ok := _c.mutation.PeakStart(); ok {
-		if err := group.PeakStartValidator(v); err != nil {
-			return &ValidationError{Name: "peak_start", err: fmt.Errorf(`ent: validator failed for field "Group.peak_start": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.PeakEnd(); !ok {
-		return &ValidationError{Name: "peak_end", err: errors.New(`ent: missing required field "Group.peak_end"`)}
-	}
-	if v, ok := _c.mutation.PeakEnd(); ok {
-		if err := group.PeakEndValidator(v); err != nil {
-			return &ValidationError{Name: "peak_end", err: fmt.Errorf(`ent: validator failed for field "Group.peak_end": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.PeakRateMultiplier(); !ok {
-		return &ValidationError{Name: "peak_rate_multiplier", err: errors.New(`ent: missing required field "Group.peak_rate_multiplier"`)}
-	}
 	if _, ok := _c.mutation.IsExclusive(); !ok {
 		return &ValidationError{Name: "is_exclusive", err: errors.New(`ent: missing required field "Group.is_exclusive"`)}
-	}
-	if _, ok := _c.mutation.IsDefault(); !ok {
-		return &ValidationError{Name: "is_default", err: errors.New(`ent: missing required field "Group.is_default"`)}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Group.status"`)}
@@ -1217,14 +860,6 @@ func (_c *GroupCreate) check() error {
 	if v, ok := _c.mutation.DuplicateOperationID(); ok {
 		if err := group.DuplicateOperationIDValidator(v); err != nil {
 			return &ValidationError{Name: "duplicate_operation_id", err: fmt.Errorf(`ent: validator failed for field "Group.duplicate_operation_id": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.Platform(); !ok {
-		return &ValidationError{Name: "platform", err: errors.New(`ent: missing required field "Group.platform"`)}
-	}
-	if v, ok := _c.mutation.Platform(); ok {
-		if err := group.PlatformValidator(v); err != nil {
-			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "Group.platform": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.SchedulerType(); !ok {
@@ -1252,47 +887,6 @@ func (_c *GroupCreate) check() error {
 	if _, ok := _c.mutation.AllowBatchImageGeneration(); !ok {
 		return &ValidationError{Name: "allow_batch_image_generation", err: errors.New(`ent: missing required field "Group.allow_batch_image_generation"`)}
 	}
-	if _, ok := _c.mutation.ImageRateIndependent(); !ok {
-		return &ValidationError{Name: "image_rate_independent", err: errors.New(`ent: missing required field "Group.image_rate_independent"`)}
-	}
-	if _, ok := _c.mutation.ImageRateMultiplier(); !ok {
-		return &ValidationError{Name: "image_rate_multiplier", err: errors.New(`ent: missing required field "Group.image_rate_multiplier"`)}
-	}
-	if _, ok := _c.mutation.BatchImageDiscountMultiplier(); !ok {
-		return &ValidationError{Name: "batch_image_discount_multiplier", err: errors.New(`ent: missing required field "Group.batch_image_discount_multiplier"`)}
-	}
-	if _, ok := _c.mutation.BatchImageHoldMultiplier(); !ok {
-		return &ValidationError{Name: "batch_image_hold_multiplier", err: errors.New(`ent: missing required field "Group.batch_image_hold_multiplier"`)}
-	}
-	if _, ok := _c.mutation.VideoRateIndependent(); !ok {
-		return &ValidationError{Name: "video_rate_independent", err: errors.New(`ent: missing required field "Group.video_rate_independent"`)}
-	}
-	if _, ok := _c.mutation.VideoRateMultiplier(); !ok {
-		return &ValidationError{Name: "video_rate_multiplier", err: errors.New(`ent: missing required field "Group.video_rate_multiplier"`)}
-	}
-	if v, ok := _c.mutation.SearchPricePer1k(); ok {
-		if err := group.SearchPricePer1kValidator(v); err != nil {
-			return &ValidationError{Name: "search_price_per_1k", err: fmt.Errorf(`ent: validator failed for field "Group.search_price_per_1k": %w`, err)}
-		}
-	}
-	if v, ok := _c.mutation.AudioRealtimePricePerMin(); ok {
-		if err := group.AudioRealtimePricePerMinValidator(v); err != nil {
-			return &ValidationError{Name: "audio_realtime_price_per_min", err: fmt.Errorf(`ent: validator failed for field "Group.audio_realtime_price_per_min": %w`, err)}
-		}
-	}
-	if v, ok := _c.mutation.AudioTtsPricePerMillionChars(); ok {
-		if err := group.AudioTtsPricePerMillionCharsValidator(v); err != nil {
-			return &ValidationError{Name: "audio_tts_price_per_million_chars", err: fmt.Errorf(`ent: validator failed for field "Group.audio_tts_price_per_million_chars": %w`, err)}
-		}
-	}
-	if v, ok := _c.mutation.AudioSttPricePerHour(); ok {
-		if err := group.AudioSttPricePerHourValidator(v); err != nil {
-			return &ValidationError{Name: "audio_stt_price_per_hour", err: fmt.Errorf(`ent: validator failed for field "Group.audio_stt_price_per_hour": %w`, err)}
-		}
-	}
-	if _, ok := _c.mutation.LongContextPricingEnabled(); !ok {
-		return &ValidationError{Name: "long_context_pricing_enabled", err: errors.New(`ent: missing required field "Group.long_context_pricing_enabled"`)}
-	}
 	if _, ok := _c.mutation.ClaudeCodeOnly(); !ok {
 		return &ValidationError{Name: "claude_code_only", err: errors.New(`ent: missing required field "Group.claude_code_only"`)}
 	}
@@ -1311,11 +905,23 @@ func (_c *GroupCreate) check() error {
 	if _, ok := _c.mutation.AllowMessagesDispatch(); !ok {
 		return &ValidationError{Name: "allow_messages_dispatch", err: errors.New(`ent: missing required field "Group.allow_messages_dispatch"`)}
 	}
-	if _, ok := _c.mutation.AllowedClientProtocols(); !ok {
-		return &ValidationError{Name: "allowed_client_protocols", err: errors.New(`ent: missing required field "Group.allowed_client_protocols"`)}
+	if _, ok := _c.mutation.AllowedProtocols(); !ok {
+		return &ValidationError{Name: "allowed_protocols", err: errors.New(`ent: missing required field "Group.allowed_protocols"`)}
+	}
+	if _, ok := _c.mutation.ProtocolFallbacks(); !ok {
+		return &ValidationError{Name: "protocol_fallbacks", err: errors.New(`ent: missing required field "Group.protocol_fallbacks"`)}
+	}
+	if _, ok := _c.mutation.ResponsesImagePolicy(); !ok {
+		return &ValidationError{Name: "responses_image_policy", err: errors.New(`ent: missing required field "Group.responses_image_policy"`)}
 	}
 	if _, ok := _c.mutation.AllowLive(); !ok {
 		return &ValidationError{Name: "allow_live", err: errors.New(`ent: missing required field "Group.allow_live"`)}
+	}
+	if _, ok := _c.mutation.OpenaiFastPolicy(); !ok {
+		return &ValidationError{Name: "openai_fast_policy", err: errors.New(`ent: missing required field "Group.openai_fast_policy"`)}
+	}
+	if _, ok := _c.mutation.ForceOpenaiFast(); !ok {
+		return &ValidationError{Name: "force_openai_fast", err: errors.New(`ent: missing required field "Group.force_openai_fast"`)}
 	}
 	if _, ok := _c.mutation.RequireOauthOnly(); !ok {
 		return &ValidationError{Name: "require_oauth_only", err: errors.New(`ent: missing required field "Group.require_oauth_only"`)}
@@ -1330,9 +936,6 @@ func (_c *GroupCreate) check() error {
 		if err := group.DefaultMappedModelValidator(v); err != nil {
 			return &ValidationError{Name: "default_mapped_model", err: fmt.Errorf(`ent: validator failed for field "Group.default_mapped_model": %w`, err)}
 		}
-	}
-	if _, ok := _c.mutation.MessagesDispatchModelConfig(); !ok {
-		return &ValidationError{Name: "messages_dispatch_model_config", err: errors.New(`ent: missing required field "Group.messages_dispatch_model_config"`)}
 	}
 	if _, ok := _c.mutation.ModelsListConfig(); !ok {
 		return &ValidationError{Name: "models_list_config", err: errors.New(`ent: missing required field "Group.models_list_config"`)}
@@ -1351,11 +954,16 @@ func (_c *GroupCreate) check() error {
 			return &ValidationError{Name: "max_reasoning_effort", err: fmt.Errorf(`ent: validator failed for field "Group.max_reasoning_effort": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.MaxReasoningEffortOverLimit(); !ok {
+		return &ValidationError{Name: "max_reasoning_effort_over_limit", err: errors.New(`ent: missing required field "Group.max_reasoning_effort_over_limit"`)}
+	}
+	if v, ok := _c.mutation.MaxReasoningEffortOverLimit(); ok {
+		if err := group.MaxReasoningEffortOverLimitValidator(v); err != nil {
+			return &ValidationError{Name: "max_reasoning_effort_over_limit", err: fmt.Errorf(`ent: validator failed for field "Group.max_reasoning_effort_over_limit": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.ReasoningEffortMappings(); !ok {
 		return &ValidationError{Name: "reasoning_effort_mappings", err: errors.New(`ent: missing required field "Group.reasoning_effort_mappings"`)}
-	}
-	if _, ok := _c.mutation.DataSharingEnabled(); !ok {
-		return &ValidationError{Name: "data_sharing_enabled", err: errors.New(`ent: missing required field "Group.data_sharing_enabled"`)}
 	}
 	if _, ok := _c.mutation.SessionIsolationEnabled(); !ok {
 		return &ValidationError{Name: "session_isolation_enabled", err: errors.New(`ent: missing required field "Group.session_isolation_enabled"`)}
@@ -1399,6 +1007,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 		_spec.SetField(group.FieldDeletedAt, field.TypeTime, value)
 		_node.DeletedAt = &value
 	}
+	if value, ok := _c.mutation.Localization(); ok {
+		_spec.SetField(group.FieldLocalization, field.TypeJSON, value)
+		_node.Localization = value
+	}
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(group.FieldName, field.TypeString, value)
 		_node.Name = value
@@ -1411,29 +1023,9 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 		_spec.SetField(group.FieldRateMultiplier, field.TypeFloat64, value)
 		_node.RateMultiplier = value
 	}
-	if value, ok := _c.mutation.PeakRateEnabled(); ok {
-		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)
-		_node.PeakRateEnabled = value
-	}
-	if value, ok := _c.mutation.PeakStart(); ok {
-		_spec.SetField(group.FieldPeakStart, field.TypeString, value)
-		_node.PeakStart = value
-	}
-	if value, ok := _c.mutation.PeakEnd(); ok {
-		_spec.SetField(group.FieldPeakEnd, field.TypeString, value)
-		_node.PeakEnd = value
-	}
-	if value, ok := _c.mutation.PeakRateMultiplier(); ok {
-		_spec.SetField(group.FieldPeakRateMultiplier, field.TypeFloat64, value)
-		_node.PeakRateMultiplier = value
-	}
 	if value, ok := _c.mutation.IsExclusive(); ok {
 		_spec.SetField(group.FieldIsExclusive, field.TypeBool, value)
 		_node.IsExclusive = value
-	}
-	if value, ok := _c.mutation.IsDefault(); ok {
-		_spec.SetField(group.FieldIsDefault, field.TypeBool, value)
-		_node.IsDefault = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(group.FieldStatus, field.TypeString, value)
@@ -1442,10 +1034,6 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DuplicateOperationID(); ok {
 		_spec.SetField(group.FieldDuplicateOperationID, field.TypeString, value)
 		_node.DuplicateOperationID = &value
-	}
-	if value, ok := _c.mutation.Platform(); ok {
-		_spec.SetField(group.FieldPlatform, field.TypeString, value)
-		_node.Platform = value
 	}
 	if value, ok := _c.mutation.SchedulerType(); ok {
 		_spec.SetField(group.FieldSchedulerType, field.TypeString, value)
@@ -1467,85 +1055,9 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 		_spec.SetField(group.FieldAllowBatchImageGeneration, field.TypeBool, value)
 		_node.AllowBatchImageGeneration = value
 	}
-	if value, ok := _c.mutation.ImageRateIndependent(); ok {
-		_spec.SetField(group.FieldImageRateIndependent, field.TypeBool, value)
-		_node.ImageRateIndependent = value
-	}
-	if value, ok := _c.mutation.ImageRateMultiplier(); ok {
-		_spec.SetField(group.FieldImageRateMultiplier, field.TypeFloat64, value)
-		_node.ImageRateMultiplier = value
-	}
-	if value, ok := _c.mutation.ImagePrice1k(); ok {
-		_spec.SetField(group.FieldImagePrice1k, field.TypeFloat64, value)
-		_node.ImagePrice1k = &value
-	}
-	if value, ok := _c.mutation.ImagePrice2k(); ok {
-		_spec.SetField(group.FieldImagePrice2k, field.TypeFloat64, value)
-		_node.ImagePrice2k = &value
-	}
-	if value, ok := _c.mutation.ImagePrice4k(); ok {
-		_spec.SetField(group.FieldImagePrice4k, field.TypeFloat64, value)
-		_node.ImagePrice4k = &value
-	}
-	if value, ok := _c.mutation.BatchImageDiscountMultiplier(); ok {
-		_spec.SetField(group.FieldBatchImageDiscountMultiplier, field.TypeFloat64, value)
-		_node.BatchImageDiscountMultiplier = value
-	}
-	if value, ok := _c.mutation.BatchImageHoldMultiplier(); ok {
-		_spec.SetField(group.FieldBatchImageHoldMultiplier, field.TypeFloat64, value)
-		_node.BatchImageHoldMultiplier = value
-	}
-	if value, ok := _c.mutation.VideoRateIndependent(); ok {
-		_spec.SetField(group.FieldVideoRateIndependent, field.TypeBool, value)
-		_node.VideoRateIndependent = value
-	}
-	if value, ok := _c.mutation.VideoRateMultiplier(); ok {
-		_spec.SetField(group.FieldVideoRateMultiplier, field.TypeFloat64, value)
-		_node.VideoRateMultiplier = value
-	}
-	if value, ok := _c.mutation.VideoPrice480p(); ok {
-		_spec.SetField(group.FieldVideoPrice480p, field.TypeFloat64, value)
-		_node.VideoPrice480p = &value
-	}
-	if value, ok := _c.mutation.VideoPrice720p(); ok {
-		_spec.SetField(group.FieldVideoPrice720p, field.TypeFloat64, value)
-		_node.VideoPrice720p = &value
-	}
-	if value, ok := _c.mutation.VideoPrice1080p(); ok {
-		_spec.SetField(group.FieldVideoPrice1080p, field.TypeFloat64, value)
-		_node.VideoPrice1080p = &value
-	}
-	if value, ok := _c.mutation.VideoModelPrices(); ok {
-		_spec.SetField(group.FieldVideoModelPrices, field.TypeJSON, value)
-		_node.VideoModelPrices = value
-	}
-	if value, ok := _c.mutation.WebSearchPricePerCall(); ok {
-		_spec.SetField(group.FieldWebSearchPricePerCall, field.TypeFloat64, value)
-		_node.WebSearchPricePerCall = &value
-	}
-	if value, ok := _c.mutation.SearchPricePer1k(); ok {
-		_spec.SetField(group.FieldSearchPricePer1k, field.TypeFloat64, value)
-		_node.SearchPricePer1k = &value
-	}
-	if value, ok := _c.mutation.AudioRealtimePricePerMin(); ok {
-		_spec.SetField(group.FieldAudioRealtimePricePerMin, field.TypeFloat64, value)
-		_node.AudioRealtimePricePerMin = &value
-	}
-	if value, ok := _c.mutation.AudioTtsPricePerMillionChars(); ok {
-		_spec.SetField(group.FieldAudioTtsPricePerMillionChars, field.TypeFloat64, value)
-		_node.AudioTtsPricePerMillionChars = &value
-	}
-	if value, ok := _c.mutation.AudioSttPricePerHour(); ok {
-		_spec.SetField(group.FieldAudioSttPricePerHour, field.TypeFloat64, value)
-		_node.AudioSttPricePerHour = &value
-	}
-	if value, ok := _c.mutation.LongContextPricingEnabled(); ok {
-		_spec.SetField(group.FieldLongContextPricingEnabled, field.TypeBool, value)
-		_node.LongContextPricingEnabled = value
-	}
-	if value, ok := _c.mutation.ModelPricing(); ok {
-		_spec.SetField(group.FieldModelPricing, field.TypeJSON, value)
-		_node.ModelPricing = value
+	if value, ok := _c.mutation.RoutingPolicy(); ok {
+		_spec.SetField(group.FieldRoutingPolicy, field.TypeJSON, value)
+		_node.RoutingPolicy = value
 	}
 	if value, ok := _c.mutation.ClaudeCodeOnly(); ok {
 		_spec.SetField(group.FieldClaudeCodeOnly, field.TypeBool, value)
@@ -1587,13 +1099,29 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 		_spec.SetField(group.FieldAllowMessagesDispatch, field.TypeBool, value)
 		_node.AllowMessagesDispatch = value
 	}
-	if value, ok := _c.mutation.AllowedClientProtocols(); ok {
-		_spec.SetField(group.FieldAllowedClientProtocols, field.TypeJSON, value)
-		_node.AllowedClientProtocols = value
+	if value, ok := _c.mutation.AllowedProtocols(); ok {
+		_spec.SetField(group.FieldAllowedProtocols, field.TypeJSON, value)
+		_node.AllowedProtocols = value
+	}
+	if value, ok := _c.mutation.ProtocolFallbacks(); ok {
+		_spec.SetField(group.FieldProtocolFallbacks, field.TypeJSON, value)
+		_node.ProtocolFallbacks = value
+	}
+	if value, ok := _c.mutation.ResponsesImagePolicy(); ok {
+		_spec.SetField(group.FieldResponsesImagePolicy, field.TypeString, value)
+		_node.ResponsesImagePolicy = value
 	}
 	if value, ok := _c.mutation.AllowLive(); ok {
 		_spec.SetField(group.FieldAllowLive, field.TypeBool, value)
 		_node.AllowLive = value
+	}
+	if value, ok := _c.mutation.OpenaiFastPolicy(); ok {
+		_spec.SetField(group.FieldOpenaiFastPolicy, field.TypeString, value)
+		_node.OpenaiFastPolicy = value
+	}
+	if value, ok := _c.mutation.ForceOpenaiFast(); ok {
+		_spec.SetField(group.FieldForceOpenaiFast, field.TypeBool, value)
+		_node.ForceOpenaiFast = value
 	}
 	if value, ok := _c.mutation.RequireOauthOnly(); ok {
 		_spec.SetField(group.FieldRequireOauthOnly, field.TypeBool, value)
@@ -1606,10 +1134,6 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DefaultMappedModel(); ok {
 		_spec.SetField(group.FieldDefaultMappedModel, field.TypeString, value)
 		_node.DefaultMappedModel = value
-	}
-	if value, ok := _c.mutation.MessagesDispatchModelConfig(); ok {
-		_spec.SetField(group.FieldMessagesDispatchModelConfig, field.TypeJSON, value)
-		_node.MessagesDispatchModelConfig = value
 	}
 	if value, ok := _c.mutation.ModelsListConfig(); ok {
 		_spec.SetField(group.FieldModelsListConfig, field.TypeJSON, value)
@@ -1627,13 +1151,13 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 		_spec.SetField(group.FieldMaxReasoningEffort, field.TypeString, value)
 		_node.MaxReasoningEffort = value
 	}
+	if value, ok := _c.mutation.MaxReasoningEffortOverLimit(); ok {
+		_spec.SetField(group.FieldMaxReasoningEffortOverLimit, field.TypeString, value)
+		_node.MaxReasoningEffortOverLimit = value
+	}
 	if value, ok := _c.mutation.ReasoningEffortMappings(); ok {
 		_spec.SetField(group.FieldReasoningEffortMappings, field.TypeJSON, value)
 		_node.ReasoningEffortMappings = value
-	}
-	if value, ok := _c.mutation.DataSharingEnabled(); ok {
-		_spec.SetField(group.FieldDataSharingEnabled, field.TypeBool, value)
-		_node.DataSharingEnabled = value
 	}
 	if value, ok := _c.mutation.SessionIsolationEnabled(); ok {
 		_spec.SetField(group.FieldSessionIsolationEnabled, field.TypeBool, value)
@@ -1687,21 +1211,21 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.AccountsIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.ProvidersIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2M,
 			Inverse: true,
-			Table:   group.AccountsTable,
-			Columns: group.AccountsPrimaryKey,
+			Table:   group.ProvidersTable,
+			Columns: group.ProvidersPrimaryKey,
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+				IDSpec: sqlgraph.NewFieldSpec(provider.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		createE := &AccountGroupCreate{config: _c.config, mutation: newAccountGroupMutation(_c.config, OpCreate)}
+		createE := &ProviderGroupCreate{config: _c.config, mutation: newProviderGroupMutation(_c.config, OpCreate)}
 		createE.defaults()
 		_, specE := createE.createSpec()
 		edge.Target.Fields = specE.Fields
@@ -1829,6 +1353,24 @@ func (u *GroupUpsert) ClearDeletedAt() *GroupUpsert {
 	return u
 }
 
+// SetLocalization sets the "localization" field.
+func (u *GroupUpsert) SetLocalization(v accessview.GroupLocalization) *GroupUpsert {
+	u.Set(group.FieldLocalization, v)
+	return u
+}
+
+// UpdateLocalization sets the "localization" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateLocalization() *GroupUpsert {
+	u.SetExcluded(group.FieldLocalization)
+	return u
+}
+
+// ClearLocalization clears the value of the "localization" field.
+func (u *GroupUpsert) ClearLocalization() *GroupUpsert {
+	u.SetNull(group.FieldLocalization)
+	return u
+}
+
 // SetName sets the "name" field.
 func (u *GroupUpsert) SetName(v string) *GroupUpsert {
 	u.Set(group.FieldName, v)
@@ -1877,60 +1419,6 @@ func (u *GroupUpsert) AddRateMultiplier(v float64) *GroupUpsert {
 	return u
 }
 
-// SetPeakRateEnabled sets the "peak_rate_enabled" field.
-func (u *GroupUpsert) SetPeakRateEnabled(v bool) *GroupUpsert {
-	u.Set(group.FieldPeakRateEnabled, v)
-	return u
-}
-
-// UpdatePeakRateEnabled sets the "peak_rate_enabled" field to the value that was provided on create.
-func (u *GroupUpsert) UpdatePeakRateEnabled() *GroupUpsert {
-	u.SetExcluded(group.FieldPeakRateEnabled)
-	return u
-}
-
-// SetPeakStart sets the "peak_start" field.
-func (u *GroupUpsert) SetPeakStart(v string) *GroupUpsert {
-	u.Set(group.FieldPeakStart, v)
-	return u
-}
-
-// UpdatePeakStart sets the "peak_start" field to the value that was provided on create.
-func (u *GroupUpsert) UpdatePeakStart() *GroupUpsert {
-	u.SetExcluded(group.FieldPeakStart)
-	return u
-}
-
-// SetPeakEnd sets the "peak_end" field.
-func (u *GroupUpsert) SetPeakEnd(v string) *GroupUpsert {
-	u.Set(group.FieldPeakEnd, v)
-	return u
-}
-
-// UpdatePeakEnd sets the "peak_end" field to the value that was provided on create.
-func (u *GroupUpsert) UpdatePeakEnd() *GroupUpsert {
-	u.SetExcluded(group.FieldPeakEnd)
-	return u
-}
-
-// SetPeakRateMultiplier sets the "peak_rate_multiplier" field.
-func (u *GroupUpsert) SetPeakRateMultiplier(v float64) *GroupUpsert {
-	u.Set(group.FieldPeakRateMultiplier, v)
-	return u
-}
-
-// UpdatePeakRateMultiplier sets the "peak_rate_multiplier" field to the value that was provided on create.
-func (u *GroupUpsert) UpdatePeakRateMultiplier() *GroupUpsert {
-	u.SetExcluded(group.FieldPeakRateMultiplier)
-	return u
-}
-
-// AddPeakRateMultiplier adds v to the "peak_rate_multiplier" field.
-func (u *GroupUpsert) AddPeakRateMultiplier(v float64) *GroupUpsert {
-	u.Add(group.FieldPeakRateMultiplier, v)
-	return u
-}
-
 // SetIsExclusive sets the "is_exclusive" field.
 func (u *GroupUpsert) SetIsExclusive(v bool) *GroupUpsert {
 	u.Set(group.FieldIsExclusive, v)
@@ -1943,18 +1431,6 @@ func (u *GroupUpsert) UpdateIsExclusive() *GroupUpsert {
 	return u
 }
 
-// SetIsDefault sets the "is_default" field.
-func (u *GroupUpsert) SetIsDefault(v bool) *GroupUpsert {
-	u.Set(group.FieldIsDefault, v)
-	return u
-}
-
-// UpdateIsDefault sets the "is_default" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateIsDefault() *GroupUpsert {
-	u.SetExcluded(group.FieldIsDefault)
-	return u
-}
-
 // SetStatus sets the "status" field.
 func (u *GroupUpsert) SetStatus(v string) *GroupUpsert {
 	u.Set(group.FieldStatus, v)
@@ -1964,18 +1440,6 @@ func (u *GroupUpsert) SetStatus(v string) *GroupUpsert {
 // UpdateStatus sets the "status" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateStatus() *GroupUpsert {
 	u.SetExcluded(group.FieldStatus)
-	return u
-}
-
-// SetPlatform sets the "platform" field.
-func (u *GroupUpsert) SetPlatform(v string) *GroupUpsert {
-	u.Set(group.FieldPlatform, v)
-	return u
-}
-
-// UpdatePlatform sets the "platform" field to the value that was provided on create.
-func (u *GroupUpsert) UpdatePlatform() *GroupUpsert {
-	u.SetExcluded(group.FieldPlatform)
 	return u
 }
 
@@ -1992,7 +1456,7 @@ func (u *GroupUpsert) UpdateSchedulerType() *GroupUpsert {
 }
 
 // SetAdvancedSchedulerOverrides sets the "advanced_scheduler_overrides" field.
-func (u *GroupUpsert) SetAdvancedSchedulerOverrides(v domain.GroupAdvancedSchedulerOverrides) *GroupUpsert {
+func (u *GroupUpsert) SetAdvancedSchedulerOverrides(v policy.GroupAdvancedSchedulerOverrides) *GroupUpsert {
 	u.Set(group.FieldAdvancedSchedulerOverrides, v)
 	return u
 }
@@ -2039,411 +1503,21 @@ func (u *GroupUpsert) UpdateAllowBatchImageGeneration() *GroupUpsert {
 	return u
 }
 
-// SetImageRateIndependent sets the "image_rate_independent" field.
-func (u *GroupUpsert) SetImageRateIndependent(v bool) *GroupUpsert {
-	u.Set(group.FieldImageRateIndependent, v)
+// SetRoutingPolicy sets the "routing_policy" field.
+func (u *GroupUpsert) SetRoutingPolicy(v jsontext.Value) *GroupUpsert {
+	u.Set(group.FieldRoutingPolicy, v)
 	return u
 }
 
-// UpdateImageRateIndependent sets the "image_rate_independent" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateImageRateIndependent() *GroupUpsert {
-	u.SetExcluded(group.FieldImageRateIndependent)
+// UpdateRoutingPolicy sets the "routing_policy" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateRoutingPolicy() *GroupUpsert {
+	u.SetExcluded(group.FieldRoutingPolicy)
 	return u
 }
 
-// SetImageRateMultiplier sets the "image_rate_multiplier" field.
-func (u *GroupUpsert) SetImageRateMultiplier(v float64) *GroupUpsert {
-	u.Set(group.FieldImageRateMultiplier, v)
-	return u
-}
-
-// UpdateImageRateMultiplier sets the "image_rate_multiplier" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateImageRateMultiplier() *GroupUpsert {
-	u.SetExcluded(group.FieldImageRateMultiplier)
-	return u
-}
-
-// AddImageRateMultiplier adds v to the "image_rate_multiplier" field.
-func (u *GroupUpsert) AddImageRateMultiplier(v float64) *GroupUpsert {
-	u.Add(group.FieldImageRateMultiplier, v)
-	return u
-}
-
-// SetImagePrice1k sets the "image_price_1k" field.
-func (u *GroupUpsert) SetImagePrice1k(v float64) *GroupUpsert {
-	u.Set(group.FieldImagePrice1k, v)
-	return u
-}
-
-// UpdateImagePrice1k sets the "image_price_1k" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateImagePrice1k() *GroupUpsert {
-	u.SetExcluded(group.FieldImagePrice1k)
-	return u
-}
-
-// AddImagePrice1k adds v to the "image_price_1k" field.
-func (u *GroupUpsert) AddImagePrice1k(v float64) *GroupUpsert {
-	u.Add(group.FieldImagePrice1k, v)
-	return u
-}
-
-// ClearImagePrice1k clears the value of the "image_price_1k" field.
-func (u *GroupUpsert) ClearImagePrice1k() *GroupUpsert {
-	u.SetNull(group.FieldImagePrice1k)
-	return u
-}
-
-// SetImagePrice2k sets the "image_price_2k" field.
-func (u *GroupUpsert) SetImagePrice2k(v float64) *GroupUpsert {
-	u.Set(group.FieldImagePrice2k, v)
-	return u
-}
-
-// UpdateImagePrice2k sets the "image_price_2k" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateImagePrice2k() *GroupUpsert {
-	u.SetExcluded(group.FieldImagePrice2k)
-	return u
-}
-
-// AddImagePrice2k adds v to the "image_price_2k" field.
-func (u *GroupUpsert) AddImagePrice2k(v float64) *GroupUpsert {
-	u.Add(group.FieldImagePrice2k, v)
-	return u
-}
-
-// ClearImagePrice2k clears the value of the "image_price_2k" field.
-func (u *GroupUpsert) ClearImagePrice2k() *GroupUpsert {
-	u.SetNull(group.FieldImagePrice2k)
-	return u
-}
-
-// SetImagePrice4k sets the "image_price_4k" field.
-func (u *GroupUpsert) SetImagePrice4k(v float64) *GroupUpsert {
-	u.Set(group.FieldImagePrice4k, v)
-	return u
-}
-
-// UpdateImagePrice4k sets the "image_price_4k" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateImagePrice4k() *GroupUpsert {
-	u.SetExcluded(group.FieldImagePrice4k)
-	return u
-}
-
-// AddImagePrice4k adds v to the "image_price_4k" field.
-func (u *GroupUpsert) AddImagePrice4k(v float64) *GroupUpsert {
-	u.Add(group.FieldImagePrice4k, v)
-	return u
-}
-
-// ClearImagePrice4k clears the value of the "image_price_4k" field.
-func (u *GroupUpsert) ClearImagePrice4k() *GroupUpsert {
-	u.SetNull(group.FieldImagePrice4k)
-	return u
-}
-
-// SetBatchImageDiscountMultiplier sets the "batch_image_discount_multiplier" field.
-func (u *GroupUpsert) SetBatchImageDiscountMultiplier(v float64) *GroupUpsert {
-	u.Set(group.FieldBatchImageDiscountMultiplier, v)
-	return u
-}
-
-// UpdateBatchImageDiscountMultiplier sets the "batch_image_discount_multiplier" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateBatchImageDiscountMultiplier() *GroupUpsert {
-	u.SetExcluded(group.FieldBatchImageDiscountMultiplier)
-	return u
-}
-
-// AddBatchImageDiscountMultiplier adds v to the "batch_image_discount_multiplier" field.
-func (u *GroupUpsert) AddBatchImageDiscountMultiplier(v float64) *GroupUpsert {
-	u.Add(group.FieldBatchImageDiscountMultiplier, v)
-	return u
-}
-
-// SetBatchImageHoldMultiplier sets the "batch_image_hold_multiplier" field.
-func (u *GroupUpsert) SetBatchImageHoldMultiplier(v float64) *GroupUpsert {
-	u.Set(group.FieldBatchImageHoldMultiplier, v)
-	return u
-}
-
-// UpdateBatchImageHoldMultiplier sets the "batch_image_hold_multiplier" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateBatchImageHoldMultiplier() *GroupUpsert {
-	u.SetExcluded(group.FieldBatchImageHoldMultiplier)
-	return u
-}
-
-// AddBatchImageHoldMultiplier adds v to the "batch_image_hold_multiplier" field.
-func (u *GroupUpsert) AddBatchImageHoldMultiplier(v float64) *GroupUpsert {
-	u.Add(group.FieldBatchImageHoldMultiplier, v)
-	return u
-}
-
-// SetVideoRateIndependent sets the "video_rate_independent" field.
-func (u *GroupUpsert) SetVideoRateIndependent(v bool) *GroupUpsert {
-	u.Set(group.FieldVideoRateIndependent, v)
-	return u
-}
-
-// UpdateVideoRateIndependent sets the "video_rate_independent" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateVideoRateIndependent() *GroupUpsert {
-	u.SetExcluded(group.FieldVideoRateIndependent)
-	return u
-}
-
-// SetVideoRateMultiplier sets the "video_rate_multiplier" field.
-func (u *GroupUpsert) SetVideoRateMultiplier(v float64) *GroupUpsert {
-	u.Set(group.FieldVideoRateMultiplier, v)
-	return u
-}
-
-// UpdateVideoRateMultiplier sets the "video_rate_multiplier" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateVideoRateMultiplier() *GroupUpsert {
-	u.SetExcluded(group.FieldVideoRateMultiplier)
-	return u
-}
-
-// AddVideoRateMultiplier adds v to the "video_rate_multiplier" field.
-func (u *GroupUpsert) AddVideoRateMultiplier(v float64) *GroupUpsert {
-	u.Add(group.FieldVideoRateMultiplier, v)
-	return u
-}
-
-// SetVideoPrice480p sets the "video_price_480p" field.
-func (u *GroupUpsert) SetVideoPrice480p(v float64) *GroupUpsert {
-	u.Set(group.FieldVideoPrice480p, v)
-	return u
-}
-
-// UpdateVideoPrice480p sets the "video_price_480p" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateVideoPrice480p() *GroupUpsert {
-	u.SetExcluded(group.FieldVideoPrice480p)
-	return u
-}
-
-// AddVideoPrice480p adds v to the "video_price_480p" field.
-func (u *GroupUpsert) AddVideoPrice480p(v float64) *GroupUpsert {
-	u.Add(group.FieldVideoPrice480p, v)
-	return u
-}
-
-// ClearVideoPrice480p clears the value of the "video_price_480p" field.
-func (u *GroupUpsert) ClearVideoPrice480p() *GroupUpsert {
-	u.SetNull(group.FieldVideoPrice480p)
-	return u
-}
-
-// SetVideoPrice720p sets the "video_price_720p" field.
-func (u *GroupUpsert) SetVideoPrice720p(v float64) *GroupUpsert {
-	u.Set(group.FieldVideoPrice720p, v)
-	return u
-}
-
-// UpdateVideoPrice720p sets the "video_price_720p" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateVideoPrice720p() *GroupUpsert {
-	u.SetExcluded(group.FieldVideoPrice720p)
-	return u
-}
-
-// AddVideoPrice720p adds v to the "video_price_720p" field.
-func (u *GroupUpsert) AddVideoPrice720p(v float64) *GroupUpsert {
-	u.Add(group.FieldVideoPrice720p, v)
-	return u
-}
-
-// ClearVideoPrice720p clears the value of the "video_price_720p" field.
-func (u *GroupUpsert) ClearVideoPrice720p() *GroupUpsert {
-	u.SetNull(group.FieldVideoPrice720p)
-	return u
-}
-
-// SetVideoPrice1080p sets the "video_price_1080p" field.
-func (u *GroupUpsert) SetVideoPrice1080p(v float64) *GroupUpsert {
-	u.Set(group.FieldVideoPrice1080p, v)
-	return u
-}
-
-// UpdateVideoPrice1080p sets the "video_price_1080p" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateVideoPrice1080p() *GroupUpsert {
-	u.SetExcluded(group.FieldVideoPrice1080p)
-	return u
-}
-
-// AddVideoPrice1080p adds v to the "video_price_1080p" field.
-func (u *GroupUpsert) AddVideoPrice1080p(v float64) *GroupUpsert {
-	u.Add(group.FieldVideoPrice1080p, v)
-	return u
-}
-
-// ClearVideoPrice1080p clears the value of the "video_price_1080p" field.
-func (u *GroupUpsert) ClearVideoPrice1080p() *GroupUpsert {
-	u.SetNull(group.FieldVideoPrice1080p)
-	return u
-}
-
-// SetVideoModelPrices sets the "video_model_prices" field.
-func (u *GroupUpsert) SetVideoModelPrices(v map[string]map[string]float64) *GroupUpsert {
-	u.Set(group.FieldVideoModelPrices, v)
-	return u
-}
-
-// UpdateVideoModelPrices sets the "video_model_prices" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateVideoModelPrices() *GroupUpsert {
-	u.SetExcluded(group.FieldVideoModelPrices)
-	return u
-}
-
-// ClearVideoModelPrices clears the value of the "video_model_prices" field.
-func (u *GroupUpsert) ClearVideoModelPrices() *GroupUpsert {
-	u.SetNull(group.FieldVideoModelPrices)
-	return u
-}
-
-// SetWebSearchPricePerCall sets the "web_search_price_per_call" field.
-func (u *GroupUpsert) SetWebSearchPricePerCall(v float64) *GroupUpsert {
-	u.Set(group.FieldWebSearchPricePerCall, v)
-	return u
-}
-
-// UpdateWebSearchPricePerCall sets the "web_search_price_per_call" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateWebSearchPricePerCall() *GroupUpsert {
-	u.SetExcluded(group.FieldWebSearchPricePerCall)
-	return u
-}
-
-// AddWebSearchPricePerCall adds v to the "web_search_price_per_call" field.
-func (u *GroupUpsert) AddWebSearchPricePerCall(v float64) *GroupUpsert {
-	u.Add(group.FieldWebSearchPricePerCall, v)
-	return u
-}
-
-// ClearWebSearchPricePerCall clears the value of the "web_search_price_per_call" field.
-func (u *GroupUpsert) ClearWebSearchPricePerCall() *GroupUpsert {
-	u.SetNull(group.FieldWebSearchPricePerCall)
-	return u
-}
-
-// SetSearchPricePer1k sets the "search_price_per_1k" field.
-func (u *GroupUpsert) SetSearchPricePer1k(v float64) *GroupUpsert {
-	u.Set(group.FieldSearchPricePer1k, v)
-	return u
-}
-
-// UpdateSearchPricePer1k sets the "search_price_per_1k" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateSearchPricePer1k() *GroupUpsert {
-	u.SetExcluded(group.FieldSearchPricePer1k)
-	return u
-}
-
-// AddSearchPricePer1k adds v to the "search_price_per_1k" field.
-func (u *GroupUpsert) AddSearchPricePer1k(v float64) *GroupUpsert {
-	u.Add(group.FieldSearchPricePer1k, v)
-	return u
-}
-
-// ClearSearchPricePer1k clears the value of the "search_price_per_1k" field.
-func (u *GroupUpsert) ClearSearchPricePer1k() *GroupUpsert {
-	u.SetNull(group.FieldSearchPricePer1k)
-	return u
-}
-
-// SetAudioRealtimePricePerMin sets the "audio_realtime_price_per_min" field.
-func (u *GroupUpsert) SetAudioRealtimePricePerMin(v float64) *GroupUpsert {
-	u.Set(group.FieldAudioRealtimePricePerMin, v)
-	return u
-}
-
-// UpdateAudioRealtimePricePerMin sets the "audio_realtime_price_per_min" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateAudioRealtimePricePerMin() *GroupUpsert {
-	u.SetExcluded(group.FieldAudioRealtimePricePerMin)
-	return u
-}
-
-// AddAudioRealtimePricePerMin adds v to the "audio_realtime_price_per_min" field.
-func (u *GroupUpsert) AddAudioRealtimePricePerMin(v float64) *GroupUpsert {
-	u.Add(group.FieldAudioRealtimePricePerMin, v)
-	return u
-}
-
-// ClearAudioRealtimePricePerMin clears the value of the "audio_realtime_price_per_min" field.
-func (u *GroupUpsert) ClearAudioRealtimePricePerMin() *GroupUpsert {
-	u.SetNull(group.FieldAudioRealtimePricePerMin)
-	return u
-}
-
-// SetAudioTtsPricePerMillionChars sets the "audio_tts_price_per_million_chars" field.
-func (u *GroupUpsert) SetAudioTtsPricePerMillionChars(v float64) *GroupUpsert {
-	u.Set(group.FieldAudioTtsPricePerMillionChars, v)
-	return u
-}
-
-// UpdateAudioTtsPricePerMillionChars sets the "audio_tts_price_per_million_chars" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateAudioTtsPricePerMillionChars() *GroupUpsert {
-	u.SetExcluded(group.FieldAudioTtsPricePerMillionChars)
-	return u
-}
-
-// AddAudioTtsPricePerMillionChars adds v to the "audio_tts_price_per_million_chars" field.
-func (u *GroupUpsert) AddAudioTtsPricePerMillionChars(v float64) *GroupUpsert {
-	u.Add(group.FieldAudioTtsPricePerMillionChars, v)
-	return u
-}
-
-// ClearAudioTtsPricePerMillionChars clears the value of the "audio_tts_price_per_million_chars" field.
-func (u *GroupUpsert) ClearAudioTtsPricePerMillionChars() *GroupUpsert {
-	u.SetNull(group.FieldAudioTtsPricePerMillionChars)
-	return u
-}
-
-// SetAudioSttPricePerHour sets the "audio_stt_price_per_hour" field.
-func (u *GroupUpsert) SetAudioSttPricePerHour(v float64) *GroupUpsert {
-	u.Set(group.FieldAudioSttPricePerHour, v)
-	return u
-}
-
-// UpdateAudioSttPricePerHour sets the "audio_stt_price_per_hour" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateAudioSttPricePerHour() *GroupUpsert {
-	u.SetExcluded(group.FieldAudioSttPricePerHour)
-	return u
-}
-
-// AddAudioSttPricePerHour adds v to the "audio_stt_price_per_hour" field.
-func (u *GroupUpsert) AddAudioSttPricePerHour(v float64) *GroupUpsert {
-	u.Add(group.FieldAudioSttPricePerHour, v)
-	return u
-}
-
-// ClearAudioSttPricePerHour clears the value of the "audio_stt_price_per_hour" field.
-func (u *GroupUpsert) ClearAudioSttPricePerHour() *GroupUpsert {
-	u.SetNull(group.FieldAudioSttPricePerHour)
-	return u
-}
-
-// SetLongContextPricingEnabled sets the "long_context_pricing_enabled" field.
-func (u *GroupUpsert) SetLongContextPricingEnabled(v bool) *GroupUpsert {
-	u.Set(group.FieldLongContextPricingEnabled, v)
-	return u
-}
-
-// UpdateLongContextPricingEnabled sets the "long_context_pricing_enabled" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateLongContextPricingEnabled() *GroupUpsert {
-	u.SetExcluded(group.FieldLongContextPricingEnabled)
-	return u
-}
-
-// SetModelPricing sets the "model_pricing" field.
-func (u *GroupUpsert) SetModelPricing(v jsontext.Value) *GroupUpsert {
-	u.Set(group.FieldModelPricing, v)
-	return u
-}
-
-// UpdateModelPricing sets the "model_pricing" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateModelPricing() *GroupUpsert {
-	u.SetExcluded(group.FieldModelPricing)
-	return u
-}
-
-// ClearModelPricing clears the value of the "model_pricing" field.
-func (u *GroupUpsert) ClearModelPricing() *GroupUpsert {
-	u.SetNull(group.FieldModelPricing)
+// ClearRoutingPolicy clears the value of the "routing_policy" field.
+func (u *GroupUpsert) ClearRoutingPolicy() *GroupUpsert {
+	u.SetNull(group.FieldRoutingPolicy)
 	return u
 }
 
@@ -2615,15 +1689,39 @@ func (u *GroupUpsert) UpdateAllowMessagesDispatch() *GroupUpsert {
 	return u
 }
 
-// SetAllowedClientProtocols sets the "allowed_client_protocols" field.
-func (u *GroupUpsert) SetAllowedClientProtocols(v []domain.GroupClientProtocol) *GroupUpsert {
-	u.Set(group.FieldAllowedClientProtocols, v)
+// SetAllowedProtocols sets the "allowed_protocols" field.
+func (u *GroupUpsert) SetAllowedProtocols(v []protocol.ProtocolID) *GroupUpsert {
+	u.Set(group.FieldAllowedProtocols, v)
 	return u
 }
 
-// UpdateAllowedClientProtocols sets the "allowed_client_protocols" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateAllowedClientProtocols() *GroupUpsert {
-	u.SetExcluded(group.FieldAllowedClientProtocols)
+// UpdateAllowedProtocols sets the "allowed_protocols" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateAllowedProtocols() *GroupUpsert {
+	u.SetExcluded(group.FieldAllowedProtocols)
+	return u
+}
+
+// SetProtocolFallbacks sets the "protocol_fallbacks" field.
+func (u *GroupUpsert) SetProtocolFallbacks(v map[protocol.ProtocolID][]protocol.ProtocolID) *GroupUpsert {
+	u.Set(group.FieldProtocolFallbacks, v)
+	return u
+}
+
+// UpdateProtocolFallbacks sets the "protocol_fallbacks" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateProtocolFallbacks() *GroupUpsert {
+	u.SetExcluded(group.FieldProtocolFallbacks)
+	return u
+}
+
+// SetResponsesImagePolicy sets the "responses_image_policy" field.
+func (u *GroupUpsert) SetResponsesImagePolicy(v string) *GroupUpsert {
+	u.Set(group.FieldResponsesImagePolicy, v)
+	return u
+}
+
+// UpdateResponsesImagePolicy sets the "responses_image_policy" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateResponsesImagePolicy() *GroupUpsert {
+	u.SetExcluded(group.FieldResponsesImagePolicy)
 	return u
 }
 
@@ -2636,6 +1734,30 @@ func (u *GroupUpsert) SetAllowLive(v bool) *GroupUpsert {
 // UpdateAllowLive sets the "allow_live" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateAllowLive() *GroupUpsert {
 	u.SetExcluded(group.FieldAllowLive)
+	return u
+}
+
+// SetOpenaiFastPolicy sets the "openai_fast_policy" field.
+func (u *GroupUpsert) SetOpenaiFastPolicy(v string) *GroupUpsert {
+	u.Set(group.FieldOpenaiFastPolicy, v)
+	return u
+}
+
+// UpdateOpenaiFastPolicy sets the "openai_fast_policy" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateOpenaiFastPolicy() *GroupUpsert {
+	u.SetExcluded(group.FieldOpenaiFastPolicy)
+	return u
+}
+
+// SetForceOpenaiFast sets the "force_openai_fast" field.
+func (u *GroupUpsert) SetForceOpenaiFast(v bool) *GroupUpsert {
+	u.Set(group.FieldForceOpenaiFast, v)
+	return u
+}
+
+// UpdateForceOpenaiFast sets the "force_openai_fast" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateForceOpenaiFast() *GroupUpsert {
+	u.SetExcluded(group.FieldForceOpenaiFast)
 	return u
 }
 
@@ -2675,20 +1797,8 @@ func (u *GroupUpsert) UpdateDefaultMappedModel() *GroupUpsert {
 	return u
 }
 
-// SetMessagesDispatchModelConfig sets the "messages_dispatch_model_config" field.
-func (u *GroupUpsert) SetMessagesDispatchModelConfig(v domain.OpenAIMessagesDispatchModelConfig) *GroupUpsert {
-	u.Set(group.FieldMessagesDispatchModelConfig, v)
-	return u
-}
-
-// UpdateMessagesDispatchModelConfig sets the "messages_dispatch_model_config" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateMessagesDispatchModelConfig() *GroupUpsert {
-	u.SetExcluded(group.FieldMessagesDispatchModelConfig)
-	return u
-}
-
 // SetModelsListConfig sets the "models_list_config" field.
-func (u *GroupUpsert) SetModelsListConfig(v domain.GroupModelsListConfig) *GroupUpsert {
+func (u *GroupUpsert) SetModelsListConfig(v accessview.GroupModelsListConfig) *GroupUpsert {
 	u.Set(group.FieldModelsListConfig, v)
 	return u
 }
@@ -2700,7 +1810,7 @@ func (u *GroupUpsert) UpdateModelsListConfig() *GroupUpsert {
 }
 
 // SetAvailabilityProbeConfig sets the "availability_probe_config" field.
-func (u *GroupUpsert) SetAvailabilityProbeConfig(v domain.GroupAvailabilityProbeConfig) *GroupUpsert {
+func (u *GroupUpsert) SetAvailabilityProbeConfig(v accessview.GroupAvailabilityProbeConfig) *GroupUpsert {
 	u.Set(group.FieldAvailabilityProbeConfig, v)
 	return u
 }
@@ -2741,8 +1851,20 @@ func (u *GroupUpsert) UpdateMaxReasoningEffort() *GroupUpsert {
 	return u
 }
 
+// SetMaxReasoningEffortOverLimit sets the "max_reasoning_effort_over_limit" field.
+func (u *GroupUpsert) SetMaxReasoningEffortOverLimit(v string) *GroupUpsert {
+	u.Set(group.FieldMaxReasoningEffortOverLimit, v)
+	return u
+}
+
+// UpdateMaxReasoningEffortOverLimit sets the "max_reasoning_effort_over_limit" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateMaxReasoningEffortOverLimit() *GroupUpsert {
+	u.SetExcluded(group.FieldMaxReasoningEffortOverLimit)
+	return u
+}
+
 // SetReasoningEffortMappings sets the "reasoning_effort_mappings" field.
-func (u *GroupUpsert) SetReasoningEffortMappings(v []domain.ReasoningEffortMapping) *GroupUpsert {
+func (u *GroupUpsert) SetReasoningEffortMappings(v []accessview.ReasoningEffortMapping) *GroupUpsert {
 	u.Set(group.FieldReasoningEffortMappings, v)
 	return u
 }
@@ -2750,18 +1872,6 @@ func (u *GroupUpsert) SetReasoningEffortMappings(v []domain.ReasoningEffortMappi
 // UpdateReasoningEffortMappings sets the "reasoning_effort_mappings" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateReasoningEffortMappings() *GroupUpsert {
 	u.SetExcluded(group.FieldReasoningEffortMappings)
-	return u
-}
-
-// SetDataSharingEnabled sets the "data_sharing_enabled" field.
-func (u *GroupUpsert) SetDataSharingEnabled(v bool) *GroupUpsert {
-	u.Set(group.FieldDataSharingEnabled, v)
-	return u
-}
-
-// UpdateDataSharingEnabled sets the "data_sharing_enabled" field to the value that was provided on create.
-func (u *GroupUpsert) UpdateDataSharingEnabled() *GroupUpsert {
-	u.SetExcluded(group.FieldDataSharingEnabled)
 	return u
 }
 
@@ -2860,6 +1970,27 @@ func (u *GroupUpsertOne) ClearDeletedAt() *GroupUpsertOne {
 	})
 }
 
+// SetLocalization sets the "localization" field.
+func (u *GroupUpsertOne) SetLocalization(v accessview.GroupLocalization) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetLocalization(v)
+	})
+}
+
+// UpdateLocalization sets the "localization" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateLocalization() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateLocalization()
+	})
+}
+
+// ClearLocalization clears the value of the "localization" field.
+func (u *GroupUpsertOne) ClearLocalization() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearLocalization()
+	})
+}
+
 // SetName sets the "name" field.
 func (u *GroupUpsertOne) SetName(v string) *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
@@ -2916,69 +2047,6 @@ func (u *GroupUpsertOne) UpdateRateMultiplier() *GroupUpsertOne {
 	})
 }
 
-// SetPeakRateEnabled sets the "peak_rate_enabled" field.
-func (u *GroupUpsertOne) SetPeakRateEnabled(v bool) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetPeakRateEnabled(v)
-	})
-}
-
-// UpdatePeakRateEnabled sets the "peak_rate_enabled" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdatePeakRateEnabled() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdatePeakRateEnabled()
-	})
-}
-
-// SetPeakStart sets the "peak_start" field.
-func (u *GroupUpsertOne) SetPeakStart(v string) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetPeakStart(v)
-	})
-}
-
-// UpdatePeakStart sets the "peak_start" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdatePeakStart() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdatePeakStart()
-	})
-}
-
-// SetPeakEnd sets the "peak_end" field.
-func (u *GroupUpsertOne) SetPeakEnd(v string) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetPeakEnd(v)
-	})
-}
-
-// UpdatePeakEnd sets the "peak_end" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdatePeakEnd() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdatePeakEnd()
-	})
-}
-
-// SetPeakRateMultiplier sets the "peak_rate_multiplier" field.
-func (u *GroupUpsertOne) SetPeakRateMultiplier(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetPeakRateMultiplier(v)
-	})
-}
-
-// AddPeakRateMultiplier adds v to the "peak_rate_multiplier" field.
-func (u *GroupUpsertOne) AddPeakRateMultiplier(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddPeakRateMultiplier(v)
-	})
-}
-
-// UpdatePeakRateMultiplier sets the "peak_rate_multiplier" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdatePeakRateMultiplier() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdatePeakRateMultiplier()
-	})
-}
-
 // SetIsExclusive sets the "is_exclusive" field.
 func (u *GroupUpsertOne) SetIsExclusive(v bool) *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
@@ -2993,20 +2061,6 @@ func (u *GroupUpsertOne) UpdateIsExclusive() *GroupUpsertOne {
 	})
 }
 
-// SetIsDefault sets the "is_default" field.
-func (u *GroupUpsertOne) SetIsDefault(v bool) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetIsDefault(v)
-	})
-}
-
-// UpdateIsDefault sets the "is_default" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateIsDefault() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateIsDefault()
-	})
-}
-
 // SetStatus sets the "status" field.
 func (u *GroupUpsertOne) SetStatus(v string) *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
@@ -3018,20 +2072,6 @@ func (u *GroupUpsertOne) SetStatus(v string) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateStatus() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateStatus()
-	})
-}
-
-// SetPlatform sets the "platform" field.
-func (u *GroupUpsertOne) SetPlatform(v string) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetPlatform(v)
-	})
-}
-
-// UpdatePlatform sets the "platform" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdatePlatform() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdatePlatform()
 	})
 }
 
@@ -3050,7 +2090,7 @@ func (u *GroupUpsertOne) UpdateSchedulerType() *GroupUpsertOne {
 }
 
 // SetAdvancedSchedulerOverrides sets the "advanced_scheduler_overrides" field.
-func (u *GroupUpsertOne) SetAdvancedSchedulerOverrides(v domain.GroupAdvancedSchedulerOverrides) *GroupUpsertOne {
+func (u *GroupUpsertOne) SetAdvancedSchedulerOverrides(v policy.GroupAdvancedSchedulerOverrides) *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.SetAdvancedSchedulerOverrides(v)
 	})
@@ -3105,479 +2145,24 @@ func (u *GroupUpsertOne) UpdateAllowBatchImageGeneration() *GroupUpsertOne {
 	})
 }
 
-// SetImageRateIndependent sets the "image_rate_independent" field.
-func (u *GroupUpsertOne) SetImageRateIndependent(v bool) *GroupUpsertOne {
+// SetRoutingPolicy sets the "routing_policy" field.
+func (u *GroupUpsertOne) SetRoutingPolicy(v jsontext.Value) *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
-		s.SetImageRateIndependent(v)
+		s.SetRoutingPolicy(v)
 	})
 }
 
-// UpdateImageRateIndependent sets the "image_rate_independent" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateImageRateIndependent() *GroupUpsertOne {
+// UpdateRoutingPolicy sets the "routing_policy" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateRoutingPolicy() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
-		s.UpdateImageRateIndependent()
+		s.UpdateRoutingPolicy()
 	})
 }
 
-// SetImageRateMultiplier sets the "image_rate_multiplier" field.
-func (u *GroupUpsertOne) SetImageRateMultiplier(v float64) *GroupUpsertOne {
+// ClearRoutingPolicy clears the value of the "routing_policy" field.
+func (u *GroupUpsertOne) ClearRoutingPolicy() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
-		s.SetImageRateMultiplier(v)
-	})
-}
-
-// AddImageRateMultiplier adds v to the "image_rate_multiplier" field.
-func (u *GroupUpsertOne) AddImageRateMultiplier(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddImageRateMultiplier(v)
-	})
-}
-
-// UpdateImageRateMultiplier sets the "image_rate_multiplier" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateImageRateMultiplier() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateImageRateMultiplier()
-	})
-}
-
-// SetImagePrice1k sets the "image_price_1k" field.
-func (u *GroupUpsertOne) SetImagePrice1k(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetImagePrice1k(v)
-	})
-}
-
-// AddImagePrice1k adds v to the "image_price_1k" field.
-func (u *GroupUpsertOne) AddImagePrice1k(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddImagePrice1k(v)
-	})
-}
-
-// UpdateImagePrice1k sets the "image_price_1k" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateImagePrice1k() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateImagePrice1k()
-	})
-}
-
-// ClearImagePrice1k clears the value of the "image_price_1k" field.
-func (u *GroupUpsertOne) ClearImagePrice1k() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearImagePrice1k()
-	})
-}
-
-// SetImagePrice2k sets the "image_price_2k" field.
-func (u *GroupUpsertOne) SetImagePrice2k(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetImagePrice2k(v)
-	})
-}
-
-// AddImagePrice2k adds v to the "image_price_2k" field.
-func (u *GroupUpsertOne) AddImagePrice2k(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddImagePrice2k(v)
-	})
-}
-
-// UpdateImagePrice2k sets the "image_price_2k" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateImagePrice2k() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateImagePrice2k()
-	})
-}
-
-// ClearImagePrice2k clears the value of the "image_price_2k" field.
-func (u *GroupUpsertOne) ClearImagePrice2k() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearImagePrice2k()
-	})
-}
-
-// SetImagePrice4k sets the "image_price_4k" field.
-func (u *GroupUpsertOne) SetImagePrice4k(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetImagePrice4k(v)
-	})
-}
-
-// AddImagePrice4k adds v to the "image_price_4k" field.
-func (u *GroupUpsertOne) AddImagePrice4k(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddImagePrice4k(v)
-	})
-}
-
-// UpdateImagePrice4k sets the "image_price_4k" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateImagePrice4k() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateImagePrice4k()
-	})
-}
-
-// ClearImagePrice4k clears the value of the "image_price_4k" field.
-func (u *GroupUpsertOne) ClearImagePrice4k() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearImagePrice4k()
-	})
-}
-
-// SetBatchImageDiscountMultiplier sets the "batch_image_discount_multiplier" field.
-func (u *GroupUpsertOne) SetBatchImageDiscountMultiplier(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetBatchImageDiscountMultiplier(v)
-	})
-}
-
-// AddBatchImageDiscountMultiplier adds v to the "batch_image_discount_multiplier" field.
-func (u *GroupUpsertOne) AddBatchImageDiscountMultiplier(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddBatchImageDiscountMultiplier(v)
-	})
-}
-
-// UpdateBatchImageDiscountMultiplier sets the "batch_image_discount_multiplier" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateBatchImageDiscountMultiplier() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateBatchImageDiscountMultiplier()
-	})
-}
-
-// SetBatchImageHoldMultiplier sets the "batch_image_hold_multiplier" field.
-func (u *GroupUpsertOne) SetBatchImageHoldMultiplier(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetBatchImageHoldMultiplier(v)
-	})
-}
-
-// AddBatchImageHoldMultiplier adds v to the "batch_image_hold_multiplier" field.
-func (u *GroupUpsertOne) AddBatchImageHoldMultiplier(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddBatchImageHoldMultiplier(v)
-	})
-}
-
-// UpdateBatchImageHoldMultiplier sets the "batch_image_hold_multiplier" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateBatchImageHoldMultiplier() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateBatchImageHoldMultiplier()
-	})
-}
-
-// SetVideoRateIndependent sets the "video_rate_independent" field.
-func (u *GroupUpsertOne) SetVideoRateIndependent(v bool) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetVideoRateIndependent(v)
-	})
-}
-
-// UpdateVideoRateIndependent sets the "video_rate_independent" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateVideoRateIndependent() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateVideoRateIndependent()
-	})
-}
-
-// SetVideoRateMultiplier sets the "video_rate_multiplier" field.
-func (u *GroupUpsertOne) SetVideoRateMultiplier(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetVideoRateMultiplier(v)
-	})
-}
-
-// AddVideoRateMultiplier adds v to the "video_rate_multiplier" field.
-func (u *GroupUpsertOne) AddVideoRateMultiplier(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddVideoRateMultiplier(v)
-	})
-}
-
-// UpdateVideoRateMultiplier sets the "video_rate_multiplier" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateVideoRateMultiplier() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateVideoRateMultiplier()
-	})
-}
-
-// SetVideoPrice480p sets the "video_price_480p" field.
-func (u *GroupUpsertOne) SetVideoPrice480p(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetVideoPrice480p(v)
-	})
-}
-
-// AddVideoPrice480p adds v to the "video_price_480p" field.
-func (u *GroupUpsertOne) AddVideoPrice480p(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddVideoPrice480p(v)
-	})
-}
-
-// UpdateVideoPrice480p sets the "video_price_480p" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateVideoPrice480p() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateVideoPrice480p()
-	})
-}
-
-// ClearVideoPrice480p clears the value of the "video_price_480p" field.
-func (u *GroupUpsertOne) ClearVideoPrice480p() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearVideoPrice480p()
-	})
-}
-
-// SetVideoPrice720p sets the "video_price_720p" field.
-func (u *GroupUpsertOne) SetVideoPrice720p(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetVideoPrice720p(v)
-	})
-}
-
-// AddVideoPrice720p adds v to the "video_price_720p" field.
-func (u *GroupUpsertOne) AddVideoPrice720p(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddVideoPrice720p(v)
-	})
-}
-
-// UpdateVideoPrice720p sets the "video_price_720p" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateVideoPrice720p() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateVideoPrice720p()
-	})
-}
-
-// ClearVideoPrice720p clears the value of the "video_price_720p" field.
-func (u *GroupUpsertOne) ClearVideoPrice720p() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearVideoPrice720p()
-	})
-}
-
-// SetVideoPrice1080p sets the "video_price_1080p" field.
-func (u *GroupUpsertOne) SetVideoPrice1080p(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetVideoPrice1080p(v)
-	})
-}
-
-// AddVideoPrice1080p adds v to the "video_price_1080p" field.
-func (u *GroupUpsertOne) AddVideoPrice1080p(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddVideoPrice1080p(v)
-	})
-}
-
-// UpdateVideoPrice1080p sets the "video_price_1080p" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateVideoPrice1080p() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateVideoPrice1080p()
-	})
-}
-
-// ClearVideoPrice1080p clears the value of the "video_price_1080p" field.
-func (u *GroupUpsertOne) ClearVideoPrice1080p() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearVideoPrice1080p()
-	})
-}
-
-// SetVideoModelPrices sets the "video_model_prices" field.
-func (u *GroupUpsertOne) SetVideoModelPrices(v map[string]map[string]float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetVideoModelPrices(v)
-	})
-}
-
-// UpdateVideoModelPrices sets the "video_model_prices" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateVideoModelPrices() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateVideoModelPrices()
-	})
-}
-
-// ClearVideoModelPrices clears the value of the "video_model_prices" field.
-func (u *GroupUpsertOne) ClearVideoModelPrices() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearVideoModelPrices()
-	})
-}
-
-// SetWebSearchPricePerCall sets the "web_search_price_per_call" field.
-func (u *GroupUpsertOne) SetWebSearchPricePerCall(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetWebSearchPricePerCall(v)
-	})
-}
-
-// AddWebSearchPricePerCall adds v to the "web_search_price_per_call" field.
-func (u *GroupUpsertOne) AddWebSearchPricePerCall(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddWebSearchPricePerCall(v)
-	})
-}
-
-// UpdateWebSearchPricePerCall sets the "web_search_price_per_call" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateWebSearchPricePerCall() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateWebSearchPricePerCall()
-	})
-}
-
-// ClearWebSearchPricePerCall clears the value of the "web_search_price_per_call" field.
-func (u *GroupUpsertOne) ClearWebSearchPricePerCall() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearWebSearchPricePerCall()
-	})
-}
-
-// SetSearchPricePer1k sets the "search_price_per_1k" field.
-func (u *GroupUpsertOne) SetSearchPricePer1k(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetSearchPricePer1k(v)
-	})
-}
-
-// AddSearchPricePer1k adds v to the "search_price_per_1k" field.
-func (u *GroupUpsertOne) AddSearchPricePer1k(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddSearchPricePer1k(v)
-	})
-}
-
-// UpdateSearchPricePer1k sets the "search_price_per_1k" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateSearchPricePer1k() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateSearchPricePer1k()
-	})
-}
-
-// ClearSearchPricePer1k clears the value of the "search_price_per_1k" field.
-func (u *GroupUpsertOne) ClearSearchPricePer1k() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearSearchPricePer1k()
-	})
-}
-
-// SetAudioRealtimePricePerMin sets the "audio_realtime_price_per_min" field.
-func (u *GroupUpsertOne) SetAudioRealtimePricePerMin(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetAudioRealtimePricePerMin(v)
-	})
-}
-
-// AddAudioRealtimePricePerMin adds v to the "audio_realtime_price_per_min" field.
-func (u *GroupUpsertOne) AddAudioRealtimePricePerMin(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddAudioRealtimePricePerMin(v)
-	})
-}
-
-// UpdateAudioRealtimePricePerMin sets the "audio_realtime_price_per_min" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateAudioRealtimePricePerMin() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateAudioRealtimePricePerMin()
-	})
-}
-
-// ClearAudioRealtimePricePerMin clears the value of the "audio_realtime_price_per_min" field.
-func (u *GroupUpsertOne) ClearAudioRealtimePricePerMin() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearAudioRealtimePricePerMin()
-	})
-}
-
-// SetAudioTtsPricePerMillionChars sets the "audio_tts_price_per_million_chars" field.
-func (u *GroupUpsertOne) SetAudioTtsPricePerMillionChars(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetAudioTtsPricePerMillionChars(v)
-	})
-}
-
-// AddAudioTtsPricePerMillionChars adds v to the "audio_tts_price_per_million_chars" field.
-func (u *GroupUpsertOne) AddAudioTtsPricePerMillionChars(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddAudioTtsPricePerMillionChars(v)
-	})
-}
-
-// UpdateAudioTtsPricePerMillionChars sets the "audio_tts_price_per_million_chars" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateAudioTtsPricePerMillionChars() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateAudioTtsPricePerMillionChars()
-	})
-}
-
-// ClearAudioTtsPricePerMillionChars clears the value of the "audio_tts_price_per_million_chars" field.
-func (u *GroupUpsertOne) ClearAudioTtsPricePerMillionChars() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearAudioTtsPricePerMillionChars()
-	})
-}
-
-// SetAudioSttPricePerHour sets the "audio_stt_price_per_hour" field.
-func (u *GroupUpsertOne) SetAudioSttPricePerHour(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetAudioSttPricePerHour(v)
-	})
-}
-
-// AddAudioSttPricePerHour adds v to the "audio_stt_price_per_hour" field.
-func (u *GroupUpsertOne) AddAudioSttPricePerHour(v float64) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddAudioSttPricePerHour(v)
-	})
-}
-
-// UpdateAudioSttPricePerHour sets the "audio_stt_price_per_hour" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateAudioSttPricePerHour() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateAudioSttPricePerHour()
-	})
-}
-
-// ClearAudioSttPricePerHour clears the value of the "audio_stt_price_per_hour" field.
-func (u *GroupUpsertOne) ClearAudioSttPricePerHour() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearAudioSttPricePerHour()
-	})
-}
-
-// SetLongContextPricingEnabled sets the "long_context_pricing_enabled" field.
-func (u *GroupUpsertOne) SetLongContextPricingEnabled(v bool) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetLongContextPricingEnabled(v)
-	})
-}
-
-// UpdateLongContextPricingEnabled sets the "long_context_pricing_enabled" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateLongContextPricingEnabled() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateLongContextPricingEnabled()
-	})
-}
-
-// SetModelPricing sets the "model_pricing" field.
-func (u *GroupUpsertOne) SetModelPricing(v jsontext.Value) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetModelPricing(v)
-	})
-}
-
-// UpdateModelPricing sets the "model_pricing" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateModelPricing() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateModelPricing()
-	})
-}
-
-// ClearModelPricing clears the value of the "model_pricing" field.
-func (u *GroupUpsertOne) ClearModelPricing() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearModelPricing()
+		s.ClearRoutingPolicy()
 	})
 }
 
@@ -3777,17 +2362,45 @@ func (u *GroupUpsertOne) UpdateAllowMessagesDispatch() *GroupUpsertOne {
 	})
 }
 
-// SetAllowedClientProtocols sets the "allowed_client_protocols" field.
-func (u *GroupUpsertOne) SetAllowedClientProtocols(v []domain.GroupClientProtocol) *GroupUpsertOne {
+// SetAllowedProtocols sets the "allowed_protocols" field.
+func (u *GroupUpsertOne) SetAllowedProtocols(v []protocol.ProtocolID) *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
-		s.SetAllowedClientProtocols(v)
+		s.SetAllowedProtocols(v)
 	})
 }
 
-// UpdateAllowedClientProtocols sets the "allowed_client_protocols" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateAllowedClientProtocols() *GroupUpsertOne {
+// UpdateAllowedProtocols sets the "allowed_protocols" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateAllowedProtocols() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
-		s.UpdateAllowedClientProtocols()
+		s.UpdateAllowedProtocols()
+	})
+}
+
+// SetProtocolFallbacks sets the "protocol_fallbacks" field.
+func (u *GroupUpsertOne) SetProtocolFallbacks(v map[protocol.ProtocolID][]protocol.ProtocolID) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetProtocolFallbacks(v)
+	})
+}
+
+// UpdateProtocolFallbacks sets the "protocol_fallbacks" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateProtocolFallbacks() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateProtocolFallbacks()
+	})
+}
+
+// SetResponsesImagePolicy sets the "responses_image_policy" field.
+func (u *GroupUpsertOne) SetResponsesImagePolicy(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetResponsesImagePolicy(v)
+	})
+}
+
+// UpdateResponsesImagePolicy sets the "responses_image_policy" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateResponsesImagePolicy() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateResponsesImagePolicy()
 	})
 }
 
@@ -3802,6 +2415,34 @@ func (u *GroupUpsertOne) SetAllowLive(v bool) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateAllowLive() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateAllowLive()
+	})
+}
+
+// SetOpenaiFastPolicy sets the "openai_fast_policy" field.
+func (u *GroupUpsertOne) SetOpenaiFastPolicy(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetOpenaiFastPolicy(v)
+	})
+}
+
+// UpdateOpenaiFastPolicy sets the "openai_fast_policy" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateOpenaiFastPolicy() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateOpenaiFastPolicy()
+	})
+}
+
+// SetForceOpenaiFast sets the "force_openai_fast" field.
+func (u *GroupUpsertOne) SetForceOpenaiFast(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetForceOpenaiFast(v)
+	})
+}
+
+// UpdateForceOpenaiFast sets the "force_openai_fast" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateForceOpenaiFast() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateForceOpenaiFast()
 	})
 }
 
@@ -3847,22 +2488,8 @@ func (u *GroupUpsertOne) UpdateDefaultMappedModel() *GroupUpsertOne {
 	})
 }
 
-// SetMessagesDispatchModelConfig sets the "messages_dispatch_model_config" field.
-func (u *GroupUpsertOne) SetMessagesDispatchModelConfig(v domain.OpenAIMessagesDispatchModelConfig) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetMessagesDispatchModelConfig(v)
-	})
-}
-
-// UpdateMessagesDispatchModelConfig sets the "messages_dispatch_model_config" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateMessagesDispatchModelConfig() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateMessagesDispatchModelConfig()
-	})
-}
-
 // SetModelsListConfig sets the "models_list_config" field.
-func (u *GroupUpsertOne) SetModelsListConfig(v domain.GroupModelsListConfig) *GroupUpsertOne {
+func (u *GroupUpsertOne) SetModelsListConfig(v accessview.GroupModelsListConfig) *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.SetModelsListConfig(v)
 	})
@@ -3876,7 +2503,7 @@ func (u *GroupUpsertOne) UpdateModelsListConfig() *GroupUpsertOne {
 }
 
 // SetAvailabilityProbeConfig sets the "availability_probe_config" field.
-func (u *GroupUpsertOne) SetAvailabilityProbeConfig(v domain.GroupAvailabilityProbeConfig) *GroupUpsertOne {
+func (u *GroupUpsertOne) SetAvailabilityProbeConfig(v accessview.GroupAvailabilityProbeConfig) *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.SetAvailabilityProbeConfig(v)
 	})
@@ -3924,8 +2551,22 @@ func (u *GroupUpsertOne) UpdateMaxReasoningEffort() *GroupUpsertOne {
 	})
 }
 
+// SetMaxReasoningEffortOverLimit sets the "max_reasoning_effort_over_limit" field.
+func (u *GroupUpsertOne) SetMaxReasoningEffortOverLimit(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetMaxReasoningEffortOverLimit(v)
+	})
+}
+
+// UpdateMaxReasoningEffortOverLimit sets the "max_reasoning_effort_over_limit" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateMaxReasoningEffortOverLimit() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateMaxReasoningEffortOverLimit()
+	})
+}
+
 // SetReasoningEffortMappings sets the "reasoning_effort_mappings" field.
-func (u *GroupUpsertOne) SetReasoningEffortMappings(v []domain.ReasoningEffortMapping) *GroupUpsertOne {
+func (u *GroupUpsertOne) SetReasoningEffortMappings(v []accessview.ReasoningEffortMapping) *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.SetReasoningEffortMappings(v)
 	})
@@ -3935,20 +2576,6 @@ func (u *GroupUpsertOne) SetReasoningEffortMappings(v []domain.ReasoningEffortMa
 func (u *GroupUpsertOne) UpdateReasoningEffortMappings() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateReasoningEffortMappings()
-	})
-}
-
-// SetDataSharingEnabled sets the "data_sharing_enabled" field.
-func (u *GroupUpsertOne) SetDataSharingEnabled(v bool) *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetDataSharingEnabled(v)
-	})
-}
-
-// UpdateDataSharingEnabled sets the "data_sharing_enabled" field to the value that was provided on create.
-func (u *GroupUpsertOne) UpdateDataSharingEnabled() *GroupUpsertOne {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateDataSharingEnabled()
 	})
 }
 
@@ -4215,6 +2842,27 @@ func (u *GroupUpsertBulk) ClearDeletedAt() *GroupUpsertBulk {
 	})
 }
 
+// SetLocalization sets the "localization" field.
+func (u *GroupUpsertBulk) SetLocalization(v accessview.GroupLocalization) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetLocalization(v)
+	})
+}
+
+// UpdateLocalization sets the "localization" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateLocalization() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateLocalization()
+	})
+}
+
+// ClearLocalization clears the value of the "localization" field.
+func (u *GroupUpsertBulk) ClearLocalization() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearLocalization()
+	})
+}
+
 // SetName sets the "name" field.
 func (u *GroupUpsertBulk) SetName(v string) *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
@@ -4271,69 +2919,6 @@ func (u *GroupUpsertBulk) UpdateRateMultiplier() *GroupUpsertBulk {
 	})
 }
 
-// SetPeakRateEnabled sets the "peak_rate_enabled" field.
-func (u *GroupUpsertBulk) SetPeakRateEnabled(v bool) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetPeakRateEnabled(v)
-	})
-}
-
-// UpdatePeakRateEnabled sets the "peak_rate_enabled" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdatePeakRateEnabled() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdatePeakRateEnabled()
-	})
-}
-
-// SetPeakStart sets the "peak_start" field.
-func (u *GroupUpsertBulk) SetPeakStart(v string) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetPeakStart(v)
-	})
-}
-
-// UpdatePeakStart sets the "peak_start" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdatePeakStart() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdatePeakStart()
-	})
-}
-
-// SetPeakEnd sets the "peak_end" field.
-func (u *GroupUpsertBulk) SetPeakEnd(v string) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetPeakEnd(v)
-	})
-}
-
-// UpdatePeakEnd sets the "peak_end" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdatePeakEnd() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdatePeakEnd()
-	})
-}
-
-// SetPeakRateMultiplier sets the "peak_rate_multiplier" field.
-func (u *GroupUpsertBulk) SetPeakRateMultiplier(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetPeakRateMultiplier(v)
-	})
-}
-
-// AddPeakRateMultiplier adds v to the "peak_rate_multiplier" field.
-func (u *GroupUpsertBulk) AddPeakRateMultiplier(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddPeakRateMultiplier(v)
-	})
-}
-
-// UpdatePeakRateMultiplier sets the "peak_rate_multiplier" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdatePeakRateMultiplier() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdatePeakRateMultiplier()
-	})
-}
-
 // SetIsExclusive sets the "is_exclusive" field.
 func (u *GroupUpsertBulk) SetIsExclusive(v bool) *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
@@ -4348,20 +2933,6 @@ func (u *GroupUpsertBulk) UpdateIsExclusive() *GroupUpsertBulk {
 	})
 }
 
-// SetIsDefault sets the "is_default" field.
-func (u *GroupUpsertBulk) SetIsDefault(v bool) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetIsDefault(v)
-	})
-}
-
-// UpdateIsDefault sets the "is_default" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateIsDefault() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateIsDefault()
-	})
-}
-
 // SetStatus sets the "status" field.
 func (u *GroupUpsertBulk) SetStatus(v string) *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
@@ -4373,20 +2944,6 @@ func (u *GroupUpsertBulk) SetStatus(v string) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateStatus() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateStatus()
-	})
-}
-
-// SetPlatform sets the "platform" field.
-func (u *GroupUpsertBulk) SetPlatform(v string) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetPlatform(v)
-	})
-}
-
-// UpdatePlatform sets the "platform" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdatePlatform() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdatePlatform()
 	})
 }
 
@@ -4405,7 +2962,7 @@ func (u *GroupUpsertBulk) UpdateSchedulerType() *GroupUpsertBulk {
 }
 
 // SetAdvancedSchedulerOverrides sets the "advanced_scheduler_overrides" field.
-func (u *GroupUpsertBulk) SetAdvancedSchedulerOverrides(v domain.GroupAdvancedSchedulerOverrides) *GroupUpsertBulk {
+func (u *GroupUpsertBulk) SetAdvancedSchedulerOverrides(v policy.GroupAdvancedSchedulerOverrides) *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.SetAdvancedSchedulerOverrides(v)
 	})
@@ -4460,479 +3017,24 @@ func (u *GroupUpsertBulk) UpdateAllowBatchImageGeneration() *GroupUpsertBulk {
 	})
 }
 
-// SetImageRateIndependent sets the "image_rate_independent" field.
-func (u *GroupUpsertBulk) SetImageRateIndependent(v bool) *GroupUpsertBulk {
+// SetRoutingPolicy sets the "routing_policy" field.
+func (u *GroupUpsertBulk) SetRoutingPolicy(v jsontext.Value) *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
-		s.SetImageRateIndependent(v)
+		s.SetRoutingPolicy(v)
 	})
 }
 
-// UpdateImageRateIndependent sets the "image_rate_independent" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateImageRateIndependent() *GroupUpsertBulk {
+// UpdateRoutingPolicy sets the "routing_policy" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateRoutingPolicy() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
-		s.UpdateImageRateIndependent()
+		s.UpdateRoutingPolicy()
 	})
 }
 
-// SetImageRateMultiplier sets the "image_rate_multiplier" field.
-func (u *GroupUpsertBulk) SetImageRateMultiplier(v float64) *GroupUpsertBulk {
+// ClearRoutingPolicy clears the value of the "routing_policy" field.
+func (u *GroupUpsertBulk) ClearRoutingPolicy() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
-		s.SetImageRateMultiplier(v)
-	})
-}
-
-// AddImageRateMultiplier adds v to the "image_rate_multiplier" field.
-func (u *GroupUpsertBulk) AddImageRateMultiplier(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddImageRateMultiplier(v)
-	})
-}
-
-// UpdateImageRateMultiplier sets the "image_rate_multiplier" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateImageRateMultiplier() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateImageRateMultiplier()
-	})
-}
-
-// SetImagePrice1k sets the "image_price_1k" field.
-func (u *GroupUpsertBulk) SetImagePrice1k(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetImagePrice1k(v)
-	})
-}
-
-// AddImagePrice1k adds v to the "image_price_1k" field.
-func (u *GroupUpsertBulk) AddImagePrice1k(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddImagePrice1k(v)
-	})
-}
-
-// UpdateImagePrice1k sets the "image_price_1k" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateImagePrice1k() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateImagePrice1k()
-	})
-}
-
-// ClearImagePrice1k clears the value of the "image_price_1k" field.
-func (u *GroupUpsertBulk) ClearImagePrice1k() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearImagePrice1k()
-	})
-}
-
-// SetImagePrice2k sets the "image_price_2k" field.
-func (u *GroupUpsertBulk) SetImagePrice2k(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetImagePrice2k(v)
-	})
-}
-
-// AddImagePrice2k adds v to the "image_price_2k" field.
-func (u *GroupUpsertBulk) AddImagePrice2k(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddImagePrice2k(v)
-	})
-}
-
-// UpdateImagePrice2k sets the "image_price_2k" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateImagePrice2k() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateImagePrice2k()
-	})
-}
-
-// ClearImagePrice2k clears the value of the "image_price_2k" field.
-func (u *GroupUpsertBulk) ClearImagePrice2k() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearImagePrice2k()
-	})
-}
-
-// SetImagePrice4k sets the "image_price_4k" field.
-func (u *GroupUpsertBulk) SetImagePrice4k(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetImagePrice4k(v)
-	})
-}
-
-// AddImagePrice4k adds v to the "image_price_4k" field.
-func (u *GroupUpsertBulk) AddImagePrice4k(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddImagePrice4k(v)
-	})
-}
-
-// UpdateImagePrice4k sets the "image_price_4k" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateImagePrice4k() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateImagePrice4k()
-	})
-}
-
-// ClearImagePrice4k clears the value of the "image_price_4k" field.
-func (u *GroupUpsertBulk) ClearImagePrice4k() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearImagePrice4k()
-	})
-}
-
-// SetBatchImageDiscountMultiplier sets the "batch_image_discount_multiplier" field.
-func (u *GroupUpsertBulk) SetBatchImageDiscountMultiplier(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetBatchImageDiscountMultiplier(v)
-	})
-}
-
-// AddBatchImageDiscountMultiplier adds v to the "batch_image_discount_multiplier" field.
-func (u *GroupUpsertBulk) AddBatchImageDiscountMultiplier(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddBatchImageDiscountMultiplier(v)
-	})
-}
-
-// UpdateBatchImageDiscountMultiplier sets the "batch_image_discount_multiplier" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateBatchImageDiscountMultiplier() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateBatchImageDiscountMultiplier()
-	})
-}
-
-// SetBatchImageHoldMultiplier sets the "batch_image_hold_multiplier" field.
-func (u *GroupUpsertBulk) SetBatchImageHoldMultiplier(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetBatchImageHoldMultiplier(v)
-	})
-}
-
-// AddBatchImageHoldMultiplier adds v to the "batch_image_hold_multiplier" field.
-func (u *GroupUpsertBulk) AddBatchImageHoldMultiplier(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddBatchImageHoldMultiplier(v)
-	})
-}
-
-// UpdateBatchImageHoldMultiplier sets the "batch_image_hold_multiplier" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateBatchImageHoldMultiplier() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateBatchImageHoldMultiplier()
-	})
-}
-
-// SetVideoRateIndependent sets the "video_rate_independent" field.
-func (u *GroupUpsertBulk) SetVideoRateIndependent(v bool) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetVideoRateIndependent(v)
-	})
-}
-
-// UpdateVideoRateIndependent sets the "video_rate_independent" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateVideoRateIndependent() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateVideoRateIndependent()
-	})
-}
-
-// SetVideoRateMultiplier sets the "video_rate_multiplier" field.
-func (u *GroupUpsertBulk) SetVideoRateMultiplier(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetVideoRateMultiplier(v)
-	})
-}
-
-// AddVideoRateMultiplier adds v to the "video_rate_multiplier" field.
-func (u *GroupUpsertBulk) AddVideoRateMultiplier(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddVideoRateMultiplier(v)
-	})
-}
-
-// UpdateVideoRateMultiplier sets the "video_rate_multiplier" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateVideoRateMultiplier() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateVideoRateMultiplier()
-	})
-}
-
-// SetVideoPrice480p sets the "video_price_480p" field.
-func (u *GroupUpsertBulk) SetVideoPrice480p(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetVideoPrice480p(v)
-	})
-}
-
-// AddVideoPrice480p adds v to the "video_price_480p" field.
-func (u *GroupUpsertBulk) AddVideoPrice480p(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddVideoPrice480p(v)
-	})
-}
-
-// UpdateVideoPrice480p sets the "video_price_480p" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateVideoPrice480p() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateVideoPrice480p()
-	})
-}
-
-// ClearVideoPrice480p clears the value of the "video_price_480p" field.
-func (u *GroupUpsertBulk) ClearVideoPrice480p() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearVideoPrice480p()
-	})
-}
-
-// SetVideoPrice720p sets the "video_price_720p" field.
-func (u *GroupUpsertBulk) SetVideoPrice720p(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetVideoPrice720p(v)
-	})
-}
-
-// AddVideoPrice720p adds v to the "video_price_720p" field.
-func (u *GroupUpsertBulk) AddVideoPrice720p(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddVideoPrice720p(v)
-	})
-}
-
-// UpdateVideoPrice720p sets the "video_price_720p" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateVideoPrice720p() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateVideoPrice720p()
-	})
-}
-
-// ClearVideoPrice720p clears the value of the "video_price_720p" field.
-func (u *GroupUpsertBulk) ClearVideoPrice720p() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearVideoPrice720p()
-	})
-}
-
-// SetVideoPrice1080p sets the "video_price_1080p" field.
-func (u *GroupUpsertBulk) SetVideoPrice1080p(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetVideoPrice1080p(v)
-	})
-}
-
-// AddVideoPrice1080p adds v to the "video_price_1080p" field.
-func (u *GroupUpsertBulk) AddVideoPrice1080p(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddVideoPrice1080p(v)
-	})
-}
-
-// UpdateVideoPrice1080p sets the "video_price_1080p" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateVideoPrice1080p() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateVideoPrice1080p()
-	})
-}
-
-// ClearVideoPrice1080p clears the value of the "video_price_1080p" field.
-func (u *GroupUpsertBulk) ClearVideoPrice1080p() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearVideoPrice1080p()
-	})
-}
-
-// SetVideoModelPrices sets the "video_model_prices" field.
-func (u *GroupUpsertBulk) SetVideoModelPrices(v map[string]map[string]float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetVideoModelPrices(v)
-	})
-}
-
-// UpdateVideoModelPrices sets the "video_model_prices" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateVideoModelPrices() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateVideoModelPrices()
-	})
-}
-
-// ClearVideoModelPrices clears the value of the "video_model_prices" field.
-func (u *GroupUpsertBulk) ClearVideoModelPrices() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearVideoModelPrices()
-	})
-}
-
-// SetWebSearchPricePerCall sets the "web_search_price_per_call" field.
-func (u *GroupUpsertBulk) SetWebSearchPricePerCall(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetWebSearchPricePerCall(v)
-	})
-}
-
-// AddWebSearchPricePerCall adds v to the "web_search_price_per_call" field.
-func (u *GroupUpsertBulk) AddWebSearchPricePerCall(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddWebSearchPricePerCall(v)
-	})
-}
-
-// UpdateWebSearchPricePerCall sets the "web_search_price_per_call" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateWebSearchPricePerCall() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateWebSearchPricePerCall()
-	})
-}
-
-// ClearWebSearchPricePerCall clears the value of the "web_search_price_per_call" field.
-func (u *GroupUpsertBulk) ClearWebSearchPricePerCall() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearWebSearchPricePerCall()
-	})
-}
-
-// SetSearchPricePer1k sets the "search_price_per_1k" field.
-func (u *GroupUpsertBulk) SetSearchPricePer1k(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetSearchPricePer1k(v)
-	})
-}
-
-// AddSearchPricePer1k adds v to the "search_price_per_1k" field.
-func (u *GroupUpsertBulk) AddSearchPricePer1k(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddSearchPricePer1k(v)
-	})
-}
-
-// UpdateSearchPricePer1k sets the "search_price_per_1k" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateSearchPricePer1k() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateSearchPricePer1k()
-	})
-}
-
-// ClearSearchPricePer1k clears the value of the "search_price_per_1k" field.
-func (u *GroupUpsertBulk) ClearSearchPricePer1k() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearSearchPricePer1k()
-	})
-}
-
-// SetAudioRealtimePricePerMin sets the "audio_realtime_price_per_min" field.
-func (u *GroupUpsertBulk) SetAudioRealtimePricePerMin(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetAudioRealtimePricePerMin(v)
-	})
-}
-
-// AddAudioRealtimePricePerMin adds v to the "audio_realtime_price_per_min" field.
-func (u *GroupUpsertBulk) AddAudioRealtimePricePerMin(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddAudioRealtimePricePerMin(v)
-	})
-}
-
-// UpdateAudioRealtimePricePerMin sets the "audio_realtime_price_per_min" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateAudioRealtimePricePerMin() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateAudioRealtimePricePerMin()
-	})
-}
-
-// ClearAudioRealtimePricePerMin clears the value of the "audio_realtime_price_per_min" field.
-func (u *GroupUpsertBulk) ClearAudioRealtimePricePerMin() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearAudioRealtimePricePerMin()
-	})
-}
-
-// SetAudioTtsPricePerMillionChars sets the "audio_tts_price_per_million_chars" field.
-func (u *GroupUpsertBulk) SetAudioTtsPricePerMillionChars(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetAudioTtsPricePerMillionChars(v)
-	})
-}
-
-// AddAudioTtsPricePerMillionChars adds v to the "audio_tts_price_per_million_chars" field.
-func (u *GroupUpsertBulk) AddAudioTtsPricePerMillionChars(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddAudioTtsPricePerMillionChars(v)
-	})
-}
-
-// UpdateAudioTtsPricePerMillionChars sets the "audio_tts_price_per_million_chars" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateAudioTtsPricePerMillionChars() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateAudioTtsPricePerMillionChars()
-	})
-}
-
-// ClearAudioTtsPricePerMillionChars clears the value of the "audio_tts_price_per_million_chars" field.
-func (u *GroupUpsertBulk) ClearAudioTtsPricePerMillionChars() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearAudioTtsPricePerMillionChars()
-	})
-}
-
-// SetAudioSttPricePerHour sets the "audio_stt_price_per_hour" field.
-func (u *GroupUpsertBulk) SetAudioSttPricePerHour(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetAudioSttPricePerHour(v)
-	})
-}
-
-// AddAudioSttPricePerHour adds v to the "audio_stt_price_per_hour" field.
-func (u *GroupUpsertBulk) AddAudioSttPricePerHour(v float64) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.AddAudioSttPricePerHour(v)
-	})
-}
-
-// UpdateAudioSttPricePerHour sets the "audio_stt_price_per_hour" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateAudioSttPricePerHour() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateAudioSttPricePerHour()
-	})
-}
-
-// ClearAudioSttPricePerHour clears the value of the "audio_stt_price_per_hour" field.
-func (u *GroupUpsertBulk) ClearAudioSttPricePerHour() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearAudioSttPricePerHour()
-	})
-}
-
-// SetLongContextPricingEnabled sets the "long_context_pricing_enabled" field.
-func (u *GroupUpsertBulk) SetLongContextPricingEnabled(v bool) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetLongContextPricingEnabled(v)
-	})
-}
-
-// UpdateLongContextPricingEnabled sets the "long_context_pricing_enabled" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateLongContextPricingEnabled() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateLongContextPricingEnabled()
-	})
-}
-
-// SetModelPricing sets the "model_pricing" field.
-func (u *GroupUpsertBulk) SetModelPricing(v jsontext.Value) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetModelPricing(v)
-	})
-}
-
-// UpdateModelPricing sets the "model_pricing" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateModelPricing() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateModelPricing()
-	})
-}
-
-// ClearModelPricing clears the value of the "model_pricing" field.
-func (u *GroupUpsertBulk) ClearModelPricing() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.ClearModelPricing()
+		s.ClearRoutingPolicy()
 	})
 }
 
@@ -5132,17 +3234,45 @@ func (u *GroupUpsertBulk) UpdateAllowMessagesDispatch() *GroupUpsertBulk {
 	})
 }
 
-// SetAllowedClientProtocols sets the "allowed_client_protocols" field.
-func (u *GroupUpsertBulk) SetAllowedClientProtocols(v []domain.GroupClientProtocol) *GroupUpsertBulk {
+// SetAllowedProtocols sets the "allowed_protocols" field.
+func (u *GroupUpsertBulk) SetAllowedProtocols(v []protocol.ProtocolID) *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
-		s.SetAllowedClientProtocols(v)
+		s.SetAllowedProtocols(v)
 	})
 }
 
-// UpdateAllowedClientProtocols sets the "allowed_client_protocols" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateAllowedClientProtocols() *GroupUpsertBulk {
+// UpdateAllowedProtocols sets the "allowed_protocols" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateAllowedProtocols() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
-		s.UpdateAllowedClientProtocols()
+		s.UpdateAllowedProtocols()
+	})
+}
+
+// SetProtocolFallbacks sets the "protocol_fallbacks" field.
+func (u *GroupUpsertBulk) SetProtocolFallbacks(v map[protocol.ProtocolID][]protocol.ProtocolID) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetProtocolFallbacks(v)
+	})
+}
+
+// UpdateProtocolFallbacks sets the "protocol_fallbacks" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateProtocolFallbacks() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateProtocolFallbacks()
+	})
+}
+
+// SetResponsesImagePolicy sets the "responses_image_policy" field.
+func (u *GroupUpsertBulk) SetResponsesImagePolicy(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetResponsesImagePolicy(v)
+	})
+}
+
+// UpdateResponsesImagePolicy sets the "responses_image_policy" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateResponsesImagePolicy() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateResponsesImagePolicy()
 	})
 }
 
@@ -5157,6 +3287,34 @@ func (u *GroupUpsertBulk) SetAllowLive(v bool) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateAllowLive() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateAllowLive()
+	})
+}
+
+// SetOpenaiFastPolicy sets the "openai_fast_policy" field.
+func (u *GroupUpsertBulk) SetOpenaiFastPolicy(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetOpenaiFastPolicy(v)
+	})
+}
+
+// UpdateOpenaiFastPolicy sets the "openai_fast_policy" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateOpenaiFastPolicy() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateOpenaiFastPolicy()
+	})
+}
+
+// SetForceOpenaiFast sets the "force_openai_fast" field.
+func (u *GroupUpsertBulk) SetForceOpenaiFast(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetForceOpenaiFast(v)
+	})
+}
+
+// UpdateForceOpenaiFast sets the "force_openai_fast" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateForceOpenaiFast() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateForceOpenaiFast()
 	})
 }
 
@@ -5202,22 +3360,8 @@ func (u *GroupUpsertBulk) UpdateDefaultMappedModel() *GroupUpsertBulk {
 	})
 }
 
-// SetMessagesDispatchModelConfig sets the "messages_dispatch_model_config" field.
-func (u *GroupUpsertBulk) SetMessagesDispatchModelConfig(v domain.OpenAIMessagesDispatchModelConfig) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetMessagesDispatchModelConfig(v)
-	})
-}
-
-// UpdateMessagesDispatchModelConfig sets the "messages_dispatch_model_config" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateMessagesDispatchModelConfig() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateMessagesDispatchModelConfig()
-	})
-}
-
 // SetModelsListConfig sets the "models_list_config" field.
-func (u *GroupUpsertBulk) SetModelsListConfig(v domain.GroupModelsListConfig) *GroupUpsertBulk {
+func (u *GroupUpsertBulk) SetModelsListConfig(v accessview.GroupModelsListConfig) *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.SetModelsListConfig(v)
 	})
@@ -5231,7 +3375,7 @@ func (u *GroupUpsertBulk) UpdateModelsListConfig() *GroupUpsertBulk {
 }
 
 // SetAvailabilityProbeConfig sets the "availability_probe_config" field.
-func (u *GroupUpsertBulk) SetAvailabilityProbeConfig(v domain.GroupAvailabilityProbeConfig) *GroupUpsertBulk {
+func (u *GroupUpsertBulk) SetAvailabilityProbeConfig(v accessview.GroupAvailabilityProbeConfig) *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.SetAvailabilityProbeConfig(v)
 	})
@@ -5279,8 +3423,22 @@ func (u *GroupUpsertBulk) UpdateMaxReasoningEffort() *GroupUpsertBulk {
 	})
 }
 
+// SetMaxReasoningEffortOverLimit sets the "max_reasoning_effort_over_limit" field.
+func (u *GroupUpsertBulk) SetMaxReasoningEffortOverLimit(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetMaxReasoningEffortOverLimit(v)
+	})
+}
+
+// UpdateMaxReasoningEffortOverLimit sets the "max_reasoning_effort_over_limit" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateMaxReasoningEffortOverLimit() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateMaxReasoningEffortOverLimit()
+	})
+}
+
 // SetReasoningEffortMappings sets the "reasoning_effort_mappings" field.
-func (u *GroupUpsertBulk) SetReasoningEffortMappings(v []domain.ReasoningEffortMapping) *GroupUpsertBulk {
+func (u *GroupUpsertBulk) SetReasoningEffortMappings(v []accessview.ReasoningEffortMapping) *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.SetReasoningEffortMappings(v)
 	})
@@ -5290,20 +3448,6 @@ func (u *GroupUpsertBulk) SetReasoningEffortMappings(v []domain.ReasoningEffortM
 func (u *GroupUpsertBulk) UpdateReasoningEffortMappings() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateReasoningEffortMappings()
-	})
-}
-
-// SetDataSharingEnabled sets the "data_sharing_enabled" field.
-func (u *GroupUpsertBulk) SetDataSharingEnabled(v bool) *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.SetDataSharingEnabled(v)
-	})
-}
-
-// UpdateDataSharingEnabled sets the "data_sharing_enabled" field to the value that was provided on create.
-func (u *GroupUpsertBulk) UpdateDataSharingEnabled() *GroupUpsertBulk {
-	return u.Update(func(s *GroupUpsert) {
-		s.UpdateDataSharingEnabled()
 	})
 }
 

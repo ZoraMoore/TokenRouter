@@ -1,3 +1,4 @@
+import type { LocalizedUpdate } from '@/i18n/content'
 /**
  * Shared constants and types for payment provider management.
  */
@@ -23,6 +24,8 @@ export interface TypeOption {
 
 /** EasyPay 自定义方法包含用户可见类型、上游类型和展示名称。 */
 export interface EasyPayCustomMethod {
+  id?: string
+  displayNameLocalization?: LocalizedUpdate<string>
   type: string
   upstreamType: string
   displayName: string
@@ -45,9 +48,6 @@ export const PROVIDER_SUPPORTED_TYPES: Record<string, string[]> = {
   stripe: ['stripe'],
   airwallex: ['airwallex'],
 }
-
-/** Available payment modes for EasyPay providers. */
-export const EASYPAY_PAYMENT_MODES = ['qrcode', 'popup'] as const
 
 /** Fixed display order for user-facing payment methods */
 export const METHOD_ORDER = ['alipay', 'alipay_direct', 'wxpay', 'wxpay_direct', 'stripe', 'airwallex'] as const
@@ -85,8 +85,7 @@ export const PAYMENT_CURRENCY_OPTIONS: TypeOption[] = [
 // 与后端当前集成的 stripe-go v85.0.0 的 stripe.APIVersion 保持一致。
 export const STRIPE_SDK_API_VERSION = '2026-03-25.dahlia'
 
-/** Preferred popup size for payment gateways. Alipay's standard checkout
- * (QR + account login panel) needs ~1200×900 to render without any scrolling. */
+// 支付宝二维码与账号登录面板约需 1200×900，弹窗按此预留显示空间。
 const PAYMENT_POPUP_PREFERRED_WIDTH = 1250
 const PAYMENT_POPUP_PREFERRED_HEIGHT = 900
 
@@ -194,6 +193,8 @@ export function parseEasyPayCustomMethods(raw: string | undefined): EasyPayCusto
     if (!Array.isArray(parsed)) return []
     return parsed
       .map(item => ({
+        id: String(item?.id || item?.type || ''),
+        displayNameLocalization: item?.displayNameLocalization,
         type: String(item?.type || '').trim(),
         upstreamType: String(item?.upstreamType || '').trim(),
         displayName: String(item?.displayName || '').trim(),
@@ -208,6 +209,8 @@ export function parseEasyPayCustomMethods(raw: string | undefined): EasyPayCusto
 export function serializeEasyPayCustomMethods(methods: EasyPayCustomMethod[]): string {
   const clean = methods
     .map(method => ({
+      id: method.id,
+      displayNameLocalization: method.displayNameLocalization,
       type: method.type.trim(),
       upstreamType: method.upstreamType.trim(),
       displayName: method.displayName.trim(),

@@ -15,28 +15,36 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/server/middleware"
 	"github.com/gin-gonic/gin"
+
+	"github.com/TokenFlux/TokenRouter/internal/pkg/locale"
+	"github.com/TokenFlux/TokenRouter/internal/server/middleware"
 )
 
 const (
-	// NonceHTMLPlaceholder is the placeholder for nonce in HTML script tags
+	// NonceHTMLPlaceholder is the placeholder for nonce in HTML script tags.
 	NonceHTMLPlaceholder = "__CSP_NONCE_VALUE__"
 )
 
-//go:embed all:dist
-var frontendFS embed.FS
+var (
+	//go:embed all:dist
+	frontendFS embed.FS
 
-// PublicSettingsProvider is an interface to fetch public settings
+	// htmlLanguagePattern 匹配构建入口的语言属性。
+	htmlLanguagePattern = regexp.MustCompile(`<html(?:\s+lang="[^"]*")?`)
+)
+
+// PublicSettingsProvider is an interface to fetch public settings.
 type PublicSettingsProvider interface {
 	GetPublicSettingsForInjection(ctx context.Context) (any, error)
 }
 
-// FrontendServer serves the embedded frontend with settings injection
+// FrontendServer serves the embedded frontend with settings injection.
 type FrontendServer struct {
 	distFS      fs.FS
 	fileServer  http.Handler
@@ -46,7 +54,7 @@ type FrontendServer struct {
 	overrideDir string // local file override directory
 }
 
-// NewFrontendServer creates a new frontend server with settings injection
+// NewFrontendServer creates a new frontend server with settings injection.
 func NewFrontendServer(settingsProvider PublicSettingsProvider) (*FrontendServer, error) {
 	distFS, err := fs.Sub(frontendFS, "dist")
 	if err != nil {
@@ -78,14 +86,14 @@ func NewFrontendServer(settingsProvider PublicSettingsProvider) (*FrontendServer
 	}, nil
 }
 
-// InvalidateCache invalidates the HTML cache (call when settings change)
+// InvalidateCache invalidates the HTML cache (call when settings change).
 func (s *FrontendServer) InvalidateCache() {
 	if s != nil && s.cache != nil {
 		s.cache.Invalidate()
 	}
 }
 
-// Middleware returns the Gin middleware handler
+// Middleware returns the Gin middleware handler.
 func (s *FrontendServer) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
@@ -150,7 +158,10 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	nonce := middleware.GetNonceFromContext(c)
 
 	// Check cache first
-	cached := s.cache.Get()
+	language := locale.FromContext(c.Request.Context())
+	c.Writer.Header().Add("Vary", "Accept-Language, Cookie")
+	c.Header("Content-Language", language)
+	cached, version := s.cache.Snapshot(language)
 	if cached != nil {
 		// Check If-None-Match for 304 response
 		if match := c.GetHeader("If-None-Match"); match == cached.ETag {
@@ -190,15 +201,13 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	}
 
 	rendered := s.injectSettings(settingsJSON)
-	s.cache.Set(rendered, settingsJSON)
+	rendered = htmlLanguagePattern.ReplaceAll(rendered, []byte(`<html lang="`+language+`" dir="`+locale.Direction(language)+`"`))
+	snapshot := s.cache.Publish(language, version, rendered, settingsJSON)
 
 	// Replace nonce placeholder with actual nonce before serving
 	content := replaceNoncePlaceholder(rendered, nonce)
 
-	cached = s.cache.Get()
-	if cached != nil {
-		c.Header("ETag", cached.ETag)
-	}
+	c.Header("ETag", snapshot.ETag)
 	c.Header("Cache-Control", "no-cache")
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 	c.Abort()
@@ -246,9 +255,9 @@ func injectSiteFavicon(html, settingsJSON []byte) []byte {
 	replacement := []byte(`<link rel="icon" href="` + htmlpkg.EscapeString(logoURL) + `" />`)
 
 	var buf bytes.Buffer
-	buf.Write(html[:linkStart])
-	buf.Write(replacement)
-	buf.Write(html[linkEnd:])
+	_, _ = buf.Write(html[:linkStart])
+	_, _ = buf.Write(replacement)
+	_, _ = buf.Write(html[linkEnd:])
 	return buf.Bytes()
 }
 
@@ -290,19 +299,19 @@ func injectSiteTitle(html, settingsJSON []byte) []byte {
 
 	newTitle := []byte("<title>" + htmlpkg.EscapeString(cfg.SiteName) + " - AI API Gateway</title>")
 	var buf bytes.Buffer
-	buf.Write(html[:titleStart])
-	buf.Write(newTitle)
-	buf.Write(html[titleEnd+len("</title>"):])
+	_, _ = buf.Write(html[:titleStart])
+	_, _ = buf.Write(newTitle)
+	_, _ = buf.Write(html[titleEnd+len("</title>"):])
 	return buf.Bytes()
 }
 
-// replaceNoncePlaceholder replaces the nonce placeholder with actual nonce value
+// replaceNoncePlaceholder replaces the nonce placeholder with actual nonce value.
 func replaceNoncePlaceholder(html []byte, nonce string) []byte {
 	return bytes.ReplaceAll(html, []byte(NonceHTMLPlaceholder), []byte(nonce))
 }
 
 // ServeEmbeddedFrontend returns a middleware for serving embedded frontend
-// This is the legacy function for backward compatibility when no settings provider is available
+// This is the legacy function for backward compatibility when no settings provider is available.
 func ServeEmbeddedFrontend() gin.HandlerFunc {
 	distFS, err := fs.Sub(frontendFS, "dist")
 	if err != nil {
@@ -376,6 +385,7 @@ func shouldBypassEmbeddedFrontend(request *http.Request) bool {
 	}
 
 	return strings.HasPrefix(trimmed, "/api/") ||
+		strings.HasPrefix(trimmed, "/internal/") ||
 		strings.HasPrefix(trimmed, "/v1/") ||
 		strings.HasPrefix(trimmed, "/v1beta/") ||
 		strings.HasPrefix(trimmed, "/backend-api/") ||

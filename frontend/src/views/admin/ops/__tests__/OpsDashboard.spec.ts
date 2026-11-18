@@ -60,6 +60,9 @@ vi.mock('@/api/admin/ops', () => ({
 }))
 
 import OpsDashboard from '../OpsDashboard.vue'
+import OpsDashboardHeader from '../components/OpsDashboardHeader.vue'
+import OpsRequestDetailsModal from '../components/OpsRequestDetailsModal.vue'
+import { LATENCY_BUCKET_STORAGE_KEY } from '../latencyBuckets'
 
 const SlotStub = defineComponent({
   template: '<div><slot /></div>',
@@ -111,6 +114,7 @@ describe('OpsDashboard latency bucket refresh', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     route.query = {}
+    localStorage.removeItem(LATENCY_BUCKET_STORAGE_KEY)
     mocks.settingsFetch.mockResolvedValue(undefined)
     mocks.getGroups.mockResolvedValue([])
     mocks.getMetricThresholds.mockResolvedValue(null)
@@ -162,7 +166,50 @@ describe('OpsDashboard latency bucket refresh', () => {
     expect(mocks.routerReplace).toHaveBeenCalledWith({
       query: { latency_bounds: '1000,2000,5000,10000,20000' },
     })
+    expect(localStorage.getItem(LATENCY_BUCKET_STORAGE_KEY)).toBe('1000,2000,5000,10000,20000')
 
+    wrapper.unmount()
+  })
+
+  it('没有 URL 参数时恢复本地保存的分桶偏好', async () => {
+    localStorage.setItem(LATENCY_BUCKET_STORAGE_KEY, '1000,2000,5000,10000,20000')
+
+    const wrapper = mountDashboard()
+    await flushPromises()
+    await flushPromises()
+
+    expect(mocks.getLatencyHistogram).toHaveBeenCalledWith(
+      expect.objectContaining({ bucket_boundaries_ms: [1000, 2000, 5000, 10000, 20000] }),
+      expect.any(Object),
+    )
+
+    wrapper.unmount()
+  })
+
+  it('自定义时间边界传给请求明细，重复修改范围时概览同步刷新', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const header = wrapper.findComponent(OpsDashboardHeader)
+    header.vm.$emit('update:customTimeRange', '2026-08-25T00:00:00Z', '2026-08-28T00:00:00Z')
+    header.vm.$emit('update:timeRange', 'custom')
+    await flushPromises()
+    const details = wrapper.findComponent(OpsRequestDetailsModal)
+    expect(details.attributes('custom-start-time')).toBe('2026-08-25T00:00:00Z')
+    expect(details.attributes('custom-end-time')).toBe('2026-08-28T00:00:00Z')
+    expect(mocks.getDashboardSnapshotV2).toHaveBeenLastCalledWith(
+      expect.objectContaining({ start_time: '2026-08-25T00:00:00Z', end_time: '2026-08-28T00:00:00Z' }),
+      expect.any(Object)
+    )
+    const calls = mocks.getDashboardSnapshotV2.mock.calls.length
+    header.vm.$emit('update:customTimeRange', '2026-08-26T00:00:00Z', '2026-08-27T00:00:00Z')
+    header.vm.$emit('update:timeRange', 'custom')
+    await flushPromises()
+    expect(mocks.getDashboardSnapshotV2).toHaveBeenCalledTimes(calls + 1)
+    expect(mocks.getDashboardSnapshotV2).toHaveBeenLastCalledWith(
+      expect.objectContaining({ start_time: '2026-08-26T00:00:00Z', end_time: '2026-08-27T00:00:00Z' }),
+      expect.any(Object)
+    )
+    expect(details.attributes('custom-start-time')).toBe('2026-08-26T00:00:00Z')
     wrapper.unmount()
   })
 

@@ -1,8 +1,8 @@
 <template>
   <AppLayout>
-    <div class="space-y-6">
+    <div class="space-y-4">
       <!-- 标题与筛选工具共用一行，保持和 OpenRouter 页面工具栏一致。 -->
-      <section class="flex flex-row items-start justify-between gap-3">
+      <section class="flex flex-row items-end justify-between gap-3">
         <div class="min-w-0">
           <h1 class="page-title">{{ t('usageRanking.title') }}</h1>
           <p class="page-description">{{ t('usageRanking.description') }}</p>
@@ -17,7 +17,7 @@
           />
           <button
             type="button"
-            class="btn btn-secondary h-11 w-11 p-0"
+            class="btn btn-secondary btn-icon"
             :disabled="loading"
             :title="t('common.refresh')"
             @click="loadRanking"
@@ -27,11 +27,18 @@
         </div>
       </section>
 
-      <div v-if="loading" class="flex items-center justify-center py-16">
-        <LoadingSpinner />
+      <div v-if="loading" class="space-y-4" role="status" :aria-label="t('common.loading')" aria-busy="true" data-loading-skeleton>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4" aria-hidden="true">
+          <div v-for="card in 3" :key="card" class="card min-w-0 space-y-3 p-4">
+            <Skeleton width="55%" :height="12" />
+            <Skeleton width="75%" :height="28" />
+            <Skeleton width="65%" :height="12" />
+          </div>
+        </div>
+        <ContentSkeleton variant="list" :rows="5" class="card p-6" />
       </div>
 
-      <div v-else-if="errorMessage" class="rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-200">
+      <div v-else-if="errorMessage" class="rounded-control border border-red-200 bg-red-50 p-5 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-200">
         {{ errorMessage }}
       </div>
 
@@ -48,7 +55,7 @@
           />
         </section>
 
-        <section v-if="ranking.length > 0" class="rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800">
+        <section v-if="ranking.length > 0" class="rounded-control border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800">
           <div class="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('usageRanking.listTitle') }}</h2>
@@ -69,9 +76,9 @@
           </div>
         </section>
 
-        <section v-else class="flex min-h-[360px] items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center dark:border-dark-600 dark:bg-dark-800">
+        <section v-else class="flex min-h-[360px] items-center justify-center rounded-surface border border-dashed border-gray-300 bg-white p-8 text-center dark:border-dark-600 dark:bg-dark-900">
           <div>
-            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-gray-400 dark:bg-dark-700 dark:text-dark-300">
+            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-control bg-gray-100 text-gray-400 dark:bg-dark-700 dark:text-dark-300">
               <Icon name="chart" size="lg" />
             </div>
             <h2 class="mt-4 text-base font-semibold text-gray-900 dark:text-white">{{ t('usageRanking.emptyTitle') }}</h2>
@@ -84,6 +91,8 @@
 </template>
 
 <script setup lang="ts">
+import Skeleton from '@/components/common/Skeleton.vue'
+import ContentSkeleton from '@/components/common/ContentSkeleton.vue'
 import { computed, defineComponent, h, onMounted, ref, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -93,7 +102,7 @@ import {
   type UsageRankingSortBy,
 } from '@/api/usage'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import UserAvatar from '@/components/common/UserAvatar.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
@@ -147,11 +156,14 @@ function topCardOrderClass(rank: number): string {
   return 'md:order-3'
 }
 
-// 用户没有头像时使用名称首字作为兜底展示。
-function initials(name: string): string {
-  const trimmed = name.trim()
-  if (!trimmed) return '?'
-  return Array.from(trimmed).slice(0, 2).join('').toUpperCase()
+// 排行榜接口不暴露邮箱，统一用付款主体 ID 作为 identicon 种子，与全站其他位置的头像保持一致。
+function rankingAvatarProps(item: UsageRankingItem, sizeClass: string) {
+  return {
+    avatarUrl: item.avatar_url,
+    userId: item.user_id,
+    alt: item.display_name,
+    sizeClass,
+  }
 }
 
 function rankLabel(rank: number): string {
@@ -184,7 +196,7 @@ function metricGridStyle(metricCount: number): Record<string, string> {
   return { gridTemplateColumns: `repeat(${Math.max(metricCount, 1)}, minmax(0, 1fr))` }
 }
 
-// 桌面端为每类指标保留固定列宽，避免各行因数值长度不同而横向漂移。
+// 桌面端各指标列使用固定宽度，行间数值对齐。
 function rankingMetricWidthClass(metric: UsageRankingMetric): string {
   switch (metric) {
     case 'requests':
@@ -256,33 +268,6 @@ async function loadRanking() {
   }
 }
 
-const UserAvatar = defineComponent({
-  name: 'UserAvatar',
-  props: {
-    item: { type: Object as PropType<UsageRankingItem>, required: true },
-    size: { type: String as PropType<'sm' | 'lg'>, default: 'sm' },
-  },
-  setup(props) {
-    return () => {
-      const sizeClass = props.size === 'lg' ? 'h-16 w-16 text-lg' : 'h-10 w-10 text-sm'
-      if (props.item.avatar_url) {
-        return h('img', {
-          src: props.item.avatar_url,
-          alt: props.item.display_name,
-          class: `${sizeClass} rounded-full object-cover`,
-        })
-      }
-      return h(
-        'div',
-        {
-          class: `${sizeClass} flex items-center justify-center rounded-full bg-primary-600 font-semibold text-white`,
-        },
-        initials(props.item.display_name),
-      )
-    }
-  },
-})
-
 const TopRankCard = defineComponent({
   name: 'TopRankCard',
   props: {
@@ -299,7 +284,7 @@ const TopRankCard = defineComponent({
         'article',
         {
           class: [
-            'relative overflow-hidden rounded-lg border p-5 shadow-sm',
+            'relative overflow-hidden rounded-control border p-5 shadow-sm',
             theme.card,
             props.featured ? 'md:min-h-[260px] md:p-6' : 'md:min-h-[220px]',
           ].join(' '),
@@ -313,7 +298,7 @@ const TopRankCard = defineComponent({
             ]),
           ]),
           h('div', { class: 'relative mt-7 flex flex-col items-center text-center' }, [
-            h(UserAvatar, { item: props.item, size: 'lg' }),
+            h(UserAvatar, rankingAvatarProps(props.item, 'h-16 w-16')),
             h('h3', { class: 'mt-4 max-w-full truncate text-lg font-semibold text-gray-900 dark:text-white' }, props.item.display_name),
             h('p', { class: 'mt-2 text-3xl font-semibold text-gray-900 dark:text-white' }, metricValue(props.item, props.primaryMetric)),
             h('p', { class: 'mt-1 text-xs text-gray-500 dark:text-gray-400' }, metricLabel(props.primaryMetric)),
@@ -357,9 +342,9 @@ const RankingRow = defineComponent({
           class: ['grid grid-cols-[auto_minmax(0,1fr)] gap-3 px-5 py-4 transition sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center', topClass].join(' '),
         },
         [
-          h('span', { class: `mt-1 inline-flex h-8 w-12 items-center justify-center rounded-lg text-sm font-semibold ring-1 sm:mt-0 ${theme.badge}` }, rankLabel(props.item.rank)),
+          h('span', { class: `mt-1 inline-flex h-8 w-12 items-center justify-center rounded-control text-sm font-semibold ring-1 sm:mt-0 ${theme.badge}` }, rankLabel(props.item.rank)),
           h('div', { class: 'flex min-w-0 items-center gap-3' }, [
-            h(UserAvatar, { item: props.item }),
+            h(UserAvatar, rankingAvatarProps(props.item, 'h-10 w-10')),
             h('div', { class: 'min-w-0' }, [
               h('p', { class: 'truncate text-sm font-medium text-gray-900 dark:text-white' }, props.item.display_name),
             ]),

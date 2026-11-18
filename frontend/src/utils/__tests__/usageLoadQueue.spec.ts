@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { enqueueUsageRequest } from '../usageLoadQueue'
-import type { Account } from '@/types'
+import type { Provider } from '@/types'
 
-/** Helper to create a minimal Account with proxy info */
-function makeAccount(
+/** Helper to create a minimal Provider with proxy info */
+function makeProvider(
   platform: string,
   type: string = 'oauth',
   proxy?: { host: string; port: number; username?: string | null } | null
-): Account {
+): Provider {
   return {
     id: Math.floor(Math.random() * 10000),
     platform,
@@ -21,11 +21,11 @@ function makeAccount(
     credentials: {},
     created_at: '',
     updated_at: ''
-  } as unknown as Account
+  } as unknown as Provider
 }
 
 describe('usageLoadQueue', () => {
-  // ─── Anthropic 账号：按代理出口排队 ───
+  // ─── Anthropic 提供商：按代理出口排队 ───
 
   it('Anthropic 同代理出口串行执行，间隔 >= 1s', async () => {
     const timestamps: number[] = []
@@ -34,7 +34,7 @@ describe('usageLoadQueue', () => {
       return 'ok'
     }
 
-    const acc = makeAccount('anthropic', 'oauth', { host: '1.2.3.4', port: 8080, username: 'u1' })
+    const acc = makeProvider('anthropic', 'oauth', { host: '1.2.3.4', port: 8080, username: 'u1' })
 
     const p1 = enqueueUsageRequest(acc, makeFn())
     const p2 = enqueueUsageRequest(acc, makeFn())
@@ -56,8 +56,8 @@ describe('usageLoadQueue', () => {
       return key
     }
 
-    const acc1 = makeAccount('anthropic', 'oauth', { host: '1.2.3.4', port: 8080, username: 'u1' })
-    const acc2 = makeAccount('anthropic', 'oauth', { host: '5.6.7.8', port: 3128, username: 'u2' })
+    const acc1 = makeProvider('anthropic', 'oauth', { host: '1.2.3.4', port: 8080, username: 'u1' })
+    const acc2 = makeProvider('anthropic', 'oauth', { host: '5.6.7.8', port: 3128, username: 'u2' })
 
     const p1 = enqueueUsageRequest(acc1, makeTracked('proxy1'))
     const p2 = enqueueUsageRequest(acc2, makeTracked('proxy2'))
@@ -68,15 +68,15 @@ describe('usageLoadQueue', () => {
     expect(spread).toBeLessThan(50)
   })
 
-  it('Anthropic 相同代理连接信息的不同账号归为同一队列', async () => {
+  it('Anthropic 相同代理连接信息的不同提供商归为同一队列', async () => {
     const timestamps: number[] = []
     const makeFn = () => async () => {
       timestamps.push(Date.now())
       return 'ok'
     }
 
-    const acc1 = makeAccount('anthropic', 'oauth', { host: '10.0.0.1', port: 3128, username: 'admin' })
-    const acc2 = makeAccount('anthropic', 'setup-token', { host: '10.0.0.1', port: 3128, username: 'admin' })
+    const acc1 = makeProvider('anthropic', 'oauth', { host: '10.0.0.1', port: 3128, username: 'admin' })
+    const acc2 = makeProvider('anthropic', 'setup-token', { host: '10.0.0.1', port: 3128, username: 'admin' })
 
     const p1 = enqueueUsageRequest(acc1, makeFn())
     const p2 = enqueueUsageRequest(acc2, makeFn())
@@ -87,15 +87,15 @@ describe('usageLoadQueue', () => {
     expect(timestamps[1] - timestamps[0]).toBeGreaterThanOrEqual(950)
   })
 
-  it('Anthropic 直连（无代理）的账号归为同一队列', async () => {
+  it('Anthropic 直连（无代理）的提供商归为同一队列', async () => {
     const order: number[] = []
     const makeFn = (n: number) => async () => {
       order.push(n)
       return n
     }
 
-    const acc1 = makeAccount('anthropic', 'oauth')
-    const acc2 = makeAccount('anthropic', 'setup-token')
+    const acc1 = makeProvider('anthropic', 'oauth')
+    const acc2 = makeProvider('anthropic', 'setup-token')
 
     const p1 = enqueueUsageRequest(acc1, makeFn(1))
     const p2 = enqueueUsageRequest(acc2, makeFn(2))
@@ -107,7 +107,7 @@ describe('usageLoadQueue', () => {
 
   it('Anthropic 请求失败时 reject，后续任务继续执行', async () => {
     const results: string[] = []
-    const acc = makeAccount('anthropic', 'oauth', { host: '99.99.99.99', port: 1234 })
+    const acc = makeProvider('anthropic', 'oauth', { host: '99.99.99.99', port: 1234 })
 
     const p1 = enqueueUsageRequest(acc, async () => {
       throw new Error('fail')
@@ -131,9 +131,9 @@ describe('usageLoadQueue', () => {
       return 'ok'
     }
 
-    // 同一代理的 Gemini 账号 — 应当并行，不排队
-    const acc1 = makeAccount('gemini', 'oauth', { host: '1.2.3.4', port: 8080 })
-    const acc2 = makeAccount('gemini', 'oauth', { host: '1.2.3.4', port: 8080 })
+    // 同一代理的 Gemini 提供商 — 应当并行，不排队
+    const acc1 = makeProvider('gemini', 'oauth', { host: '1.2.3.4', port: 8080 })
+    const acc2 = makeProvider('gemini', 'oauth', { host: '1.2.3.4', port: 8080 })
 
     const p1 = enqueueUsageRequest(acc1, makeFn())
     const p2 = enqueueUsageRequest(acc2, makeFn())
@@ -152,8 +152,8 @@ describe('usageLoadQueue', () => {
       return 'ok'
     }
 
-    const acc1 = makeAccount('openai', 'oauth', { host: '1.2.3.4', port: 8080 })
-    const acc2 = makeAccount('openai', 'oauth', { host: '1.2.3.4', port: 8080 })
+    const acc1 = makeProvider('openai', 'oauth', { host: '1.2.3.4', port: 8080 })
+    const acc2 = makeProvider('openai', 'oauth', { host: '1.2.3.4', port: 8080 })
 
     const p1 = enqueueUsageRequest(acc1, makeFn())
     const p2 = enqueueUsageRequest(acc2, makeFn())
@@ -173,8 +173,8 @@ describe('usageLoadQueue', () => {
       return 'ok'
     }
 
-    const acc1 = makeAccount('anthropic', 'apikey', { host: '1.2.3.4', port: 8080 })
-    const acc2 = makeAccount('anthropic', 'apikey', { host: '1.2.3.4', port: 8080 })
+    const acc1 = makeProvider('anthropic', 'apikey', { host: '1.2.3.4', port: 8080 })
+    const acc2 = makeProvider('anthropic', 'apikey', { host: '1.2.3.4', port: 8080 })
 
     const p1 = enqueueUsageRequest(acc1, makeFn())
     const p2 = enqueueUsageRequest(acc2, makeFn())
@@ -188,7 +188,7 @@ describe('usageLoadQueue', () => {
   // ─── 返回值透传 ───
 
   it('返回值正确透传', async () => {
-    const acc = makeAccount('anthropic', 'oauth')
+    const acc = makeProvider('anthropic', 'oauth')
     const result = await enqueueUsageRequest(acc, async () => {
       return { usage: 42 }
     })
@@ -196,7 +196,7 @@ describe('usageLoadQueue', () => {
   })
 
   it('非 Anthropic 返回值正确透传', async () => {
-    const acc = makeAccount('gemini', 'oauth')
+    const acc = makeProvider('gemini', 'oauth')
     const result = await enqueueUsageRequest(acc, async () => {
       return { quota: 100 }
     })

@@ -3,38 +3,37 @@
     <template #page-heading-actions>
       <button
         type="button"
-        class="btn btn-secondary h-11 w-11 shrink-0 p-0"
+        class="btn btn-secondary shrink-0 btn-icon"
         :disabled="chartsLoading"
         :title="t('common.refresh')"
         @click="loadDashboardStats"
       >
-        <Icon name="refresh" size="md" :class="chartsLoading ? 'animate-spin' : ''" />
+        <Icon name="refresh" size="sm" :class="chartsLoading ? 'animate-spin' : ''" />
       </button>
     </template>
 
-    <div class="space-y-6">
+    <div class="space-y-4">
       <!-- Loading State -->
-      <div v-if="loading" class="flex items-center justify-center py-12">
-        <LoadingSpinner />
-      </div>
+      <DashboardSkeleton v-if="loading && !stats" />
 
       <template v-else-if="stats">
         <!-- Row 1: Core Stats -->
+        <!-- 移动端卡片纵向排列图标和文字，文字占满卡宽，桌面端横向排列。 -->
         <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <!-- Total API Keys -->
           <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30">
+            <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <div class="shrink-0 self-start rounded-control bg-blue-100 p-2 dark:bg-blue-900/30">
                 <Icon name="key" size="md" class="text-blue-600 dark:text-blue-400" :stroke-width="2" />
               </div>
-              <div>
+              <div class="min-w-0">
                 <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
                   {{ t('admin.dashboard.apiKeys') }}
                 </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
+                <p class="mt-0.5 whitespace-nowrap text-lg font-bold tabular-nums text-gray-900 dark:text-white lg:text-xl">
                   {{ stats.total_api_keys }}
                 </p>
-                <p class="text-xs text-green-600 dark:text-green-400">
+                <p class="mt-0.5 text-xs text-green-600 dark:text-green-400">
                   {{ stats.active_api_keys }} {{ t('common.active') }}
                 </p>
               </div>
@@ -43,23 +42,23 @@
 
           <!-- Service Accounts -->
           <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30">
+            <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <div class="shrink-0 self-start rounded-control bg-purple-100 p-2 dark:bg-purple-900/30">
                 <Icon name="server" size="md" class="text-purple-600 dark:text-purple-400" :stroke-width="2" />
               </div>
-              <div>
+              <div class="min-w-0">
                 <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.accounts') }}
+                  {{ t('admin.dashboard.providers') }}
                 </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
-                  {{ stats.total_accounts }}
+                <p class="mt-0.5 whitespace-nowrap text-lg font-bold tabular-nums text-gray-900 dark:text-white lg:text-xl">
+                  {{ stats.total_providers }}
                 </p>
-                <p class="text-xs">
-                  <span class="text-green-600 dark:text-green-400"
-                    >{{ stats.normal_accounts }} {{ t('common.active') }}</span
+                <p class="mt-0.5 text-xs">
+                  <span class="whitespace-nowrap text-green-600 dark:text-green-400"
+                    >{{ stats.normal_providers }} {{ t('common.active') }}</span
                   >
-                  <span v-if="stats.error_accounts > 0" class="ml-1 text-red-500"
-                    >{{ stats.error_accounts }} {{ t('common.error') }}</span
+                  <span v-if="stats.error_providers > 0" class="ml-1 whitespace-nowrap text-red-500"
+                    >{{ stats.error_providers }} {{ t('common.error') }}</span
                   >
                 </p>
               </div>
@@ -68,18 +67,18 @@
 
           <!-- Today Requests -->
           <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-green-100 p-2 dark:bg-green-900/30">
+            <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <div class="shrink-0 self-start rounded-control bg-green-100 p-2 dark:bg-green-900/30">
                 <Icon name="chart" size="md" class="text-green-600 dark:text-green-400" :stroke-width="2" />
               </div>
-              <div>
+              <div class="min-w-0">
                 <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
                   {{ t('admin.dashboard.todayRequests') }}
                 </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
+                <p class="mt-0.5 whitespace-nowrap text-lg font-bold tabular-nums text-gray-900 dark:text-white lg:text-xl">
                   {{ stats.today_requests }}
                 </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                   {{ t('common.total') }}: {{ formatNumber(stats.total_requests) }}
                 </p>
               </div>
@@ -88,18 +87,18 @@
 
           <!-- New Users Today -->
           <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/30">
+            <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <div class="shrink-0 self-start rounded-control bg-emerald-100 p-2 dark:bg-emerald-900/30">
                 <Icon name="userPlus" size="md" class="text-emerald-600 dark:text-emerald-400" :stroke-width="2" />
               </div>
-              <div>
+              <div class="min-w-0">
                 <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
                   {{ t('admin.dashboard.users') }}
                 </p>
-                <p class="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                <p class="mt-0.5 whitespace-nowrap text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400 lg:text-xl">
                   +{{ stats.today_new_users }}
                 </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                   {{ t('common.total') }}: {{ formatNumber(stats.total_users) }}
                 </p>
               </div>
@@ -111,94 +110,96 @@
         <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <!-- Today Tokens -->
           <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-amber-100 p-2 dark:bg-amber-900/30">
+            <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <div class="shrink-0 self-start rounded-control bg-amber-100 p-2 dark:bg-amber-900/30">
                 <Icon name="cube" size="md" class="text-amber-600 dark:text-amber-400" :stroke-width="2" />
               </div>
-              <div>
+              <div class="min-w-0">
                 <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
                   {{ t('admin.dashboard.todayTokens') }}
                 </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
+                <p class="mt-0.5 whitespace-nowrap text-lg font-bold tabular-nums text-gray-900 dark:text-white lg:text-xl">
                   {{ formatTokens(stats.today_tokens) }}
                 </p>
-                <p class="text-xs">
+                <!-- 金额与符号在各段内保持同一行，段间可以换行。 -->
+                <div class="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs">
                   <span
-                    class="text-green-600 dark:text-green-400"
+                    class="whitespace-nowrap text-green-600 dark:text-green-400"
                     :title="t('admin.dashboard.actualDescription')"
                     >{{ formatBalanceAmount(stats.today_actual_cost, { withSymbol: true, fractionDigits: costDigits(stats.today_actual_cost) }) }}</span
                   >
                   <span class="text-gray-400 dark:text-gray-500"> / </span>
                   <span
-                    class="text-orange-500 dark:text-orange-400"
-                    :title="t('admin.dashboard.accountCostDescription')"
-                    >{{ formatUsdAmount(stats.today_account_cost, { withSymbol: true, fractionDigits: costDigits(stats.today_account_cost) }) }}</span
+                    class="whitespace-nowrap text-orange-500 dark:text-orange-400"
+                    :title="t('admin.dashboard.providerCostDescription')"
+                    >{{ formatUsdAmount(stats.today_provider_cost, { withSymbol: true, fractionDigits: costDigits(stats.today_provider_cost) }) }}</span
                   >
                   <span class="text-gray-400 dark:text-gray-500"> / </span>
                   <span
-                    class="text-gray-400 dark:text-gray-500"
+                    class="whitespace-nowrap text-gray-400 dark:text-gray-500"
                     :title="t('admin.dashboard.standardDescription')"
                     >{{ formatUsdAmount(stats.today_cost, { withSymbol: true, fractionDigits: costDigits(stats.today_cost) }) }}</span
                   >
-                </p>
+                </div>
               </div>
             </div>
           </div>
 
           <!-- Total Tokens -->
           <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/30">
+            <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <div class="shrink-0 self-start rounded-control bg-indigo-100 p-2 dark:bg-indigo-900/30">
                 <Icon name="database" size="md" class="text-indigo-600 dark:text-indigo-400" :stroke-width="2" />
               </div>
-              <div>
+              <div class="min-w-0">
                 <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
                   {{ t('admin.dashboard.totalTokens') }}
                 </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
+                <p class="mt-0.5 whitespace-nowrap text-lg font-bold tabular-nums text-gray-900 dark:text-white lg:text-xl">
                   {{ formatTokens(stats.total_tokens) }}
                 </p>
-                <p class="text-xs">
+                <!-- 金额与符号在各段内保持同一行，段间可以换行。 -->
+                <div class="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs">
                   <span
-                    class="text-green-600 dark:text-green-400"
+                    class="whitespace-nowrap text-green-600 dark:text-green-400"
                     :title="t('admin.dashboard.actualDescription')"
                     >{{ formatBalanceAmount(stats.total_actual_cost, { withSymbol: true, fractionDigits: costDigits(stats.total_actual_cost) }) }}</span
                   >
                   <span class="text-gray-400 dark:text-gray-500"> / </span>
                   <span
-                    class="text-orange-500 dark:text-orange-400"
-                    :title="t('admin.dashboard.accountCostDescription')"
-                    >{{ formatUsdAmount(stats.total_account_cost, { withSymbol: true, fractionDigits: costDigits(stats.total_account_cost) }) }}</span
+                    class="whitespace-nowrap text-orange-500 dark:text-orange-400"
+                    :title="t('admin.dashboard.providerCostDescription')"
+                    >{{ formatUsdAmount(stats.total_provider_cost, { withSymbol: true, fractionDigits: costDigits(stats.total_provider_cost) }) }}</span
                   >
                   <span class="text-gray-400 dark:text-gray-500"> / </span>
                   <span
-                    class="text-gray-400 dark:text-gray-500"
+                    class="whitespace-nowrap text-gray-400 dark:text-gray-500"
                     :title="t('admin.dashboard.standardDescription')"
                     >{{ formatUsdAmount(stats.total_cost, { withSymbol: true, fractionDigits: costDigits(stats.total_cost) }) }}</span
                   >
-                </p>
+                </div>
               </div>
             </div>
           </div>
 
           <!-- Performance (RPM/TPM) -->
           <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-violet-100 p-2 dark:bg-violet-900/30">
+            <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <div class="shrink-0 self-start rounded-control bg-violet-100 p-2 dark:bg-violet-900/30">
                 <Icon name="bolt" size="md" class="text-violet-600 dark:text-violet-400" :stroke-width="2" />
               </div>
-              <div class="flex-1">
+              <div class="min-w-0 flex-1">
                 <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
                   {{ t('admin.dashboard.performance') }}
                 </p>
-                <div class="flex items-baseline gap-2">
-                  <p class="text-xl font-bold text-gray-900 dark:text-white">
+                <div class="mt-0.5 flex items-baseline gap-2">
+                  <p class="whitespace-nowrap text-lg font-bold tabular-nums text-gray-900 dark:text-white lg:text-xl">
                     {{ formatTokens(stats.rpm) }}
                   </p>
                   <span class="text-xs text-gray-500 dark:text-gray-400">RPM</span>
                 </div>
-                <div class="flex items-baseline gap-2">
-                  <p class="text-sm font-semibold text-violet-600 dark:text-violet-400">
+                <div class="mt-0.5 flex items-baseline gap-2">
+                  <p class="whitespace-nowrap text-sm font-semibold tabular-nums text-violet-600 dark:text-violet-400">
                     {{ formatTokens(stats.tpm) }}
                   </p>
                   <span class="text-xs text-gray-500 dark:text-gray-400">TPM</span>
@@ -209,18 +210,18 @@
 
           <!-- Avg Response Time -->
           <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-rose-100 p-2 dark:bg-rose-900/30">
+            <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <div class="shrink-0 self-start rounded-control bg-rose-100 p-2 dark:bg-rose-900/30">
                 <Icon name="clock" size="md" class="text-rose-600 dark:text-rose-400" :stroke-width="2" />
               </div>
-              <div>
+              <div class="min-w-0">
                 <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
                   {{ t('admin.dashboard.avgResponse') }}
                 </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
+                <p class="mt-0.5 whitespace-nowrap text-lg font-bold tabular-nums text-gray-900 dark:text-white lg:text-xl">
                   {{ formatDuration(stats.average_duration_ms) }}
                 </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                   {{ stats.active_users }} {{ t('admin.dashboard.activeUsers') }}
                 </p>
               </div>
@@ -229,7 +230,7 @@
         </div>
 
         <!-- Charts Section -->
-        <div class="space-y-6">
+        <div class="space-y-4">
           <!-- Date Range Filter -->
           <div class="card p-4">
             <div class="time-controls flex flex-wrap items-center justify-between gap-2">
@@ -255,7 +256,7 @@
           </div>
 
           <!-- Charts Grid -->
-          <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <ModelDistributionChart
               :model-stats="modelStats"
               :enable-ranking-view="true"
@@ -279,9 +280,7 @@
               {{ t('admin.dashboard.recentUsage') }} (Top 12)
             </h3>
             <div class="h-64">
-              <div v-if="userTrendLoading" class="flex h-full items-center justify-center">
-                <LoadingSpinner size="md" />
-              </div>
+              <ChartSkeleton v-if="userTrendLoading" height="100%" />
               <Line v-else-if="userTrendChartData" :data="userTrendChartData" :options="lineOptions" />
               <div
                 v-else
@@ -298,7 +297,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
@@ -314,13 +313,15 @@ import type {
   UserSpendingRankingItem
 } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import ChartSkeleton from '@/components/common/ChartSkeleton.vue'
+import DashboardSkeleton from '@/components/common/DashboardSkeleton.vue'
 import Icon from '@/components/icons/Icon.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Select from '@/components/common/Select.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
+import { externalTooltipHandler, hideExternalTooltip } from '@/utils/chartExternalTooltip'
 
 import {
   Chart as ChartJS,
@@ -333,6 +334,8 @@ import {
   Filler
 } from 'chart.js'
 import { Line } from 'vue-chartjs'
+import { formatTokens } from '@/utils/format'
+import { useChartTheme, CHART_TICK_FONT_SIZE, CHART_LEGEND_FONT_SIZE } from '@/composables/useChartTheme'
 
 // Register Chart.js components
 ChartJS.register(
@@ -345,12 +348,14 @@ ChartJS.register(
   Filler
 )
 
+onBeforeUnmount(hideExternalTooltip)
+
 const appStore = useAppStore()
 const router = useRouter()
 const { formatBalanceAmount, formatUsdAmount } = useBalanceDisplay()
 const { refreshBatchImageAccess } = useBatchImageAccess()
 const stats = ref<DashboardStats | null>(null)
-const loading = ref(false)
+const loading = ref(true)
 const chartsLoading = ref(false)
 const userTrendLoading = ref(false)
 const rankingLoading = ref(false)
@@ -395,15 +400,12 @@ const granularityOptions = computed(() => [
   { value: 'hour', label: t('admin.dashboard.hour') }
 ])
 
-// Dark mode detection
-const isDarkMode = computed(() => {
-  return document.documentElement.classList.contains('dark')
-})
-
-// Chart colors
+// 品牌调仪表盘:刻度/网格用品牌色系(dark-200/primary-900 字面值),不归 zinc 档位;
+// 修复为非一次性快照,主题切换即刻重绘。
+const { isDark } = useChartTheme()
 const chartColors = computed(() => ({
-  text: isDarkMode.value ? '#D9D9DE' : '#2D4F68',
-  grid: isDarkMode.value ? '#29292E' : '#DDF4FC'
+  text: isDark.value ? '#D4D4D8' : '#2D4F68',
+  grid: isDark.value ? '#27272A' : '#DDF4FC'
 }))
 
 // Line chart options (for user trend chart)
@@ -423,11 +425,13 @@ const lineOptions = computed(() => ({
         pointStyle: 'circle',
         padding: 15,
         font: {
-          size: 11
+          size: CHART_LEGEND_FONT_SIZE
         }
       }
     },
     tooltip: {
+      enabled: false,
+      external: externalTooltipHandler,
       itemSort: (a: any, b: any) => {
         const aValue = typeof a?.raw === 'number' ? a.raw : Number(a?.parsed?.y ?? 0)
         const bValue = typeof b?.raw === 'number' ? b.raw : Number(b?.parsed?.y ?? 0)
@@ -448,7 +452,7 @@ const lineOptions = computed(() => ({
       ticks: {
         color: chartColors.value.text,
         font: {
-          size: 10
+          size: CHART_TICK_FONT_SIZE
         }
       }
     },
@@ -459,7 +463,7 @@ const lineOptions = computed(() => ({
       ticks: {
         color: chartColors.value.text,
         font: {
-          size: 10
+          size: CHART_TICK_FONT_SIZE
         },
         callback: (value: string | number) => formatTokens(Number(value))
       }
@@ -530,18 +534,6 @@ const userTrendChartData = computed(() => {
 })
 
 // Format helpers
-const formatTokens = (value: number | undefined): string => {
-  if (value === undefined || value === null) return '0'
-  if (value >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toFixed(2)}B`
-  } else if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(2)}M`
-  } else if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(2)}K`
-  }
-  return value.toLocaleString()
-}
-
 const toFiniteNumber = (value: unknown): number => {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) ? numberValue : 0

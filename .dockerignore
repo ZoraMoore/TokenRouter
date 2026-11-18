@@ -1,5 +1,5 @@
 # =============================================================================
-# Docker Ignore File for Sub2API
+# Docker Ignore File for TokenRouter
 # =============================================================================
 
 # Git
@@ -10,6 +10,7 @@
 # Documentation
 *.md
 !deploy/DOCKER.md
+website-docs/
 docs/
 # admin-compliance gate 的 LegalDocumentView.vue 构建时会导入 docs/legal/*.md?raw。
 # docs/ 其他内容仍排除，只把法律文档子树放入 Docker 构建上下文。
@@ -63,8 +64,8 @@ temp/
 
 # Deploy files (not needed in image)
 deploy/install.sh
-deploy/sub2api.service
-deploy/sub2api-sudoers
+deploy/tokenrouter.service
+deploy/tokenrouter-sudoers
 deploy/data/
 deploy/postgres_data/
 deploy/redis_data/

@@ -24,7 +24,7 @@ type TencentCaptchaCallback = (result: TencentCaptchaResult) => void
 
 // 两个站点的构造函数签名不同，且不可互换：
 // - 中国站 TJCaptcha.js：第一个参数是 CaptchaAppId 字符串（传 DOM 走另一条分支）。
-// - 国际站 TJNCaptcha-global.js：第一个参数必须是承载 Robot checkbox 的 DOM 容器，传字符串会直接抛
+// - 国际站 TJNCaptcha-global.js：第一个参数是放置 Robot checkbox 的 DOM 容器，传字符串会直接抛
 //   "The parameter of the constructor of the Captcha is passed incorrectly"。
 type TencentCaptchaConstructor = {
   new (
@@ -43,7 +43,7 @@ type TencentCaptchaConstructor = {
 declare global {
   interface Window {
     TencentCaptcha?: TencentCaptchaConstructor
-    // 国际站入口脚本会置为 true；国内站脚本只读取、从不写入。
+    // 国际站入口脚本将该值设为 true，国内站脚本读取该值。
     // 用于判定页面上已存在的 TencentCaptcha 属于哪个站点。
     TCaptchaGlobal?: boolean
   }
@@ -81,7 +81,7 @@ export function loadTencentCaptcha(
     return Promise.resolve(window.TencentCaptcha)
   }
   if (window.TencentCaptcha && loadedRegion !== null && loadedRegion !== region) {
-    // 两个站点共享 TencentCaptcha 全局且构造签名不兼容，不能在同一页面注入第二份 SDK。
+    // 两个站点共享 TencentCaptcha 全局且构造签名不兼容，切换站点需要重新加载页面。
     // 管理员切换区域后由部署流程刷新页面，刷新前直接失败可避免全局构造函数被污染。
     return Promise.reject(new Error('Tencent Captcha region changed; reload the page to apply it'))
   }
@@ -94,8 +94,8 @@ export function loadTencentCaptcha(
     script.async = true
     script.onload = () => {
       // 入口脚本被重复引入时腾讯会在求值阶段抛错（"请勿多次引用腾讯验证码的接入js"），
-      // 此时 onload 仍会触发而全局仍是上一个站点的构造函数。校验站点，避免把
-      // 签名不兼容的构造函数当成本站点的返回出去。
+      // 此时 onload 仍会触发，全局仍可能是上一个站点的构造函数。
+      // 站点匹配后才返回构造函数，各站点使用不同的签名。
       if (window.TencentCaptcha && existingGlobalRegion() === region) {
         resolve(window.TencentCaptcha)
         return

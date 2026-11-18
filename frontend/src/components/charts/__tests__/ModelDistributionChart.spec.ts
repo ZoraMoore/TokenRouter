@@ -17,7 +17,7 @@ const messages: Record<string, string> = {
   'admin.dashboard.requests': 'Requests',
   'admin.dashboard.tokens': 'Tokens',
   'admin.dashboard.actual': 'Actual',
-  'admin.dashboard.accountCost': 'Account Cost',
+  'admin.dashboard.providerCost': 'Provider Cost',
   'admin.dashboard.standard': 'Standard',
   'admin.dashboard.metricTokens': 'By Tokens',
   'admin.dashboard.metricActualCost': 'By Actual Cost',
@@ -97,6 +97,8 @@ describe('ModelDistributionChart', () => {
     expect(rows[1].text()).toContain('model-b')
 
     const options = (wrapper.vm as any).$?.setupState.doughnutOptions
+    expect(options.plugins.tooltip.enabled).toBe(false)
+    expect(options.plugins.tooltip.external).toBeTypeOf('function')
     const label = options.plugins.tooltip.callbacks.label({
       label: 'model-a',
       dataIndex: 0,
@@ -133,11 +135,11 @@ describe('ModelDistributionChart', () => {
     expect(label).toBe('model-b: $1.40 (87.5%)')
   })
 
-  it('can hide account cost for user usage stats without account_cost', () => {
+  it('can hide provider cost for user usage stats without provider_cost', () => {
     const wrapper = mount(ModelDistributionChart, {
       props: {
         modelStats,
-        showAccountCost: false,
+        showProviderCost: false,
       },
       global: {
         stubs: {
@@ -146,7 +148,7 @@ describe('ModelDistributionChart', () => {
       },
     })
 
-    expect(wrapper.text()).not.toContain('Account Cost')
+    expect(wrapper.text()).not.toContain('Provider Cost')
     expect(wrapper.findAll('thead th')).toHaveLength(5)
     expect(wrapper.findAll('tbody tr')[0].findAll('td')).toHaveLength(5)
   })
@@ -184,6 +186,12 @@ describe('ModelDistributionChart', () => {
       'Others',
     ])
     expect(chartData.datasets[0].data).toEqual([12, 8, 0, 10])
+
+    const options = (wrapper.vm as any).$?.setupState.rankingDoughnutOptions
+    expect(options.plugins.tooltip.callbacks.label({ label: '#1 alpha', dataIndex: 0 }))
+      .toBe('#1 alpha: $12.00 (40.0%)')
+    expect(options.plugins.tooltip.callbacks.label({ label: 'Others', dataIndex: 3 }))
+      .toBe('Others: $10.00 (33.3%)')
     expect(chartData.datasets[0].backgroundColor[0]).toBe('#3b82f6')
     expect(chartData.datasets[0].backgroundColor[3]).toBe('#94a3b8')
     expect(chartData.datasets[0].backgroundColor[3]).not.toBe(chartData.datasets[0].backgroundColor[0])

@@ -3,8 +3,6 @@ package schema
 import (
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/domain"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
@@ -12,6 +10,8 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	"github.com/TokenFlux/TokenRouter/internal/promotion"
 )
 
 // PromoCode holds the schema definition for the PromoCode entity.
@@ -19,7 +19,7 @@ import (
 // 注册优惠码：用户注册时使用，可获得赠送余额
 // 与 RedeemCode 不同，PromoCode 支持多次使用（有使用次数限制）
 //
-// 删除策略：硬删除
+// 删除策略：硬删除。
 type PromoCode struct {
 	ent.Schema
 }
@@ -49,7 +49,7 @@ func (PromoCode) Fields() []ent.Field {
 			Comment("已使用次数"),
 		field.String("status").
 			MaxLen(20).
-			Default(domain.PromoCodeStatusActive).
+			Default(promotion.PromoCodeStatusActive).
 			Comment("状态: active, disabled"),
 		field.Time("expires_at").
 			Optional().

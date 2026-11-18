@@ -67,7 +67,7 @@ describe('passkey api', () => {
           options: {
             publicKey: {
               challenge: 'AQID',
-              rpId: 'sub2api.example.com',
+              rpId: 'tokenrouter.example.com',
               userVerification: 'required'
             }
           }
@@ -114,7 +114,7 @@ describe('passkey api', () => {
           options: {
             publicKey: {
               challenge: 'AQID',
-              rpId: 'sub2api.example.com',
+              rpId: 'tokenrouter.example.com',
               userVerification: 'required'
             }
           }

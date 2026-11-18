@@ -9,6 +9,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
 import { useNavigationLoadingState, _resetNavigationLoadingInstance } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
+import { installNavigationLoading } from '@/router/navigationLoading'
 
 // Mock 视图组件
 const MockDashboard = defineComponent({
@@ -37,7 +38,6 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     isAuthenticated: true,
     isAdmin: false,
-    isSimpleMode: false,
     checkAuth: vi.fn()
   })
 }))
@@ -370,7 +370,7 @@ describe('Navigation Integration Tests', () => {
   })
 
   describe('导航状态管理', () => {
-    it('导航开始时 isLoading 应该变为 true', async () => {
+    it('导航结束后保留完成反馈，动画结束才隐藏', async () => {
       const navigationLoading = useNavigationLoadingState()
 
       // 创建一个延迟加载的组件来模拟真实场景
@@ -398,14 +398,8 @@ describe('Navigation Integration Tests', () => {
         ]
       })
 
-      // 设置导航守卫
-      delayRouter.beforeEach(() => {
-        navigationLoading.startNavigation()
-      })
-
-      delayRouter.afterEach(() => {
-        navigationLoading.endNavigation()
-      })
+      // 与生产路由使用同一生命周期绑定。
+      installNavigationLoading(delayRouter)
 
       const wrapper = mount(TestApp, {
         global: {
@@ -417,7 +411,10 @@ describe('Navigation Integration Tests', () => {
       await delayRouter.push('/dashboard')
       await flushPromises()
 
-      // 导航结束后 isLoading 应该为 false
+      // 路由已就绪，完成反馈仍保留，随后由动画事件结束。
+      expect(navigationLoading.isNavigating.value).toBe(false)
+      expect(navigationLoading.isLoading.value).toBe(true)
+      navigationLoading.finishNavigation(navigationLoading.navigationId.value)
       expect(navigationLoading.isLoading.value).toBe(false)
 
       wrapper.unmount()
@@ -446,13 +443,7 @@ describe('Navigation Integration Tests', () => {
         ]
       })
 
-      testRouter.beforeEach(() => {
-        navigationLoading.startNavigation()
-      })
-
-      testRouter.afterEach(() => {
-        navigationLoading.endNavigation()
-      })
+      installNavigationLoading(testRouter)
 
       const wrapper = mount(TestApp, {
         global: {
@@ -468,8 +459,10 @@ describe('Navigation Integration Tests', () => {
       await testRouter.push('/keys').catch(() => {})
       await flushPromises()
 
-      // 导航被取消后，状态应该被重置
-      // 注意：由于 afterEach 仍然会被调用，isLoading 应该为 false
+      // 中止导航与成功导航共用完成反馈，不残留进行中的状态。
+      expect(navigationLoading.isNavigating.value).toBe(false)
+      expect(navigationLoading.isLoading.value).toBe(true)
+      navigationLoading.finishNavigation(navigationLoading.navigationId.value)
       expect(navigationLoading.isLoading.value).toBe(false)
 
       wrapper.unmount()

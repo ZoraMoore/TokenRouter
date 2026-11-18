@@ -7,7 +7,7 @@
   >
     <div class="space-y-4">
       <!-- 头部 -->
-      <div class="flex items-center justify-between">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p class="text-sm text-gray-500 dark:text-gray-400">
           {{ t('admin.tlsFingerprintProfiles.description') }}
         </p>
@@ -18,7 +18,7 @@
       </div>
 
       <!-- 收集器 -->
-      <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-800/60">
+      <div class="rounded-surface border border-gray-200 bg-gray-50 p-4 dark:border-dark-600 dark:bg-dark-800/60">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div class="flex items-center gap-2">
@@ -88,7 +88,185 @@
           {{ collectorStatus.last_error }}
         </p>
 
+        <!-- 已认证入站采集链路独立于 CONNECT 收集器，客户正常调用 API 即可进入该链路。 -->
+        <section
+          class="mt-4 border-t border-gray-200 pt-4 dark:border-dark-600"
+          aria-labelledby="authenticated-ingress-title"
+          data-testid="authenticated-ingress-status"
+        >
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h5 id="authenticated-ingress-title" class="text-sm font-medium text-gray-900 dark:text-white">
+                  {{ t('admin.tlsFingerprintProfiles.authenticatedIngress.title') }}
+                </h5>
+                <span
+                  v-if="authenticatedIngressStatus"
+                  :class="[
+                    'rounded-full px-2 py-0.5 text-xs font-medium',
+                    authenticatedIngressStatus.enabled
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                      : 'bg-gray-200 text-gray-600 dark:bg-dark-600 dark:text-gray-300'
+                  ]"
+                >
+                  {{ authenticatedIngressStatus.enabled
+                    ? t('admin.tlsFingerprintProfiles.authenticatedIngress.enabled')
+                    : t('admin.tlsFingerprintProfiles.authenticatedIngress.disabled') }}
+                </span>
+              </div>
+              <p class="mt-1 max-w-3xl text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.tlsFingerprintProfiles.authenticatedIngress.description') }}
+              </p>
+            </div>
+            <button
+              type="button"
+              class="btn btn-secondary btn-xs shrink-0"
+              :disabled="authenticatedIngressLoading"
+              :aria-label="t('admin.tlsFingerprintProfiles.authenticatedIngress.refresh')"
+              data-testid="authenticated-ingress-refresh"
+              @click="loadAuthenticatedIngressStatus"
+            >
+              <Icon name="refresh" size="xs" :class="['mr-1', authenticatedIngressLoading ? 'animate-spin' : '']" />
+              {{ t('admin.tlsFingerprintProfiles.authenticatedIngress.refresh') }}
+            </button>
+          </div>
+
+          <div
+            v-if="authenticatedIngressLoading && !authenticatedIngressStatus"
+            class="mt-3 flex min-h-16 items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400"
+            role="status"
+            aria-live="polite"
+          >
+            <Icon name="refresh" size="sm" class="animate-spin" />
+            {{ t('admin.tlsFingerprintProfiles.authenticatedIngress.loading') }}
+          </div>
+
+          <div
+            v-else-if="authenticatedIngressError && !authenticatedIngressStatus"
+            class="mt-3 rounded-control border border-red-200 bg-red-50 px-3 py-3 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300"
+            role="alert"
+            data-testid="authenticated-ingress-error"
+          >
+            <p class="break-words">{{ authenticatedIngressError }}</p>
+            <button type="button" class="btn btn-secondary btn-xs mt-2" @click="loadAuthenticatedIngressStatus">
+              {{ t('admin.tlsFingerprintProfiles.authenticatedIngress.retry') }}
+            </button>
+          </div>
+
+          <template v-else-if="authenticatedIngressStatus">
+            <dl
+              v-if="hasAuthenticatedIngressActivity"
+              class="mt-3 grid gap-px overflow-hidden rounded-control bg-gray-200 sm:grid-cols-2 lg:grid-cols-4 dark:bg-dark-600"
+              data-testid="authenticated-ingress-metrics"
+            >
+              <div
+                v-for="metric in authenticatedIngressMetrics"
+                :key="metric.key"
+                class="min-w-0 bg-white px-3 py-2.5 dark:bg-dark-900/60"
+              >
+                <dt class="break-words text-xs text-gray-500 dark:text-gray-400">{{ metric.label }}</dt>
+                <dd class="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                  {{ formatCount(metric.value) }}
+                </dd>
+              </div>
+            </dl>
+
+            <div
+              v-else
+              class="mt-3 rounded-control border border-dashed border-gray-300 px-3 py-4 text-center text-xs text-gray-500 dark:border-dark-600 dark:text-gray-400"
+              data-testid="authenticated-ingress-empty"
+            >
+              {{ authenticatedIngressStatus.enabled
+                ? t('admin.tlsFingerprintProfiles.authenticatedIngress.noActivity')
+                : t('admin.tlsFingerprintProfiles.authenticatedIngress.disabledHint') }}
+            </div>
+
+            <div class="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+              <span>
+                {{ t('admin.tlsFingerprintProfiles.authenticatedIngress.lastVerified') }}:
+                <span class="text-gray-700 dark:text-gray-300">{{ formatDateTime(authenticatedIngressStatus.last_verified_at) }}</span>
+              </span>
+              <span v-if="authenticatedIngressLoading" role="status" aria-live="polite">
+                {{ t('admin.tlsFingerprintProfiles.authenticatedIngress.refreshing') }}
+              </span>
+            </div>
+
+            <p
+              v-if="authenticatedIngressError"
+              class="mt-3 break-words text-xs text-amber-700 dark:text-amber-300"
+              role="alert"
+              data-testid="authenticated-ingress-refresh-error"
+            >
+              {{ authenticatedIngressError }}
+            </p>
+            <p
+              v-if="authenticatedIngressStatus.last_error"
+              class="mt-3 break-words text-xs text-red-600 dark:text-red-400"
+              role="alert"
+              data-testid="authenticated-ingress-backend-error"
+            >
+              {{ t('admin.tlsFingerprintProfiles.authenticatedIngress.lastError') }}:
+              {{ authenticatedIngressStatus.last_error }}
+            </p>
+          </template>
+        </section>
+
         <div v-if="isCollectorRunning" class="mt-4 space-y-3">
+          <div class="rounded-control border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-900/60">
+            <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label class="input-label" for="tls-capture-client-kind">{{ t('admin.tlsFingerprintProfiles.collector.clientKind') }}</label>
+                <Select
+                  id="tls-capture-client-kind"
+                  v-model="collectorSessionForm.client_kind"
+                  :options="collectorClientKindOptions"
+                  :searchable="false"
+                  :aria-label="t('admin.tlsFingerprintProfiles.collector.clientKind')"
+                />
+              </div>
+              <div>
+                <label class="input-label" for="tls-capture-client-version">{{ t('admin.tlsFingerprintProfiles.collector.clientVersion') }}</label>
+                <input id="tls-capture-client-version" v-model="collectorSessionForm.client_version" class="input" maxlength="128" autocomplete="off" placeholder="0.144.1" />
+              </div>
+              <div>
+                <label class="input-label" for="tls-capture-os">{{ t('admin.tlsFingerprintProfiles.collector.operatingSystem') }}</label>
+                <input id="tls-capture-os" v-model="collectorSessionForm.operating_system" class="input" maxlength="128" autocomplete="off" placeholder="Ubuntu 22.04" />
+              </div>
+              <div>
+                <label class="input-label" for="tls-capture-arch">{{ t('admin.tlsFingerprintProfiles.collector.architecture') }}</label>
+                <input id="tls-capture-arch" v-model="collectorSessionForm.architecture" class="input" maxlength="128" autocomplete="off" placeholder="x86_64" />
+              </div>
+              <div>
+                <label class="input-label" for="tls-capture-runtime">{{ t('admin.tlsFingerprintProfiles.collector.runtime') }}</label>
+                <input id="tls-capture-runtime" v-model="collectorSessionForm.runtime" class="input" maxlength="128" autocomplete="off" placeholder="rust / node" />
+              </div>
+              <div>
+                <label class="input-label" for="tls-capture-runtime-version">{{ t('admin.tlsFingerprintProfiles.collector.runtimeVersion') }}</label>
+                <input id="tls-capture-runtime-version" v-model="collectorSessionForm.runtime_version" class="input" maxlength="128" autocomplete="off" placeholder="24.3.0" />
+              </div>
+              <div class="md:col-span-2">
+                <label class="input-label" for="tls-capture-target">{{ t('admin.tlsFingerprintProfiles.collector.targetHost') }}</label>
+                <Select
+                  id="tls-capture-target"
+                  v-model="collectorSessionForm.target_host"
+                  :options="collectorTargetOptions"
+                  :searchable="false"
+                  :aria-label="t('admin.tlsFingerprintProfiles.collector.targetHost')"
+                />
+              </div>
+            </div>
+            <label class="mt-3 flex min-h-11 cursor-pointer items-center gap-3 rounded-control bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-dark-800 dark:text-gray-200">
+              <input v-model="collectorSessionForm.cold_start_confirmed" type="checkbox" class="h-4 w-4 rounded-compact border-gray-300 text-primary-600 focus:ring-primary-500" />
+              <span>{{ t('admin.tlsFingerprintProfiles.collector.coldStartConfirmed') }}</span>
+            </label>
+            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.tlsFingerprintProfiles.collector.controlledHint') }}
+            </p>
+            <p v-if="collectorSessionError" class="mt-2 text-xs text-red-600 dark:text-red-400" role="alert">
+              {{ collectorSessionError }}
+            </p>
+          </div>
+
           <div class="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -111,49 +289,40 @@
             </button>
           </div>
 
-          <div v-if="collectorSession" class="space-y-3 rounded-md border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-900/60">
+          <div v-if="collectorSession" class="space-y-3 rounded-control border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-900/60">
             <div class="grid gap-3 text-xs sm:grid-cols-2">
               <div>
-                <div class="text-gray-500 dark:text-gray-400">{{ t('admin.tlsFingerprintProfiles.collector.captureURL') }}</div>
-                <div class="mt-1 break-all font-mono text-gray-900 dark:text-gray-100">{{ collectorSession.capture_url }}</div>
+                <div class="text-gray-500 dark:text-gray-400">{{ t('admin.tlsFingerprintProfiles.collector.proxyURL') }}</div>
+                <div class="mt-1 break-all font-mono text-gray-900 dark:text-gray-100">{{ collectorSession.proxy_url || '—' }}</div>
               </div>
               <div>
                 <div class="text-gray-500 dark:text-gray-400">{{ t('admin.tlsFingerprintProfiles.collector.expiresAt') }}</div>
                 <div class="mt-1 text-gray-900 dark:text-gray-100">{{ formatDateTime(collectorSession.expires_at) }}</div>
               </div>
+              <div>
+                <div class="text-gray-500 dark:text-gray-400">{{ t('admin.tlsFingerprintProfiles.collector.targetHost') }}</div>
+                <div class="mt-1 font-mono text-gray-900 dark:text-gray-100">{{ collectorSession.target_host || '—' }}</div>
+              </div>
+              <div>
+                <div class="text-gray-500 dark:text-gray-400">{{ t('admin.tlsFingerprintProfiles.collector.declaredClient') }}</div>
+                <div class="mt-1 text-gray-900 dark:text-gray-100">
+                  {{ formatClientKind(collectorSession.client_kind || '') }} {{ collectorSession.client_version || '' }} · {{ collectorSession.operating_system || '—' }} / {{ collectorSession.architecture || '—' }}
+                </div>
+              </div>
             </div>
 
-            <div class="grid gap-3 lg:grid-cols-3">
-              <div class="min-w-0">
-                <div class="mb-1 flex items-center justify-between">
-                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ t('admin.tlsFingerprintProfiles.collector.claudeCommand') }}</span>
-                  <button type="button" class="btn btn-secondary btn-xs" @click="copyText(claudeCommand)">
-                    <Icon name="copy" size="xs" class="mr-1" />
-                    {{ t('common.copy') }}
-                  </button>
-                </div>
-                <pre class="max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded bg-gray-900 p-2 text-xs leading-relaxed text-gray-100">{{ claudeCommand }}</pre>
+            <div class="min-w-0">
+              <div class="mb-1 flex items-center justify-between gap-3">
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ t('admin.tlsFingerprintProfiles.collector.controlledCommand') }}</span>
+                <button type="button" class="btn btn-secondary btn-xs" @click="copyText(controlledCaptureCommand)">
+                  <Icon name="copy" size="xs" class="mr-1" />
+                  {{ t('common.copy') }}
+                </button>
               </div>
-              <div class="min-w-0">
-                <div class="mb-1 flex items-center justify-between">
-                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ t('admin.tlsFingerprintProfiles.collector.codexCommand') }}</span>
-                  <button type="button" class="btn btn-secondary btn-xs" @click="copyText(codexCommand)">
-                    <Icon name="copy" size="xs" class="mr-1" />
-                    {{ t('common.copy') }}
-                  </button>
-                </div>
-                <pre class="max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded bg-gray-900 p-2 text-xs leading-relaxed text-gray-100">{{ codexCommand }}</pre>
-              </div>
-              <div class="min-w-0">
-                <div class="mb-1 flex items-center justify-between">
-                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ t('admin.tlsFingerprintProfiles.collector.codexConfig') }}</span>
-                  <button type="button" class="btn btn-secondary btn-xs" @click="copyText(codexConfigSnippet)">
-                    <Icon name="copy" size="xs" class="mr-1" />
-                    {{ t('common.copy') }}
-                  </button>
-                </div>
-                <pre class="max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded bg-gray-900 p-2 text-xs leading-relaxed text-gray-100">{{ codexConfigSnippet }}</pre>
-              </div>
+              <pre class="max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded-compact bg-gray-900 p-2 text-xs leading-relaxed text-gray-100">{{ controlledCaptureCommand }}</pre>
+              <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                {{ t('admin.tlsFingerprintProfiles.collector.commandStopsBeforeHTTP') }}
+              </p>
             </div>
 
             <div v-if="activeCAPEM" class="flex flex-wrap items-center gap-2">
@@ -177,35 +346,56 @@
                 {{ t('admin.tlsFingerprintProfiles.collector.captureCount', { count: collectorCaptures.length }) }}
               </span>
             </div>
-            <div v-if="collectorCaptures.length === 0" class="rounded-md border border-dashed border-gray-300 px-3 py-4 text-center text-xs text-gray-500 dark:border-dark-600 dark:text-gray-400">
+            <div v-if="collectorCaptures.length === 0" class="rounded-control border border-dashed border-gray-300 px-3 py-4 text-center text-xs text-gray-500 dark:border-dark-600 dark:text-gray-400">
               {{ t('admin.tlsFingerprintProfiles.collector.noCaptures') }}
             </div>
             <div
               v-for="record in collectorCaptures"
               :key="record.id"
-              class="rounded-md border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-900/60"
+              class="rounded-control border border-gray-200 bg-white p-3 dark:border-dark-600 dark:bg-dark-900/60"
             >
               <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div class="min-w-0 text-xs">
                   <div class="flex flex-wrap items-center gap-2">
                     <span class="font-medium text-gray-900 dark:text-white">{{ formatClientKind(record.client_kind) }}</span>
                     <span class="font-mono text-gray-500 dark:text-gray-400">{{ record.ja3_hash }}</span>
+                    <span
+                      :class="[
+                        'rounded-full px-2 py-0.5 text-xs font-medium',
+                        record.promotion_eligible
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                      ]"
+                    >
+                      {{ record.promotion_eligible ? t('admin.tlsFingerprintProfiles.collector.ready') : t('admin.tlsFingerprintProfiles.collector.blocked') }}
+                    </span>
                   </div>
                   <div class="mt-1 break-all text-gray-500 dark:text-gray-400">
                     {{ record.user_agent || '—' }}
                   </div>
                   <div class="mt-1 text-gray-500 dark:text-gray-400">
-                    {{ formatDateTime(record.captured_at) }} · {{ record.http_proto || '—' }} · ALPN {{ record.negotiated_alpn || '—' }}
+                    {{ formatDateTime(record.captured_at) }} · {{ record.target_host || '—' }} · {{ t('admin.tlsFingerprintProfiles.collector.matchingSamples', { count: record.matching_sample_count || 0 }) }}
                   </div>
+                  <ul v-if="record.blocked_reasons?.length" class="mt-2 space-y-1 text-amber-700 dark:text-amber-300" role="status">
+                    <li v-for="reason in record.blocked_reasons" :key="reason" class="break-words">{{ reason }}</li>
+                  </ul>
+                  <ul v-if="record.replay_validation?.warnings?.length" class="mt-2 space-y-1 text-gray-500 dark:text-gray-400">
+                    <li v-for="warning in record.replay_validation.warnings" :key="warning.code" class="break-words">{{ warning.message }}</li>
+                  </ul>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                   <button type="button" class="btn btn-secondary btn-xs" @click="copyText(record.yaml)">
                     <Icon name="copy" size="xs" class="mr-1" />
                     {{ t('admin.tlsFingerprintProfiles.collector.copyYaml') }}
                   </button>
-                  <button type="button" class="btn btn-primary btn-xs" @click="applyCapture(record)">
-                    <Icon name="check" size="xs" class="mr-1" />
-                    {{ t('admin.tlsFingerprintProfiles.collector.applyCapture') }}
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-xs"
+                    :disabled="!record.promotion_eligible || promotingCaptureId === record.id"
+                    @click="promoteCapture(record)"
+                  >
+                    <Icon :name="promotingCaptureId === record.id ? 'refresh' : 'check'" size="xs" :class="['mr-1', promotingCaptureId === record.id ? 'animate-spin' : '']" />
+                    {{ t('admin.tlsFingerprintProfiles.collector.promoteCapture') }}
                   </button>
                 </div>
               </div>
@@ -231,7 +421,7 @@
         </p>
       </div>
 
-      <div v-else class="max-h-96 overflow-auto rounded-lg border border-gray-200 dark:border-dark-600">
+      <div v-else class="max-h-96 overflow-auto rounded-surface border border-gray-200 dark:border-dark-600">
         <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
           <thead class="sticky top-0 bg-gray-50 dark:bg-dark-700">
             <tr>
@@ -240,6 +430,9 @@
               </th>
               <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
                 {{ t('admin.tlsFingerprintProfiles.columns.description') }}
+              </th>
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                {{ t('admin.tlsFingerprintProfiles.columns.validation') }}
               </th>
               <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
                 {{ t('admin.tlsFingerprintProfiles.columns.grease') }}
@@ -262,6 +455,26 @@
                   {{ profile.description }}
                 </div>
                 <div v-else class="text-xs text-gray-400 dark:text-gray-600">—</div>
+              </td>
+              <td class="px-3 py-2">
+                <span :class="['rounded-full px-2 py-0.5 text-xs font-medium', validationStatusClass(profile.verification?.validation_status)]">
+                  {{ formatValidationStatus(profile.verification?.validation_status) }}
+                </span>
+                <div
+                  class="mt-1 text-xs text-gray-500 dark:text-gray-400"
+                  :data-testid="`tls-profile-source-${profile.id}`"
+                >
+                  {{ formatVerificationSource(profile.verification?.source_kind) }}
+                </div>
+                <div
+                  v-if="profile.verification?.validation_status === 'verified' && !profile.verification?.approved_for_use"
+                  class="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300"
+                >
+                  {{ t('admin.tlsFingerprintProfiles.approval.pending') }}
+                </div>
+                <div v-if="profile.verification?.capture_target" class="mt-1 font-mono text-xs text-gray-500 dark:text-gray-400">
+                  {{ profile.verification.capture_target }}
+                </div>
               </td>
               <td class="px-3 py-2">
                 <Icon
@@ -288,9 +501,20 @@
               <td class="px-3 py-2">
                 <div class="flex items-center gap-1">
                   <button
+                    v-if="profile.verification?.validation_status === 'verified' && !profile.verification?.approved_for_use"
+                    type="button"
+                    class="btn btn-secondary btn-xs"
+                    :disabled="approvingProfileId === profile.id"
+                    @click="approveProfile(profile)"
+                  >
+                    <Icon name="check" size="xs" :class="['mr-1', approvingProfileId === profile.id ? 'animate-pulse' : '']" />
+                    {{ t('admin.tlsFingerprintProfiles.approval.approve') }}
+                  </button>
+                  <button
                     @click="handleEdit(profile)"
                     class="p-1 text-gray-500 hover:text-primary-600 dark:hover:text-primary-400"
                     :title="t('common.edit')"
+                    :aria-label="t('common.edit')"
                   >
                     <Icon name="edit" size="sm" />
                   </button>
@@ -307,6 +531,7 @@
                     @click="handleDelete(profile)"
                     class="p-1 text-gray-500 hover:text-red-600 dark:hover:text-red-400"
                     :title="t('common.delete')"
+                    :aria-label="t('common.delete')"
                   >
                     <Icon name="trash" size="sm" />
                   </button>
@@ -335,6 +560,9 @@
       @close="closeFormModal"
     >
       <form @submit.prevent="handleSubmit" class="space-y-4">
+        <div class="rounded-control bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200" role="status">
+          {{ t('admin.tlsFingerprintProfiles.form.manualDraftWarning') }}
+        </div>
         <!-- 粘贴 YAML -->
         <div>
           <label class="input-label">{{ t('admin.tlsFingerprintProfiles.form.pasteYaml') }}</label>
@@ -359,7 +587,7 @@
         <hr class="border-gray-200 dark:border-dark-600" />
 
         <!-- 基础信息 -->
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label class="input-label">{{ t('admin.tlsFingerprintProfiles.form.name') }}</label>
             <input
@@ -386,6 +614,8 @@
           <button
             type="button"
             @click="form.enable_grease = !form.enable_grease"
+            :aria-label="t('admin.tlsFingerprintProfiles.form.enableGrease')"
+            :aria-pressed="form.enable_grease"
             :class="[
               'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
               form.enable_grease ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
@@ -409,7 +639,7 @@
         </div>
 
         <!-- TLS 数组字段 -->
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label class="input-label text-xs">{{ t('admin.tlsFingerprintProfiles.form.cipherSuites') }}</label>
             <textarea
@@ -436,6 +666,16 @@
             <label class="input-label text-xs">{{ t('admin.tlsFingerprintProfiles.form.signatureAlgorithms') }}</label>
             <textarea
               v-model="fieldInputs.signature_algorithms"
+              rows="2"
+              class="input font-mono text-xs"
+              :placeholder="'0x0403, 0x0804, 0x0401'"
+            />
+          </div>
+
+          <div>
+            <label class="input-label text-xs">{{ t('admin.tlsFingerprintProfiles.form.signatureAlgorithmsCert') }}</label>
+            <textarea
+              v-model="fieldInputs.signature_algorithms_cert"
               rows="2"
               class="input font-mono text-xs"
               :placeholder="'0x0403, 0x0804, 0x0401'"
@@ -538,13 +778,16 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import type {
+  CreateTLSFingerprintCollectorSessionRequest,
   TLSFingerprintCaptureRecord,
+  TLSFingerprintAuthenticatedIngressStatus,
   TLSFingerprintCollectorSession,
   TLSFingerprintCollectorStatus,
   TLSFingerprintProfile
 } from '@/api/admin/tlsFingerprintProfile'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import Select, { type SelectOption } from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const props = defineProps<{
@@ -555,7 +798,6 @@ const emit = defineEmits<{
   close: []
 }>()
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 void emit // 模板中通过 $emit 使用，脚本侧保留引用避免类型告警。
 
 const { t } = useI18n()
@@ -569,15 +811,68 @@ const showEditModal = ref(false)
 const showDeleteDialog = ref(false)
 const editingProfile = ref<TLSFingerprintProfile | null>(null)
 const deletingProfile = ref<TLSFingerprintProfile | null>(null)
+const approvingProfileId = ref<number | null>(null)
 const yamlInput = ref('')
 const collectorStatus = ref<TLSFingerprintCollectorStatus | null>(null)
+const authenticatedIngressStatus = ref<TLSFingerprintAuthenticatedIngressStatus | null>(null)
 const collectorSession = ref<TLSFingerprintCollectorSession | null>(null)
 const collectorCaptures = ref<TLSFingerprintCaptureRecord[]>([])
 const collectorLoading = ref(false)
+const authenticatedIngressLoading = ref(false)
+const authenticatedIngressError = ref('')
 const collectorActionLoading = ref(false)
 const collectorSessionLoading = ref(false)
 const collectorCapturesLoading = ref(false)
+const promotingCaptureId = ref<string | null>(null)
+const collectorSessionError = ref('')
 let collectorPollTimer: number | null = null
+
+const collectorSessionForm = reactive<CreateTLSFingerprintCollectorSessionRequest>({
+  mode: 'controlled_connect',
+  client_kind: 'codex',
+  client_version: '',
+  runtime: '',
+  runtime_version: '',
+  operating_system: '',
+  architecture: '',
+  target_host: 'chatgpt.com',
+  cold_start_confirmed: false
+})
+
+const collectorClientKindOptions = computed<SelectOption[]>(() => [
+  { value: 'codex', label: 'Codex CLI' },
+  { value: 'node', label: 'Node.js' },
+  { value: 'claude_code', label: 'Claude Code' }
+])
+const collectorTargetOptions = computed<SelectOption[]>(() => [
+  { value: 'chatgpt.com', label: t('admin.tlsFingerprintProfiles.collector.targetChatGPT') },
+  { value: 'api.openai.com', label: t('admin.tlsFingerprintProfiles.collector.targetOpenAIAPI') }
+])
+const canCreateCollectorSession = computed(() => Boolean(
+  collectorSessionForm.client_kind &&
+  collectorSessionForm.client_version.trim() &&
+  collectorSessionForm.operating_system.trim() &&
+  collectorSessionForm.architecture.trim() &&
+  collectorSessionForm.target_host &&
+  collectorSessionForm.cold_start_confirmed
+))
+const authenticatedIngressMetrics = computed(() => {
+  const status = authenticatedIngressStatus.value
+  return [
+    { key: 'pending_client_hellos', label: t('admin.tlsFingerprintProfiles.authenticatedIngress.pendingClientHellos'), value: status?.pending_client_hellos },
+    { key: 'pending_authenticated_flows', label: t('admin.tlsFingerprintProfiles.authenticatedIngress.pendingAuthenticatedFlows'), value: status?.pending_authenticated_flows },
+    { key: 'matched_flows', label: t('admin.tlsFingerprintProfiles.authenticatedIngress.matchedFlows'), value: status?.matched_flows },
+    { key: 'rejected_flows', label: t('admin.tlsFingerprintProfiles.authenticatedIngress.rejectedFlows'), value: status?.rejected_flows },
+    { key: 'candidate_groups', label: t('admin.tlsFingerprintProfiles.authenticatedIngress.candidateGroups'), value: status?.candidate_groups },
+    { key: 'validations_in_flight', label: t('admin.tlsFingerprintProfiles.authenticatedIngress.validationsInFlight'), value: status?.validations_in_flight },
+    { key: 'verified_profiles_created', label: t('admin.tlsFingerprintProfiles.authenticatedIngress.verifiedProfilesCreated'), value: status?.verified_profiles_created },
+    { key: 'existing_profiles_matched', label: t('admin.tlsFingerprintProfiles.authenticatedIngress.existingProfilesMatched'), value: status?.existing_profiles_matched }
+  ]
+})
+const hasAuthenticatedIngressActivity = computed(() => (
+  authenticatedIngressMetrics.value.some(metric => Number(metric.value || 0) > 0) ||
+  Boolean(authenticatedIngressStatus.value?.last_verified_at)
+))
 
 // 数组字段以字符串形式编辑，提交前再统一解析。
 const fieldInputs = reactive({
@@ -585,6 +880,7 @@ const fieldInputs = reactive({
   curves: '',
   point_formats: '',
   signature_algorithms: '',
+  signature_algorithms_cert: '',
   alpn_protocols: '',
   supported_versions: '',
   key_share_groups: '',
@@ -600,30 +896,20 @@ const form = reactive({
 
 const isCollectorRunning = computed(() => Boolean(collectorStatus.value?.running))
 const activeCAPEM = computed(() => collectorSession.value?.ca_pem || collectorStatus.value?.ca_pem || '')
-const claudeCommand = computed(() => {
-  if (!collectorSession.value) return ''
-  const tlsPrefix = activeCAPEM.value ? 'NODE_TLS_REJECT_UNAUTHORIZED=0 ' : ''
-  const settings = {
-    env: {
-      ANTHROPIC_BASE_URL: collectorSession.value.capture_url,
-      ANTHROPIC_AUTH_TOKEN: collectorSession.value.token
-    }
+const controlledCaptureCommand = computed(() => {
+  const session = collectorSession.value
+  if (!session?.proxy_url) return ''
+  const proxy = JSON.stringify(session.proxy_url)
+  if (session.client_kind === 'node') {
+    const ca = activeCAPEM.value ? 'NODE_EXTRA_CA_CERTS=/path/to/tokenrouter-tls-collector-ca.pem ' : ''
+    return `${ca}HTTPS_PROXY=${proxy} https_proxy=${proxy} node your-script.js`
   }
-  // Claude Code 会优先读取自身 settings.env，因此用 --settings 保证采集地址覆盖全局配置。
-  return `${tlsPrefix}claude --settings '${JSON.stringify(settings)}' "test"`
-})
-const codexCommand = computed(() => {
-  if (!collectorSession.value) return ''
-  const caPrefix = activeCAPEM.value ? 'CODEX_CA_CERTIFICATE=/path/to/tokenrouter-tls-collector-ca.pem ' : ''
-  const captureURL = collectorSession.value.capture_url
-  return `${caPrefix}codex -c 'openai_base_url="${captureURL}"' -c 'chatgpt_base_url="${captureURL}"'`
-})
-const codexConfigSnippet = computed(() => {
-  if (!collectorSession.value) return ''
-  return [
-    `openai_base_url = "${collectorSession.value.capture_url}"`,
-    `chatgpt_base_url = "${collectorSession.value.capture_url}"`
-  ].join('\n')
+  if (session.client_kind === 'claude_code') {
+    const ca = activeCAPEM.value ? 'NODE_EXTRA_CA_CERTS=/path/to/tokenrouter-tls-collector-ca.pem ' : ''
+    return `${ca}HTTPS_PROXY=${proxy} https_proxy=${proxy} claude "test"`
+  }
+  const ca = activeCAPEM.value ? 'CODEX_CA_CERTIFICATE=/path/to/tokenrouter-tls-collector-ca.pem ' : ''
+  return `${ca}HTTPS_PROXY=${proxy} https_proxy=${proxy} codex`
 })
 
 // 弹窗打开时刷新模板列表与收集器状态。
@@ -631,6 +917,7 @@ watch(() => props.show, (newVal) => {
   if (newVal) {
     loadProfiles()
     loadCollectorStatus()
+    loadAuthenticatedIngressStatus()
   } else {
     stopCollectorPolling()
   }
@@ -660,6 +947,7 @@ const resetForm = () => {
   fieldInputs.curves = ''
   fieldInputs.point_formats = ''
   fieldInputs.signature_algorithms = ''
+  fieldInputs.signature_algorithms_cert = ''
   fieldInputs.alpn_protocols = ''
   fieldInputs.supported_versions = ''
   fieldInputs.key_share_groups = ''
@@ -683,6 +971,20 @@ async function loadCollectorStatus() {
 	} finally {
 		collectorLoading.value = false
 	}
+}
+
+// 已认证入站状态单独失败时保留旧快照，并在区块内提供重试入口。
+async function loadAuthenticatedIngressStatus() {
+  authenticatedIngressLoading.value = true
+  authenticatedIngressError.value = ''
+  try {
+    authenticatedIngressStatus.value = await adminAPI.tlsFingerprintProfiles.authenticatedIngressStatus()
+  } catch (error: any) {
+    authenticatedIngressError.value = error?.response?.data?.detail || error?.message || t('admin.tlsFingerprintProfiles.authenticatedIngress.loadFailed')
+    console.error('Error loading authenticated ingress TLS status:', error)
+  } finally {
+    authenticatedIngressLoading.value = false
+  }
 }
 
 const toggleCollector = async () => {
@@ -709,9 +1011,21 @@ const toggleCollector = async () => {
 }
 
 const createCollectorSession = async () => {
+  collectorSessionError.value = ''
+  if (!canCreateCollectorSession.value) {
+    collectorSessionError.value = t('admin.tlsFingerprintProfiles.collector.sessionValidationError')
+    return
+  }
   collectorSessionLoading.value = true
   try {
-    collectorSession.value = await adminAPI.tlsFingerprintProfiles.createCollectorSession()
+    collectorSession.value = await adminAPI.tlsFingerprintProfiles.createCollectorSession({
+      ...collectorSessionForm,
+      client_version: collectorSessionForm.client_version.trim(),
+      runtime: collectorSessionForm.runtime?.trim() || undefined,
+      runtime_version: collectorSessionForm.runtime_version?.trim() || undefined,
+      operating_system: collectorSessionForm.operating_system.trim(),
+      architecture: collectorSessionForm.architecture.trim()
+    })
     collectorCaptures.value = []
     startCollectorPolling()
     appStore.showSuccess(t('admin.tlsFingerprintProfiles.collector.sessionCreated'))
@@ -721,6 +1035,42 @@ const createCollectorSession = async () => {
     console.error('Error creating TLS fingerprint collector session:', error)
   } finally {
     collectorSessionLoading.value = false
+  }
+}
+
+const promoteCapture = async (record: TLSFingerprintCaptureRecord) => {
+  if (!collectorSession.value || !record.promotion_eligible) return
+  promotingCaptureId.value = record.id
+  try {
+    await adminAPI.tlsFingerprintProfiles.promoteCollectorCapture(
+      collectorSession.value.token,
+      record.id,
+      { name: record.profile?.name }
+    )
+    appStore.showSuccess(t('admin.tlsFingerprintProfiles.collector.promoteSuccess'))
+    await loadProfiles()
+    await refreshCollectorCaptures()
+  } catch (error: any) {
+    appStore.showError(error?.response?.data?.detail || t('admin.tlsFingerprintProfiles.collector.promoteFailed'))
+    console.error('Error promoting TLS fingerprint capture:', error)
+  } finally {
+    promotingCaptureId.value = null
+  }
+}
+
+const approveProfile = async (profile: TLSFingerprintProfile) => {
+  approvingProfileId.value = profile.id
+  try {
+    await adminAPI.tlsFingerprintProfiles.setApproval(profile.id, {
+      approved_for_use: true,
+      random_pool_eligible: false
+    })
+    appStore.showSuccess(t('admin.tlsFingerprintProfiles.approval.success'))
+    await loadProfiles()
+  } catch (error: any) {
+    appStore.showError(error?.response?.data?.detail || t('admin.tlsFingerprintProfiles.approval.failed'))
+  } finally {
+    approvingProfileId.value = null
   }
 }
 
@@ -759,21 +1109,12 @@ const fillFormFromProfile = (profile: TLSFingerprintProfile) => {
   fieldInputs.curves = formatPlainNumericArray(profile.curves)
   fieldInputs.point_formats = formatPlainNumericArray(profile.point_formats)
   fieldInputs.signature_algorithms = formatNumericArray(profile.signature_algorithms)
+  fieldInputs.signature_algorithms_cert = formatNumericArray(profile.signature_algorithms_cert)
   fieldInputs.alpn_protocols = (profile.alpn_protocols ?? []).join(', ')
   fieldInputs.supported_versions = formatNumericArray(profile.supported_versions)
   fieldInputs.key_share_groups = formatPlainNumericArray(profile.key_share_groups)
   fieldInputs.psk_modes = formatPlainNumericArray(profile.psk_modes)
   fieldInputs.extensions = formatNumericArray(profile.extensions)
-}
-
-const applyCapture = (record: TLSFingerprintCaptureRecord) => {
-  if (!record.profile) return
-  fillFormFromProfile(record.profile)
-  yamlInput.value = record.yaml || ''
-  editingProfile.value = null
-  showEditModal.value = false
-  showCreateModal.value = true
-  appStore.showSuccess(t('admin.tlsFingerprintProfiles.collector.applied'))
 }
 
 const copyText = async (text: string) => {
@@ -802,13 +1143,46 @@ const downloadCA = () => {
 
 const formatDateTime = (value?: string) => {
   if (!value) return '—'
-  return new Date(value).toLocaleString()
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString()
 }
+
+const formatCount = (value?: number) => new Intl.NumberFormat().format(
+  Number.isFinite(value) ? Math.max(0, Number(value)) : 0
+)
 
 const formatClientKind = (kind: string) => {
   if (kind === 'claude_code') return 'Claude Code'
   if (kind === 'codex') return 'Codex CLI'
+  if (kind === 'node') return 'Node.js'
   return t('admin.tlsFingerprintProfiles.collector.unknownClient')
+}
+
+const formatValidationStatus = (status?: string) => {
+  switch (status) {
+    case 'verified': return t('admin.tlsFingerprintProfiles.validation.verified')
+    case 'rejected': return t('admin.tlsFingerprintProfiles.validation.rejected')
+    case 'stale': return t('admin.tlsFingerprintProfiles.validation.stale')
+    default: return t('admin.tlsFingerprintProfiles.validation.draft')
+  }
+}
+
+const formatVerificationSource = (source?: string) => {
+  switch (source) {
+    case 'authenticated_ingress': return t('admin.tlsFingerprintProfiles.verificationSource.authenticatedIngress')
+    case 'controlled_connect': return t('admin.tlsFingerprintProfiles.verificationSource.controlledConnect')
+    case 'manual': return t('admin.tlsFingerprintProfiles.verificationSource.manual')
+    default: return t('admin.tlsFingerprintProfiles.verificationSource.legacy')
+  }
+}
+
+const validationStatusClass = (status?: string) => {
+  switch (status) {
+    case 'verified': return 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+    case 'rejected': return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+    case 'stale': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+    default: return 'bg-gray-200 text-gray-600 dark:bg-dark-600 dark:text-gray-300'
+  }
 }
 
 /**
@@ -863,6 +1237,7 @@ const parseYamlInput = () => {
       case 'curves':
       case 'point_formats':
       case 'signature_algorithms':
+      case 'signature_algorithms_cert':
       case 'supported_versions':
       case 'key_share_groups':
       case 'psk_modes':
@@ -987,6 +1362,7 @@ const buildProfileYaml = (profile: TLSFingerprintProfile): string => {
     `  curves: ${formatYamlNumericArray(profile.curves, formatDecimal)}`,
     `  point_formats: ${formatYamlNumericArray(profile.point_formats, formatDecimal)}`,
     `  signature_algorithms: ${formatYamlNumericArray(profile.signature_algorithms)}`,
+    `  signature_algorithms_cert: ${formatYamlNumericArray(profile.signature_algorithms_cert)}`,
     `  alpn_protocols: ${formatYamlStringArray(profile.alpn_protocols)}`,
     `  supported_versions: ${formatYamlNumericArray(profile.supported_versions)}`,
     `  key_share_groups: ${formatYamlNumericArray(profile.key_share_groups, formatDecimal)}`,
@@ -1026,6 +1402,7 @@ const handleSubmit = async () => {
       curves: parseNumericArray(fieldInputs.curves),
       point_formats: parseNumericArray(fieldInputs.point_formats),
       signature_algorithms: parseNumericArray(fieldInputs.signature_algorithms),
+      signature_algorithms_cert: parseNumericArray(fieldInputs.signature_algorithms_cert),
       alpn_protocols: parseStringArray(fieldInputs.alpn_protocols),
       supported_versions: parseNumericArray(fieldInputs.supported_versions),
       key_share_groups: parseNumericArray(fieldInputs.key_share_groups),

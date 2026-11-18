@@ -1,0 +1,60 @@
+//go:build integration
+
+package apikey_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/TokenFlux/TokenRouter/internal/apikey"
+	keypostgres "github.com/TokenFlux/TokenRouter/internal/apikey/postgres"
+	"github.com/TokenFlux/TokenRouter/internal/infra/postgres"
+	"github.com/TokenFlux/TokenRouter/migrations"
+)
+
+// TestRequestLimitsPersistence 覆盖空库迁移、重复执行、局部更新和认证查询。
+func TestRequestLimitsPersistence(t *testing.T) {
+	db, client := keyDatabase(t)
+	ctx := context.Background()
+	require.NoError(t, postgres.ApplyMigrations(ctx, db, migrations.FS))
+	migration, err := migrations.FS.ReadFile("289_api_key_request_limits.sql")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, string(migration))
+	require.NoError(t, err)
+	user, err := client.User.Create().SetEmail("request-limits@example.com").SetPasswordHash("test").Save(ctx)
+	require.NoError(t, err)
+	repo := keypostgres.NewKeyStore(client, db, nil)
+	key := &apikey.APIKey{UserID: user.ID, Key: "sk-request-limits", Name: "limits", Status: "active", ConcurrencyLimit: 2, RPMLimit: 10}
+	require.NoError(t, repo.Create(ctx, key))
+	loaded, err := repo.GetByKeyForAuth(ctx, key.Key)
+	require.NoError(t, err)
+	require.Equal(t, 2, loaded.ConcurrencyLimit)
+	require.Equal(t, 10, loaded.RPMLimit)
+	// 更新 RPM 时，陈旧对象中的并发值不能覆盖数据库配置。
+	_, err = db.ExecContext(ctx, "DELETE FROM auth_cache_invalidation_outbox")
+	require.NoError(t, err)
+	key.ConcurrencyLimit = 99
+	key.RPMLimit = 0
+	require.NoError(t, repo.Update(ctx, key, apikey.APIKeyUpdateFields{RPMLimit: true}))
+	loaded, err = repo.GetByID(ctx, key.ID)
+	require.NoError(t, err)
+	require.Equal(t, 2, loaded.ConcurrencyLimit)
+	require.Zero(t, loaded.RPMLimit)
+	key.ConcurrencyLimit = 0
+	require.NoError(t, repo.Update(ctx, key, apikey.APIKeyUpdateFields{ConcurrencyLimit: true}))
+	loaded, err = repo.GetByKeyForAuth(ctx, key.Key)
+	require.NoError(t, err)
+	require.Zero(t, loaded.ConcurrencyLimit)
+	// 两项配置的独立修改都需要通知其他实例清理认证缓存。
+	var invalidations int
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT count(*) FROM auth_cache_invalidation_outbox").Scan(&invalidations))
+	require.Equal(t, 2, invalidations)
+	// 数据库约束阻止绕过 HTTP 校验的负值写入。
+	_, err = db.ExecContext(ctx, "UPDATE api_keys SET rpm_limit=-1 WHERE id=$1", key.ID)
+	require.Error(t, err)
+	var count int
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT count(*) FROM schema_migrations WHERE filename=$1", "289_api_key_request_limits.sql").Scan(&count))
+	require.Equal(t, 1, count)
+}

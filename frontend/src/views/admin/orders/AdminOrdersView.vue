@@ -1,88 +1,89 @@
 <template>
   <AppLayout>
-    <div class="space-y-4">
+    <TablePageLayout>
+      <template #filters>
       <!-- 搜索和筛选工具栏 -->
       <div class="flex items-center gap-2 sm:justify-between">
         <div class="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
           <div class="min-w-0 flex-1 sm:flex-none sm:w-64">
             <input v-model="orderSearch" type="text" :placeholder="t('payment.admin.searchOrders')" class="input" @input="debounceLoadOrders" />
           </div>
-          <div ref="filterDropdownRef" class="relative shrink-0">
-            <button type="button" class="btn btn-secondary relative h-11 w-11 p-0" :aria-expanded="showFilterDropdown" :aria-label="t('common.filter')" :title="t('common.filter')" @click="showFilterDropdown = !showFilterDropdown">
-              <Icon name="filter" size="sm" />
-              <span v-if="activeFilterCount > 0" class="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-100 px-1.5 text-xs font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">{{ activeFilterCount }}</span>
-            </button>
-            <div v-if="showFilterDropdown" class="absolute left-auto right-0 top-full z-[60] mt-2 w-80 rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-dark-600 dark:bg-dark-900 sm:left-0 sm:right-auto" @click.stop>
-              <div class="mb-3 flex items-center justify-between">
-                <div class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('common.filter') }}</div>
-                <button v-if="activeFilterCount > 0" type="button" class="text-xs font-medium text-primary-600 dark:text-primary-400" @click="resetOrderFilters">{{ t('common.reset') }}</button>
-              </div>
-              <div class="space-y-3">
-                <Select v-model="orderFilters.status" :options="statusFilterOptions" @change="loadOrders" />
-                <Select v-model="orderFilters.payment_type" :options="paymentTypeFilterOptions" @change="loadOrders" />
-                <Select v-model="orderFilters.order_type" :options="orderTypeFilterOptions" @change="loadOrders" />
-              </div>
-            </div>
-          </div>
+          <FilterDropdown :active-count="activeFilterCount" @reset="resetOrderFilters">
+            <FilterField :label="t('payment.orders.status')">
+              <Select v-model="orderFilters.status" :options="statusFilterOptions" @change="loadOrders" />
+            </FilterField>
+            <FilterField :label="t('payment.orders.paymentMethod')">
+              <Select v-model="orderFilters.payment_type" :options="paymentTypeFilterOptions" @change="loadOrders" />
+            </FilterField>
+            <FilterField :label="t('payment.orders.orderType')">
+              <Select v-model="orderFilters.order_type" :options="orderTypeFilterOptions" @change="loadOrders" />
+            </FilterField>
+          </FilterDropdown>
         </div>
         <button
           @click="loadOrders"
           :disabled="ordersLoading"
-          class="btn btn-secondary h-11 w-11 shrink-0 p-0"
+          class="btn btn-secondary shrink-0 btn-icon"
           :title="t('common.refresh')"
         >
-          <Icon name="refresh" size="md" :class="ordersLoading ? 'animate-spin' : ''" />
+          <Icon name="refresh" size="sm" :class="ordersLoading ? 'animate-spin' : ''" />
         </button>
       </div>
+      </template>
 
-      <!-- Table -->
-      <OrderTable :orders="orders" :loading="ordersLoading" show-user>
+      <template #table>
+        <!-- 订单表格复用与 API Keys 相同的 TablePageLayout/DataTable 容器，订单字段和操作仍由本组件定制。 -->
+        <OrderTable :orders="orders" :loading="ordersLoading" show-user>
         <template #actions="{ row }">
           <div class="flex items-center gap-1">
-            <button @click="showOrderDetail(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-dark-600">
+            <button @click="showOrderDetail(row)" class="inline-flex items-center gap-1 rounded-compact px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-dark-700">
               <Icon name="eye" size="sm" />
               {{ t('common.view') }}
             </button>
-            <button v-if="canOpenInvoice(row)" @click="openInvoice(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20">
+            <button v-if="canOpenInvoice(row)" @click="openInvoice(row)" class="inline-flex items-center gap-1 rounded-compact px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 dark:text-primary-500 dark:hover:bg-primary-500/8">
               <Icon name="document" size="sm" />
               {{ t('payment.orders.invoice') }}
             </button>
-            <button v-if="row.status === 'PENDING'" @click="handleCancelOrder(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/20">
+            <button v-if="row.status === 'PENDING'" @click="handleCancelOrder(row)" class="inline-flex items-center gap-1 rounded-compact px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/20">
               <Icon name="x" size="sm" />
               {{ t('payment.orders.cancel') }}
             </button>
-            <button v-if="row.status === 'PENDING'" @click="openForceExpireDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20">
+            <button v-if="row.status === 'PENDING'" @click="openForceExpireDialog(row)" class="inline-flex items-center gap-1 rounded-compact px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20">
               <Icon name="exclamationTriangle" size="sm" />
               {{ t('payment.admin.forceExpire') }}
             </button>
-            <button v-if="row.status === 'FAILED'" @click="handleRetryOrder(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20">
+            <button v-if="row.status === 'FAILED'" @click="handleRetryOrder(row)" class="inline-flex items-center gap-1 rounded-compact px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 dark:text-primary-500 dark:hover:bg-primary-500/8">
               <Icon name="refresh" size="sm" />
               {{ t('payment.admin.retry') }}
             </button>
             <template v-if="row.status === 'REFUND_REQUESTED'">
               <span v-if="row.refund_amount" class="rounded-full bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">{{ formatOrderAmount(row.refund_amount, row) }}</span>
-              <button @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20">
-                <Icon name="check" size="sm" />
+              <button @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-compact px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20">
+                <Icon name="check" size="sm" :animate-on-hover="false" />
                 {{ t('payment.admin.approveRefund') }}
               </button>
             </template>
-            <button v-else-if="row.status === 'REFUND_FAILED'" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20">
+            <button v-else-if="row.status === 'REFUND_FAILED'" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-compact px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20">
               <Icon name="refresh" size="sm" />
               {{ t('payment.admin.retryRefund') }}
             </button>
-            <button v-else-if="row.status === 'REFUND_PENDING'" :disabled="refundQueryingIds.has(row.id)" @click="handleQueryRefund(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-50 disabled:opacity-60 dark:text-orange-400 dark:hover:bg-orange-900/20">
+            <button v-else-if="row.status === 'REFUND_PENDING' || row.status === 'REFUNDING'" :disabled="refundQueryingIds.has(row.id)" @click="handleQueryRefund(row)" class="inline-flex items-center gap-1 rounded-compact px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-50 disabled:opacity-60 dark:text-orange-400 dark:hover:bg-orange-900/20">
               <Icon name="refresh" size="sm" :class="refundQueryingIds.has(row.id) ? 'animate-spin' : ''" />
               {{ t('payment.admin.queryRefundStatus') }}
             </button>
-            <button v-else-if="row.status === 'COMPLETED' || row.status === 'PARTIALLY_REFUNDED'" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20">
+            <button v-else-if="row.status === 'COMPLETED' || row.status === 'PARTIALLY_REFUNDED'" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-compact px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20">
               <Icon name="dollar" size="sm" />
               {{ t('payment.admin.refund') }}
             </button>
           </div>
         </template>
-      </OrderTable>
-      <Pagination v-if="orderPagination.total > 0" :page="orderPagination.page" :total="orderPagination.total" :page-size="orderPagination.page_size" @update:page="handleOrderPageChange" @update:pageSize="handleOrderPageSizeChange" />
-    </div>
+        </OrderTable>
+      </template>
+
+      <template #pagination>
+        <Pagination v-if="orderPagination.total > 0" :page="orderPagination.page" :total="orderPagination.total" :page-size="orderPagination.page_size" @update:page="handleOrderPageChange" @update:pageSize="handleOrderPageSizeChange" />
+      </template>
+    </TablePageLayout>
 
     <!-- Order Detail Dialog -->
     <BaseDialog :show="showDetailDialog" :title="t('payment.admin.orderDetail')" width="wide" @close="showDetailDialog = false">
@@ -130,7 +131,7 @@
         <div v-if="orderAuditLogs.length > 0" class="border-t border-gray-200 pt-4 dark:border-dark-600">
           <p class="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('payment.admin.auditLogs') }}</p>
           <div class="max-h-48 space-y-2 overflow-y-auto">
-            <div v-for="log in orderAuditLogs" :key="log.id" class="rounded-lg border border-gray-100 bg-gray-50 p-2.5 dark:border-dark-600 dark:bg-dark-800">
+            <div v-for="log in orderAuditLogs" :key="log.id" class="rounded-control border border-gray-100 bg-gray-50 p-2.5 dark:border-dark-600 dark:bg-dark-800">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ log.action }}</span>
                 <span class="text-xs text-gray-400">{{ formatDateTime(log.created_at) }}</span>
@@ -145,10 +146,10 @@
 
     <BaseDialog :show="showForceExpireDialog" :title="t('payment.admin.forceExpireOrder')" width="normal" @close="closeForceExpireDialog">
       <form id="force-expire-form" class="space-y-4" @submit.prevent="handleForceExpireOrder">
-        <div class="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-200">
+        <div class="rounded-control border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-200">
           {{ t('payment.admin.forceExpireWarning') }}
         </div>
-        <div v-if="forceExpireTarget" class="rounded-md bg-gray-50 p-3 text-sm dark:bg-dark-700">
+        <div v-if="forceExpireTarget" class="rounded-control bg-gray-50 p-3 text-sm dark:bg-dark-700">
           <div class="flex justify-between gap-3">
             <span class="text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderId') }}</span>
             <span class="font-mono text-gray-900 dark:text-white">#{{ forceExpireTarget.id }}</span>
@@ -163,7 +164,7 @@
           <textarea id="force-expire-reason" v-model="forceExpireReason" rows="3" maxlength="500" class="input" :placeholder="t('payment.admin.forceExpireReasonPlaceholder')" required></textarea>
         </div>
         <label class="flex items-start gap-2 text-sm text-red-700 dark:text-red-300">
-          <input id="force-expire-confirm" v-model="forceExpireConfirmed" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500" />
+          <input id="force-expire-confirm" v-model="forceExpireConfirmed" type="checkbox" class="mt-0.5 h-4 w-4 rounded-compact border-gray-300 text-red-600 focus:ring-red-500" />
           <span>{{ t('payment.admin.forceExpireAcknowledge') }}</span>
         </label>
       </form>
@@ -182,7 +183,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminPaymentAPI } from '@/api/admin/payment'
@@ -191,9 +192,12 @@ import { formatOrderDateTime } from '@/components/payment/orderUtils'
 import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
 import type { PaymentOrder } from '@/types/payment'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
+import FilterDropdown from '@/components/common/FilterDropdown.vue'
+import FilterField from '@/components/common/FilterField.vue'
 import Icon from '@/components/icons/Icon.vue'
 import AdminRefundDialog from '@/components/admin/payment/AdminRefundDialog.vue'
 import OrderStatusBadge from '@/components/payment/OrderStatusBadge.vue'
@@ -216,8 +220,6 @@ const ordersLoading = ref(false)
 const orders = ref<PaymentOrder[]>([])
 const orderSearch = ref('')
 const orderFilters = reactive({ status: '', payment_type: '', order_type: '' })
-const showFilterDropdown = ref(false)
-const filterDropdownRef = ref<HTMLElement | null>(null)
 const activeFilterCount = computed(() => [orderFilters.status, orderFilters.payment_type, orderFilters.order_type].filter(Boolean).length)
 const orderPagination = reactive({ page: 1, page_size: 20, total: 0 })
 const selectedOrder = ref<PaymentOrder | null>(null)
@@ -240,12 +242,6 @@ function resetOrderFilters() {
   orderFilters.order_type = ''
   orderPagination.page = 1
   loadOrders()
-}
-
-function handleOrderClickOutside(event: MouseEvent) {
-  const target = event.target
-  if (target instanceof Node && filterDropdownRef.value?.contains(target)) return
-  showFilterDropdown.value = false
 }
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -465,8 +461,5 @@ function formatDateTime(dateStr: string): string { return formatOrderDateTime(da
 
 onMounted(() => {
   loadOrders()
-  document.addEventListener('click', handleOrderClickOutside)
 })
-
-onUnmounted(() => document.removeEventListener('click', handleOrderClickOutside))
 </script>
