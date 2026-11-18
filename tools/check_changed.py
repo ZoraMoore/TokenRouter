@@ -69,7 +69,7 @@ def go_test_packages(directories):
         ['go', 'list', '-e', '-f', '{{if or .GoFiles .TestGoFiles .XTestGoFiles}}{{.Dir}}{{end}}',
          *['./' + d for d in directories]],
         cwd=ROOT / 'backend', text=True)
-    return ['./' + os.path.relpath(d, ROOT / 'backend') for d in output.split()]
+    return ['./' + os.path.relpath(d, ROOT / 'backend') for d in output.splitlines() if d]
 
 
 def plan(files, base, go_packages=go_test_packages):
