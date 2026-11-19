@@ -601,6 +601,7 @@ export default {
     affiliateBalance: '邀请返利转余额',
     codeRedeemSuccess: '兑换成功！',
     balanceReceived: '余额已到账 {amount}',
+    couponReceived: '已领取充值优惠券',
     concurrencyReceived: '并发数 {count}',
     subscriptionReceived: '订阅已领取',
     dataRefreshFailed: '兑换成功，但数据刷新失败，请刷新页面查看。',

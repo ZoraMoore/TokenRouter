@@ -129,6 +129,9 @@
               <template v-else-if="row.type === 'subscription'">
                 {{ row.plan?.name || (row.plan_id ? `Plan #${row.plan_id}` : '-') }}
               </template>
+              <template v-else-if="row.type === 'coupon' && row.coupon_terms">
+                {{ t('payment.coupons.terms', rechargeCouponLabel(row.coupon_terms)) }}
+              </template>
               <template v-else>{{ value }}</template>
             </span>
           </template>
@@ -285,11 +288,12 @@
         </div>
         <div>
           <label class="input-label">{{ t('admin.redeem.codeType') }}</label>
-          <Select v-model="generateForm.type" :options="typeOptions" />
+          <Select v-model="generateForm.type" data-testid="generate-redeem-type" :options="typeOptions" />
         </div>
 
         <!-- 余额/并发类型：显示数值输入 -->
-        <div v-if="generateForm.type !== 'subscription' && generateForm.type !== 'invitation'">
+        <RechargeCouponFields v-if="generateForm.type === 'coupon'" v-model="generateForm.coupon" />
+        <div v-else-if="generateForm.type !== 'subscription' && generateForm.type !== 'invitation'">
           <label class="input-label">
             {{
               generateForm.type === 'balance'
@@ -405,7 +409,8 @@
             editingCode &&
             editingCode.used_count === 0 &&
             editingCode.type !== 'subscription' &&
-            editingCode.type !== 'invitation'
+            editingCode.type !== 'invitation' &&
+            editingCode.type !== 'coupon'
           "
         >
           <label class="input-label">
@@ -425,6 +430,7 @@
           />
         </div>
 
+        <RechargeCouponFields v-if="editingCode?.type === 'coupon' && editingCode.used_count === 0" v-model="editForm.coupon" />
         <div v-if="editingCode && editingCode.used_count === 0 && editingCode.type === 'subscription'">
           <label class="input-label">{{ t('payment.admin.planName') }}</label>
           <Select
@@ -632,7 +638,9 @@ import { useTableSelection } from '@/composables/useTableSelection'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { adminAPI } from '@/api/admin'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
-import type { BatchUpdateRedeemCodeFields, RedeemCode, RedeemCodeType } from '@/types'
+import type { BatchUpdateRedeemCodeFields, RedeemCode, RedeemCodeType, UpdateRedeemCodeRequest } from '@/types'
+import RechargeCouponFields from '@/components/payment/RechargeCouponFields.vue'
+import { emptyRechargeCouponInput, parseRechargeCouponTerms, rechargeCouponAmount, rechargeCouponLabel } from '@/components/payment/rechargeCoupon'
 import type { SubscriptionPlan } from '@/types/payment'
 import type { Column } from '@/components/common/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -736,7 +744,8 @@ const typeOptions = computed(() => [
   { value: 'balance', label: t('admin.redeem.balance') },
   { value: 'concurrency', label: t('admin.redeem.concurrency') },
   { value: 'subscription', label: t('admin.redeem.subscription') },
-  { value: 'invitation', label: t('admin.redeem.invitation') }
+  { value: 'invitation', label: t('admin.redeem.invitation') },
+  { value: 'coupon', label: t('admin.redeem.types.coupon') },
 ])
 
 const filterTypeOptions = computed(() => [
@@ -745,7 +754,8 @@ const filterTypeOptions = computed(() => [
   { value: 'affiliate_balance', label: t('admin.redeem.types.affiliate_balance') },
   { value: 'concurrency', label: t('admin.redeem.concurrency') },
   { value: 'subscription', label: t('admin.redeem.subscription') },
-  { value: 'invitation', label: t('admin.redeem.invitation') }
+  { value: 'invitation', label: t('admin.redeem.invitation') },
+  { value: 'coupon', label: t('admin.redeem.types.coupon') },
 ])
 
 const filterStatusOptions = computed(() => [
@@ -828,6 +838,7 @@ const generateForm = reactive({
   plan_id: null as number | null,
   max_uses: 1,
   requires_payment: false,
+  coupon: emptyRechargeCouponInput(),
   expires_at_str: ''
 })
 const hasCustomCode = computed(() => generateForm.code.trim().length > 0)
@@ -837,6 +848,7 @@ const editForm = reactive({
   plan_id: null as number | null,
   max_uses: 1,
   requires_payment: false,
+  coupon: emptyRechargeCouponInput(),
   expires_at_str: ''
 })
 
@@ -858,7 +870,7 @@ watch(
       generateForm.value = 0
       generateForm.max_uses = 1
       generateForm.requires_payment = false
-    } else if (newType === 'subscription') {
+    } else if (newType === 'subscription' || newType === 'coupon') {
       generateForm.value = 0
     } else if (generateForm.value === 0) {
       generateForm.value = 10
@@ -898,7 +910,7 @@ const getStatusBadgeClass = (status: RedeemCode['status']) => {
 }
 
 const canEditCode = (code: RedeemCode) => {
-  return ['balance', 'concurrency', 'subscription', 'invitation'].includes(code.type)
+  return ['balance', 'concurrency', 'subscription', 'invitation', 'coupon'].includes(code.type)
 }
 
 const toDateTimeLocalString = (value: string | null) => {
@@ -914,6 +926,7 @@ const resetGenerateForm = () => {
   generateForm.plan_id = null
   generateForm.max_uses = 1
   generateForm.requires_payment = false
+  generateForm.coupon = emptyRechargeCouponInput()
   generateForm.expires_at_str = ''
 }
 
@@ -1049,6 +1062,11 @@ const buildBatchUpdateFields = (): BatchUpdateRedeemCodeFields | null => {
 }
 
 const handleGenerateCodes = async () => {
+  const couponTerms = generateForm.type === 'coupon' ? parseRechargeCouponTerms(generateForm.coupon) : null
+  if (generateForm.type === 'coupon' && !couponTerms) {
+    appStore.showError(t('admin.redeem.coupon.invalid'))
+    return
+  }
   if (generateForm.type === 'subscription' && !generateForm.plan_id) {
     appStore.showError(t('admin.announcements.form.selectPackages'))
     return
@@ -1071,13 +1089,14 @@ const handleGenerateCodes = async () => {
     const result = await adminAPI.redeem.generate(
       customCode ? 1 : generateForm.count,
       generateForm.type,
-      generateForm.value,
+      couponTerms ? 0 : generateForm.value,
       generateForm.type === 'subscription' ? generateForm.plan_id : undefined,
       generateForm.max_uses,
       expiresAt,
       customCode || undefined,
       undefined,
-      generateForm.requires_payment
+      generateForm.requires_payment,
+      ...(couponTerms ? [couponTerms] as const : [] as const)
     )
     showGenerateDialog.value = false
     generatedCodes.value = result
@@ -1129,6 +1148,12 @@ const handleEdit = (code: RedeemCode) => {
   editForm.plan_id = code.plan_id ?? null
   editForm.max_uses = code.max_uses
   editForm.requires_payment = code.requires_payment ?? false
+  const terms = code.coupon_terms
+  editForm.coupon = terms ? {
+    currency: terms.currency,
+    minimum: String(rechargeCouponAmount(terms.minimum_minor, terms.currency)),
+    discount: String(rechargeCouponAmount(terms.discount_minor, terms.currency)),
+  } : emptyRechargeCouponInput()
   editForm.expires_at_str = toDateTimeLocalString(code.expires_at)
   showEditDialog.value = true
 }
@@ -1154,13 +1179,7 @@ const handleUpdateCode = async () => {
     return
   }
 
-  const payload: {
-    value?: number
-    plan_id?: number | null
-    requires_payment?: boolean
-    max_uses?: number
-    expires_at?: number | null
-  } = {
+  const payload: UpdateRedeemCodeRequest = {
     requires_payment: code.type === 'invitation' ? false : editForm.requires_payment,
     max_uses: code.type === 'invitation' ? 1 : editForm.max_uses
   }
@@ -1168,6 +1187,13 @@ const handleUpdateCode = async () => {
   if (code.used_count === 0) {
     if (code.type === 'subscription') {
       payload.plan_id = editForm.plan_id
+    } else if (code.type === 'coupon') {
+      const couponTerms = parseRechargeCouponTerms(editForm.coupon)
+      if (!couponTerms) {
+        appStore.showError(t('admin.redeem.coupon.invalid'))
+        return
+      }
+      payload.coupon_terms = couponTerms
     } else if (code.type !== 'invitation') {
       payload.value = editForm.value
     }

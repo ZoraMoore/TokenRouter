@@ -596,6 +596,7 @@ export default {
     affiliateBalance: 'Affiliate Balance Transfer',
     codeRedeemSuccess: 'Code redeemed successfully!',
     balanceReceived: 'Balance credited {amount}',
+    couponReceived: 'Recharge coupon claimed',
     concurrencyReceived: 'Concurrency {count}',
     subscriptionReceived: 'Subscription received',
     dataRefreshFailed: 'Redeemed successfully, but data could not be refreshed. Please reload the page.',

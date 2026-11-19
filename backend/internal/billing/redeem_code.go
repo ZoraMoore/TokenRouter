@@ -12,6 +12,7 @@ const (
 	RedeemTypeConcurrency  = "concurrency"
 	RedeemTypeSubscription = "subscription"
 	RedeemTypeInvitation   = "invitation"
+	RedeemTypeCoupon       = "coupon"
 
 	// Admin adjustment type constants.
 	AdjustmentTypeAdminBalance     = "admin_balance"     // 管理员调整余额
@@ -30,6 +31,10 @@ type RedeemCode struct {
 	Type   string
 	Value  float64
 	Status string
+	// CouponTerms 是优惠券码的门槛、折扣和币种。
+	CouponTerms *RechargeCouponTerms
+	// Coupon 在本次兑换发出优惠券时返回领取结果。
+	Coupon *RechargeCoupon
 	// RequiresPayment 表示领取者需要有成功付款记录。
 	RequiresPayment bool
 	MaxUses         int

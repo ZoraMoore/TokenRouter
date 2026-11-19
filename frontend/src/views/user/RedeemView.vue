@@ -72,6 +72,10 @@
               {{ submitting ? t('redeem.redeeming') : t('redeem.redeemButton') }}
             </button>
           </form>
+          <button type="button" class="btn btn-secondary w-full" @click="openCoupons">
+            <Icon name="ticket" size="sm" />
+            {{ t('payment.coupons.mine') }}
+          </button>
         </div>
       </section>
 
@@ -207,6 +211,28 @@
         </p>
       </section>
     </div>
+    <BaseDialog :show="showCoupons" :title="t('payment.coupons.mine')" @close="closeCoupons">
+      <ContentSkeleton v-if="couponLoading" variant="list" :rows="3" />
+      <p v-else-if="couponLoadError" class="text-sm text-red-600 dark:text-red-400" role="status">{{ couponLoadError }}</p>
+      <ul v-else-if="coupons.length" class="divide-y divide-gray-100 dark:divide-dark-700">
+        <li v-for="coupon in coupons" :key="coupon.id" class="flex flex-wrap items-center justify-between gap-2 py-3">
+          <div class="min-w-0">
+            <p class="text-sm font-medium">{{ t('payment.coupons.terms', rechargeCouponLabel(coupon)) }}</p>
+            <p class="text-xs text-gray-500 dark:text-dark-400">{{ formatDateTime(coupon.claimed_at) }}</p>
+          </div>
+          <span class="text-xs text-gray-500 dark:text-dark-400">{{ couponStatus(coupon) }}</span>
+        </li>
+      </ul>
+      <p v-else class="text-sm text-gray-500 dark:text-dark-400">{{ t('payment.coupons.empty') }}</p>
+      <Pagination
+        v-if="couponTotal > COUPON_PAGE_SIZE"
+        :page="couponPage"
+        :page-size="COUPON_PAGE_SIZE"
+        :total="couponTotal"
+        :show-page-size-selector="false"
+        @update:page="fetchCoupons"
+      />
+    </BaseDialog>
   </AppLayout>
 </template>
 
@@ -218,13 +244,17 @@ import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useSubscriptionStore } from '@/stores/subscriptions'
 import { redeemAPI, type RedeemHistoryItem } from '@/api'
+import { paymentAPI } from '@/api/payment'
+import type { RechargeCoupon } from '@/types/payment'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BalanceIcon from '@/components/common/BalanceIcon.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import SubscriptionUsageList from '@/components/common/SubscriptionUsageList.vue'
 import Icon from '@/components/icons/Icon.vue'
 import RedeemCelebration from '@/components/user/RedeemCelebration.vue'
+import { rechargeCouponLabel } from '@/components/payment/rechargeCoupon'
 import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
 import { formatDateTime } from '@/utils/format'
 
@@ -250,6 +280,14 @@ const history = ref<RedeemHistoryItem[]>([])
 const historyPage = ref(1)
 const historyTotal = ref(0)
 const loadingHistory = ref(false)
+const COUPON_PAGE_SIZE = 20
+const showCoupons = ref(false)
+const couponLoading = ref(false)
+const couponLoadError = ref('')
+const coupons = ref<RechargeCoupon[]>([])
+const couponPage = ref(1)
+const couponTotal = ref(0)
+let couponRequest: AbortController | undefined
 // 快速连续翻页时只采纳最后一次请求的结果。
 let historyRequestId = 0
 
@@ -301,6 +339,8 @@ const getHistoryItemTitle = (item: RedeemHistoryItem) => {
     return item.value >= 0 ? t('redeem.concurrencyAddedAdmin') : t('redeem.concurrencyReducedAdmin')
   } else if (item.type === 'subscription') {
     return t('redeem.subscriptionAssigned')
+  } else if (item.type === 'coupon') {
+    return t('redeem.couponReceived')
   } else if (item.type === 'affiliate_balance') {
     return t('redeem.affiliateBalance')
   }
@@ -320,6 +360,8 @@ const formatHistoryValue = (item: RedeemHistoryItem) => {
     return formatSignedBalanceAmount(item.value, 2)
   } else if (isSubscriptionType(item.type)) {
     return item.plan?.name || (item.plan_id ? `Plan #${item.plan_id}` : t('redeem.subscriptionAssigned'))
+  } else if (item.type === 'coupon' && item.coupon_terms) {
+    return t('payment.coupons.terms', rechargeCouponLabel(item.coupon_terms))
   } else {
     const sign = item.value >= 0 ? '+' : ''
     return `${sign}${item.value} ${t('redeem.requests')}`
@@ -353,6 +395,9 @@ const fetchHistory = async (page = historyPage.value) => {
 
 // 成功内容来自兑换响应，不依赖后续刷新，也不从余额差额推算到账金额。
 const getCelebrationDetail = (result: RedeemHistoryItem) => {
+  if (result.type === 'coupon' && result.coupon_terms) {
+    return t('payment.coupons.terms', rechargeCouponLabel(result.coupon_terms))
+  }
   if (result.type === 'balance') {
     return t('redeem.balanceReceived', { amount: formatSignedBalanceAmount(result.value, 2) })
   }
@@ -419,7 +464,44 @@ const handleRedeem = async () => {
   }
 }
 
+function couponStatus(coupon: RechargeCoupon) {
+  if (coupon.consumed_at) return t('payment.coupons.used')
+  if (coupon.order_id) return t('payment.coupons.reserved', { id: coupon.order_id })
+  return t('payment.coupons.available')
+}
+
+function openCoupons() {
+  showCoupons.value = true
+  void fetchCoupons(1)
+}
+
+function closeCoupons() {
+  showCoupons.value = false
+  couponRequest?.abort()
+}
+
+async function fetchCoupons(page: number) {
+  couponRequest?.abort()
+  const controller = new AbortController()
+  couponRequest = controller
+  couponLoading.value = true
+  couponLoadError.value = ''
+  try {
+    const { data } = await paymentAPI.listRechargeCoupons({ page, page_size: COUPON_PAGE_SIZE }, controller.signal)
+    if (!controller.signal.aborted) {
+      coupons.value = data.items
+      couponPage.value = page
+      couponTotal.value = data.total
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) couponLoadError.value = extractApiErrorMessage(error, t('payment.coupons.loadFailed'))
+  } finally {
+    if (!controller.signal.aborted) couponLoading.value = false
+  }
+}
+
 onBeforeUnmount(() => {
+  couponRequest?.abort()
   disposed = true
   historyRequestId++
 })

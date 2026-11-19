@@ -35,6 +35,13 @@
       <button class="btn btn-primary mt-6 w-full" @click="handleDone">{{ t('common.confirm') }}</button>
     </div>
 
+    <div v-else-if="outcome === 'review'" class="card p-6 text-center sm:p-8">
+      <Icon name="clock" size="lg" class="mx-auto text-yellow-600 dark:text-yellow-400" />
+      <p class="mt-4 text-lg font-semibold text-gray-900 dark:text-white">{{ t('payment.status.payment_review') }}</p>
+      <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">{{ t('payment.coupons.review') }}</p>
+      <button class="btn btn-primary mt-6 w-full" @click="handleDone">{{ t('common.confirm') }}</button>
+    </div>
+
     <!-- 已取消 -->
     <div v-else-if="outcome === 'cancelled'" class="card p-6 text-center sm:p-8">
       <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-500/10">
@@ -262,7 +269,7 @@ const props = defineProps<{
   mobileAlipayDeepLink?: boolean
 }>()
 
-type PaymentOutcome = 'success' | 'cancelled' | 'expired'
+type PaymentOutcome = 'success' | 'cancelled' | 'expired' | 'review'
 
 const emit = defineEmits<{ done: []; success: []; settled: [outcome: PaymentOutcome] }>()
 
@@ -290,7 +297,7 @@ const localeCode = computed(() => {
   return undefined
 })
 
-// Terminal outcome: null = still active, 'success' | 'cancelled' | 'expired'
+// 收到终态后停止轮询，并由用户确认返回结算页。
 const outcome = ref<PaymentOutcome | null>(null)
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -438,6 +445,11 @@ function applyResolvedOrderStatus(order: PaymentOrder | null): boolean {
   if (!order) return false
   if (order.status === 'PROCESSING') {
     enterProcessingState()
+    return true
+  }
+  if (order.status === 'PAYMENT_REVIEW') {
+    cleanup()
+    setOutcome('review')
     return true
   }
   if (isSuccessStatus(order.status)) {

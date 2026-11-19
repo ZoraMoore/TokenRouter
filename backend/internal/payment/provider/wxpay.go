@@ -409,6 +409,7 @@ func (w *Wxpay) QueryOrder(ctx context.Context, tradeNo string) (*payment.QueryO
 		Amount:   amt,
 		PaidAt:   pa,
 		Metadata: buildWxpayTransactionMetadata(tx),
+		Closed:   wxSV(tx.TradeState) == wxpayTradeStateClosed,
 	}, nil
 }
 

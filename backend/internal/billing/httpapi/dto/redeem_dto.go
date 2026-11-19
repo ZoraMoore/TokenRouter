@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"time"
+
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 type RedeemCode struct {
@@ -20,7 +22,9 @@ type RedeemCode struct {
 	UsedAt          *time.Time `json:"used_at"` // 最后一次成功兑换的时间
 	CreatedAt       time.Time  `json:"created_at"`
 
-	PlanID *int64 `json:"plan_id"`
+	PlanID      *int64                       `json:"plan_id"`
+	CouponTerms *billing.RechargeCouponTerms `json:"coupon_terms,omitempty"`
+	Coupon      *billing.RechargeCoupon      `json:"coupon,omitempty"`
 
 	// Notes is only populated for admin_balance/admin_concurrency types
 	// so users can see why they were charged or credited
@@ -48,10 +52,11 @@ type BatchUpdateRedeemCodeFields struct {
 	ExpiresAt NullableTimeField `json:"expires_at,omitempty"`
 	Notes     *string           `json:"notes,omitempty"`
 
-	Type    *string  `json:"type,omitempty"`
-	Value   *float64 `json:"value,omitempty"`
-	MaxUses *int     `json:"max_uses,omitempty"`
-	PlanID  *int64   `json:"plan_id,omitempty"`
+	Type        *string                      `json:"type,omitempty"`
+	Value       *float64                     `json:"value,omitempty"`
+	MaxUses     *int                         `json:"max_uses,omitempty"`
+	PlanID      *int64                       `json:"plan_id,omitempty"`
+	CouponTerms *billing.RechargeCouponTerms `json:"coupon_terms,omitempty"`
 }
 
 type BatchUpdateRedeemCodesRequest struct {

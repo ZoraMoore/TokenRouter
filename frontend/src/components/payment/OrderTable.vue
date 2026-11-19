@@ -18,7 +18,10 @@
         <span v-if="row.fee_rate > 0" class="ml-1 text-xs text-gray-400" :title="t('payment.orders.fee') + ': ' + row.fee_rate + '%'">
           ({{ t('payment.orders.fee') }} {{ row.fee_rate }}%)
         </span>
-        <div v-if="row.amount !== row.pay_amount" class="text-xs text-gray-500">
+        <div v-if="row.coupon_snapshot" class="text-xs text-gray-500">
+          {{ t('payment.coupons.discount') }} {{ formatRechargeCouponAmount(row.coupon_snapshot.discount_minor, row.coupon_snapshot.currency) }}
+        </div>
+        <div v-if="row.status !== 'PAYMENT_REVIEW' && row.amount !== row.pay_amount" class="text-xs text-gray-500">
           {{ t('payment.orders.creditedAmount') }}: {{ formatOrderAmount(row.amount, row) }}
         </div>
       </div>
@@ -48,6 +51,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import OrderStatusBadge from '@/components/payment/OrderStatusBadge.vue'
 import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
 import { formatPaymentAmount } from '@/components/payment/currency'
+import { formatRechargeCouponAmount } from '@/components/payment/rechargeCoupon'
 
 const { t } = useI18n()
 const { formatBalanceAmount } = useBalanceDisplay()

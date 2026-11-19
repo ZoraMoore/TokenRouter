@@ -446,6 +446,26 @@ func (_u *PaymentOrderUpdate) ClearBillingSnapshot() *PaymentOrderUpdate {
 	return _u
 }
 
+// SetCouponSnapshot sets the "coupon_snapshot" field.
+func (_u *PaymentOrderUpdate) SetCouponSnapshot(v billing.RechargeCouponSnapshot) *PaymentOrderUpdate {
+	_u.mutation.SetCouponSnapshot(v)
+	return _u
+}
+
+// SetNillableCouponSnapshot sets the "coupon_snapshot" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableCouponSnapshot(v *billing.RechargeCouponSnapshot) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetCouponSnapshot(*v)
+	}
+	return _u
+}
+
+// ClearCouponSnapshot clears the value of the "coupon_snapshot" field.
+func (_u *PaymentOrderUpdate) ClearCouponSnapshot() *PaymentOrderUpdate {
+	_u.mutation.ClearCouponSnapshot()
+	return _u
+}
+
 // SetOrderType sets the "order_type" field.
 func (_u *PaymentOrderUpdate) SetOrderType(v string) *PaymentOrderUpdate {
 	_u.mutation.SetOrderType(v)
@@ -1122,6 +1142,12 @@ func (_u *PaymentOrderUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if _u.mutation.BillingSnapshotCleared() {
 		_spec.ClearField(paymentorder.FieldBillingSnapshot, field.TypeJSON)
 	}
+	if value, ok := _u.mutation.CouponSnapshot(); ok {
+		_spec.SetField(paymentorder.FieldCouponSnapshot, field.TypeJSON, value)
+	}
+	if _u.mutation.CouponSnapshotCleared() {
+		_spec.ClearField(paymentorder.FieldCouponSnapshot, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.OrderType(); ok {
 		_spec.SetField(paymentorder.FieldOrderType, field.TypeString, value)
 	}
@@ -1704,6 +1730,26 @@ func (_u *PaymentOrderUpdateOne) SetBillingSnapshot(v map[string]interface{}) *P
 // ClearBillingSnapshot clears the value of the "billing_snapshot" field.
 func (_u *PaymentOrderUpdateOne) ClearBillingSnapshot() *PaymentOrderUpdateOne {
 	_u.mutation.ClearBillingSnapshot()
+	return _u
+}
+
+// SetCouponSnapshot sets the "coupon_snapshot" field.
+func (_u *PaymentOrderUpdateOne) SetCouponSnapshot(v billing.RechargeCouponSnapshot) *PaymentOrderUpdateOne {
+	_u.mutation.SetCouponSnapshot(v)
+	return _u
+}
+
+// SetNillableCouponSnapshot sets the "coupon_snapshot" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableCouponSnapshot(v *billing.RechargeCouponSnapshot) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetCouponSnapshot(*v)
+	}
+	return _u
+}
+
+// ClearCouponSnapshot clears the value of the "coupon_snapshot" field.
+func (_u *PaymentOrderUpdateOne) ClearCouponSnapshot() *PaymentOrderUpdateOne {
+	_u.mutation.ClearCouponSnapshot()
 	return _u
 }
 
@@ -2412,6 +2458,12 @@ func (_u *PaymentOrderUpdateOne) sqlSave(ctx context.Context) (_node *PaymentOrd
 	}
 	if _u.mutation.BillingSnapshotCleared() {
 		_spec.ClearField(paymentorder.FieldBillingSnapshot, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.CouponSnapshot(); ok {
+		_spec.SetField(paymentorder.FieldCouponSnapshot, field.TypeJSON, value)
+	}
+	if _u.mutation.CouponSnapshotCleared() {
+		_spec.ClearField(paymentorder.FieldCouponSnapshot, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.OrderType(); ok {
 		_spec.SetField(paymentorder.FieldOrderType, field.TypeString, value)

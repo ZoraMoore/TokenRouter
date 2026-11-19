@@ -18,6 +18,7 @@ import (
 	idempotencytest "github.com/TokenFlux/TokenRouter/internal/idempotency/testkit"
 	identityhttp "github.com/TokenFlux/TokenRouter/internal/identity/httpapi"
 	opshttp "github.com/TokenFlux/TokenRouter/internal/ops/httpapi"
+	paymenthttp "github.com/TokenFlux/TokenRouter/internal/payment/httpapi"
 	providerhttp "github.com/TokenFlux/TokenRouter/internal/provider/httpapi"
 	routinghttp "github.com/TokenFlux/TokenRouter/internal/routing/httpapi"
 	routingdto "github.com/TokenFlux/TokenRouter/internal/routing/httpapi/dto"
@@ -41,11 +42,12 @@ func TestIdempotencyHTTPUsesExplicitApplicationCoordinator(t *testing.T) {
 	groups := &routinghttp.GroupHandler{}
 	system := &opshttp.SystemHandler{}
 	usage := &usagehttp.UsageHandler{}
-	provideIdempotencyHTTP(coordinator, providers, archive, codex, keys, redeem, subscriptions, proxies, users, groups, system, usage)
+	payment := &paymenthttp.PaymentHandler{}
+	provideIdempotencyHTTP(coordinator, providers, archive, codex, keys, redeem, subscriptions, proxies, users, groups, system, usage, payment)
 	for _, handler := range []interface {
 		DefaultWriteIdempotencyTTL() time.Duration
 		DefaultSystemOperationIdempotencyTTL() time.Duration
-	}{providers, archive, codex, keys, redeem, subscriptions, proxies, users, groups, system, usage} {
+	}{providers, archive, codex, keys, redeem, subscriptions, proxies, users, groups, system, usage, payment} {
 		require.Equal(t, 2*time.Hour, handler.DefaultWriteIdempotencyTTL())
 		require.Equal(t, 17*time.Minute, handler.DefaultSystemOperationIdempotencyTTL())
 	}

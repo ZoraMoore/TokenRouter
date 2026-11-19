@@ -12,7 +12,9 @@ import type {
   CreateOrderRequest,
   CreateOrderResult,
   PaymentDocument,
-  PaymentOrder
+  PaymentOrder,
+  RechargeCoupon,
+  RechargeCouponQuote
 } from '@/types/payment'
 import type { BasePaginationResponse } from '@/types'
 
@@ -48,8 +50,19 @@ export const paymentAPI = {
   },
 
   /** Create a new payment order */
-  createOrder(data: CreateOrderRequest) {
+  createOrder(data: CreateOrderRequest, idempotencyKey?: string) {
+    if (idempotencyKey) {
+      return apiClient.post<CreateOrderResult>('/payment/orders', data, { headers: { 'Idempotency-Key': idempotencyKey } })
+    }
     return apiClient.post<CreateOrderResult>('/payment/orders', data)
+  },
+
+  listRechargeCoupons(params: { page: number; page_size: number; available?: boolean }, signal?: AbortSignal) {
+    return apiClient.get<BasePaginationResponse<RechargeCoupon>>('/payment/coupons', { params, signal })
+  },
+
+  quoteRechargeCoupon(data: { amount: number; payment_type: string; coupon_id: number }, signal: AbortSignal) {
+    return apiClient.post<RechargeCouponQuote>('/payment/coupons/quote', data, { signal })
   },
 
   /** Get current user's orders */

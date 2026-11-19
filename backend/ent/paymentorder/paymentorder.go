@@ -60,6 +60,8 @@ const (
 	FieldPaymentInvoiceStatus = "payment_invoice_status"
 	// FieldBillingSnapshot holds the string denoting the billing_snapshot field in the database.
 	FieldBillingSnapshot = "billing_snapshot"
+	// FieldCouponSnapshot holds the string denoting the coupon_snapshot field in the database.
+	FieldCouponSnapshot = "coupon_snapshot"
 	// FieldOrderType holds the string denoting the order_type field in the database.
 	FieldOrderType = "order_type"
 	// FieldPlanID holds the string denoting the plan_id field in the database.
@@ -147,6 +149,7 @@ var Columns = []string{
 	FieldPaymentInvoicePdfURL,
 	FieldPaymentInvoiceStatus,
 	FieldBillingSnapshot,
+	FieldCouponSnapshot,
 	FieldOrderType,
 	FieldPlanID,
 	FieldPlanSnapshot,

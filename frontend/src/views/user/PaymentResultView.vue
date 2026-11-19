@@ -20,6 +20,10 @@
             class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/30">
             <div class="spinner h-10 w-10 text-yellow-500"></div>
           </div>
+          <div v-else-if="isCouponReview"
+            class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/30">
+            <Icon name="clock" size="lg" class="text-yellow-600 dark:text-yellow-400" />
+          </div>
           <div v-else
             class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
             <Icon name="x" size="md" class="h-10 w-10 text-red-500" />
@@ -30,6 +34,7 @@
           <p v-if="isPending" class="mt-2 text-sm text-gray-500 dark:text-gray-400">
             {{ t('payment.result.processingHint') }}
           </p>
+          <p v-else-if="isCouponReview" class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('payment.coupons.review') }}</p>
         </div>
         <!-- Order Info -->
         <div v-if="order" class="rounded-surface bg-white p-5 shadow-sm dark:bg-dark-900">
@@ -45,6 +50,10 @@
             <div v-if="hasAmountFields(order)" class="flex justify-between">
               <span class="text-gray-500 dark:text-gray-400">{{ t('payment.orders.baseAmount') }}</span>
               <span class="font-medium text-gray-900 dark:text-white">{{ formatGatewayAmount(baseAmount) }}</span>
+            </div>
+            <div v-if="hasAmountFields(order) && order.coupon_snapshot" class="flex justify-between">
+              <span class="text-gray-500 dark:text-gray-400">{{ t('payment.coupons.discount') }}</span>
+              <span class="font-medium text-gray-900 dark:text-white">−{{ formatRechargeCouponAmount(order.coupon_snapshot.discount_minor, order.coupon_snapshot.currency) }}</span>
             </div>
             <div v-if="hasAmountFields(order) && order.fee_fixed > 0" class="flex justify-between">
               <span class="text-gray-500 dark:text-gray-400">{{ t('payment.fixedFee') }}</span>
@@ -62,7 +71,7 @@
               <span class="text-gray-500 dark:text-gray-400">{{ t('payment.orders.payAmount') }}</span>
               <span class="font-bold text-primary-600 dark:text-primary-400">{{ formatGatewayAmount(order.pay_amount) }}</span>
             </div>
-            <div v-if="hasAmountFields(order) && order.amount !== order.pay_amount" class="flex justify-between">
+            <div v-if="hasAmountFields(order) && !isCouponReview && order.amount !== order.pay_amount" class="flex justify-between">
               <span class="text-gray-500 dark:text-gray-400">{{ t('payment.orders.creditedAmount') }}</span>
               <span class="font-medium text-gray-900 dark:text-white">{{ formatOrderAmount(order.amount, order.order_type) }}</span>
             </div>
@@ -125,6 +134,7 @@ import { paymentAPI } from '@/api/payment'
 import type { PublicOrderVerifyResult } from '@/api/payment'
 import type { OrderStatus, PaymentOrder, PublicPaymentOrder } from '@/types/payment'
 import { formatPaymentAmount, normalizePaymentCurrency } from '@/components/payment/currency'
+import { formatRechargeCouponAmount, rechargeCouponAmount } from '@/components/payment/rechargeCoupon'
 import { normalizePaymentMethodForDisplay, paymentMethodI18nKey } from './paymentUx'
 
 const i18n = useI18n()
@@ -162,6 +172,8 @@ const refreshAttempts = ref(0)
 /** 基础金额优先使用订单原始金额；旧订单缺少拆分字段时按历史费率兜底。 */
 const baseAmount = computed(() => {
   if (!hasAmountFields(order.value)) return 0
+  const coupon = order.value.coupon_snapshot
+  if (coupon) return rechargeCouponAmount(coupon.recharge_minor, coupon.currency)
   const feeRate = Number(order.value.fee_rate) || 0
   if ((order.value.fee_amount || 0) > 0) return Math.round((order.value.pay_amount - order.value.fee_amount) * 100) / 100
   if (feeRate <= 0) return order.value.pay_amount ?? 0
@@ -193,6 +205,7 @@ const isSuccess = computed(() => {
 const isPending = computed(() => {
   return isPendingStatus(order.value?.status)
 })
+const isCouponReview = computed(() => normalizeOrderStatus(order.value?.status) === 'PAYMENT_REVIEW')
 
 const statusTitle = computed(() => {
   if (isSuccess.value) {
@@ -201,6 +214,7 @@ const statusTitle = computed(() => {
   if (isPending.value) {
     return t('payment.result.processing')
   }
+  if (isCouponReview.value) return t('payment.status.payment_review')
   return t('payment.result.failed')
 })
 

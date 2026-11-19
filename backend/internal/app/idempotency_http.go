@@ -8,6 +8,7 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/idempotency"
 	identityhttp "github.com/TokenFlux/TokenRouter/internal/identity/httpapi"
 	opshttp "github.com/TokenFlux/TokenRouter/internal/ops/httpapi"
+	paymenthttp "github.com/TokenFlux/TokenRouter/internal/payment/httpapi"
 	providerhttp "github.com/TokenFlux/TokenRouter/internal/provider/httpapi"
 	routinghttp "github.com/TokenFlux/TokenRouter/internal/routing/httpapi"
 	routingdto "github.com/TokenFlux/TokenRouter/internal/routing/httpapi/dto"
@@ -31,10 +32,11 @@ func provideIdempotencyHTTP(
 	groups *routinghttp.GroupHandler,
 	system *opshttp.SystemHandler,
 	usage *usagehttp.UsageHandler,
+	payment *paymenthttp.PaymentHandler,
 ) *idempotencyHTTPReady {
 	for _, consumer := range []interface {
 		BindIdempotency(*idempotency.IdempotencyCoordinator)
-	}{providers, archive, codex, keys, redeem, subscriptions, proxies, users, groups, system, usage} {
+	}{providers, archive, codex, keys, redeem, subscriptions, proxies, users, groups, system, usage, payment} {
 		consumer.BindIdempotency(coordinator)
 	}
 	return &idempotencyHTTPReady{}

@@ -39,37 +39,40 @@ type AdminRedeemHandler struct {
 
 // GenerateRedeemCodesRequest represents generate redeem codes request.
 type GenerateRedeemCodesRequest struct {
-	RequiresPayment bool    `json:"requires_payment"` // 默认允许所有用户领取
-	Code            string  `json:"code" binding:"omitempty,max=32"`
-	Count           int     `json:"count" binding:"required,min=1,max=100"`
-	Type            string  `json:"type" binding:"required,oneof=balance concurrency subscription invitation"`
-	Value           float64 `json:"value"`
-	MaxUses         *int    `json:"max_uses" binding:"omitempty,min=0"`
-	ExpiresAt       *int64  `json:"expires_at" binding:"omitempty,min=0"`
-	ExpiresInDays   *int    `json:"expires_in_days" binding:"omitempty,min=1,max=3650"`
-	PlanID          *int64  `json:"plan_id"` // 订阅类型必填
+	RequiresPayment bool                         `json:"requires_payment"` // 默认允许所有用户领取
+	Code            string                       `json:"code" binding:"omitempty,max=32"`
+	Count           int                          `json:"count" binding:"required,min=1,max=100"`
+	Type            string                       `json:"type" binding:"required,oneof=balance concurrency subscription invitation coupon"`
+	Value           float64                      `json:"value"`
+	MaxUses         *int                         `json:"max_uses" binding:"omitempty,min=0"`
+	ExpiresAt       *int64                       `json:"expires_at" binding:"omitempty,min=0"`
+	ExpiresInDays   *int                         `json:"expires_in_days" binding:"omitempty,min=1,max=3650"`
+	PlanID          *int64                       `json:"plan_id"` // 订阅类型必填
+	CouponTerms     *billing.RechargeCouponTerms `json:"coupon_terms"`
 }
 
 // UpdateRedeemCodeRequest 表示更新兑换码请求。
 type UpdateRedeemCodeRequest struct {
-	RequiresPayment *bool    `json:"requires_payment"` // 省略时保持领取条件
-	Value           *float64 `json:"value"`
-	MaxUses         *int     `json:"max_uses" binding:"omitempty,min=0"`
-	ExpiresAt       *int64   `json:"expires_at" binding:"omitempty,min=0"`
-	PlanID          *int64   `json:"plan_id"` // 订阅类型专用
+	RequiresPayment *bool                        `json:"requires_payment"` // 省略时保持领取条件
+	Value           *float64                     `json:"value"`
+	MaxUses         *int                         `json:"max_uses" binding:"omitempty,min=0"`
+	ExpiresAt       *int64                       `json:"expires_at" binding:"omitempty,min=0"`
+	PlanID          *int64                       `json:"plan_id"` // 订阅类型专用
+	CouponTerms     *billing.RechargeCouponTerms `json:"coupon_terms"`
 }
 
 // CreateAndRedeemCodeRequest represents creating a fixed code and redeeming it for a target user.
 // Type 使用 omitempty，未传入时默认为 balance。
 type CreateAndRedeemCodeRequest struct {
-	Code          string  `json:"code" binding:"required,min=3,max=128"`
-	Type          string  `json:"type" binding:"omitempty,oneof=balance concurrency subscription invitation"` // 不传时默认 balance（向后兼容）
-	Value         float64 `json:"value" binding:"required"`
-	UserID        int64   `json:"user_id" binding:"required,gt=0"`
-	PlanID        *int64  `json:"plan_id"` // subscription 类型必填
-	Notes         string  `json:"notes"`
-	ExpiresAt     *int64  `json:"expires_at" binding:"omitempty,min=0"`
-	ExpiresInDays *int    `json:"expires_in_days" binding:"omitempty,min=1,max=3650"`
+	Code          string                       `json:"code" binding:"required,min=3,max=128"`
+	Type          string                       `json:"type" binding:"omitempty,oneof=balance concurrency subscription invitation coupon"` // 省略时默认 balance
+	Value         float64                      `json:"value" binding:"required_unless=Type coupon"`
+	CouponTerms   *billing.RechargeCouponTerms `json:"coupon_terms"`
+	UserID        int64                        `json:"user_id" binding:"required,gt=0"`
+	PlanID        *int64                       `json:"plan_id"` // subscription 类型必填
+	Notes         string                       `json:"notes"`
+	ExpiresAt     *int64                       `json:"expires_at" binding:"omitempty,min=0"`
+	ExpiresInDays *int                         `json:"expires_in_days" binding:"omitempty,min=1,max=3650"`
 }
 
 // NewAdminRedeemHandler 创建管理员兑换码处理器。
@@ -182,6 +185,7 @@ func (h *AdminRedeemHandler) Update(c *gin.Context) {
 		Value:           req.Value,
 		MaxUses:         req.MaxUses,
 		PlanID:          req.PlanID,
+		CouponTerms:     req.CouponTerms,
 		ExpiresAtSet:    req.ExpiresAt != nil,
 	}
 	if req.ExpiresAt != nil && *req.ExpiresAt > 0 {
@@ -224,6 +228,7 @@ func (h *AdminRedeemHandler) Generate(c *gin.Context) {
 			MaxUses:         req.MaxUses,
 			ExpiresAt:       expiresAt,
 			PlanID:          req.PlanID,
+			CouponTerms:     req.CouponTerms,
 		})
 		if execErr != nil {
 			return nil, execErr
@@ -272,27 +277,28 @@ func (h *AdminRedeemHandler) CreateAndRedeem(c *gin.Context) {
 	h.ExecuteAdminIdempotentJSON(c, "admin.redeem_codes.create_and_redeem", req, h.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		existing, err := h.redeemService.GetByCode(ctx, req.Code)
 		if err == nil {
-			return h.resolveCreateAndRedeemExisting(ctx, existing, req.UserID)
+			return h.resolveCreateAndRedeemExisting(ctx, existing, req)
 		}
 		if !errors.Is(err, billing.ErrRedeemCodeNotFound) {
 			return nil, err
 		}
 
 		createErr := h.redeemService.CreateCode(ctx, &billing.RedeemCode{
-			Code:      req.Code,
-			Type:      req.Type,
-			Value:     req.Value,
-			Status:    billing.StatusUnused,
-			MaxUses:   1,
-			Notes:     req.Notes,
-			PlanID:    req.PlanID,
-			ExpiresAt: expiresAt,
+			Code:        req.Code,
+			Type:        req.Type,
+			Value:       req.Value,
+			Status:      billing.StatusUnused,
+			MaxUses:     1,
+			Notes:       req.Notes,
+			PlanID:      req.PlanID,
+			ExpiresAt:   expiresAt,
+			CouponTerms: req.CouponTerms,
 		})
 		if createErr != nil {
 			// 唯一码并发创建时，如果此时已能查到固定码，则按 used_by 做幂等处理。
 			existingAfterCreateErr, getErr := h.redeemService.GetByCode(ctx, req.Code)
 			if getErr == nil {
-				return h.resolveCreateAndRedeemExisting(ctx, existingAfterCreateErr, req.UserID)
+				return h.resolveCreateAndRedeemExisting(ctx, existingAfterCreateErr, req)
 			}
 			return nil, createErr
 		}
@@ -305,10 +311,16 @@ func (h *AdminRedeemHandler) CreateAndRedeem(c *gin.Context) {
 	})
 }
 
-func (h *AdminRedeemHandler) resolveCreateAndRedeemExisting(ctx context.Context, existing *billing.RedeemCode, userID int64) (any, error) {
+func (h *AdminRedeemHandler) resolveCreateAndRedeemExisting(ctx context.Context, existing *billing.RedeemCode, req CreateAndRedeemCodeRequest) (any, error) {
 	if existing == nil {
 		return nil, apperror.Conflict("REDEEM_CODE_CONFLICT", "redeem code conflict")
 	}
+	if req.Type == billing.RedeemTypeCoupon || existing.Type == billing.RedeemTypeCoupon {
+		if existing.Type != req.Type || existing.CouponTerms == nil || req.CouponTerms == nil || *existing.CouponTerms != *req.CouponTerms || req.Value != 0 || req.PlanID != nil {
+			return nil, apperror.Conflict("REDEEM_CODE_CONFLICT", "redeem code coupon terms differ from the existing code")
+		}
+	}
+	userID := req.UserID
 
 	if existing.UsedBy != nil && *existing.UsedBy == userID {
 		return gin.H{"redeem_code": RedeemCodeFromServiceAdmin(existing)}, nil
@@ -410,12 +422,13 @@ func (h *AdminRedeemHandler) BatchUpdate(c *gin.Context) {
 
 func RedeemBatchUpdateFieldsFromDTO(in BatchUpdateRedeemCodeFields) billing.RedeemCodeBatchUpdateFields {
 	out := billing.RedeemCodeBatchUpdateFields{
-		Status:  in.Status,
-		Notes:   in.Notes,
-		Type:    in.Type,
-		Value:   in.Value,
-		MaxUses: in.MaxUses,
-		PlanID:  in.PlanID,
+		Status:      in.Status,
+		Notes:       in.Notes,
+		Type:        in.Type,
+		Value:       in.Value,
+		MaxUses:     in.MaxUses,
+		PlanID:      in.PlanID,
+		CouponTerms: in.CouponTerms,
 	}
 	if in.ExpiresAt.Set {
 		out.ExpiresAt = billing.NullableTimeUpdate{Set: true, Value: in.ExpiresAt.Value}
@@ -475,6 +488,9 @@ func (h *AdminRedeemHandler) Export(c *gin.Context) {
 		"last_used_by_email",
 		"last_used_at",
 		"created_at",
+		"coupon_currency",
+		"coupon_minimum_minor",
+		"coupon_discount_minor",
 	}); err != nil {
 		response.InternalError(c, "Failed to export redeem codes: "+err.Error())
 		return
@@ -498,6 +514,12 @@ func (h *AdminRedeemHandler) Export(c *gin.Context) {
 		if code.ExpiresAt != nil {
 			expiresAt = code.ExpiresAt.Format("2006-01-02 15:04:05")
 		}
+		var couponCurrency, couponMinimum, couponDiscount string
+		if code.CouponTerms != nil {
+			couponCurrency = code.CouponTerms.Currency
+			couponMinimum = strconv.FormatInt(code.CouponTerms.MinimumMinor, 10)
+			couponDiscount = strconv.FormatInt(code.CouponTerms.DiscountMinor, 10)
+		}
 		if err := writer.Write([]string{
 			fmt.Sprintf("%d", code.ID),
 			code.Code,
@@ -511,6 +533,9 @@ func (h *AdminRedeemHandler) Export(c *gin.Context) {
 			usedByEmail,
 			usedAt,
 			code.CreatedAt.Format("2006-01-02 15:04:05"),
+			couponCurrency,
+			couponMinimum,
+			couponDiscount,
 		}); err != nil {
 			response.InternalError(c, "Failed to export redeem codes: "+err.Error())
 			return

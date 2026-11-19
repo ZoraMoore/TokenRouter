@@ -26428,6 +26428,7 @@ type PaymentOrderMutation struct {
 	payment_invoice_pdf_url *string
 	payment_invoice_status  *string
 	billing_snapshot        *map[string]interface{}
+	coupon_snapshot         *billing.RechargeCouponSnapshot
 	order_type              *string
 	plan_id                 *int64
 	addplan_id              *int64
@@ -27638,6 +27639,55 @@ func (m *PaymentOrderMutation) ResetBillingSnapshot() {
 	delete(m.clearedFields, paymentorder.FieldBillingSnapshot)
 }
 
+// SetCouponSnapshot sets the "coupon_snapshot" field.
+func (m *PaymentOrderMutation) SetCouponSnapshot(bcs billing.RechargeCouponSnapshot) {
+	m.coupon_snapshot = &bcs
+}
+
+// CouponSnapshot returns the value of the "coupon_snapshot" field in the mutation.
+func (m *PaymentOrderMutation) CouponSnapshot() (r billing.RechargeCouponSnapshot, exists bool) {
+	v := m.coupon_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCouponSnapshot returns the old "coupon_snapshot" field's value of the PaymentOrder entity.
+// If the PaymentOrder object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentOrderMutation) OldCouponSnapshot(ctx context.Context) (v billing.RechargeCouponSnapshot, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCouponSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCouponSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCouponSnapshot: %w", err)
+	}
+	return oldValue.CouponSnapshot, nil
+}
+
+// ClearCouponSnapshot clears the value of the "coupon_snapshot" field.
+func (m *PaymentOrderMutation) ClearCouponSnapshot() {
+	m.coupon_snapshot = nil
+	m.clearedFields[paymentorder.FieldCouponSnapshot] = struct{}{}
+}
+
+// CouponSnapshotCleared returns if the "coupon_snapshot" field was cleared in this mutation.
+func (m *PaymentOrderMutation) CouponSnapshotCleared() bool {
+	_, ok := m.clearedFields[paymentorder.FieldCouponSnapshot]
+	return ok
+}
+
+// ResetCouponSnapshot resets all changes to the "coupon_snapshot" field.
+func (m *PaymentOrderMutation) ResetCouponSnapshot() {
+	m.coupon_snapshot = nil
+	delete(m.clearedFields, paymentorder.FieldCouponSnapshot)
+}
+
 // SetOrderType sets the "order_type" field.
 func (m *PaymentOrderMutation) SetOrderType(s string) {
 	m.order_type = &s
@@ -28799,7 +28849,7 @@ func (m *PaymentOrderMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PaymentOrderMutation) Fields() []string {
-	fields := make([]string, 0, 47)
+	fields := make([]string, 0, 48)
 	if m.user != nil {
 		fields = append(fields, paymentorder.FieldUserID)
 	}
@@ -28868,6 +28918,9 @@ func (m *PaymentOrderMutation) Fields() []string {
 	}
 	if m.billing_snapshot != nil {
 		fields = append(fields, paymentorder.FieldBillingSnapshot)
+	}
+	if m.coupon_snapshot != nil {
+		fields = append(fields, paymentorder.FieldCouponSnapshot)
 	}
 	if m.order_type != nil {
 		fields = append(fields, paymentorder.FieldOrderType)
@@ -28995,6 +29048,8 @@ func (m *PaymentOrderMutation) Field(name string) (ent.Value, bool) {
 		return m.PaymentInvoiceStatus()
 	case paymentorder.FieldBillingSnapshot:
 		return m.BillingSnapshot()
+	case paymentorder.FieldCouponSnapshot:
+		return m.CouponSnapshot()
 	case paymentorder.FieldOrderType:
 		return m.OrderType()
 	case paymentorder.FieldPlanID:
@@ -29098,6 +29153,8 @@ func (m *PaymentOrderMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldPaymentInvoiceStatus(ctx)
 	case paymentorder.FieldBillingSnapshot:
 		return m.OldBillingSnapshot(ctx)
+	case paymentorder.FieldCouponSnapshot:
+		return m.OldCouponSnapshot(ctx)
 	case paymentorder.FieldOrderType:
 		return m.OldOrderType(ctx)
 	case paymentorder.FieldPlanID:
@@ -29315,6 +29372,13 @@ func (m *PaymentOrderMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBillingSnapshot(v)
+		return nil
+	case paymentorder.FieldCouponSnapshot:
+		v, ok := value.(billing.RechargeCouponSnapshot)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCouponSnapshot(v)
 		return nil
 	case paymentorder.FieldOrderType:
 		v, ok := value.(string)
@@ -29643,6 +29707,9 @@ func (m *PaymentOrderMutation) ClearedFields() []string {
 	if m.FieldCleared(paymentorder.FieldBillingSnapshot) {
 		fields = append(fields, paymentorder.FieldBillingSnapshot)
 	}
+	if m.FieldCleared(paymentorder.FieldCouponSnapshot) {
+		fields = append(fields, paymentorder.FieldCouponSnapshot)
+	}
 	if m.FieldCleared(paymentorder.FieldPlanID) {
 		fields = append(fields, paymentorder.FieldPlanID)
 	}
@@ -29731,6 +29798,9 @@ func (m *PaymentOrderMutation) ClearField(name string) error {
 		return nil
 	case paymentorder.FieldBillingSnapshot:
 		m.ClearBillingSnapshot()
+		return nil
+	case paymentorder.FieldCouponSnapshot:
+		m.ClearCouponSnapshot()
 		return nil
 	case paymentorder.FieldPlanID:
 		m.ClearPlanID()
@@ -29853,6 +29923,9 @@ func (m *PaymentOrderMutation) ResetField(name string) error {
 		return nil
 	case paymentorder.FieldBillingSnapshot:
 		m.ResetBillingSnapshot()
+		return nil
+	case paymentorder.FieldCouponSnapshot:
+		m.ResetCouponSnapshot()
 		return nil
 	case paymentorder.FieldOrderType:
 		m.ResetOrderType()
@@ -38784,6 +38857,7 @@ type RedeemCodeMutation struct {
 	_type                *string
 	value                *float64
 	addvalue             *float64
+	coupon_terms         *billing.RechargeCouponTerms
 	status               *string
 	requires_payment     *bool
 	max_uses             *int
@@ -39031,6 +39105,55 @@ func (m *RedeemCodeMutation) AddedValue() (r float64, exists bool) {
 func (m *RedeemCodeMutation) ResetValue() {
 	m.value = nil
 	m.addvalue = nil
+}
+
+// SetCouponTerms sets the "coupon_terms" field.
+func (m *RedeemCodeMutation) SetCouponTerms(bct billing.RechargeCouponTerms) {
+	m.coupon_terms = &bct
+}
+
+// CouponTerms returns the value of the "coupon_terms" field in the mutation.
+func (m *RedeemCodeMutation) CouponTerms() (r billing.RechargeCouponTerms, exists bool) {
+	v := m.coupon_terms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCouponTerms returns the old "coupon_terms" field's value of the RedeemCode entity.
+// If the RedeemCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RedeemCodeMutation) OldCouponTerms(ctx context.Context) (v billing.RechargeCouponTerms, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCouponTerms is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCouponTerms requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCouponTerms: %w", err)
+	}
+	return oldValue.CouponTerms, nil
+}
+
+// ClearCouponTerms clears the value of the "coupon_terms" field.
+func (m *RedeemCodeMutation) ClearCouponTerms() {
+	m.coupon_terms = nil
+	m.clearedFields[redeemcode.FieldCouponTerms] = struct{}{}
+}
+
+// CouponTermsCleared returns if the "coupon_terms" field was cleared in this mutation.
+func (m *RedeemCodeMutation) CouponTermsCleared() bool {
+	_, ok := m.clearedFields[redeemcode.FieldCouponTerms]
+	return ok
+}
+
+// ResetCouponTerms resets all changes to the "coupon_terms" field.
+func (m *RedeemCodeMutation) ResetCouponTerms() {
+	m.coupon_terms = nil
+	delete(m.clearedFields, redeemcode.FieldCouponTerms)
 }
 
 // SetStatus sets the "status" field.
@@ -39653,7 +39776,7 @@ func (m *RedeemCodeMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RedeemCodeMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 14)
 	if m.code != nil {
 		fields = append(fields, redeemcode.FieldCode)
 	}
@@ -39662,6 +39785,9 @@ func (m *RedeemCodeMutation) Fields() []string {
 	}
 	if m.value != nil {
 		fields = append(fields, redeemcode.FieldValue)
+	}
+	if m.coupon_terms != nil {
+		fields = append(fields, redeemcode.FieldCouponTerms)
 	}
 	if m.status != nil {
 		fields = append(fields, redeemcode.FieldStatus)
@@ -39707,6 +39833,8 @@ func (m *RedeemCodeMutation) Field(name string) (ent.Value, bool) {
 		return m.GetType()
 	case redeemcode.FieldValue:
 		return m.Value()
+	case redeemcode.FieldCouponTerms:
+		return m.CouponTerms()
 	case redeemcode.FieldStatus:
 		return m.Status()
 	case redeemcode.FieldRequiresPayment:
@@ -39742,6 +39870,8 @@ func (m *RedeemCodeMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldType(ctx)
 	case redeemcode.FieldValue:
 		return m.OldValue(ctx)
+	case redeemcode.FieldCouponTerms:
+		return m.OldCouponTerms(ctx)
 	case redeemcode.FieldStatus:
 		return m.OldStatus(ctx)
 	case redeemcode.FieldRequiresPayment:
@@ -39791,6 +39921,13 @@ func (m *RedeemCodeMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetValue(v)
+		return nil
+	case redeemcode.FieldCouponTerms:
+		v, ok := value.(billing.RechargeCouponTerms)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCouponTerms(v)
 		return nil
 	case redeemcode.FieldStatus:
 		v, ok := value.(string)
@@ -39931,6 +40068,9 @@ func (m *RedeemCodeMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *RedeemCodeMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(redeemcode.FieldCouponTerms) {
+		fields = append(fields, redeemcode.FieldCouponTerms)
+	}
 	if m.FieldCleared(redeemcode.FieldExpiresAt) {
 		fields = append(fields, redeemcode.FieldExpiresAt)
 	}
@@ -39960,6 +40100,9 @@ func (m *RedeemCodeMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *RedeemCodeMutation) ClearField(name string) error {
 	switch name {
+	case redeemcode.FieldCouponTerms:
+		m.ClearCouponTerms()
+		return nil
 	case redeemcode.FieldExpiresAt:
 		m.ClearExpiresAt()
 		return nil
@@ -39991,6 +40134,9 @@ func (m *RedeemCodeMutation) ResetField(name string) error {
 		return nil
 	case redeemcode.FieldValue:
 		m.ResetValue()
+		return nil
+	case redeemcode.FieldCouponTerms:
+		m.ResetCouponTerms()
 		return nil
 	case redeemcode.FieldStatus:
 		m.ResetStatus()

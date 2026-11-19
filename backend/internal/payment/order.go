@@ -38,6 +38,7 @@ type Order struct {
 	PaymentInvoicePdfURL *string                          `json:"payment_invoice_pdf_url,omitempty"`
 	PaymentInvoiceStatus *string                          `json:"payment_invoice_status,omitempty"`
 	BillingSnapshot      map[string]any                   `json:"billing_snapshot,omitempty"`
+	CouponSnapshot       *billing.RechargeCouponSnapshot  `json:"coupon_snapshot,omitempty"`
 	OrderType            string                           `json:"order_type,omitempty"`
 	PlanID               *int64                           `json:"plan_id,omitempty"`
 	PlanSnapshot         billing.SubscriptionPlanSnapshot `json:"plan_snapshot,omitempty"`
@@ -72,6 +73,10 @@ func (o *Order) Clone() *Order {
 		return nil
 	}
 	copy := *o
+	if o.CouponSnapshot != nil {
+		value := *o.CouponSnapshot
+		copy.CouponSnapshot = &value
+	}
 	if o.UserNotes != nil {
 		value := *o.UserNotes
 		copy.UserNotes = &value

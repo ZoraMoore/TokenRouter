@@ -20,6 +20,8 @@ const (
 	FieldType = "type"
 	// FieldValue holds the string denoting the value field in the database.
 	FieldValue = "value"
+	// FieldCouponTerms holds the string denoting the coupon_terms field in the database.
+	FieldCouponTerms = "coupon_terms"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldRequiresPayment holds the string denoting the requires_payment field in the database.
@@ -77,6 +79,7 @@ var Columns = []string{
 	FieldCode,
 	FieldType,
 	FieldValue,
+	FieldCouponTerms,
 	FieldStatus,
 	FieldRequiresPayment,
 	FieldMaxUses,

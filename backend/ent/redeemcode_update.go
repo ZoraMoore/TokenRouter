@@ -16,6 +16,7 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/redeemcodeusage"
 	"github.com/TokenFlux/TokenRouter/ent/subscriptionplan"
 	"github.com/TokenFlux/TokenRouter/ent/user"
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 // RedeemCodeUpdate is the builder for updating RedeemCode entities.
@@ -77,6 +78,26 @@ func (_u *RedeemCodeUpdate) SetNillableValue(v *float64) *RedeemCodeUpdate {
 // AddValue adds value to the "value" field.
 func (_u *RedeemCodeUpdate) AddValue(v float64) *RedeemCodeUpdate {
 	_u.mutation.AddValue(v)
+	return _u
+}
+
+// SetCouponTerms sets the "coupon_terms" field.
+func (_u *RedeemCodeUpdate) SetCouponTerms(v billing.RechargeCouponTerms) *RedeemCodeUpdate {
+	_u.mutation.SetCouponTerms(v)
+	return _u
+}
+
+// SetNillableCouponTerms sets the "coupon_terms" field if the given value is not nil.
+func (_u *RedeemCodeUpdate) SetNillableCouponTerms(v *billing.RechargeCouponTerms) *RedeemCodeUpdate {
+	if v != nil {
+		_u.SetCouponTerms(*v)
+	}
+	return _u
+}
+
+// ClearCouponTerms clears the value of the "coupon_terms" field.
+func (_u *RedeemCodeUpdate) ClearCouponTerms() *RedeemCodeUpdate {
+	_u.mutation.ClearCouponTerms()
 	return _u
 }
 
@@ -398,6 +419,12 @@ func (_u *RedeemCodeUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.AddedValue(); ok {
 		_spec.AddField(redeemcode.FieldValue, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.CouponTerms(); ok {
+		_spec.SetField(redeemcode.FieldCouponTerms, field.TypeJSON, value)
+	}
+	if _u.mutation.CouponTermsCleared() {
+		_spec.ClearField(redeemcode.FieldCouponTerms, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(redeemcode.FieldStatus, field.TypeString, value)
 	}
@@ -603,6 +630,26 @@ func (_u *RedeemCodeUpdateOne) SetNillableValue(v *float64) *RedeemCodeUpdateOne
 // AddValue adds value to the "value" field.
 func (_u *RedeemCodeUpdateOne) AddValue(v float64) *RedeemCodeUpdateOne {
 	_u.mutation.AddValue(v)
+	return _u
+}
+
+// SetCouponTerms sets the "coupon_terms" field.
+func (_u *RedeemCodeUpdateOne) SetCouponTerms(v billing.RechargeCouponTerms) *RedeemCodeUpdateOne {
+	_u.mutation.SetCouponTerms(v)
+	return _u
+}
+
+// SetNillableCouponTerms sets the "coupon_terms" field if the given value is not nil.
+func (_u *RedeemCodeUpdateOne) SetNillableCouponTerms(v *billing.RechargeCouponTerms) *RedeemCodeUpdateOne {
+	if v != nil {
+		_u.SetCouponTerms(*v)
+	}
+	return _u
+}
+
+// ClearCouponTerms clears the value of the "coupon_terms" field.
+func (_u *RedeemCodeUpdateOne) ClearCouponTerms() *RedeemCodeUpdateOne {
+	_u.mutation.ClearCouponTerms()
 	return _u
 }
 
@@ -953,6 +1000,12 @@ func (_u *RedeemCodeUpdateOne) sqlSave(ctx context.Context) (_node *RedeemCode, 
 	}
 	if value, ok := _u.mutation.AddedValue(); ok {
 		_spec.AddField(redeemcode.FieldValue, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.CouponTerms(); ok {
+		_spec.SetField(redeemcode.FieldCouponTerms, field.TypeJSON, value)
+	}
+	if _u.mutation.CouponTermsCleared() {
+		_spec.ClearField(redeemcode.FieldCouponTerms, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(redeemcode.FieldStatus, field.TypeString, value)

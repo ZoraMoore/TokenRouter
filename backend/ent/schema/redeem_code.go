@@ -46,6 +46,9 @@ func (RedeemCode) Fields() []ent.Field {
 		field.Float("value").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0),
+		field.JSON("coupon_terms", billing.RechargeCouponTerms{}).
+			Optional().
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 		field.String("status").
 			MaxLen(20).
 			Default(billing.StatusUnused),

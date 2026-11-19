@@ -8,7 +8,7 @@
 // 文件分组：
 //   - configuration*.go、settings_participant.go：读取和保存支付配置，管理渠道实例。
 //   - visible_*.go、method_localization.go：管理支付方式的展示来源和多语言名称。
-//   - checkout*.go、billing_info.go：处理下单校验、付款人信息和订单快照。
+//   - checkout*.go、recharge_coupons.go、billing_info.go：处理下单校验、充值满减报价、付款人信息和订单快照。
 //   - order*.go、query_ports.go、query_types.go、document.go、statistics.go：维护订单状态，查询订单、票据和统计数据。
 //   - fulfillment*.go、expiry.go：确认付款、发放权益并定时处理过期订单。
 //   - refund_*.go：检查退款条件，调用渠道退款并扣回或恢复权益。

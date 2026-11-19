@@ -37,6 +37,10 @@ func (s *Checkout) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Cr
 	if err != nil {
 		return nil, err
 	}
+	coupon, err := s.checkoutCoupon(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.CheckCancelRateLimit(ctx, req.UserID, cfg); err != nil {
 		return nil, err
 	}
@@ -58,7 +62,6 @@ func (s *Checkout) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Cr
 	} else if req.OrderType == OrderTypeBalance {
 		orderAmount = CalculateCreditedBalance(req.Amount, cfg.BalanceRechargeMultiplier)
 	}
-	methodFee := cfg.EffectiveMethodFee(req.PaymentType)
 	methodCurrency := DefaultPaymentCurrency
 	if s.configService != nil {
 		methodCurrency, err = s.configService.ValidateMethodCurrencyConsistency(ctx, req.PaymentType)
@@ -66,12 +69,11 @@ func (s *Checkout) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Cr
 			return nil, err
 		}
 	}
-	// 订阅订单先换算网关扣款基数，再统一应用 fork 的固定费与比例费模型。
-	feeBreakdown, payAmountStr, payAmount, err := CalculateCreateOrderPayAmountForOrderType(limitAmount, methodFee, methodCurrency, req.OrderType, cfg.SubscriptionUSDToCNYRate)
+	pricing, err := priceCheckout(req, cfg, limitAmount, methodCurrency, coupon)
 	if err != nil {
 		return nil, err
 	}
-	sel, err := s.SelectCreateOrderInstance(ctx, req, cfg, payAmount)
+	sel, err := s.SelectCreateOrderInstance(ctx, req, cfg, pricing.payAmount)
 	if err != nil {
 		return nil, err
 	}
@@ -83,12 +85,12 @@ func (s *Checkout) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Cr
 		selectedCurrency = ProviderConfigCurrency(sel.ProviderKey, sel.Config)
 	}
 	if selectedCurrency != methodCurrency {
-		feeBreakdown, payAmountStr, payAmount, err = CalculateCreateOrderPayAmountForOrderType(limitAmount, methodFee, selectedCurrency, req.OrderType, cfg.SubscriptionUSDToCNYRate)
+		pricing, err = priceCheckout(req, cfg, limitAmount, selectedCurrency, coupon)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if err := ValidateSelectedCreateOrderAmountCurrency(payAmountStr, sel); err != nil {
+	if err := ValidateSelectedCreateOrderAmountCurrency(pricing.payString, sel); err != nil {
 		return nil, err
 	}
 	if sel.ProviderKey == TypeStripe {
@@ -102,26 +104,30 @@ func (s *Checkout) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Cr
 	} else {
 		req.BillingInfo = nil
 	}
-	oauthResp, err := s.MaybeBuildWeChatOAuthRequiredResponseForSelection(ctx, req, limitAmount, feeBreakdown, sel)
+	req.couponSnapshot = pricing.coupon
+	oauthResp, err := s.MaybeBuildWeChatOAuthRequiredResponseForSelection(ctx, req, limitAmount, pricing.fee, sel)
 	if err != nil {
 		return nil, err
 	}
 	if oauthResp != nil {
 		return oauthResp, nil
 	}
-	order, err := s.CreateOrderInTx(ctx, req, user, plan, cfg, orderAmount, limitAmount, feeBreakdown, sel)
+	order, err := s.CreateOrderInTx(ctx, req, user, plan, cfg, orderAmount, limitAmount, pricing.fee, sel)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := s.InvokeProvider(ctx, order, req, cfg, limitAmount, payAmountStr, payAmount, plan, sel)
+	resp, sent, err := s.invokeProvider(ctx, order, req, cfg, limitAmount, pricing.payString, pricing.payAmount, plan, sel)
 	if err != nil {
-		_ = s.store.FailCheckout(ctx, order.ID)
+		s.handleCheckoutFailure(ctx, order, sent)
 		return nil, err
 	}
 	return resp, nil
 }
 
 func (s *Checkout) ValidateOrderInput(ctx context.Context, req CreateOrderRequest, cfg *PaymentConfig) (*SubscriptionPlan, error) {
+	if req.CouponID != 0 && req.OrderType != OrderTypeBalance {
+		return nil, infraerrors.BadRequest("RECHARGE_COUPON_ORDER_TYPE", "coupons apply to balance recharge only")
+	}
 	if req.OrderType == OrderTypeBalance && cfg.BalanceDisabled {
 		return nil, infraerrors.Forbidden("BALANCE_PAYMENT_DISABLED", "balance recharge has been disabled")
 	}
@@ -272,7 +278,8 @@ func (s *Checkout) UsesOfficialWxpayVisibleMethod(ctx context.Context) bool {
 	return inst.ProviderKey == TypeWxpay
 }
 
-func (s *Checkout) InvokeProvider(ctx context.Context, order *Order, req CreateOrderRequest, cfg *PaymentConfig, limitAmount float64, payAmountStr string, payAmount float64, plan *SubscriptionPlan, sel *InstanceSelection) (*CreateOrderResponse, error) {
+// invokeProvider 返回下单请求是否可能已到达渠道。请求超时后仍可收到付款。
+func (s *Checkout) invokeProvider(ctx context.Context, order *Order, req CreateOrderRequest, cfg *PaymentConfig, limitAmount float64, payAmountStr string, payAmount float64, plan *SubscriptionPlan, sel *InstanceSelection) (*CreateOrderResponse, bool, error) {
 	prov, err := s.runtime.CreateProvider(sel.ProviderKey, sel.InstanceID, sel.Config)
 	if err != nil {
 		s.runtime.Error("[PaymentService] CreateProvider failed", "provider", sel.ProviderKey, "instance", sel.InstanceID, "error", err)
@@ -281,9 +288,9 @@ func (s *Checkout) InvokeProvider(ctx context.Context, order *Order, req CreateO
 		if appErr := new(infraerrors.ApplicationError); errors.As(err, &appErr) {
 			md := map[string]string{"provider": sel.ProviderKey, "instance_id": sel.InstanceID}
 			maps.Copy(md, appErr.Metadata)
-			return nil, appErr.WithMetadata(md)
+			return nil, false, appErr.WithMetadata(md)
 		}
-		return nil, infraerrors.ServiceUnavailable("PAYMENT_PROVIDER_MISCONFIGURED", "provider_misconfigured").
+		return nil, false, infraerrors.ServiceUnavailable("PAYMENT_PROVIDER_MISCONFIGURED", "provider_misconfigured").
 			WithMetadata(map[string]string{"provider": sel.ProviderKey, "instance_id": sel.InstanceID})
 	}
 	subject, _ := order.ProviderSnapshot["display_subject"].(string)
@@ -293,7 +300,7 @@ func (s *Checkout) InvokeProvider(ctx context.Context, order *Order, req CreateO
 	outTradeNo := order.OutTradeNo
 	canonicalReturnURL, err := CanonicalizeReturnURL(req.ReturnURL, req.SrcHost, req.SrcURL)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	resumeToken := ""
 	if resume := s.resume; resume != nil {
@@ -307,13 +314,13 @@ func (s *Checkout) InvokeProvider(ctx context.Context, order *Order, req CreateO
 				CanonicalReturnURL: canonicalReturnURL,
 			})
 			if err != nil {
-				return nil, fmt.Errorf("create payment resume token: %w", err)
+				return nil, false, fmt.Errorf("create payment resume token: %w", err)
 			}
 		}
 	}
 	providerReturnURL, err := ResumeBuildPaymentReturnURL(canonicalReturnURL, order.ID, outTradeNo, resumeToken)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	providerReq := BuildProviderCreatePaymentRequest(CreateOrderRequest{
 		PaymentType: req.PaymentType,
@@ -325,20 +332,23 @@ func (s *Checkout) InvokeProvider(ctx context.Context, order *Order, req CreateO
 	}, sel, outTradeNo, payAmountStr, subject, order.ExpiresAt)
 	providerReq.UserEmail = order.UserEmail
 	providerReq.AlipayMobilePrecreate = ShouldUseAlipayMobilePrecreate(req, cfg, sel)
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	finishProviderCall := s.runtime.Observe(ctx)
 	pr, err := prov.CreatePayment(ctx, providerReq)
 	finishProviderCall()
 	if err != nil {
 		s.runtime.Error("[PaymentService] CreatePayment failed", "provider", sel.ProviderKey, "instance", sel.InstanceID, "error", err)
 		if appErr := new(infraerrors.ApplicationError); errors.As(err, &appErr) {
-			return nil, appErr
+			return nil, true, appErr
 		}
-		return nil, ClassifyCreatePaymentError(req, sel.ProviderKey, err)
+		return nil, true, ClassifyCreatePaymentError(req, sel.ProviderKey, err)
 	}
 	SanitizeCreatePaymentResponseDetails(pr)
 	order, err = s.PersistCreatePaymentResponse(ctx, order.ID, sel, pr)
 	if err != nil {
-		return nil, err
+		return nil, true, err
 	}
 	s.runtime.Audit(ctx, order.ID, "ORDER_CREATED", fmt.Sprintf("user:%d", req.UserID), map[string]any{
 		"paymentAmount":  req.Amount,
@@ -355,7 +365,18 @@ func (s *Checkout) InvokeProvider(ctx context.Context, order *Order, req CreateO
 	resp := BuildCreateOrderResponse(order, req, payAmount, sel, pr, resultType)
 	resp.ResumeToken = resumeToken
 	resp.AlipayMobilePrecreateDeepLink = providerReq.AlipayMobilePrecreate && strings.TrimSpace(pr.QRCode) != ""
-	return resp, nil
+	return resp, true, nil
+}
+
+// handleCheckoutFailure 记录发单结果。渠道结果未知时保留订单和优惠券占用。
+func (s *Checkout) handleCheckoutFailure(ctx context.Context, order *Order, sent bool) {
+	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+	if order.CouponSnapshot != nil && sent {
+		s.runtime.Audit(finishCtx, order.ID, "PAYMENT_CREATE_UNCONFIRMED", "system", nil)
+		return
+	}
+	_ = s.store.FailCheckout(finishCtx, order.ID)
 }
 
 func (s *Checkout) PersistCreatePaymentResponse(ctx context.Context, id int64, sel *InstanceSelection, response *CreatePaymentResponse) (*Order, error) {
@@ -486,14 +507,15 @@ func (s *Checkout) BuildWeChatOAuthRequiredResponse(ctx context.Context, req Cre
 	}
 
 	return &CreateOrderResponse{
-		Amount:        amount,
-		PayAmount:     feeBreakdown.PayAmount,
-		FeeRate:       feeBreakdown.FeeRate,
-		FeeFixed:      feeBreakdown.FixedFee,
-		FeeRateAmount: feeBreakdown.FeeRateAmount,
-		FeeAmount:     feeBreakdown.FeeAmount,
-		ResultType:    CreatePaymentResultOAuthRequired,
-		PaymentType:   req.PaymentType,
+		Amount:         amount,
+		PayAmount:      feeBreakdown.PayAmount,
+		FeeRate:        feeBreakdown.FeeRate,
+		FeeFixed:       feeBreakdown.FixedFee,
+		FeeRateAmount:  feeBreakdown.FeeRateAmount,
+		FeeAmount:      feeBreakdown.FeeAmount,
+		CouponSnapshot: req.couponSnapshot,
+		ResultType:     CreatePaymentResultOAuthRequired,
+		PaymentType:    req.PaymentType,
 		OAuth: &WechatOAuthInfo{
 			AuthorizeURL: authorizeURL,
 			AppID:        appID,
@@ -604,34 +626,35 @@ func ClassifyCreatePaymentError(req CreateOrderRequest, providerKey string, err 
 
 func BuildCreateOrderResponse(order *Order, req CreateOrderRequest, payAmount float64, sel *InstanceSelection, pr *CreatePaymentResponse, resultType CreatePaymentResultType) *CreateOrderResponse {
 	return &CreateOrderResponse{
-		OrderID:       order.ID,
-		Amount:        order.Amount,
-		PayAmount:     payAmount,
-		FeeRate:       order.FeeRate,
-		FeeFixed:      order.FeeFixed,
-		FeeRateAmount: order.FeeRateAmount,
-		FeeAmount:     order.FeeAmount,
-		Status:        OrderStatusPending,
-		ResultType:    resultType,
-		PaymentType:   req.PaymentType,
-		OutTradeNo:    order.OutTradeNo,
-		PayURL:        pr.PayURL,
-		QRCode:        pr.QRCode,
-		ClientSecret:  pr.ClientSecret,
-		CustomerID:    pr.CustomerID,
-		InvoiceID:     pr.InvoiceID,
-		InvoiceURL:    pr.InvoiceURL,
-		InvoicePDF:    pr.InvoicePDF,
-		InvoiceStatus: pr.InvoiceStatus,
-		IntentID:      pr.IntentID,
-		Currency:      pr.Currency,
-		CountryCode:   pr.CountryCode,
-		PaymentEnv:    pr.PaymentEnv,
-		OAuth:         pr.OAuth,
-		JSAPI:         pr.JSAPI,
-		JSAPIPayload:  pr.JSAPI,
-		ExpiresAt:     order.ExpiresAt,
-		PaymentMode:   sel.PaymentMode,
+		OrderID:        order.ID,
+		Amount:         order.Amount,
+		PayAmount:      payAmount,
+		FeeRate:        order.FeeRate,
+		FeeFixed:       order.FeeFixed,
+		FeeRateAmount:  order.FeeRateAmount,
+		FeeAmount:      order.FeeAmount,
+		CouponSnapshot: order.CouponSnapshot,
+		Status:         OrderStatusPending,
+		ResultType:     resultType,
+		PaymentType:    req.PaymentType,
+		OutTradeNo:     order.OutTradeNo,
+		PayURL:         pr.PayURL,
+		QRCode:         pr.QRCode,
+		ClientSecret:   pr.ClientSecret,
+		CustomerID:     pr.CustomerID,
+		InvoiceID:      pr.InvoiceID,
+		InvoiceURL:     pr.InvoiceURL,
+		InvoicePDF:     pr.InvoicePDF,
+		InvoiceStatus:  pr.InvoiceStatus,
+		IntentID:       pr.IntentID,
+		Currency:       pr.Currency,
+		CountryCode:    pr.CountryCode,
+		PaymentEnv:     pr.PaymentEnv,
+		OAuth:          pr.OAuth,
+		JSAPI:          pr.JSAPI,
+		JSAPIPayload:   pr.JSAPI,
+		ExpiresAt:      order.ExpiresAt,
+		PaymentMode:    sel.PaymentMode,
 	}
 }
 
@@ -650,6 +673,9 @@ func BuildWeChatPaymentOAuthStartURL(req CreateOrderRequest, scope string) (stri
 	}
 	if req.PlanID > 0 {
 		q.Set("plan_id", strconv.FormatInt(req.PlanID, 10))
+	}
+	if req.CouponID > 0 {
+		q.Set("coupon_id", strconv.FormatInt(req.CouponID, 10))
 	}
 	if scope = strings.TrimSpace(scope); scope != "" {
 		q.Set("scope", scope)

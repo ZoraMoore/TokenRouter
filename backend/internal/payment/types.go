@@ -18,9 +18,11 @@ const (
 	TypeAirwallex    PaymentType = "airwallex"
 
 	// Order status constants shared across payment and service layers.
-	OrderStatusPending           = "PENDING"
-	OrderStatusProcessing        = "PROCESSING"
-	OrderStatusPaid              = "PAID"
+	OrderStatusPending    = "PENDING"
+	OrderStatusProcessing = "PROCESSING"
+	OrderStatusPaid       = "PAID"
+	// OrderStatusPaymentReview 记录已收款但需要核对订单归属的付款。
+	OrderStatusPaymentReview     = "PAYMENT_REVIEW"
 	OrderStatusRecharging        = "RECHARGING"
 	OrderStatusCompleted         = "COMPLETED"
 	OrderStatusExpired           = "EXPIRED"
@@ -161,6 +163,7 @@ type QueryOrderResponse struct {
 	Amount   float64 // 按服务商返回币种解释的金额
 	PaidAt   string  // RFC3339 timestamp or empty
 	Metadata map[string]string
+	Closed   bool // 渠道确认这笔订单已关闭
 }
 
 // PaymentNotification is the parsed result of a webhook/notify callback.

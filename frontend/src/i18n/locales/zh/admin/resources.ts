@@ -257,6 +257,7 @@ export default {
         concurrency: '并发数',
         subscription: '订阅',
         invitation: '邀请码',
+        coupon: '优惠卷',
         affiliate_balance: '邀请返利转余额',
         // 管理员在用户管理页面调整余额/并发时产生的记录
         admin_balance: '余额（管理员）',
@@ -303,6 +304,12 @@ export default {
       customCodeCountHint: '设置了自定义兑换码后，数量固定为 1。',
       codeType: '类型',
       amount: '金额 ($)',
+      coupon: {
+        currency: '币种',
+        minimum: '充值满',
+        discount: '减免',
+        invalid: '请输入有效币种，减免金额须大于零且小于充值门槛。'
+      },
       value: '面值',
       maxUses: '兑换次数',
       maxUsesHint: '填写 0 表示无兑换次数上限。',

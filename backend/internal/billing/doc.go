@@ -11,7 +11,7 @@
 //   - settlement*.go、funds.go、allocation.go：分配订阅与余额扣款，执行结算并更新缓存。
 //   - eligibility*.go、cache.go、key_rate_limits.go、member_quota.go：检查余额、API Key 和团队成员额度。
 //   - subscription*.go、plan*.go、clock.go：管理订阅套餐、订阅状态和日期窗口。
-//   - redeem_*.go、balance.go、user_summary.go：管理兑换码和调账所需的用户数据。
+//   - redeem_*.go、recharge_coupons.go、balance.go、user_summary.go：管理兑换码和充值券，提供调账所需的用户数据。
 //   - group_rate_*.go、provider_*.go、window_cost_*.go：管理用户分组倍率和提供商费用窗口。
 //   - balance_notifications.go、notification_thresholds.go：判断余额和额度提醒条件。
 //   - admin_settings*.go、default_settings.go、settings_participant.go：读取和校验计费设置。

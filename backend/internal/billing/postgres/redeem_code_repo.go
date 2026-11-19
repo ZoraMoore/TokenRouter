@@ -15,6 +15,7 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/redeemcodeusage"
 	"github.com/TokenFlux/TokenRouter/ent/user"
 	"github.com/TokenFlux/TokenRouter/internal/billing"
+	"github.com/TokenFlux/TokenRouter/internal/pkg/apperror"
 	"github.com/TokenFlux/TokenRouter/internal/pkg/pagination"
 )
 
@@ -41,6 +42,9 @@ func (r *RedeemStore) Create(ctx context.Context, code *billing.RedeemCode) erro
 		SetNillableUsedAt(code.UsedAt).
 		SetNillablePlanID(code.PlanID)
 
+	if code.CouponTerms != nil {
+		builder.SetCouponTerms(*code.CouponTerms)
+	}
 	if code.ExpiresAt != nil {
 		builder.SetExpiresAt(*code.ExpiresAt)
 	}
@@ -74,6 +78,9 @@ func (r *RedeemStore) CreateBatch(ctx context.Context, codes []billing.RedeemCod
 			SetNillableUsedBy(c.UsedBy).
 			SetNillableUsedAt(c.UsedAt).
 			SetNillablePlanID(c.PlanID)
+		if c.CouponTerms != nil {
+			builder.SetCouponTerms(*c.CouponTerms)
+		}
 		if c.ExpiresAt != nil {
 			builder.SetExpiresAt(*c.ExpiresAt)
 		}
@@ -243,8 +250,15 @@ func (r *RedeemStore) batchUpdate(ctx context.Context, client *dbent.Client, ids
 
 func (r *RedeemStore) Delete(ctx context.Context, id int64) error {
 	client := clientFromContext(ctx, r.client)
-	_, err := client.RedeemCode.Delete().Where(redeemcode.IDEQ(id)).Exec(ctx)
-	return err
+	deleted, err := client.RedeemCode.Delete().Where(redeemcode.IDEQ(id), redeemcode.UsedCountEQ(0)).Exec(ctx)
+	if err != nil || deleted > 0 {
+		return err
+	}
+	exists, err := client.RedeemCode.Query().Where(redeemcode.IDEQ(id)).Exist(ctx)
+	if err != nil || !exists {
+		return err
+	}
+	return apperror.Conflict("REDEEM_CODE_DELETE_USED", "cannot delete redeem code that has usage records")
 }
 
 func (r *RedeemStore) Use(ctx context.Context, id, userID int64) error {
@@ -604,6 +618,9 @@ func RedeemFromEntity(model *dbent.RedeemCode) *billing.RedeemCode {
 	}
 	if model.Edges.User != nil {
 		out.User = userSummaryFromEntity(model.Edges.User)
+	}
+	if model.Type == billing.RedeemTypeCoupon {
+		out.CouponTerms = &model.CouponTerms
 	}
 	if model.Edges.Plan != nil {
 		out.Plan = PlanFromEntity(model.Edges.Plan)

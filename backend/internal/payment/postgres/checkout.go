@@ -78,6 +78,9 @@ func (s *OrderStore) CreateCheckout(ctx context.Context, draft payment.CheckoutD
 	if draft.Order.BillingSnapshot != nil {
 		b.SetBillingSnapshot(draft.Order.BillingSnapshot)
 	}
+	if draft.Order.CouponSnapshot != nil {
+		b.SetCouponSnapshot(*draft.Order.CouponSnapshot)
+	}
 	if draft.Order.PlanID != nil {
 		b.SetPlanID(*draft.Order.PlanID).SetPlanSnapshot(draft.Order.PlanSnapshot)
 	}
@@ -85,6 +88,11 @@ func (s *OrderStore) CreateCheckout(ctx context.Context, draft payment.CheckoutD
 	order, err := b.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("create order: %w", err)
+	}
+	if snapshot := draft.Order.CouponSnapshot; snapshot != nil {
+		if err := reserveRechargeCoupon(ctx, tx, order.ID, order.UserID, *snapshot); err != nil {
+			return nil, err
+		}
 	}
 	code := fmt.Sprintf("PAY-%d-%d", order.ID, time.Now().UnixNano()%100000)
 	order, err = tx.PaymentOrder.UpdateOneID(order.ID).SetRechargeCode(code).Save(ctx)
@@ -139,7 +147,12 @@ func (s *OrderStore) PersistCheckoutResponse(ctx context.Context, orderID int64,
 }
 
 func (s *OrderStore) FailCheckout(ctx context.Context, id int64) error {
-	_, err := s.client.PaymentOrder.UpdateOneID(id).SetStatus(payment.OrderStatusFailed).Save(ctx)
+	_, err := s.TransitionOrder(ctx, payment.OrderTransition{
+		ID:            id,
+		From:          []string{payment.OrderStatusPending},
+		Status:        payment.OrderStatusFailed,
+		ReleaseCoupon: true,
+	})
 	return err
 }
 

@@ -1610,6 +1610,16 @@ func BillingSnapshotNotNil() predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldNotNull(FieldBillingSnapshot))
 }
 
+// CouponSnapshotIsNil applies the IsNil predicate on the "coupon_snapshot" field.
+func CouponSnapshotIsNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIsNull(FieldCouponSnapshot))
+}
+
+// CouponSnapshotNotNil applies the NotNil predicate on the "coupon_snapshot" field.
+func CouponSnapshotNotNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotNull(FieldCouponSnapshot))
+}
+
 // OrderTypeEQ applies the EQ predicate on the "order_type" field.
 func OrderTypeEQ(v string) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldEQ(FieldOrderType, v))

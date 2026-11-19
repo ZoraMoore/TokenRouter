@@ -108,6 +108,9 @@ func (PaymentOrder) Fields() []ent.Field {
 		field.JSON("billing_snapshot", map[string]any{}).
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
+		field.JSON("coupon_snapshot", billing.RechargeCouponSnapshot{}).
+			Optional().
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 
 		// 订单类型 & 订阅关联
 		field.String("order_type").

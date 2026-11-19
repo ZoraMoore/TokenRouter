@@ -11,7 +11,7 @@
 //   - key_usage.go、member_usage.go：API Key 与团队成员的用量累计和窗口重置。
 //   - provider_usage.go、provider_usage_store.go、provider_quota_expressions.go：提供商用量写入、额度周期和提交后通知。
 //   - plans.go、user_subscription_repo.go、subscription_transactions.go、user_group_rate_repo.go：套餐、订阅、分组倍率及发放事务。
-//   - redeem_code_repo.go、redeem_administration.go、redeem_transactions.go、redeem_writers.go、redeem_update_builder.go：兑换码存储、管理和权益写入。
+//   - redeem_code_repo.go、redeem_administration.go、redeem_transactions.go、redeem_writers.go、redeem_update_builder.go、recharge_coupons.go：兑换码存储、优惠券领取和权益写入。
 //   - participants.go、registration_invitation.go：外层事务中的余额、订阅、兑换和注册邀请操作。
 //   - entity_helpers.go：事务客户端读取、数据库错误转换和实体转换。
 package postgres

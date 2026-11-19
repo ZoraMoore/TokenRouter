@@ -18,6 +18,7 @@ export type OrderStatus =
   | 'PENDING'
   | 'PROCESSING'
   | 'PAID'
+  | 'PAYMENT_REVIEW'
   | 'RECHARGING'
   | 'COMPLETED'
   | 'EXPIRED'
@@ -113,6 +114,7 @@ export interface PaymentOrder {
   fee_fixed: number
   fee_rate_amount: number
   fee_amount: number
+  coupon_snapshot?: RechargeCouponSnapshot
   payment_type: string
   out_trade_no: string
   status: OrderStatus
@@ -137,6 +139,37 @@ export interface PaymentOrder {
 }
 
 export type PublicPaymentOrder = PaymentOrder
+
+// 券面金额按币种小数位存为整数。
+export interface RechargeCouponTerms {
+  currency: string
+  minimum_minor: number
+  discount_minor: number
+}
+
+export interface RechargeCoupon extends RechargeCouponTerms {
+  id: number
+  claimed_at: string
+  order_id?: number
+  consumed_at?: string
+}
+
+export interface RechargeCouponSnapshot extends RechargeCouponTerms {
+  coupon_id: number
+  recharge_minor: number
+  charge_minor: number
+}
+
+export interface RechargeCouponQuote {
+  amount: number
+  base_amount: number
+  pay_amount: number
+  fee_rate: number
+  fee_fixed: number
+  fee_rate_amount: number
+  fee_amount: number
+  coupon_snapshot: RechargeCouponSnapshot
+}
 
 // ==================== Plans & Channels ====================
 
@@ -208,6 +241,7 @@ export interface CreateOrderRequest {
   payment_type: string
   order_type: string
   plan_id?: number
+  coupon_id?: number
   return_url?: string
   payment_source?: string
   openid?: string
@@ -256,6 +290,7 @@ export interface WechatJSAPIPayload {
 export interface CreateOrderResult {
   order_id: number
   amount: number
+  coupon_snapshot?: RechargeCouponSnapshot
   pay_url?: string
   qr_code?: string
   client_secret?: string

@@ -61,6 +61,7 @@ func (s *OrderLifecycle) ForceExpireOrder(ctx context.Context, orderID int64, re
 }
 
 func (s *OrderLifecycle) CancelCore(ctx context.Context, o *Order, fs, op, ad string) (string, error) {
+	releaseCoupon := false
 	if o.PaymentTradeNo != "" || o.PaymentType != "" {
 		prov, queryRef, resp, err := s.QueryPaymentOrderProvider(ctx, o)
 		if err != nil {
@@ -81,7 +82,7 @@ func (s *OrderLifecycle) CancelCore(ctx context.Context, o *Order, fs, op, ad st
 			s.RecordPaymentCancelFailure(ctx, o, prov, queryRef, err, resp)
 			return "", err
 		case LifecycleCheckPaidResultFailed:
-			return s.FinalizePendingOrder(ctx, o, fs, op, ad)
+			return s.FinalizePendingOrder(ctx, o, fs, op, ad, couponCloseConfirmed(o, prov, resp))
 		}
 
 		if cp, ok := prov.(CancelableProvider); ok {
@@ -102,7 +103,7 @@ func (s *OrderLifecycle) CancelCore(ctx context.Context, o *Order, fs, op, ad st
 					case LifecycleCheckPaidResultProcessing:
 						return s.ProcessingCancellationResult(fs)
 					case LifecycleCheckPaidResultFailed:
-						return s.FinalizePendingOrder(ctx, o, fs, op, ad)
+						return s.FinalizePendingOrder(ctx, o, fs, op, ad, couponCloseConfirmed(o, prov, retryResp))
 					}
 				}
 				s.RecordPaymentCancelFailure(ctx, o, prov, queryRef, cancelErr, retryResp)
@@ -111,9 +112,12 @@ func (s *OrderLifecycle) CancelCore(ctx context.Context, o *Order, fs, op, ad st
 				}
 				return "", PaymentStatusUnavailableError(fmt.Errorf("cancel upstream payment: %w", cancelErr))
 			}
+			// 支付宝在查无此单时也返回关单成功。下单在途时继续占用优惠券。
+			releaseCoupon = o.CouponSnapshot != nil &&
+				(prov.ProviderKey() != TypeAlipay || IsValidProviderAmount(resp.Amount))
 		}
 	}
-	return s.FinalizePendingOrder(ctx, o, fs, op, ad)
+	return s.FinalizePendingOrder(ctx, o, fs, op, ad, releaseCoupon)
 }
 
 func (s *OrderLifecycle) ProcessingCancellationResult(finalStatus string) (string, error) {
@@ -123,8 +127,8 @@ func (s *OrderLifecycle) ProcessingCancellationResult(finalStatus string) (strin
 	return LifecycleCheckPaidResultProcessing, infraerrors.BadRequest("INVALID_STATUS", "payment is processing and cannot be cancelled")
 }
 
-func (s *OrderLifecycle) FinalizePendingOrder(ctx context.Context, o *Order, fs, op, ad string) (string, error) {
-	c, err := s.store.TransitionOrder(ctx, OrderTransition{ID: o.ID, From: []string{OrderStatusPending}, Status: fs})
+func (s *OrderLifecycle) FinalizePendingOrder(ctx context.Context, o *Order, fs, op, ad string, releaseCoupon bool) (string, error) {
+	c, err := s.store.TransitionOrder(ctx, OrderTransition{ID: o.ID, From: []string{OrderStatusPending}, Status: fs, ReleaseCoupon: releaseCoupon})
 	if err != nil {
 		return "", fmt.Errorf("update order status: %w", err)
 	}
@@ -143,7 +147,7 @@ func (s *OrderLifecycle) FinalizePendingOrder(ctx context.Context, o *Order, fs,
 		return "", fmt.Errorf("reload order after cancellation race: %w", err)
 	}
 	switch current.Status {
-	case OrderStatusPaid, OrderStatusRecharging, OrderStatusCompleted:
+	case OrderStatusPaid, OrderStatusRecharging, OrderStatusCompleted, OrderStatusPaymentReview:
 		return LifecycleCheckPaidResultAlreadyPaid, nil
 	case OrderStatusProcessing:
 		return s.ProcessingCancellationResult(fs)
@@ -187,7 +191,30 @@ func (s *OrderLifecycle) CheckPaid(ctx context.Context, o *Order) (string, error
 		s.runtime.Log("warn", "query upstream failed", "orderID", o.ID, "error", err)
 		return "", nil
 	}
-	return s.ApplyQueriedPaymentStatus(ctx, o, prov, queryRef, resp)
+	outcome, err := s.ApplyQueriedPaymentStatus(ctx, o, prov, queryRef, resp)
+	if err != nil || outcome != LifecycleCheckPaidResultFailed || !couponCloseConfirmed(o, prov, resp) {
+		return outcome, err
+	}
+	switch o.Status {
+	case OrderStatusPending:
+		return s.FinalizePendingOrder(ctx, o, OrderStatusExpired, "system", "provider confirmed the order is closed", true)
+	case OrderStatusCancelled, OrderStatusExpired:
+		_, err = s.store.TransitionOrder(ctx, OrderTransition{
+			ID: o.ID, From: []string{o.Status}, Status: o.Status, ReleaseCoupon: true,
+		})
+		return outcome, err
+	default:
+		return outcome, nil
+	}
+}
+
+// couponCloseConfirmed 区分关闭凭证与还能继续支付的失败状态。
+func couponCloseConfirmed(o *Order, prov Provider, resp *QueryOrderResponse) bool {
+	if o.CouponSnapshot == nil || resp == nil || resp.Status != ProviderStatusFailed {
+		return false
+	}
+	// 支付宝查单只有 TRADE_CLOSED 会返回 failed。
+	return resp.Closed || (prov.ProviderKey() == TypeAlipay && IsValidProviderAmount(resp.Amount))
 }
 
 func (s *OrderLifecycle) QueryPaymentOrderProvider(ctx context.Context, o *Order) (Provider, string, *QueryOrderResponse, error) {
@@ -365,12 +392,12 @@ func (s *OrderLifecycle) VerifyOrderByOutTradeNo(ctx context.Context, outTradeNo
 		return nil, infraerrors.Forbidden("FORBIDDEN", "no permission for this order")
 	}
 	// 待支付和已过期订单允许主动补查；处理中订单交给低频后台对账。
-	if o.Status == OrderStatusPending || o.Status == OrderStatusExpired {
+	if o.Status == OrderStatusPending || o.Status == OrderStatusExpired || (o.CouponSnapshot != nil && o.Status == OrderStatusCancelled) {
 		result, checkErr := s.CheckPaid(ctx, o)
 		if checkErr != nil {
 			return nil, checkErr
 		}
-		if result == LifecycleCheckPaidResultAlreadyPaid || result == LifecycleCheckPaidResultProcessing {
+		if result == LifecycleCheckPaidResultAlreadyPaid || result == LifecycleCheckPaidResultProcessing || result == LifecycleCheckPaidResultCancelled {
 			// 重新读取以返回原子状态转换后的结果。
 			o, err = s.store.Order(ctx, o.ID)
 			if err != nil {

@@ -274,6 +274,20 @@ func (_c *PaymentOrderCreate) SetBillingSnapshot(v map[string]interface{}) *Paym
 	return _c
 }
 
+// SetCouponSnapshot sets the "coupon_snapshot" field.
+func (_c *PaymentOrderCreate) SetCouponSnapshot(v billing.RechargeCouponSnapshot) *PaymentOrderCreate {
+	_c.mutation.SetCouponSnapshot(v)
+	return _c
+}
+
+// SetNillableCouponSnapshot sets the "coupon_snapshot" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableCouponSnapshot(v *billing.RechargeCouponSnapshot) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetCouponSnapshot(*v)
+	}
+	return _c
+}
+
 // SetOrderType sets the "order_type" field.
 func (_c *PaymentOrderCreate) SetOrderType(v string) *PaymentOrderCreate {
 	_c.mutation.SetOrderType(v)
@@ -930,6 +944,10 @@ func (_c *PaymentOrderCreate) createSpec() (*PaymentOrder, *sqlgraph.CreateSpec)
 		_spec.SetField(paymentorder.FieldBillingSnapshot, field.TypeJSON, value)
 		_node.BillingSnapshot = value
 	}
+	if value, ok := _c.mutation.CouponSnapshot(); ok {
+		_spec.SetField(paymentorder.FieldCouponSnapshot, field.TypeJSON, value)
+		_node.CouponSnapshot = value
+	}
 	if value, ok := _c.mutation.OrderType(); ok {
 		_spec.SetField(paymentorder.FieldOrderType, field.TypeString, value)
 		_node.OrderType = value
@@ -1464,6 +1482,24 @@ func (u *PaymentOrderUpsert) UpdateBillingSnapshot() *PaymentOrderUpsert {
 // ClearBillingSnapshot clears the value of the "billing_snapshot" field.
 func (u *PaymentOrderUpsert) ClearBillingSnapshot() *PaymentOrderUpsert {
 	u.SetNull(paymentorder.FieldBillingSnapshot)
+	return u
+}
+
+// SetCouponSnapshot sets the "coupon_snapshot" field.
+func (u *PaymentOrderUpsert) SetCouponSnapshot(v billing.RechargeCouponSnapshot) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldCouponSnapshot, v)
+	return u
+}
+
+// UpdateCouponSnapshot sets the "coupon_snapshot" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateCouponSnapshot() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldCouponSnapshot)
+	return u
+}
+
+// ClearCouponSnapshot clears the value of the "coupon_snapshot" field.
+func (u *PaymentOrderUpsert) ClearCouponSnapshot() *PaymentOrderUpsert {
+	u.SetNull(paymentorder.FieldCouponSnapshot)
 	return u
 }
 
@@ -2321,6 +2357,27 @@ func (u *PaymentOrderUpsertOne) UpdateBillingSnapshot() *PaymentOrderUpsertOne {
 func (u *PaymentOrderUpsertOne) ClearBillingSnapshot() *PaymentOrderUpsertOne {
 	return u.Update(func(s *PaymentOrderUpsert) {
 		s.ClearBillingSnapshot()
+	})
+}
+
+// SetCouponSnapshot sets the "coupon_snapshot" field.
+func (u *PaymentOrderUpsertOne) SetCouponSnapshot(v billing.RechargeCouponSnapshot) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetCouponSnapshot(v)
+	})
+}
+
+// UpdateCouponSnapshot sets the "coupon_snapshot" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateCouponSnapshot() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateCouponSnapshot()
+	})
+}
+
+// ClearCouponSnapshot clears the value of the "coupon_snapshot" field.
+func (u *PaymentOrderUpsertOne) ClearCouponSnapshot() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearCouponSnapshot()
 	})
 }
 
@@ -3407,6 +3464,27 @@ func (u *PaymentOrderUpsertBulk) UpdateBillingSnapshot() *PaymentOrderUpsertBulk
 func (u *PaymentOrderUpsertBulk) ClearBillingSnapshot() *PaymentOrderUpsertBulk {
 	return u.Update(func(s *PaymentOrderUpsert) {
 		s.ClearBillingSnapshot()
+	})
+}
+
+// SetCouponSnapshot sets the "coupon_snapshot" field.
+func (u *PaymentOrderUpsertBulk) SetCouponSnapshot(v billing.RechargeCouponSnapshot) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetCouponSnapshot(v)
+	})
+}
+
+// UpdateCouponSnapshot sets the "coupon_snapshot" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateCouponSnapshot() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateCouponSnapshot()
+	})
+}
+
+// ClearCouponSnapshot clears the value of the "coupon_snapshot" field.
+func (u *PaymentOrderUpsertBulk) ClearCouponSnapshot() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearCouponSnapshot()
 	})
 }
 

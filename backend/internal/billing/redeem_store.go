@@ -50,10 +50,11 @@ type RedeemCodeBatchUpdateFields struct {
 	Notes     *string
 
 	// 这些核心字段只用于显式拒绝批量修改，避免绕过单条编辑里的权益一致性校验。
-	Type    *string
-	Value   *float64
-	MaxUses *int
-	PlanID  *int64
+	Type        *string
+	Value       *float64
+	MaxUses     *int
+	PlanID      *int64
+	CouponTerms *RechargeCouponTerms
 }
 
 type RedeemCodeBatchUpdateInput struct {
@@ -72,11 +73,12 @@ func (f RedeemCodeBatchUpdateFields) HasChanges() bool {
 		f.Type != nil ||
 		f.Value != nil ||
 		f.MaxUses != nil ||
-		f.PlanID != nil
+		f.PlanID != nil ||
+		f.CouponTerms != nil
 }
 
 func (f RedeemCodeBatchUpdateFields) HasCoreFieldChanges() bool {
-	return f.Type != nil || f.Value != nil || f.MaxUses != nil || f.PlanID != nil
+	return f.Type != nil || f.Value != nil || f.MaxUses != nil || f.PlanID != nil || f.CouponTerms != nil
 }
 
 func (f RedeemCodeBatchUpdateFields) TouchesUsedSensitiveFields() bool {

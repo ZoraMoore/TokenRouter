@@ -34,6 +34,7 @@ type GenerateRedeemCodesInput struct {
 	MaxUses         *int
 	ExpiresAt       *time.Time
 	PlanID          *int64 // 订阅类型专用：关联的套餐ID
+	CouponTerms     *RechargeCouponTerms
 }
 
 type UpdateRedeemCodeInput struct {
@@ -43,6 +44,7 @@ type UpdateRedeemCodeInput struct {
 	ExpiresAt       *time.Time
 	ExpiresAtSet    bool
 	PlanID          *int64 // 订阅类型专用：关联的套餐ID
+	CouponTerms     *RechargeCouponTerms
 }
 
 func NewRedeemAdmin(repo RedeemCodeRepository, transactions RedeemAdminTransactions, now func() time.Time) *RedeemAdmin {
@@ -64,6 +66,9 @@ func (s *RedeemAdmin) GetRedeemCode(ctx context.Context, id int64) (*RedeemCode,
 }
 
 func (s *RedeemAdmin) GenerateRedeemCodes(ctx context.Context, input *GenerateRedeemCodesInput) ([]RedeemCode, error) {
+	if err := validateRedeemCouponTerms(input.Type, input.CouponTerms, input.Value, input.PlanID); err != nil {
+		return nil, err
+	}
 	if input.Type == RedeemTypeInvitation && input.RequiresPayment {
 		return nil, ErrRedeemPaymentRequirementUnsupported
 	}
@@ -117,6 +122,7 @@ func (s *RedeemAdmin) GenerateRedeemCodes(ctx context.Context, input *GenerateRe
 			Status:          StatusUnused,
 			MaxUses:         maxUses,
 			ExpiresAt:       input.ExpiresAt,
+			CouponTerms:     input.CouponTerms,
 		}
 		if input.Type == RedeemTypeSubscription {
 			code.PlanID = input.PlanID
@@ -155,15 +161,18 @@ func (s *RedeemAdmin) BatchDeleteRedeemCodes(ctx context.Context, ids []int64) (
 }
 
 func (s *RedeemAdmin) ExpireRedeemCode(ctx context.Context, id int64) (*RedeemCode, error) {
-	code, err := s.redeemCodeRepo.GetByID(ctx, id)
+	err := s.transactions.Mutation(ctx, func(txCtx context.Context) error {
+		code, err := s.redeemCodeRepo.GetByIDForUpdate(txCtx, id)
+		if err != nil {
+			return err
+		}
+		code.Status = StatusExpired
+		return s.redeemCodeRepo.Update(txCtx, code)
+	})
 	if err != nil {
 		return nil, err
 	}
-	code.Status = StatusExpired
-	if err := s.redeemCodeRepo.Update(ctx, code); err != nil {
-		return nil, err
-	}
-	return code, nil
+	return s.redeemCodeRepo.GetByID(ctx, id)
 }
 
 // GetUserBalanceHistory returns paginated balance/concurrency change records for a user.
@@ -215,7 +224,7 @@ func (s *RedeemAdmin) UpdateRedeemCode(ctx context.Context, id int64, input *Upd
 			code.ExpiresAt = input.ExpiresAt
 		}
 
-		if input.Value != nil || input.PlanID != nil {
+		if input.Value != nil || input.PlanID != nil || input.CouponTerms != nil {
 			// 已兑换记录没有面值快照，修改面值或套餐会让历史展示与实际发放权益不一致。
 			if code.UsedCount > 0 {
 				return apperror.Conflict("REDEEM_CODE_VALUE_LOCKED", "value or plan cannot be updated after the code has been redeemed")
@@ -242,7 +251,18 @@ func (s *RedeemAdmin) UpdateRedeemCode(ctx context.Context, id int64, input *Upd
 }
 
 func (s *RedeemAdmin) applyRedeemCodeValueUpdate(ctx context.Context, code *RedeemCode, input *UpdateRedeemCodeInput) error {
+	if input.CouponTerms != nil && code.Type != RedeemTypeCoupon {
+		return ErrRechargeCouponTerms
+	}
 	switch code.Type {
+	case RedeemTypeCoupon:
+		if input.Value != nil || input.PlanID != nil || input.CouponTerms == nil {
+			return ErrRechargeCouponTerms
+		}
+		if err := input.CouponTerms.Validate(); err != nil {
+			return err
+		}
+		code.CouponTerms = input.CouponTerms
 	case RedeemTypeBalance:
 		if input.PlanID != nil {
 			return apperror.BadRequest("REDEEM_CODE_PLAN_UNSUPPORTED", "plan_id is only supported for subscription redeem codes")
@@ -317,7 +337,7 @@ func (s *RedeemAdmin) RecordAdjustment(ctx context.Context, userID int64, codeTy
 
 func isEditableRedeemCodeType(codeType string) bool {
 	switch codeType {
-	case RedeemTypeBalance, RedeemTypeConcurrency, RedeemTypeSubscription, RedeemTypeInvitation:
+	case RedeemTypeBalance, RedeemTypeConcurrency, RedeemTypeSubscription, RedeemTypeInvitation, RedeemTypeCoupon:
 		return true
 	default:
 		return false

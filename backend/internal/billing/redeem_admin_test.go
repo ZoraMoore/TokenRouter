@@ -30,6 +30,14 @@ type redeemRepoStubForAdminList struct {
 	listWithFiltersErr    error
 }
 
+func TestRedeemAdmin_RejectsCouponWithoutTerms(t *testing.T) {
+	repo := &redeemCreateRecorder{}
+	service := NewRedeemAdmin(repo, nil, nil)
+	_, err := service.GenerateRedeemCodes(t.Context(), &GenerateRedeemCodesInput{Type: "coupon", Count: 1})
+	require.ErrorIs(t, err, ErrRechargeCouponTerms)
+	require.Empty(t, repo.created)
+}
+
 // TestRedeemAdmin_GenerateRedeemCodes_CustomCodeLength 覆盖中文、混合文本和补充平面字符的长度限制。
 func TestRedeemAdmin_GenerateRedeemCodes_CustomCodeLength(t *testing.T) {
 	tests := []struct {

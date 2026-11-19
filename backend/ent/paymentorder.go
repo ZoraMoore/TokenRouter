@@ -66,6 +66,8 @@ type PaymentOrder struct {
 	PaymentInvoiceStatus *string `json:"payment_invoice_status,omitempty"`
 	// BillingSnapshot holds the value of the "billing_snapshot" field.
 	BillingSnapshot map[string]interface{} `json:"billing_snapshot,omitempty"`
+	// CouponSnapshot holds the value of the "coupon_snapshot" field.
+	CouponSnapshot billing.RechargeCouponSnapshot `json:"coupon_snapshot,omitempty"`
 	// OrderType holds the value of the "order_type" field.
 	OrderType string `json:"order_type,omitempty"`
 	// PlanID holds the value of the "plan_id" field.
@@ -145,7 +147,7 @@ func (*PaymentOrder) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case paymentorder.FieldBillingSnapshot, paymentorder.FieldPlanSnapshot, paymentorder.FieldProviderSnapshot:
+		case paymentorder.FieldBillingSnapshot, paymentorder.FieldCouponSnapshot, paymentorder.FieldPlanSnapshot, paymentorder.FieldProviderSnapshot:
 			values[i] = new([]byte)
 		case paymentorder.FieldForceRefund:
 			values[i] = new(sql.NullBool)
@@ -325,6 +327,14 @@ func (_m *PaymentOrder) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.BillingSnapshot); err != nil {
 					return fmt.Errorf("unmarshal field billing_snapshot: %w", err)
+				}
+			}
+		case paymentorder.FieldCouponSnapshot:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field coupon_snapshot", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.CouponSnapshot); err != nil {
+					return fmt.Errorf("unmarshal field coupon_snapshot: %w", err)
 				}
 			}
 		case paymentorder.FieldOrderType:
@@ -615,6 +625,9 @@ func (_m *PaymentOrder) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("billing_snapshot=")
 	builder.WriteString(fmt.Sprintf("%v", _m.BillingSnapshot))
+	builder.WriteString(", ")
+	builder.WriteString("coupon_snapshot=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CouponSnapshot))
 	builder.WriteString(", ")
 	builder.WriteString("order_type=")
 	builder.WriteString(_m.OrderType)

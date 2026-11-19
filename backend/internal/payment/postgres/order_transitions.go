@@ -18,7 +18,15 @@ func (s *OrderStore) OrderByTradeNumber(ctx context.Context, no string) (*paymen
 }
 
 func (s *OrderStore) TransitionOrder(ctx context.Context, c payment.OrderTransition) (int, error) {
-	u := s.client.PaymentOrder.Update().Where(paymentorder.IDEQ(c.ID), paymentorder.StatusIn(c.From...)).SetStatus(c.Status)
+	if c.ConfirmCoupon || c.ReleaseCoupon {
+		return s.transitionCouponOrder(ctx, c)
+	}
+	return transitionOrder(ctx, s.client, c)
+}
+
+// transitionOrder 使用指定连接写入条件状态和该阶段的支付信息。
+func transitionOrder(ctx context.Context, client *dbent.Client, c payment.OrderTransition) (int, error) {
+	u := client.PaymentOrder.Update().Where(paymentorder.IDEQ(c.ID), paymentorder.StatusIn(c.From...)).SetStatus(c.Status)
 	if c.Version != nil {
 		u.Where(paymentorder.UpdatedAtEQ(*c.Version))
 	}

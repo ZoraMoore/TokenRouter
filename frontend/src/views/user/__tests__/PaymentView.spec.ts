@@ -68,6 +68,8 @@ const showError = vi.hoisted(() => vi.fn())
 const showInfo = vi.hoisted(() => vi.fn())
 const showWarning = vi.hoisted(() => vi.fn())
 const getCheckoutInfo = vi.hoisted(() => vi.fn())
+const listRechargeCoupons = vi.hoisted(() => vi.fn().mockResolvedValue({ data: { items: [], total: 0 } }))
+const quoteRechargeCoupon = vi.hoisted(() => vi.fn())
 const bridgeInvoke = vi.hoisted(() => vi.fn())
 const translate = vi.hoisted(() => vi.fn((key: string) => key))
 
@@ -125,6 +127,8 @@ vi.mock('@/stores', () => ({
 vi.mock('@/api/payment', () => ({
   paymentAPI: {
     getCheckoutInfo,
+    listRechargeCoupons,
+    quoteRechargeCoupon,
   },
 }))
 
@@ -504,6 +508,35 @@ describe('PaymentView recharge rate preview', () => {
     })
     expect(en.payment.rechargeRatePreview).toBe('Current rate: 1 {currency} = {amount} {unitName}')
     expect(zh.payment.rechargeRatePreview).toBe('当前倍率：1 {currency} = {amount} {unitName}')
+  })
+})
+
+describe('PaymentView 充值满减券', () => {
+  it('按服务端报价显示实付并携带充值面额和券号下单', async () => {
+    routeState.query = {}
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({ balance_recharge_multiplier: 2 }))
+    const terms = { currency: 'CNY', minimum_minor: 10000, discount_minor: 2000 }
+    listRechargeCoupons.mockResolvedValueOnce({ data: { items: [{ ...terms, id: 3 }], total: 1 } })
+    quoteRechargeCoupon.mockResolvedValueOnce({
+      data: { base_amount: 80, fee_fixed: 0, fee_rate: 0, fee_rate_amount: 0, fee_amount: 0, pay_amount: 80, amount: 200,
+        coupon_snapshot: { ...terms, coupon_id: 3, recharge_minor: 10000, charge_minor: 8000 } },
+    })
+    createOrder.mockReset().mockResolvedValueOnce({
+      order_id: 81, payment_type: 'wxpay', amount: 200, pay_amount: 80, qr_code: 'sample-code', out_trade_no: 'order-81',
+    })
+    const wrapper = shallowMount(PaymentView, {
+      global: { stubs: { MotionTransition: motionTransitionStub, AppLayout: { template: '<div><slot /></div>' } } },
+    })
+    await flushPromises()
+    wrapper.getComponent(AmountInput).vm.$emit('update:modelValue', 100)
+    wrapper.getComponent({ name: 'Select' }).vm.$emit('update:modelValue', 3)
+    await flushPromises()
+
+    expect(quoteRechargeCoupon).toHaveBeenCalledWith({ amount: 100, payment_type: 'wxpay', coupon_id: 3 }, expect.any(AbortSignal))
+    expect(wrapper.get('[data-testid="checkout-summary"]').text()).toContain(formatPaymentAmount(80, 'CNY'))
+    await wrapper.get('[data-testid="checkout-summary"] button').trigger('click')
+    expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({ amount: 100, coupon_id: 3 }), expect.any(String))
+    wrapper.unmount()
   })
 })
 

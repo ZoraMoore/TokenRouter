@@ -44,6 +44,8 @@ func RegisterRoutes(
 		authenticated.GET("/checkout-info", paymentHandler.GetCheckoutInfo)
 		authenticated.GET("/plans", planHandler.GetPlans)
 		authenticated.GET("/limits", paymentHandler.GetLimits)
+		authenticated.GET("/coupons", paymentHandler.ListRechargeCoupons)
+		authenticated.POST("/coupons/quote", paymentHandler.QuoteRechargeCoupon)
 
 		orders := authenticated.Group("/orders")
 		{

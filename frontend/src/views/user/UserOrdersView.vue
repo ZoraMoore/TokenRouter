@@ -18,6 +18,13 @@
         <OrderTable :orders="orders" :loading="loading">
           <template #actions="{ row }">
             <div class="flex items-center gap-2">
+              <router-link
+                v-if="row.coupon_snapshot"
+                :to="{ path: '/payment/result', query: { order_id: String(row.id) } }"
+                class="text-xs font-medium text-primary-600 dark:text-primary-400"
+              >
+                {{ t('payment.orders.viewDetail') }}
+              </router-link>
               <button v-if="row.status === 'PENDING'" @click="handleCancel(row.id)" class="inline-flex items-center gap-1 rounded-compact px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/20">
                 <Icon name="x" size="sm" />
                 <span>{{ t('payment.orders.cancel') }}</span>
@@ -123,6 +130,7 @@ const statusFilters = computed(() => [
   { value: '', label: t('common.all') },
   { value: 'PENDING', label: t('payment.status.pending') },
   { value: 'PROCESSING', label: t('payment.status.processing') },
+  { value: 'PAYMENT_REVIEW', label: t('payment.status.payment_review') },
   { value: 'COMPLETED', label: t('payment.status.completed') },
   { value: 'FAILED', label: t('payment.status.failed') },
   { value: 'REFUNDED', label: t('payment.status.refunded') },

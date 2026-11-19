@@ -30,6 +30,7 @@ func BuildCheckoutDraft(req CreateOrderRequest, user *Buyer, plan *SubscriptionP
 		SrcURL:           NilIfEmpty(req.SrcURL),
 		ProviderSnapshot: BuildPaymentOrderProviderSnapshot(sel, req),
 		BillingSnapshot:  BillingInfoSnapshot(req.BillingInfo),
+		CouponSnapshot:   req.couponSnapshot,
 	}
 	if order.ProviderSnapshot == nil {
 		order.ProviderSnapshot = map[string]any{}
@@ -82,6 +83,10 @@ func ValidateCheckoutDaily(orders []*Order, amount, limit float64) error {
 	var used float64
 	for _, o := range orders {
 		if o.OrderType == OrderTypeBalance {
+			if o.CouponSnapshot != nil {
+				used += rechargeCouponAmount(o.CouponSnapshot.RechargeMinor, o.CouponSnapshot.Currency)
+				continue
+			}
 			used += o.PayAmount
 			continue
 		}

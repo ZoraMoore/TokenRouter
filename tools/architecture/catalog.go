@@ -23,7 +23,7 @@ github.com/pquerna/otp github.com/pquerna/otp/totp github.com/robfig/cron/v3
 github.com/shopspring/decimal github.com/tidwall/gjson github.com/tidwall/sjson
 github.com/tiktoken-go/tokenizer go.uber.org/zap golang.org/x/crypto/bcrypt golang.org/x/image/draw
 golang.org/x/image/webp golang.org/x/net/html golang.org/x/net/http/httpguts golang.org/x/net/publicsuffix
-golang.org/x/sync/errgroup golang.org/x/sync/singleflight`, Tests: `github.com/DATA-DOG/go-sqlmock github.com/redis/go-redis/v9 github.com/stretchr/testify/assert
+golang.org/x/sync/errgroup golang.org/x/sync/singleflight golang.org/x/text/currency`, Tests: `github.com/DATA-DOG/go-sqlmock github.com/redis/go-redis/v9 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require github.com/testcontainers/testcontainers-go/modules/redis`},
 		"fixture": {Production: `entgo.io/ent/dialect entgo.io/ent/dialect/sql github.com/alicebob/miniredis/v2
 github.com/gin-gonic/gin github.com/lib/pq github.com/redis/go-redis/v9
@@ -201,9 +201,9 @@ internal/infra/telemetry/... internal/notification/contract internal/ops/... int
 internal/scheduler internal/server/httpx internal/server/middleware internal/settings
 internal/settings/preaggregation`, Tests: `internal/testutil/rediscontainer ent/... internal/notification internal/notification/smtp internal/notification/testkit
 internal/routing/capability internal/testutil/assertion migrations`},
-		"internal/payment": {Production: `ent/... internal/billing internal/billing/httpapi internal/billing/postgres internal/identity
+		"internal/payment": {Production: `ent/... internal/billing internal/billing/httpapi internal/billing/postgres internal/idempotency/httpapi internal/identity
 internal/identity/httpapi internal/identity/httpapi/authctx internal/payment/... internal/pkg/
-internal/promotion internal/server/httpx internal/settings`, Tests: "internal/testutil/assertion internal/testutil/sqlite"},
+internal/promotion internal/server/httpx internal/settings`, Tests: "internal/testutil/assertion internal/testutil/postgrescontainer internal/testutil/sqlite"},
 		"internal/pkg": {Production: "internal/pkg/...", Tests: ""},
 		"internal/promotion": {Production: `ent/... internal/identity internal/identity/contact internal/identity/httpapi/authctx
 internal/identity/httpapi/dto internal/pkg/ internal/promotion/... internal/server/httpx
@@ -419,6 +419,7 @@ internal/upstream/zhipu/...`, Tests: ""},
 		{Scope: "internal/batchimage", Imports: "internal/billing/provider", Files: "public_test.go"},
 		{Scope: "internal/billing", Imports: "internal/billing/postgres", Files: "redeem_admin_external_test.go subscription_service_test.go"},
 		{Scope: "internal/billing", Imports: "internal/billing/provider", Files: "price_resolver_test.go"},
+		{Scope: "internal/billing", Imports: "golang.org/x/text/currency", Files: "recharge_coupons.go"},
 		{Scope: "internal/billing", Imports: "internal/modelcatalog/provider", Files: "calculator_external_test.go helpers_external_test.go price_resolver_test.go"},
 		{Scope: "internal/billing", Imports: "internal/gateway/provider/modelidentity", Files: "calculator_external_test.go helpers_external_test.go"},
 		{Scope: "internal/billing/postgres", Imports: "internal/batchimage/postgres", Files: "settlement_test.go"},
@@ -439,7 +440,9 @@ internal/upstream/zhipu/...`, Tests: ""},
 		{Scope: "internal/identity/postgres", Imports: "internal/usage/postgres/query", Files: "user_repo.go"},
 		{Scope: "internal/moderation", Imports: "internal/moderation/provider", Files: "service_test.go helpers_test.go"},
 		{Scope: "internal/moderation/postgres", Imports: "internal/identity/postgres", Files: "repository_test.go"},
+		{Scope: "internal/payment/httpapi", Imports: "internal/idempotency/httpapi", Files: "user.go"},
 		{Scope: "internal/payment/postgres", Imports: "internal/billing/postgres", Files: "checkout_scenario_test.go"},
+		{Scope: "internal/payment/postgres", Imports: "internal/testutil/postgrescontainer", Files: "recharge_coupons_integration_test.go"},
 		{Scope: "internal/routing", Imports: "internal/modelcatalog/provider", Files: "marketplace_external_test.go"},
 		{Scope: "internal/routing", Imports: "internal/provider/provider", Files: "group_admin_external_test.go"},
 		{Scope: "internal/routing", Imports: "internal/gateway/provider/modelidentity", Files: "marketplace_external_test.go"},

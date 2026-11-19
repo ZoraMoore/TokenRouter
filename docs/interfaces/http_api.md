@@ -101,6 +101,14 @@ Markdown 正文需要 JWT，并且菜单可见；管理员页面只对管理员�
 - 订阅不属于当前用户或不存在，返回 `SUBSCRIPTION_NOT_FOUND`；不是当前 active 的记录，返回 `SUBSCRIPTION_NOT_ACTIVE`（409）；最高层额度还有剩余或套餐不限额，返回 `SUBSCRIPTION_QUOTA_NOT_EXHAUSTED`（409）。撤销不退款，用户端也没有恢复接口。
 
 <a id="payment_admin_recovery"></a>
+## 余额充值券
+
+用户登录后可通过 `GET /api/v1/payment/coupons` 分页读取本人已经领取的券。传入 `available=true` 读取可选用的券。`POST /api/v1/payment/coupons/quote` 接受 `coupon_id`、`payment_type` 和充值面额 `amount`，返回订单抵扣、手续费、实付和到账额。
+
+创建余额订单时可在 `POST /api/v1/payment/orders` 传入 `coupon_id` 和请求头 `Idempotency-Key`。服务端重验券的归属、币种、使用状态和金额。用券订单返回 `coupon_snapshot`。`minimum_minor`、`discount_minor`、`recharge_minor` 和 `charge_minor` 使用币种最小单位。
+
+管理员生成类型为 `coupon` 的兑换码时，提供 `coupon_terms`，其中包含 `currency`、`minimum_minor` 和 `discount_minor`。用户在兑换码入口领取该券，使用状态通过充值券接口查询。
+
 ## 支付管理恢复
 
 支付、推广和 Promo 的路由分别绑定 `payment/httpapi` 和 `promotion/httpapi`。Webhook 按原始的 body、query 和 Header 验签。

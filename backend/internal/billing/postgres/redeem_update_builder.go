@@ -17,6 +17,9 @@ func redeemUpdateBuilder(client *dbent.Client, code *billing.RedeemCode) *dbent.
 		SetUsedCount(code.UsedCount).
 		SetNotes(code.Notes)
 
+	if code.CouponTerms != nil {
+		update.SetCouponTerms(*code.CouponTerms)
+	}
 	if code.UsedBy != nil {
 		update.SetUsedBy(*code.UsedBy)
 	} else {

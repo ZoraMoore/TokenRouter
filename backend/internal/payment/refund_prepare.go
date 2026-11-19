@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/TokenFlux/TokenRouter/internal/billing"
 	infraerrors "github.com/TokenFlux/TokenRouter/internal/pkg/apperror"
 )
@@ -94,7 +96,16 @@ func (s *RefundWorkflow) PrepareRefund(ctx context.Context, oid int64, amt float
 	if amt-o.Amount > PaymentAmountToleranceForCurrency(orderCurrency) {
 		return nil, nil, infraerrors.BadRequest("REFUND_AMOUNT_EXCEEDED", "refund amount exceeds recharge")
 	}
+	if o.CouponSnapshot != nil {
+		precise := decimal.NewFromFloat(amt)
+		if amt > o.Amount || !precise.Equal(precise.Truncate(2)) {
+			return nil, nil, infraerrors.BadRequest("INVALID_AMOUNT", "coupon refund must fit the credited balance and settlement precision")
+		}
+	}
 	ga := CalculateGatewayRefundAmount(o.Amount, o.PayAmount, amt, orderCurrency)
+	if o.CouponSnapshot != nil && (ga <= 0 || ga > o.PayAmount) {
+		return nil, nil, infraerrors.BadRequest("INVALID_AMOUNT", "coupon refund must fit the amount received")
+	}
 	rr := strings.TrimSpace(reason)
 	if rr == "" && o.RefundRequestReason != nil {
 		rr = *o.RefundRequestReason

@@ -187,6 +187,21 @@
                     :currency="selectedCurrency"
                   />
                   <p v-if="amountError" class="mt-2 text-xs text-amber-600 dark:text-amber-300">{{ amountError }}</p>
+                  <div v-if="coupons.length > 0" class="mt-4">
+                    <label for="recharge-coupon" class="input-label">{{ t('payment.coupons.title') }}</label>
+                    <Select
+                      id="recharge-coupon"
+                      v-model="selectedCouponID"
+                      data-testid="recharge-coupon-select"
+                      :options="couponOptions"
+                      :disabled="submitting"
+                    />
+                    <button v-if="coupons.length < couponsTotal && !couponListLoading" type="button" class="btn btn-secondary btn-sm mt-2" @click="loadCouponPage">
+                      {{ t('payment.coupons.loadMore') }}
+                    </button>
+                    <p v-if="couponQuoteLoading" class="input-hint">{{ t('payment.coupons.quoting') }}</p>
+                    <p v-else-if="couponQuoteError" class="input-hint text-red-600 dark:text-red-400" role="status">{{ couponQuoteError }}</p>
+                  </div>
                 </section>
 
                 <section v-if="enabledMethods.length >= 1" class="card p-4 sm:p-6">
@@ -253,6 +268,10 @@
                       <dt class="text-gray-500 dark:text-dark-400">{{ checkoutBaseLabel }}</dt>
                       <dd class="tabular-nums text-gray-900 dark:text-dark-100">{{ checkoutBaseText }}</dd>
                     </div>
+                    <div v-if="!isSubscriptionCheckout && couponQuote" class="flex justify-between gap-4">
+                      <dt class="text-gray-500 dark:text-dark-400">{{ t('payment.coupons.discount') }}</dt>
+                      <dd class="font-medium tabular-nums text-primary-600 dark:text-primary-400">−{{ formatSelectedPaymentAmount(couponDiscount) }}</dd>
+                    </div>
                     <div v-if="checkoutFeeBreakdown.fixedFee > 0" class="flex justify-between gap-4">
                       <dt class="text-gray-500 dark:text-dark-400">{{ t('payment.fixedFee') }}</dt>
                       <dd class="tabular-nums text-gray-900 dark:text-dark-100">{{ formatSelectedPaymentAmount(checkoutFeeBreakdown.fixedFee) }}</dd>
@@ -267,11 +286,11 @@
                     </div>
                     <div class="flex items-baseline justify-between gap-4 border-t border-gray-100 pt-3 dark:border-dark-700">
                       <dt class="font-medium text-gray-900 dark:text-white">{{ t('payment.actualPay') }}</dt>
-                      <dd class="text-xl font-semibold tabular-nums text-gray-900 dark:text-white">{{ formatSelectedPaymentAmount(checkoutTotalAmount) }}</dd>
+                      <dd class="text-xl font-semibold tabular-nums text-gray-900 dark:text-white">{{ couponQuoteRequired ? '—' : formatSelectedPaymentAmount(checkoutTotalAmount) }}</dd>
                     </div>
-                    <div v-if="!isSubscriptionCheckout && balanceRechargeMultiplier !== 1" class="flex justify-between gap-4">
+                    <div v-if="!isSubscriptionCheckout && (balanceRechargeMultiplier !== 1 || couponQuote)" class="flex justify-between gap-4">
                       <dt class="text-gray-500 dark:text-dark-400">{{ t('payment.creditedBalance') }}</dt>
-                      <dd class="font-medium tabular-nums text-primary-600 dark:text-primary-400">{{ formatBalanceAmount(creditedAmount, { fractionDigits: 2 }) }}</dd>
+                      <dd class="font-medium tabular-nums text-primary-600 dark:text-primary-400">{{ formatBalanceAmount(couponQuote?.amount ?? creditedAmount, { fractionDigits: 2 }) }}</dd>
                     </div>
                   </dl>
                   <p v-if="!isSubscriptionCheckout && balanceRechargeMultiplier !== 1" class="mt-3 text-xs text-gray-500 dark:text-dark-400">
@@ -289,7 +308,7 @@
                         <Icon name="loader" size="sm" :animate-on-hover="false" class="animate-spin" />
                         {{ t('common.processing') }}
                       </template>
-                      <template v-else>{{ t('payment.createOrder') }} {{ formatSelectedPaymentAmount(checkoutTotalAmount) }}</template>
+                      <template v-else>{{ t('payment.createOrder') }} {{ couponQuoteRequired ? '' : formatSelectedPaymentAmount(checkoutTotalAmount) }}</template>
                     </button>
                     <button
                       v-if="isSubscriptionCheckout"
@@ -350,7 +369,7 @@
 import { useLocaleRefresh } from '@/composables/useLocaleRefresh'
 import { vSegmented } from '@/directives/segmented'
 import MotionTransition from '@/components/common/MotionTransition.vue'
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { marked } from 'marked'
@@ -362,7 +381,7 @@ import { useAppStore } from '@/stores'
 import { paymentAPI } from '@/api/payment'
 import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiError'
 import { isMobileDevice } from '@/utils/device'
-import type { BillingInfo, SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType } from '@/types/payment'
+import type { BillingInfo, SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType, RechargeCoupon, RechargeCouponQuote } from '@/types/payment'
 import type { UserSubscription } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AmountInput from '@/components/payment/AmountInput.vue'
@@ -385,11 +404,13 @@ import SubscriptionUsageList from '@/components/common/SubscriptionUsageList.vue
 import PaymentStatusPanel from '@/components/payment/PaymentStatusPanel.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import Skeleton from '@/components/common/Skeleton.vue'
 import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
 import { DEFAULT_PAYMENT_CURRENCY, formatPaymentAmount, normalizePaymentCurrency, paymentCurrencyFractionDigits } from '@/components/payment/currency'
 import { planValiditySuffix as validitySuffixOf } from '@/components/payment/validity'
+import { rechargeCouponAmount, rechargeCouponLabel } from '@/components/payment/rechargeCoupon'
 import type { PaymentMethodOption } from '@/components/payment/PaymentMethodSelector.vue'
 import { buildPaymentErrorToastMessage, describePaymentScenarioError } from './paymentUx'
 import { hasWechatResumeQuery, parseWechatResumeRoute, stripWechatResumeQuery } from './paymentWechatResume'
@@ -417,6 +438,17 @@ const submitting = ref(false)
 const errorMessage = ref('')
 const errorHintMessage = ref('')
 const activeTab = ref<'recharge' | 'subscription'>('recharge')
+const coupons = ref<RechargeCoupon[]>([])
+const couponsTotal = ref(0)
+const couponListLoading = ref(false)
+const selectedCouponID = ref(0)
+const couponQuoteResult = ref<{ key: string; quote: RechargeCouponQuote } | null>(null)
+const couponQuoteLoading = ref(false)
+const couponQuoteError = ref('')
+const couponListController = new AbortController()
+const couponPageSize = 50
+let couponPage = 0
+let couponOrderAttempt: { input: string; key: string } | null = null
 const amount = ref<number | null>(null)
 const selectedMethod = ref('')
 const selectedPlan = ref<SubscriptionPlan | null>(null)
@@ -440,6 +472,7 @@ const paymentPhase = ref<'select' | 'paying'>('select')
 interface CreateOrderOptions {
   openid?: string
   wechatResumeToken?: string
+  couponId?: number
   paymentType?: string
   isResume?: boolean
   mobileQrFallbackAttempted?: boolean
@@ -548,7 +581,7 @@ async function redirectToPaymentResult(state: PaymentRecoverySnapshot): Promise<
 
 function buildWechatOAuthAuthorizeUrl(
   authorizeUrl: string,
-  context: { paymentType: string; orderType: OrderType; planId?: number; orderAmount: number },
+  context: { paymentType: string; orderType: OrderType; planId?: number; orderAmount: number; couponId: number },
 ): string {
   const normalizedUrl = authorizeUrl.trim()
   if (!normalizedUrl || typeof window === 'undefined') {
@@ -563,6 +596,7 @@ function buildWechatOAuthAuthorizeUrl(
 
     redirectUrl.searchParams.set('payment_type', paymentType)
     redirectUrl.searchParams.set('order_type', context.orderType)
+    if (context.couponId > 0) redirectUrl.searchParams.set('coupon_id', String(context.couponId))
 
     if (context.planId) {
       redirectUrl.searchParams.set('plan_id', String(context.planId))
@@ -733,6 +767,61 @@ function validateStripeBillingInfo(): boolean {
 }
 
 const selectedCurrency = computed(() => normalizePaymentCurrency(selectedLimit.value?.currency))
+const couponOptions = computed(() => [
+  { value: 0, label: t('payment.coupons.none') },
+  ...coupons.value.map(coupon => ({
+    value: coupon.id,
+    label: t('payment.coupons.terms', rechargeCouponLabel(coupon)),
+  })),
+])
+const couponQuoteKey = computed(() => JSON.stringify([selectedCouponID.value, validAmount.value, selectedMethod.value]))
+const couponQuote = computed(() => couponQuoteResult.value?.key === couponQuoteKey.value ? couponQuoteResult.value.quote : undefined)
+const couponQuoteRequired = computed(() => activeTab.value === 'recharge' && selectedCouponID.value > 0 && !couponQuote.value)
+const couponDiscount = computed(() => {
+  const snapshot = couponQuote.value?.coupon_snapshot
+  return snapshot ? rechargeCouponAmount(snapshot.discount_minor, snapshot.currency) : 0
+})
+
+async function loadCouponPage() {
+  if (couponListLoading.value) return
+  couponListLoading.value = true
+  try {
+    const { data } = await paymentAPI.listRechargeCoupons({ page: couponPage + 1, page_size: couponPageSize, available: true }, couponListController.signal)
+    if (couponListController.signal.aborted) return
+    const added = data.items.filter(coupon => !coupons.value.some(saved => saved.id === coupon.id))
+    coupons.value.push(...added)
+    couponsTotal.value = data.total
+    couponPage++
+  } catch (error) {
+    if (!couponListController.signal.aborted) couponQuoteError.value = extractApiErrorMessage(error, t('payment.coupons.loadFailed'))
+  } finally {
+    couponListLoading.value = false
+  }
+}
+
+watch([couponQuoteKey, activeTab], async ([key, tab], _previous, onCleanup) => {
+  couponQuoteLoading.value = false
+  couponQuoteResult.value = null
+  couponQuoteError.value = ''
+  if (tab !== 'recharge' || !selectedCouponID.value || !selectedMethod.value || validAmount.value <= 0) return
+  const controller = new AbortController()
+  onCleanup(() => controller.abort())
+  couponQuoteLoading.value = true
+  try {
+    const { data } = await paymentAPI.quoteRechargeCoupon({
+      amount: validAmount.value,
+      payment_type: selectedMethod.value,
+      coupon_id: selectedCouponID.value,
+    }, controller.signal)
+    if (!controller.signal.aborted) couponQuoteResult.value = { key, quote: data }
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      couponQuoteError.value = extractI18nErrorMessage(error, t, 'payment.errors', t('payment.coupons.quoteFailed'))
+    }
+  } finally {
+    if (!controller.signal.aborted) couponQuoteLoading.value = false
+  }
+})
 const localeCode = computed(() => {
   const raw = i18n.locale as unknown
   if (typeof raw === 'string') return raw
@@ -762,7 +851,7 @@ const methodOptions = computed<PaymentMethodOption[]>(() =>
       fee_fixed: ml?.fee_fixed ?? 0,
       display_name: ml?.display_name,
       fee_rate: ml?.fee_rate ?? 0,
-      available: ml?.available !== false && amountFitsMethod(validAmount.value, type),
+      available: ml?.available !== false && (selectedCouponID.value > 0 || amountFitsMethod(validAmount.value, type)),
     }
   })
 )
@@ -809,11 +898,21 @@ function calculateFeeBreakdown(baseAmount: number, methodType: string): FeeBreak
   }
 }
 
-const rechargeFeeBreakdown = computed(() => calculateFeeBreakdown(validAmount.value, selectedMethod.value))
+const rechargeFeeBreakdown = computed(() => {
+  const quote = couponQuote.value
+  if (quote) {
+    return { fixedFee: quote.fee_fixed, feeRate: quote.fee_rate, rateFee: quote.fee_rate_amount, totalFee: quote.fee_amount, payAmount: quote.pay_amount }
+  }
+  return calculateFeeBreakdown(validAmount.value, selectedMethod.value)
+})
 const totalAmount = computed(() => rechargeFeeBreakdown.value.payAmount)
 
 const amountError = computed(() => {
   if (validAmount.value <= 0) return ''
+  if (selectedCouponID.value > 0) {
+    const quote = couponQuote.value
+    return quote && !amountFitsMethod(quote.pay_amount, selectedMethod.value) ? t('payment.amountNoMethod') : ''
+  }
   // No method can handle this amount
   if (!enabledMethods.value.some((m) => amountFitsMethod(validAmount.value, m))) {
     return t('payment.amountNoMethod')
@@ -829,7 +928,8 @@ const amountError = computed(() => {
 
 const canSubmit = computed(() =>
   validAmount.value > 0
-    && amountFitsMethod(validAmount.value, selectedMethod.value)
+    && !couponQuoteRequired.value
+    && amountFitsMethod(couponQuote.value?.pay_amount ?? validAmount.value, selectedMethod.value)
     && selectedLimit.value?.available !== false
     && (!isStripeSelected.value || (billingInfo.name.trim() !== '' && billingInfo.email.trim() !== ''))
 )
@@ -888,6 +988,7 @@ function handleCheckoutSubmit() {
 
 // Auto-switch to first available method when current selection can't handle the amount
 watch(() => [validAmount.value, selectedMethod.value] as const, ([amt, method]) => {
+  if (selectedCouponID.value > 0 && activeTab.value === 'recharge') return
   if (amt <= 0 || amountFitsMethod(amt, method)) return
   const available = enabledMethods.value.find((m) => amountFitsMethod(amt, m))
   if (available) selectedMethod.value = available
@@ -1031,6 +1132,7 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
   errorMessage.value = ''
   errorHintMessage.value = ''
   const requestType = normalizeVisibleMethod(options.paymentType || selectedMethod.value) || options.paymentType || selectedMethod.value
+  const couponId = orderType === 'balance' ? (options.couponId ?? selectedCouponID.value) : 0
   try {
     const payload = buildCreateOrderPayload({
       amount: orderAmount,
@@ -1050,8 +1152,22 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
     if (options.wechatResumeToken) {
       payload.wechat_resume_token = options.wechatResumeToken
     }
-
-    const result = await paymentStore.createOrder(payload) as CreateOrderResult & { resume_token?: string }
+    if (couponId > 0) payload.coupon_id = couponId
+    let orderKey: string | undefined
+    if (couponId > 0 && !options.wechatResumeToken) {
+      const input = JSON.stringify(payload)
+      if (couponOrderAttempt?.input !== input) {
+        couponOrderAttempt = { input, key: Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join('') }
+      }
+      orderKey = couponOrderAttempt.key
+    }
+    const result = (orderKey ? await paymentStore.createOrder(payload, orderKey) : await paymentStore.createOrder(payload)) as CreateOrderResult & { resume_token?: string }
+    if (result.order_id > 0) couponOrderAttempt = null
+    if (result.order_id > 0 && result.coupon_snapshot) {
+      const usedCouponID = result.coupon_snapshot.coupon_id
+      coupons.value = coupons.value.filter(coupon => coupon.id !== usedCouponID)
+      selectedCouponID.value = 0
+    }
     const openWindow = (url: string) => {
       const win = window.open(url, 'paymentPopup', getPaymentPopupFeatures())
       if (!win || win.closed) {
@@ -1103,6 +1219,7 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
         orderType,
         planId,
         orderAmount,
+        couponId,
       })
       return
     }
@@ -1137,7 +1254,7 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
           resetPayment()
         } else if (errMsg && !errMsg.includes('ok')) {
           resetPayment()
-          const fallbackApplied = await attemptMobileQrFallback(
+          const fallbackApplied = !result.coupon_snapshot && await attemptMobileQrFallback(
             { reason: 'WECHAT_JSAPI_FAILED', message: errMsg },
             {
               orderAmount,
@@ -1157,7 +1274,7 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
         }
       } catch (err: unknown) {
         resetPayment()
-        const fallbackApplied = await attemptMobileQrFallback(err, {
+        const fallbackApplied = !result.coupon_snapshot && await attemptMobileQrFallback(err, {
           orderAmount,
           orderType,
           planId,
@@ -1186,7 +1303,7 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
     } else if (apiErr.reason === 'CANCEL_RATE_LIMITED') {
       errorMessage.value = t('payment.errors.cancelRateLimited')
       errorHintMessage.value = ''
-    } else if (await attemptMobileQrFallback(err, {
+    } else if (couponId === 0 && await attemptMobileQrFallback(err, {
       orderAmount,
       orderType,
       planId,
@@ -1346,6 +1463,7 @@ async function resumeWechatPaymentFromQuery() {
   if (resume.wechatResumeToken) {
     await createOrder(0, resume.orderType, resume.planId, {
       wechatResumeToken: resume.wechatResumeToken,
+      couponId: resume.couponId,
       paymentType: resume.paymentType,
       isResume: true,
     })
@@ -1355,6 +1473,7 @@ async function resumeWechatPaymentFromQuery() {
   if (resume.orderAmount > 0 && resume.openid) {
     await createOrder(resume.orderAmount, resume.orderType, resume.planId, {
       openid: resume.openid,
+      couponId: resume.couponId,
       paymentType: resume.paymentType,
       isResume: true,
     })
@@ -1365,6 +1484,7 @@ onMounted(async () => {
   try {
     const res = await paymentAPI.getCheckoutInfo()
     checkout.value = res.data
+    if (!checkout.value.balance_disabled) void loadCouponPage()
     if (enabledMethods.value.length) {
       const order: readonly string[] = METHOD_ORDER
       const sorted = [...enabledMethods.value].sort((a, b) => {
@@ -1427,6 +1547,7 @@ onMounted(async () => {
   // Fetch active subscriptions (uses cache, non-blocking)
   subscriptionStore.fetchActiveSubscriptions().catch(() => {})
 })
+onBeforeUnmount(() => couponListController.abort())
 useLocaleRefresh(async () => {
   const { data } = await paymentAPI.getCheckoutInfo()
   checkout.value = data

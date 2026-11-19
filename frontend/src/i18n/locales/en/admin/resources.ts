@@ -298,6 +298,12 @@ export default {
       customCodeCountHint: 'When a custom code is set, the count is fixed at 1.',
       codeType: 'Code Type',
       amount: 'Amount',
+      coupon: {
+        currency: 'Currency',
+        minimum: 'Minimum recharge',
+        discount: 'Discount',
+        invalid: 'Enter a valid currency and a positive discount below the minimum recharge.'
+      },
       value: 'Value',
       maxUses: 'Redemption Limit',
       maxUsesHint: 'Set to 0 for unlimited redemptions.',
@@ -332,6 +338,7 @@ export default {
         concurrency: 'Concurrency',
         subscription: 'Subscription',
         invitation: 'Invitation',
+        coupon: 'Recharge coupon',
         affiliate_balance: 'Affiliate Balance Transfer',
         // Admin adjustment types (created when admin modifies user balance/concurrency)
         admin_balance: 'Balance (Admin)',

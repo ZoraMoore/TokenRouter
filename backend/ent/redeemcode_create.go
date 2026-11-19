@@ -15,6 +15,7 @@ import (
 	"github.com/TokenFlux/TokenRouter/ent/redeemcodeusage"
 	"github.com/TokenFlux/TokenRouter/ent/subscriptionplan"
 	"github.com/TokenFlux/TokenRouter/ent/user"
+	"github.com/TokenFlux/TokenRouter/internal/billing"
 )
 
 // RedeemCodeCreate is the builder for creating a RedeemCode entity.
@@ -55,6 +56,20 @@ func (_c *RedeemCodeCreate) SetValue(v float64) *RedeemCodeCreate {
 func (_c *RedeemCodeCreate) SetNillableValue(v *float64) *RedeemCodeCreate {
 	if v != nil {
 		_c.SetValue(*v)
+	}
+	return _c
+}
+
+// SetCouponTerms sets the "coupon_terms" field.
+func (_c *RedeemCodeCreate) SetCouponTerms(v billing.RechargeCouponTerms) *RedeemCodeCreate {
+	_c.mutation.SetCouponTerms(v)
+	return _c
+}
+
+// SetNillableCouponTerms sets the "coupon_terms" field if the given value is not nil.
+func (_c *RedeemCodeCreate) SetNillableCouponTerms(v *billing.RechargeCouponTerms) *RedeemCodeCreate {
+	if v != nil {
+		_c.SetCouponTerms(*v)
 	}
 	return _c
 }
@@ -383,6 +398,10 @@ func (_c *RedeemCodeCreate) createSpec() (*RedeemCode, *sqlgraph.CreateSpec) {
 		_spec.SetField(redeemcode.FieldValue, field.TypeFloat64, value)
 		_node.Value = value
 	}
+	if value, ok := _c.mutation.CouponTerms(); ok {
+		_spec.SetField(redeemcode.FieldCouponTerms, field.TypeJSON, value)
+		_node.CouponTerms = value
+	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(redeemcode.FieldStatus, field.TypeString, value)
 		_node.Status = value
@@ -556,6 +575,24 @@ func (u *RedeemCodeUpsert) UpdateValue() *RedeemCodeUpsert {
 // AddValue adds v to the "value" field.
 func (u *RedeemCodeUpsert) AddValue(v float64) *RedeemCodeUpsert {
 	u.Add(redeemcode.FieldValue, v)
+	return u
+}
+
+// SetCouponTerms sets the "coupon_terms" field.
+func (u *RedeemCodeUpsert) SetCouponTerms(v billing.RechargeCouponTerms) *RedeemCodeUpsert {
+	u.Set(redeemcode.FieldCouponTerms, v)
+	return u
+}
+
+// UpdateCouponTerms sets the "coupon_terms" field to the value that was provided on create.
+func (u *RedeemCodeUpsert) UpdateCouponTerms() *RedeemCodeUpsert {
+	u.SetExcluded(redeemcode.FieldCouponTerms)
+	return u
+}
+
+// ClearCouponTerms clears the value of the "coupon_terms" field.
+func (u *RedeemCodeUpsert) ClearCouponTerms() *RedeemCodeUpsert {
+	u.SetNull(redeemcode.FieldCouponTerms)
 	return u
 }
 
@@ -800,6 +837,27 @@ func (u *RedeemCodeUpsertOne) AddValue(v float64) *RedeemCodeUpsertOne {
 func (u *RedeemCodeUpsertOne) UpdateValue() *RedeemCodeUpsertOne {
 	return u.Update(func(s *RedeemCodeUpsert) {
 		s.UpdateValue()
+	})
+}
+
+// SetCouponTerms sets the "coupon_terms" field.
+func (u *RedeemCodeUpsertOne) SetCouponTerms(v billing.RechargeCouponTerms) *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetCouponTerms(v)
+	})
+}
+
+// UpdateCouponTerms sets the "coupon_terms" field to the value that was provided on create.
+func (u *RedeemCodeUpsertOne) UpdateCouponTerms() *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateCouponTerms()
+	})
+}
+
+// ClearCouponTerms clears the value of the "coupon_terms" field.
+func (u *RedeemCodeUpsertOne) ClearCouponTerms() *RedeemCodeUpsertOne {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.ClearCouponTerms()
 	})
 }
 
@@ -1235,6 +1293,27 @@ func (u *RedeemCodeUpsertBulk) AddValue(v float64) *RedeemCodeUpsertBulk {
 func (u *RedeemCodeUpsertBulk) UpdateValue() *RedeemCodeUpsertBulk {
 	return u.Update(func(s *RedeemCodeUpsert) {
 		s.UpdateValue()
+	})
+}
+
+// SetCouponTerms sets the "coupon_terms" field.
+func (u *RedeemCodeUpsertBulk) SetCouponTerms(v billing.RechargeCouponTerms) *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.SetCouponTerms(v)
+	})
+}
+
+// UpdateCouponTerms sets the "coupon_terms" field to the value that was provided on create.
+func (u *RedeemCodeUpsertBulk) UpdateCouponTerms() *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.UpdateCouponTerms()
+	})
+}
+
+// ClearCouponTerms clears the value of the "coupon_terms" field.
+func (u *RedeemCodeUpsertBulk) ClearCouponTerms() *RedeemCodeUpsertBulk {
+	return u.Update(func(s *RedeemCodeUpsert) {
+		s.ClearCouponTerms()
 	})
 }
 

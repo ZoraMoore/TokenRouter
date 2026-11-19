@@ -59,5 +59,8 @@ func OrderFromEntity(v *dbent.PaymentOrder) *payment.Order {
 		CreatedAt:            v.CreatedAt,
 		UpdatedAt:            v.UpdatedAt,
 	}
+	if v.CouponSnapshot.CouponID > 0 {
+		value.CouponSnapshot = &v.CouponSnapshot
+	}
 	return value.Clone()
 }

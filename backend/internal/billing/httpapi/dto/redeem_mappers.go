@@ -39,6 +39,8 @@ func RedeemCodeFromServiceBase(rc *billing.RedeemCode) RedeemCode {
 		UsedAt:          rc.UsedAt,
 		CreatedAt:       rc.CreatedAt,
 		PlanID:          rc.PlanID,
+		CouponTerms:     rc.CouponTerms,
+		Coupon:          rc.Coupon,
 		User:            UserSummaryFromBilling(rc.User),
 	}
 

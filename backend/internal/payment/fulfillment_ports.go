@@ -19,6 +19,7 @@ type (
 		PaidAt, CompletedAt, FailedAt                    *time.Time
 		FailedReason                                     *string
 		ClearFailure                                     bool
+		ConfirmCoupon, ReleaseCoupon                     bool
 		InvoiceID, InvoiceURL, InvoicePDF, InvoiceStatus string
 	}
 )

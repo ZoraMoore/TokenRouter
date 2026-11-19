@@ -290,6 +290,16 @@ func ValueLTE(v float64) predicate.RedeemCode {
 	return predicate.RedeemCode(sql.FieldLTE(FieldValue, v))
 }
 
+// CouponTermsIsNil applies the IsNil predicate on the "coupon_terms" field.
+func CouponTermsIsNil() predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldIsNull(FieldCouponTerms))
+}
+
+// CouponTermsNotNil applies the NotNil predicate on the "coupon_terms" field.
+func CouponTermsNotNil() predicate.RedeemCode {
+	return predicate.RedeemCode(sql.FieldNotNull(FieldCouponTerms))
+}
+
 // StatusEQ applies the EQ predicate on the "status" field.
 func StatusEQ(v string) predicate.RedeemCode {
 	return predicate.RedeemCode(sql.FieldEQ(FieldStatus, v))

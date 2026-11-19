@@ -48,6 +48,7 @@ type WechatPaymentOAuthContext struct {
 	Amount      string `json:"amount,omitempty"`
 	OrderType   string `json:"order_type,omitempty"`
 	PlanID      int64  `json:"plan_id,omitempty"`
+	CouponID    int64  `json:"coupon_id,omitempty"`
 }
 
 func NewWeChatPaymentHandler(options WeChatPaymentHTTPOptions) *WeChatPaymentHandler {
@@ -80,11 +81,20 @@ func (h *WeChatPaymentHandler) WeChatPaymentOAuthStart(c *gin.Context) {
 	if redirectTo == "" {
 		redirectTo = WechatPaymentOAuthDefaultTo
 	}
+	var couponID int64
+	if raw := c.Query("coupon_id"); raw != "" {
+		couponID, err = strconv.ParseInt(raw, 10, 64)
+		if err != nil || couponID < 1 {
+			response.BadRequest(c, "invalid recharge coupon id")
+			return
+		}
+	}
 	rawContext, err := EncodeWeChatPaymentOAuthContext(WechatPaymentOAuthContext{
 		PaymentType: paymentType,
 		Amount:      strings.TrimSpace(c.Query("amount")),
 		OrderType:   strings.TrimSpace(c.Query("order_type")),
 		PlanID:      ParseWeChatPaymentPlanID(c.Query("plan_id")),
+		CouponID:    couponID,
 	})
 	if err != nil {
 		response.ErrorFrom(c, infraerrors.InternalServer("OAUTH_CONTEXT_ENCODE_FAILED", "failed to encode oauth context").WithCause(err))
@@ -185,6 +195,7 @@ func (h *WeChatPaymentHandler) WeChatPaymentOAuthCallback(c *gin.Context) {
 		Amount:      paymentContext.Amount,
 		OrderType:   paymentContext.OrderType,
 		PlanID:      paymentContext.PlanID,
+		CouponID:    paymentContext.CouponID,
 		RedirectTo:  redirectTo,
 		Scope:       scope,
 	})

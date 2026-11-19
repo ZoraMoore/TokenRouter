@@ -44,6 +44,11 @@ type RedeemTransactions interface {
 	ApplyConcurrency(context.Context, int64, int) error
 }
 
+// redeemCouponClaimer 写入与兑换记录同一事务的余额充值券。
+type redeemCouponClaimer interface {
+	ClaimRechargeCoupon(context.Context, int64, int64, RechargeCouponTerms, time.Time) (*RechargeCoupon, error)
+}
+
 type (
 	RedeemAuthInvalidator interface{ InvalidateAuthCacheByUserID(context.Context, int64) }
 	RedeemAffiliate       interface {
@@ -99,7 +104,10 @@ func (s *RedeemService) CreateCode(ctx context.Context, code *RedeemCode) error 
 	if code.Type == "" {
 		code.Type = RedeemTypeBalance
 	}
-	if code.Type != RedeemTypeInvitation && code.Value == 0 {
+	if err := validateRedeemCouponTerms(code.Type, code.CouponTerms, code.Value, code.PlanID); err != nil {
+		return err
+	}
+	if code.Type != RedeemTypeInvitation && code.Type != RedeemTypeCoupon && code.Value == 0 {
 		return errors.New("value must not be zero")
 	}
 	if code.Status == "" {
@@ -274,11 +282,13 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 	}
 
 	// 重新获取更新后的兑换码
+	coupon := redeemCode.Coupon
 	redeemCode, err = s.redeemRepo.GetByID(ctx, redeemCode.ID)
 	if err != nil {
 		return nil, fmt.Errorf("get updated redeem code: %w", err)
 	}
 
+	redeemCode.Coupon = coupon
 	return redeemCode, nil
 }
 
@@ -301,6 +311,10 @@ func (s *RedeemService) redeemInTx(ctx, txCtx context.Context, userID int64, cod
 	// 邀请码只允许在注册流程使用，普通兑换接口仅接受能直接发放权益的类型。
 	switch redeemCode.Type {
 	case RedeemTypeBalance, RedeemTypeConcurrency:
+	case RedeemTypeCoupon:
+		if err := validateRedeemCouponTerms(redeemCode.Type, redeemCode.CouponTerms, redeemCode.Value, redeemCode.PlanID); err != nil {
+			return nil, err
+		}
 	case RedeemTypeSubscription:
 		if redeemCode.PlanID == nil || *redeemCode.PlanID <= 0 {
 			return nil, apperror.BadRequest("REDEEM_CODE_INVALID", "invalid subscription redeem code: missing plan_id")
@@ -329,7 +343,18 @@ func (s *RedeemService) redeemInTx(ctx, txCtx context.Context, userID int64, cod
 	}
 
 	// 执行兑换逻辑（兑换码已被锁定，此时可安全操作）
+	usageTime := s.runtime.Now()
 	switch redeemCode.Type {
+	case RedeemTypeCoupon:
+		claimer, ok := s.redeemRepo.(redeemCouponClaimer)
+		if !ok {
+			return nil, errors.New("coupon store unavailable")
+		}
+		coupon, err := claimer.ClaimRechargeCoupon(txCtx, userID, redeemCode.ID, *redeemCode.CouponTerms, usageTime)
+		if err != nil {
+			return nil, fmt.Errorf("claim recharge coupon: %w", err)
+		}
+		redeemCode.Coupon = coupon
 	case RedeemTypeBalance:
 		if err := s.transactions.ApplyBalance(txCtx, userID, redeemCode.Value); err != nil {
 			if errors.Is(err, ErrRedeemBalanceUnsupported) {
@@ -360,7 +385,6 @@ func (s *RedeemService) redeemInTx(ctx, txCtx context.Context, userID int64, cod
 		return nil, unsupportedRedeemTypeError(redeemCode.Type)
 	}
 
-	usageTime := s.runtime.Now()
 	if err := s.redeemRepo.CreateUsage(txCtx, &RedeemCodeUsage{
 		RedeemCodeID: redeemCode.ID,
 		UserID:       userID,

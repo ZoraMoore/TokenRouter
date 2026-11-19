@@ -279,6 +279,7 @@ func (a *Airwallex) QueryOrder(ctx context.Context, tradeNo string) (*payment.Qu
 		Status:   airwallexProviderStatus(intent.Status),
 		Amount:   intent.Amount.InexactFloat64(),
 		Metadata: a.intentMetadata(intent, ""),
+		Closed:   strings.EqualFold(intent.Status, "CANCELLED"),
 	}, nil
 }
 

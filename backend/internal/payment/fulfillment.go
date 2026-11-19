@@ -140,7 +140,14 @@ func (s *Fulfillment) ConfirmPayment(ctx context.Context, o *Order, tradeNo stri
 		})
 		return fmt.Errorf("invalid paid amount from provider: %v", paid)
 	}
-	if math.Abs(paid-o.PayAmount) > PaymentAmountToleranceForCurrency(PaymentOrderCurrency(o)) {
+	currency := PaymentOrderCurrency(o)
+	mismatch := math.Abs(paid-o.PayAmount) > PaymentAmountToleranceForCurrency(currency)
+	if o.CouponSnapshot != nil {
+		expected, validExpected := rechargeCouponMinor(o.PayAmount, currency)
+		actual, validActual := rechargeCouponMinor(paid, currency)
+		mismatch = !validExpected || !validActual || expected != actual
+	}
+	if mismatch {
 		s.runtime.Audit(ctx, o.ID, "PAYMENT_AMOUNT_MISMATCH", pk, map[string]any{"expected": o.PayAmount, "paid": paid, "tradeNo": tradeNo})
 		return fmt.Errorf("amount mismatch: expected %s, got %s", strconv.FormatFloat(o.PayAmount, 'f', -1, 64), strconv.FormatFloat(paid, 'f', -1, 64))
 	}
@@ -245,16 +252,22 @@ func (s *Fulfillment) ToPaid(ctx context.Context, o *Order, tradeNo string, paid
 	for range 5 {
 		previousStatus := o.Status
 		switch previousStatus {
+		case OrderStatusFailed:
+			if o.PaidAt != nil {
+				return s.ExecuteFulfillment(ctx, o.ID)
+			}
+			fallthrough
 		case OrderStatusPending, OrderStatusProcessing, OrderStatusExpired, OrderStatusCancelled:
 			now := s.runtime.Now()
 			change := OrderTransition{
-				ID:           o.ID,
-				From:         []string{previousStatus},
-				Status:       OrderStatusPaid,
-				PayAmount:    &paid,
-				PaidAt:       &now,
-				ClearFailure: true,
-				TradeNo:      strings.TrimSpace(tradeNo),
+				ID:            o.ID,
+				From:          []string{previousStatus},
+				Status:        OrderStatusPaid,
+				PayAmount:     &paid,
+				PaidAt:        &now,
+				ClearFailure:  true,
+				TradeNo:       strings.TrimSpace(tradeNo),
+				ConfirmCoupon: o.CouponSnapshot != nil,
 			}
 			ApplyInvoiceMetadata(&change, metadata)
 			updated, err := s.store.TransitionOrder(ctx, change)
@@ -267,6 +280,15 @@ func (s *Fulfillment) ToPaid(ctx context.Context, o *Order, tradeNo string, paid
 					return fmt.Errorf("reload payment order after success race: %w", err)
 				}
 				continue
+			}
+			if o.CouponSnapshot != nil {
+				current, err := s.store.Order(ctx, o.ID)
+				if err != nil {
+					return fmt.Errorf("reload coupon order after payment: %w", err)
+				}
+				if current.Status == OrderStatusPaymentReview {
+					return nil
+				}
 			}
 			if previousStatus != OrderStatusPending {
 				s.runtime.Log("info", "order recovered from payment success",
@@ -284,9 +306,9 @@ func (s *Fulfillment) ToPaid(ctx context.Context, o *Order, tradeNo string, paid
 			}
 			s.runtime.Audit(ctx, o.ID, "ORDER_PAID", pk, map[string]any{"tradeNo": tradeNo, "paidAmount": paid})
 			return s.ExecuteFulfillment(ctx, o.ID)
-		case OrderStatusFailed, OrderStatusPaid, OrderStatusRecharging:
+		case OrderStatusPaid, OrderStatusRecharging:
 			return s.ExecuteFulfillment(ctx, o.ID)
-		case OrderStatusCompleted, OrderStatusRefunded:
+		case OrderStatusCompleted, OrderStatusRefunded, OrderStatusPaymentReview:
 			return nil
 		default:
 			return nil
@@ -313,6 +335,9 @@ func (s *Fulfillment) ExecuteBalanceFulfillment(ctx context.Context, oid int64) 
 	}
 	if o.Status == OrderStatusCompleted {
 		return nil
+	}
+	if o.CouponSnapshot != nil && o.PaidAt == nil {
+		return infraerrors.BadRequest("INVALID_STATUS", "coupon order has no confirmed payment")
 	}
 	if IsRefundStatus(o.Status) {
 		return infraerrors.BadRequest("INVALID_STATUS", "refund-related order cannot fulfill")

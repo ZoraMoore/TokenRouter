@@ -1762,6 +1762,7 @@ export type RedeemCodeType =
   | 'admin_concurrency'
   | 'subscription'
   | 'invitation'
+  | 'coupon'
   | 'affiliate_balance'
 export type UsageRequestType = 'unknown' | 'sync' | 'stream' | 'ws_v2' | 'cyber' | 'live'
 export type ImageSizeSource = 'output' | 'input' | 'default' | 'legacy'
@@ -1900,6 +1901,8 @@ export interface RedeemCode {
   created_at: string
   updated_at?: string
   plan_id?: number | null
+  coupon_terms?: import('./payment').RechargeCouponTerms
+  coupon?: import('./payment').RechargeCoupon
   notes?: string | null
   user?: User
   plan?: SubscriptionPlan
@@ -1916,6 +1919,7 @@ export interface GenerateRedeemCodesRequest {
   expires_at?: number | null
   expires_in_days?: number
   plan_id?: number | null
+  coupon_terms?: import('./payment').RechargeCouponTerms
 }
 
 export interface UpdateRedeemCodeRequest {
@@ -1925,6 +1929,7 @@ export interface UpdateRedeemCodeRequest {
   max_uses?: number
   expires_at?: number | null
   plan_id?: number | null
+  coupon_terms?: import('./payment').RechargeCouponTerms
 }
 
 export interface BatchUpdateRedeemCodeFields {

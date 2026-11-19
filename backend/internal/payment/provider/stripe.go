@@ -284,6 +284,7 @@ func (s *Stripe) QueryOrder(ctx context.Context, tradeNo string) (*payment.Query
 		TradeNo: pi.ID,
 		Status:  status,
 		Amount:  payment.MinorUnitToAmount(pi.Amount, currency),
+		Closed:  pi.Status == stripe.PaymentIntentStatusCanceled,
 		Metadata: map[string]string{
 			"currency": currency,
 		},
@@ -312,6 +313,7 @@ func (s *Stripe) queryCheckoutSession(ctx context.Context, sessionID string) (*p
 		Status:   status,
 		Amount:   payment.MinorUnitToAmount(session.AmountTotal, currency),
 		Metadata: stripeCheckoutMetadata(session, currency),
+		Closed:   session.Status == stripe.CheckoutSessionStatusExpired,
 	}, nil
 }
 
@@ -391,6 +393,7 @@ func (s *Stripe) queryInvoice(ctx context.Context, invoiceID string) (*payment.Q
 		TradeNo: tradeNo,
 		Status:  status,
 		Amount:  payment.MinorUnitToAmount(amount, s.currency()),
+		Closed:  inv.Status == stripe.InvoiceStatusVoid,
 		Metadata: map[string]string{
 			"invoice_id":     inv.ID,
 			"invoice_status": string(inv.Status),

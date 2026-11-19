@@ -12,6 +12,7 @@ import type {
   RedeemCodeType,
   PaginatedResponse
 } from '@/types'
+import type { RechargeCouponTerms } from '@/types/payment'
 
 /**
  * List all redeem codes with pagination
@@ -62,7 +63,8 @@ export async function generate(
   expiresAt?: number | null,
   code?: string,
   expiresInDays?: number | null,
-  requiresPayment: boolean = false
+  requiresPayment: boolean = false,
+  couponTerms?: RechargeCouponTerms
 ): Promise<RedeemCode[]> {
   const payload: GenerateRedeemCodesRequest = {
     count,
@@ -90,6 +92,9 @@ export async function generate(
   // 订阅类型专用字段
   if (type === 'subscription') {
     payload.plan_id = planId
+  }
+  if (type === 'coupon') {
+    payload.coupon_terms = couponTerms
   }
 
   const { data } = await apiClient.post<RedeemCode[]>('/admin/redeem-codes/generate', payload)

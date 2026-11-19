@@ -92,8 +92,19 @@
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderId') }}</p><p class="font-mono text-sm font-medium text-gray-900 dark:text-white">#{{ selectedOrder.id }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderNo') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedOrder.out_trade_no }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.status') }}</p><OrderStatusBadge :status="selectedOrder.status" /></div>
+          <p v-if="selectedOrder.status === 'PAYMENT_REVIEW'" class="col-span-2 text-sm text-yellow-700 dark:text-yellow-400">{{ t('payment.coupons.review') }}</p>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.amount') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ formatOrderAmount(selectedOrder.amount, selectedOrder) }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.payAmount') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ formatGatewayAmount(selectedOrder.pay_amount, selectedOrder.currency) }}</p></div>
+          <template v-if="selectedOrder.coupon_snapshot">
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.baseAmount') }}</p>
+              <p class="text-sm text-gray-900 dark:text-white">{{ formatRechargeCouponAmount(selectedOrder.coupon_snapshot.recharge_minor, selectedOrder.coupon_snapshot.currency) }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.coupons.discount') }}</p>
+              <p class="text-sm text-gray-900 dark:text-white">−{{ formatRechargeCouponAmount(selectedOrder.coupon_snapshot.discount_minor, selectedOrder.coupon_snapshot.currency) }}</p>
+            </div>
+          </template>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.paymentMethod') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ t('payment.methods.' + selectedOrder.payment_type, selectedOrder.payment_type) }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.fee') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatGatewayAmount(selectedOrderFeeAmount, selectedOrder.currency) }} <span v-if="selectedOrder.fee_rate > 0">({{ selectedOrder.fee_rate }}%)</span></p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.createdAt') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(selectedOrder.created_at) }}</p></div>
@@ -203,6 +214,7 @@ import AdminRefundDialog from '@/components/admin/payment/AdminRefundDialog.vue'
 import OrderStatusBadge from '@/components/payment/OrderStatusBadge.vue'
 import OrderTable from '@/components/payment/OrderTable.vue'
 import { formatPaymentAmount } from '@/components/payment/currency'
+import { formatRechargeCouponAmount } from '@/components/payment/rechargeCoupon'
 
 interface AuditLog {
   id: number
@@ -289,6 +301,7 @@ const statusFilterOptions = computed(() => [
   { value: 'PENDING', label: t('payment.status.pending') },
   { value: 'PROCESSING', label: t('payment.status.processing') },
   { value: 'PAID', label: t('payment.status.paid') },
+  { value: 'PAYMENT_REVIEW', label: t('payment.status.payment_review') },
   { value: 'COMPLETED', label: t('payment.status.completed') },
   { value: 'EXPIRED', label: t('payment.status.expired') },
   { value: 'CANCELLED', label: t('payment.status.cancelled') },
