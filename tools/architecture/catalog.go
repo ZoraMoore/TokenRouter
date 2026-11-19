@@ -203,7 +203,7 @@ internal/settings/preaggregation`, Tests: `internal/testutil/rediscontainer ent/
 internal/routing/capability internal/testutil/assertion migrations`},
 		"internal/payment": {Production: `ent/... internal/billing internal/billing/httpapi internal/billing/postgres internal/idempotency/httpapi internal/identity
 internal/identity/httpapi internal/identity/httpapi/authctx internal/payment/... internal/pkg/
-internal/promotion internal/server/httpx internal/settings`, Tests: "internal/testutil/assertion internal/testutil/postgrescontainer internal/testutil/sqlite"},
+internal/promotion internal/server/httpx internal/settings`, Tests: "internal/testutil/assertion internal/testutil/sqlite"},
 		"internal/pkg": {Production: "internal/pkg/...", Tests: ""},
 		"internal/promotion": {Production: `ent/... internal/identity internal/identity/contact internal/identity/httpapi/authctx
 internal/identity/httpapi/dto internal/pkg/ internal/promotion/... internal/server/httpx
@@ -442,7 +442,6 @@ internal/upstream/zhipu/...`, Tests: ""},
 		{Scope: "internal/moderation/postgres", Imports: "internal/identity/postgres", Files: "repository_test.go"},
 		{Scope: "internal/payment/httpapi", Imports: "internal/idempotency/httpapi", Files: "user.go"},
 		{Scope: "internal/payment/postgres", Imports: "internal/billing/postgres", Files: "checkout_scenario_test.go"},
-		{Scope: "internal/payment/postgres", Imports: "internal/testutil/postgrescontainer", Files: "recharge_coupons_integration_test.go"},
 		{Scope: "internal/routing", Imports: "internal/modelcatalog/provider", Files: "marketplace_external_test.go"},
 		{Scope: "internal/routing", Imports: "internal/provider/provider", Files: "group_admin_external_test.go"},
 		{Scope: "internal/routing", Imports: "internal/gateway/provider/modelidentity", Files: "marketplace_external_test.go"},

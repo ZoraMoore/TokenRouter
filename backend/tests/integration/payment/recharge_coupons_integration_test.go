@@ -1,20 +1,18 @@
 //go:build integration
 
-package postgres
+package payment_test
 
 import (
 	"context"
 	"testing"
 
-	"entgo.io/ent/dialect"
-	entsql "entgo.io/ent/dialect/sql"
 	"github.com/stretchr/testify/require"
 
 	dbent "github.com/TokenFlux/TokenRouter/ent"
 	"github.com/TokenFlux/TokenRouter/internal/billing"
 	billingpostgres "github.com/TokenFlux/TokenRouter/internal/billing/postgres"
 	"github.com/TokenFlux/TokenRouter/internal/payment"
-	"github.com/TokenFlux/TokenRouter/internal/testutil/postgrescontainer"
+	paymentpostgres "github.com/TokenFlux/TokenRouter/internal/payment/postgres"
 )
 
 type couponTestUserReader struct{ client *dbent.Client }
@@ -29,8 +27,7 @@ func (r couponTestUserReader) GetByID(ctx context.Context, id int64) (*billing.U
 }
 
 func TestRechargeCouponOrderCompetitionAndLatePayment(t *testing.T) {
-	db := postgrescontainer.New(t)
-	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+	client := testEntClient(t)
 	ctx := t.Context()
 	user, err := client.User.Create().SetUsername("coupon-owner").SetEmail("coupon-owner@example.com").SetPasswordHash("hash").Save(ctx)
 	require.NoError(t, err)
@@ -52,7 +49,7 @@ func TestRechargeCouponOrderCompetitionAndLatePayment(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, user.Balance, client.User.GetX(ctx, user.ID).Balance, "领券不增加余额")
 
-	store := NewOrderStore(client)
+	store := paymentpostgres.NewOrderStore(client)
 	_, err = store.RechargeCoupon(ctx, user.ID+1, couponID)
 	require.ErrorIs(t, err, billing.ErrRechargeCouponUnavailable)
 	owned, total, err := store.ListRechargeCoupons(ctx, user.ID, true, 1, 20)
@@ -124,6 +121,6 @@ func TestRechargeCouponOrderCompetitionAndLatePayment(t *testing.T) {
 	require.Equal(t, payment.OrderStatusCompleted, settled.Status)
 	require.Equal(t, user.Balance+200, client.User.GetX(ctx, user.ID).Balance, "按充值面额与倍率到账一次")
 	var usedBy int64
-	require.NoError(t, db.QueryRowContext(ctx, "SELECT order_id FROM recharge_coupons WHERE id=$1 AND consumed_at IS NOT NULL", couponID).Scan(&usedBy))
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT order_id FROM recharge_coupons WHERE id=$1 AND consumed_at IS NOT NULL", couponID).Scan(&usedBy))
 	require.Equal(t, settled.ID, usedBy)
 }
