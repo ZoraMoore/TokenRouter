@@ -183,7 +183,7 @@ TokenRouter、PostgreSQL 和 Redis 的 Docker 标准输出日志各配置为单�
 
 HAProxy 每三秒检查应用 `/health`，连续两次失败后停止向该节点分配请求，连续两次成功后恢复。入口仅在后端连接尚未建立时改选节点。SSE 和 WebSocket 使用一小时的空闲超时。
 
-`api.scienceedu.me` 的 Nginx 优先从 `/var/www/scienceedu-ui/assets` 提供按内容哈希命名的公共静态资源，未命中时转发到应用池。发布前将新构建的资源加入该目录，已有文件继续供打开中的页面加载，支持应用镜像逐节点更新。
+`api.scienceedu.me` 的 Nginx 优先从 `/var/www/scienceedu-ui/assets` 提供按内容哈希命名的公共静态资源，未命中时转发到应用池。在镜像切换前运行 `bash deploy/publish-ui-assets.sh backend/internal/web/dist/assets /var/www/scienceedu-ui/assets`，源目录取构建该镜像的产物。脚本串行发布，检查同名资源的内容，并核对发布目录中的 SHA-256。各版本文件按内容哈希共存，供滚动更新中的节点和已打开的页面读取。
 
 三个实例分别配置 `OPS_NODE_ID=primary`、`secondary`、`tertiary`，`OPS_NODE_NAME` 为对应公网 IP，`OPS_CLUSTER_NODE_IDS=primary,secondary,tertiary`。运维概览通过共享 Redis 读取各节点十五秒一次的资源心跳，展示整机容量与应用额度。当前整机合计 8 核 CPU、15379 MiB 内存，应用 CPU 额度合计 7.6 核，内存上限合计 11264 MiB。采样与离线规则见[多节点资源容量](ops_monitoring_and_alerting.md#多节点资源容量)。
 
