@@ -133,7 +133,7 @@ func newPricingMarketplaceFixture(groupRepo routing.GroupRepository, settingRepo
 	return routing.NewMarketplace(groups, settingRepo, source, projection, prices, capacity, availabilityRepo, routing.MarketplaceOptions{Timezone: timezone, Now: time.Now, Warn: slog.Warn})
 }
 
-func (g marketplaceFixtureGroups) ListActive(ctx context.Context) ([]routing.Group, error) {
+func (g marketplaceFixtureGroups) ListMarketplaceGroups(ctx context.Context) ([]routing.Group, error) {
 	v, err := g.source.ListActive(ctx)
 	if v == nil {
 		return nil, err

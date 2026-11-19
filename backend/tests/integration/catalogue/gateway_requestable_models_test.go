@@ -603,7 +603,13 @@ func TestModelMarketplaceUsesResolvedGroupMappedPricingModel(t *testing.T) {
 	gatewayService := newCatalogueFixture(&modelsListProviderRepoStub{byGroup: map[int64][]providercore.Record{groupID: {provider}}}, pricingConfigService, cataloguePriceResolver(pricingConfigService, billingService))
 	marketplace := newCatalogueMarketplace(nil, gatewayService, billingService)
 
-	models := marketplace.ModelsForGroup(context.Background(), &routing.Group{ID: groupID, RateMultiplier: 1})
+	group := &routing.Group{
+		ID:               groupID,
+		RateMultiplier:   1,
+		AllowedProtocols: capability.DefaultGroupClientProtocols(""),
+		RoutingPolicy:    pricingConfig.Policy(),
+	}
+	models := marketplace.ModelsForGroup(context.Background(), group)
 	var alias *routing.ModelMarketplaceModel
 	for i := range models {
 		if models[i].ID == "client-alias" {
@@ -639,7 +645,13 @@ func TestModelMarketplaceKeepsAmbiguousUpstreamModelUnpriced(t *testing.T) {
 	gatewayService := newCatalogueFixture(&modelsListProviderRepoStub{byGroup: map[int64][]providercore.Record{groupID: providers}}, pricingConfigService, cataloguePriceResolver(pricingConfigService, billingService))
 	marketplace := newCatalogueMarketplace(nil, gatewayService, billingService)
 
-	models := marketplace.ModelsForGroup(context.Background(), &routing.Group{ID: groupID, RateMultiplier: 1})
+	group := &routing.Group{
+		ID:               groupID,
+		RateMultiplier:   1,
+		AllowedProtocols: capability.DefaultGroupClientProtocols(""),
+		RoutingPolicy:    pricingConfig.Policy(),
+	}
+	models := marketplace.ModelsForGroup(context.Background(), group)
 	var alias *routing.ModelMarketplaceModel
 	for i := range models {
 		if models[i].ID == "client-alias" {

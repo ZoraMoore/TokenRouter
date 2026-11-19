@@ -34,7 +34,7 @@ func newBedrockRoutingTestProvider(id int64, region string, forceGlobal bool) pr
 	return provider
 }
 
-func (s *bedrockMarketplaceGroups) ListActive(context.Context) ([]routing.Group, error) {
+func (s *bedrockMarketplaceGroups) ListMarketplaceGroups(context.Context) ([]routing.Group, error) {
 	return s.groups, nil
 }
 
@@ -59,8 +59,16 @@ func TestBedrockRegionRouting_MarketplaceUsesSharedResolution(t *testing.T) {
 				require.NotContains(t, routing.RequestableModelIDs(models.Models), "client-alias")
 			}
 			marketplace := newCatalogueMarketplace(
-				&bedrockMarketplaceGroups{groups: []routing.Group{{ID: groupID, Name: "Bedrock", Status: billing.StatusActive, RateMultiplier: 1, ActiveProviderCount: 1}}},
-				gateway, billingtestkit.Calculator(nil, nil),
+				&bedrockMarketplaceGroups{groups: []routing.Group{{
+					ID:                  groupID,
+					Name:                "Bedrock",
+					Status:              billing.StatusActive,
+					RateMultiplier:      1,
+					ActiveProviderCount: 1,
+					AllowedProtocols:    capability.DefaultGroupClientProtocols(""),
+				}}},
+				gateway,
+				billingtestkit.Calculator(nil, nil),
 			)
 			groups, err := marketplace.ListPublic(context.Background(), routing.MarketplaceListOptions{IncludeCapacity: true})
 			require.NoError(t, err)

@@ -11,8 +11,10 @@ import (
 )
 
 func TestCollectDisksDeduplicatesMountedDevices(t *testing.T) {
-	system := t.TempDir()
-	data := t.TempDir()
+	system, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	data, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
 	paths := []monitoredDisk{{role: "system", path: system, displayPath: "/"}, {role: "data", path: data, displayPath: "/mnt/data"}, {role: "data", path: system, displayPath: "/bind-copy"}}
 	partitions := []disk.PartitionStat{{Device: "/dev/sda1", Mountpoint: system}, {Device: "/dev/sdb", Mountpoint: data}}
 	calls := 0
@@ -33,8 +35,9 @@ func TestCollectDisksDeduplicatesMountedDevices(t *testing.T) {
 }
 
 func TestCollectDisksReportsUnreadableCapacity(t *testing.T) {
-	root := t.TempDir()
-	_, err := collectDisks(context.Background(), []monitoredDisk{{role: "system", path: root}}, []disk.PartitionStat{{Device: "/dev/sda1", Mountpoint: root}}, func(context.Context, string) (*disk.UsageStat, error) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	_, err = collectDisks(context.Background(), []monitoredDisk{{role: "system", path: root}}, []disk.PartitionStat{{Device: "/dev/sda1", Mountpoint: root}}, func(context.Context, string) (*disk.UsageStat, error) {
 		return nil, errors.New("permission denied")
 	})
 	require.ErrorContains(t, err, "system disk capacity")

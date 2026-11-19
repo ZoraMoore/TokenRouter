@@ -255,8 +255,8 @@ func sortedModelMappingSources(mapping map[string]string) []string {
 }
 
 // resolve 用本次查询的规则校验单个请求型号。
-func (q *requestableQuery) resolve(ctx context.Context, requestedModel string) (RequestableModel, bool) {
-	policy, providers, billingSource := q.policy, q.providers, q.billingSource
+func (query *requestableQuery) resolve(ctx context.Context, requestedModel string) (RequestableModel, bool) {
+	policy, providers, billingSource := query.policy, query.providers, query.billingSource
 	groupMappedModel := requestedModel
 	if mapped := strings.TrimSpace(policy.ResolveModel(requestedModel)); mapped != "" {
 		groupMappedModel = mapped
@@ -282,7 +282,7 @@ func (q *requestableQuery) resolve(ctx context.Context, requestedModel string) (
 				continue
 			}
 			for _, source := range policy.AllowedProtocols {
-				target, ok := capability.ResolveRoute(q.protocols[i], source, policy.ProtocolFallbacks)
+				target, ok := capability.ResolveRoute(query.protocols[i], source, policy.ProtocolFallbacks)
 				if !ok {
 					continue
 				}

@@ -194,7 +194,7 @@ func TestGroupHandlerEndpoints(t *testing.T) {
 // TestGroupReadViewsKeepFullDetail 检查选项和表格响应大小，并核对详情保留模型顺序。
 func TestGroupReadViewsKeepFullDetail(t *testing.T) {
 	router, svc := setupGroupAdminContractRouter()
-	for i := 0; i < 13529; i++ {
+	for i := range 13529 {
 		svc.groups[0].ModelsListConfig.Models = append(svc.groups[0].ModelsListConfig.Models, fmt.Sprintf("test-model-%05d", i))
 	}
 	call := func(path string) *httptest.ResponseRecorder {
@@ -231,7 +231,7 @@ func TestGroupReadViewsKeepFullDetail(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, strings.Contains(detail.Body.String(), string(expectedOrder)))
 
-	for i := 0; i < 11; i++ {
+	for i := range 11 {
 		svc.groups = append(svc.groups, routing.Group{
 			ID:     int64(i + 4),
 			Name:   fmt.Sprintf("group-%02d", i),

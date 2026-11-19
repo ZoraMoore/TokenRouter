@@ -39,7 +39,11 @@ func TestModelMarketplaceQoderProviderMappedCustomModelUsesRouteKeyManualPricing
 			},
 		},
 	}}, pricingConfigService, cataloguePriceResolver(pricingConfigService, billingService)), billingService)
-	group := &routing.Group{ID: groupID, RateMultiplier: 1}
+	group := &routing.Group{
+		ID:               groupID,
+		RateMultiplier:   1,
+		AllowedProtocols: capability.DefaultGroupClientProtocols(""),
+	}
 
 	models := svc.ModelsForGroup(context.Background(), group)
 
@@ -61,8 +65,22 @@ func TestModelMarketplaceQoderProviderMappedCustomModelUsesRouteKeyManualPricing
 
 func TestModelMarketplaceListPublicPrefetchesProvidersOnce(t *testing.T) {
 	groups := []routing.Group{
-		{ID: 4101, Name: "OpenAI A", Status: billing.StatusActive, RateMultiplier: 1, ActiveProviderCount: 1},
-		{ID: 4102, Name: "OpenAI B", Status: billing.StatusActive, RateMultiplier: 1, ActiveProviderCount: 1},
+		{
+			ID:                  4101,
+			Name:                "OpenAI A",
+			Status:              billing.StatusActive,
+			RateMultiplier:      1,
+			ActiveProviderCount: 1,
+			AllowedProtocols:    capability.DefaultGroupClientProtocols(""),
+		},
+		{
+			ID:                  4102,
+			Name:                "OpenAI B",
+			Status:              billing.StatusActive,
+			RateMultiplier:      1,
+			ActiveProviderCount: 1,
+			AllowedProtocols:    capability.DefaultGroupClientProtocols(""),
+		},
 	}
 	providers := []providercore.Record{
 		{
@@ -156,6 +174,6 @@ func TestModelMarketplacePrefetchSortsByGlobalProviderPriority(t *testing.T) {
 	}
 }
 
-func (s *marketplaceGroupRepoStub) ListActive(context.Context) ([]routing.Group, error) {
+func (s *marketplaceGroupRepoStub) ListMarketplaceGroups(context.Context) ([]routing.Group, error) {
 	return s.groups, nil
 }
