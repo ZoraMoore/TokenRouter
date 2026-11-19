@@ -14,6 +14,7 @@ export interface PelicanPlanInput {
   reasoning_effort?: PelicanEffort | ''
   cron_expression: string
   enabled: boolean
+  suspend_on_wrong_answer?: boolean
 }
 
 // 从账号的智商测试建立计划时，可带入模型和题型。
@@ -45,6 +46,7 @@ export interface PelicanQuestionDefault {
 export interface AdminPelicanResult extends PelicanResult {
   provider_id?: number | null
   provider_name?: string
+  round_id?: string
 }
 
 export type AdminPelicanResultDetail = AdminPelicanResult & PelicanResultDetail
@@ -58,6 +60,7 @@ function planPayload(plan: PelicanPlanInput): PelicanPlanInput {
   if (plan.question_prompt?.trim()) input.question_prompt = plan.question_prompt.trim()
   if (!isPelicanArtwork(question_kind) && plan.expected_answer?.trim()) input.expected_answer = plan.expected_answer.trim()
   if (plan.reasoning_effort) input.reasoning_effort = plan.reasoning_effort
+  if (question_kind === 'candy' && provider_id === null && plan.suspend_on_wrong_answer) input.suspend_on_wrong_answer = true
   return input
 }
 

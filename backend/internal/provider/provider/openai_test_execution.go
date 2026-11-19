@@ -158,7 +158,7 @@ func (s *OpenAIProviderTest) Execute(c *TestRun, value *providercore.Record, mod
 				delete(payload, "instructions")
 				payload["max_output_tokens"] = 4096
 			}
-		} else {
+		} else if !c.SVGAnswer {
 			payload["instructions"] = "请按题目指定的格式直接作答。"
 		}
 		if c.ReasoningEffort != "" {

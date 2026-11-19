@@ -202,6 +202,75 @@ describe('账号智商测试', () => {
     view.unmount()
   })
 
+  it('旧的本地手测历史若在脚本标签中间截断，显示未完成并可下载原文', async () => {
+    const raw = '<svg><circle r="6"/></svg><script'
+    localStorage.setItem('tokenrouter_provider_iq:7:12', JSON.stringify([{
+      id: 'old', at: answer.started_at, model: 'alpha', effort: '', mode: 'question',
+      samples: [{ ...answer, question_kind: 'pelican', status: 'passed', answer: '<svg><circle r="6"/></svg>', raw_answer: raw }],
+    }]))
+    const view = mountModal()
+    await flushPromises()
+    await view.get('[data-testid="iq-history"]').trigger('click')
+    await view.get('[data-testid="iq-history-item"]').trigger('click')
+    expect(view.find('[data-testid="pelican-artwork-preview"]').exists()).toBe(false)
+    expect(view.text()).toContain('pelicanTests.reason.incomplete')
+    await view.get('[data-testid="iq-download-answer"]').trigger('click')
+    expect(api.saveAs.mock.calls[0][0].size).toBe(new Blob([raw]).size)
+    view.unmount()
+  })
+
+  it('可发推理强度的账号首次手测鹈鹕使用 medium，手选档位和其他题型照常使用', async () => {
+    const view = mountModal()
+    await flushPromises()
+    const selectKind = () => view.get('[data-testid="iq-kind"]')
+    const value = () => (view.get('[data-testid="iq-effort"]').element as HTMLSelectElement).value
+    expect(value()).toBe('')
+    await selectKind().setValue('pelican')
+    expect(value()).toBe('medium')
+    await selectKind().setValue('candy')
+    expect(value()).toBe('')
+    await selectKind().setValue('pelican')
+    await view.get('[data-testid="iq-effort"]').setValue('')
+    await selectKind().setValue('candy')
+    await selectKind().setValue('pelican')
+    expect(value()).toBe('')
+    await view.setProps({ provider: { ...provider, id: 45, parent_provider_id: 3 } })
+    await flushPromises()
+    await selectKind().setValue('pelican')
+    expect(value()).toBe('medium')
+    await view.setProps({ provider: { ...provider, id: 47, platform: 'anthropic', type: 'bedrock' } })
+    await flushPromises()
+    await selectKind().setValue('pelican')
+    expect(value()).toBe('')
+    await view.setProps({ provider: { ...provider, id: 46, platform: 'gemini' } })
+    await flushPromises()
+    await selectKind().setValue('pelican')
+    expect(value()).toBe('')
+    view.unmount()
+  })
+
+  it('鹈鹕手测和历史记录展示模型完成后的整页作品，下载含有绘图脚本的原文', async () => {
+    const raw = '<html><body><canvas width="900" height="600"></canvas><script>document.querySelector("canvas").getContext("2d").fillRect(0,0,10,10)</script></body></html>'
+    const pending = deferred<typeof answer & { raw_answer: string }>()
+    api.runIQQuestion.mockReturnValueOnce(pending.promise)
+    const view = mountModal()
+    await flushPromises()
+    await view.get('[data-testid="iq-kind"]').setValue('pelican')
+    await view.get('[data-testid="iq-run"]').trigger('click')
+    expect(view.find('iframe').exists()).toBe(false)
+    pending.resolve({ ...answer, question_kind: 'pelican', status: 'pending_review', answer: '', raw_answer: raw })
+    await flushPromises()
+    expect(view.get('iframe').attributes('srcdoc')).toContain('fillRect')
+    await view.get('[data-testid="iq-download-answer"]').trigger('click')
+    expect(api.saveAs.mock.calls[0][0].size).toBe(new Blob([raw]).size)
+    await view.setProps({ show: false })
+    await view.setProps({ show: true })
+    await view.get('[data-testid="iq-history"]').trigger('click')
+    await view.get('[data-testid="iq-history-item"]').trigger('click')
+    expect(view.get('iframe').attributes('srcdoc')).toContain('fillRect')
+    view.unmount()
+  })
+
   it('向所选账号并行提交同一题面，将完成的作答作为纯文本显示并按管理员和账号保存', async () => {
     const view = mountModal()
     await flushPromises()

@@ -91,7 +91,9 @@ func (s *AnthropicProviderTest) Execute(c *TestRun, value *providercore.Record, 
 	if err != nil {
 		return (TestStreamOutput{}).Error(c, "Failed to create test payload")
 	}
-	if c.IQMode != "" {
+	if c.SVGAnswer {
+		applyClaudeDrawingEffort(payload, testModelID, c.ReasoningEffort)
+	} else if c.IQMode != "" {
 		if c.IQMode == "modeltrace" {
 			delete(payload, "temperature")
 			payload["max_tokens"] = 4096

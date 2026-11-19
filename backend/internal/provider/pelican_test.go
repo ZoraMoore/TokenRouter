@@ -104,6 +104,24 @@ func TestPelicanKeepsOriginalDrawing(t *testing.T) {
 	}
 }
 
+// TestPelicanGradesCompleteCanvas 允许完整 HTML 作品参加网页复核。
+func TestPelicanGradesCompleteCanvas(t *testing.T) {
+	for _, tc := range []struct {
+		document string
+		status   string
+	}{
+		{`<!doctype html><html><body><canvas id="art"></canvas><script>document.querySelector('canvas').getContext('2d').fillRect(0,0,20,20)</script></body></html>`, "pending_review"},
+		{`<html><body><canvas id="art"></canvas><script>draw()</script>`, "inconclusive"},
+		{`<html><body><h1>Bad gateway</h1></body></html>`, "inconclusive"},
+	} {
+		evidence := PelicanEvidence{Status: "inconclusive"}
+		evidence.grade("pelican", tc.document, "")
+		require.Equal(t, tc.status, evidence.Status)
+		require.Equal(t, tc.document, evidence.RawAnswer)
+		require.Empty(t, evidence.Answer)
+	}
+}
+
 func TestRunPelicanCancelledBeforeOrDuringRequest(t *testing.T) {
 	for _, alreadyCancelled := range []bool{true, false} {
 		ctx, cancel := context.WithCancel(t.Context())
@@ -130,8 +148,8 @@ func TestRunPelicanUsesRoundQuestionAndItsRubric(t *testing.T) {
 	for round, description := range map[string][]string{"1": {"鹈鹕", "喉囊", "路标"}, "2": {"企鹅", "短喙", "冰块"}, "4": {"兔子", "长耳", "草丛"}, "7": {"水獭", "长尾", "石块"}} {
 		evidence := service.RunPelican(t.Context(), 1, "model", "pelican", round, "")
 		require.Contains(t, evidence.Prompt, description[0])
-		require.Contains(t, evidence.Prompt, "CSS")
-		require.Contains(t, evidence.Prompt, "SMIL")
+		require.Contains(t, evidence.Prompt, "使用内联 SVG 绘制循环的 2D 动画")
+		require.Contains(t, evidence.Prompt, "只输出 HTML，不要解释。")
 		require.Len(t, evidence.Criteria, 4)
 		require.Contains(t, evidence.Criteria[0], description[1])
 		require.Contains(t, evidence.Criteria[3], description[2])
@@ -187,8 +205,7 @@ func TestRunConfiguredPelicanGradesCustomQuestions(t *testing.T) {
 				if tt.kind == "custom_text" {
 					require.Equal(t, prompt, request.Prompt)
 				} else {
-					require.Contains(t, request.Prompt, "SVG")
-					require.Contains(t, request.Prompt, "脚本")
+					require.Contains(t, request.Prompt, "直接返回独立 HTML")
 				}
 				if err := sink.Emit(ctx, TestEvent{Type: "content", Text: tt.output}); err != nil {
 					return err
@@ -236,7 +253,9 @@ func TestRunConfiguredPelicanUsesEditedBuiltInQuestions(t *testing.T) {
 				return sink.Emit(ctx, TestEvent{Type: "test_complete", Success: true})
 			}), TestOptions{})
 			ev := service.RunConfiguredPelican(t.Context(), 1, "model", tt.kind, "2", "", PelicanQuestionConfig{Prompt: tt.prompt, ExpectedAnswer: tt.reference})
-			if tt.prompt != "" {
+			if tt.kind == "pelican" {
+				require.Equal(t, tt.prompt+"\n\n所有账号使用相同交付约定：直接返回独立 HTML，不使用 Markdown 代码块或外部依赖。只输出 HTML，不要解释。", sent)
+			} else if tt.prompt != "" {
 				require.Equal(t, tt.prompt, sent)
 			} else {
 				require.Equal(t, candyPrompt, sent)
@@ -256,5 +275,62 @@ func TestRunConfiguredPelicanUsesEditedBuiltInQuestions(t *testing.T) {
 				require.Equal(t, tt.output, ev.Answer)
 			}
 		})
+	}
+}
+
+// TestPelicanGradesHTMLArtwork 区分已传完的页面与先结束 SVG、随后断流的页面。
+func TestPelicanGradesHTMLArtwork(t *testing.T) {
+	const svg = `<svg><circle r="7"/></svg>`
+	for _, tc := range []struct {
+		name, source, status string
+	}{
+		{"动画脚本截断", "<html><body>" + svg + `<script>const last="</html>";`, "inconclusive"},
+		{"文档末尾截断", "<!doctype html><html><body>" + svg + "</body>", "inconclusive"},
+		{"截断在文档结束注释后", "<html><body>" + svg + "<!-- </html> -->", "inconclusive"},
+		{"多个图层", "<html><body>" + svg + svg + "</body></html>", "pending_review"},
+		{"脚本补全图形", `<html><body><svg id="scene"></svg><script>scene.innerHTML='<path d="M0 0L10 10"/>'</script></body></html>`, "pending_review"},
+		{"SVG 内脚本绘制图层", `<svg xmlns="http://www.w3.org/2000/svg"><g id="layer"/><script>document.querySelector('g').innerHTML='&lt;circle r="6"/&gt;'</script></svg>`, "pending_review"},
+		{"SVG 之后脚本截断", "<style>.bird{fill:red}</style>" + svg + "<script>draw(", "inconclusive"},
+		{"SVG 之后标签截断", svg + "<script", "inconclusive"},
+		{"SVG 之后样式截断", svg + "<style>.beak {", "inconclusive"},
+		{"包装片段缺少结尾", "<body>" + svg + `<script>const last = 123`, "inconclusive"},
+		{"动态创建画布", `<html><body><script>document.body.append(document.createElement('canvas'))</script></body></html>`, "pending_review"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			evidence := PelicanEvidence{Status: "inconclusive"}
+			evidence.grade("pelican", tc.source, "")
+			require.Equal(t, tc.status, evidence.Status)
+			require.Equal(t, tc.source, evidence.RawAnswer)
+			require.Empty(t, evidence.Answer)
+		})
+	}
+}
+
+// TestPelicanGradesLastDraft 使用最后一份绘图代码，末稿截断时让管理员查看原文。
+func TestPelicanGradesLastDraft(t *testing.T) {
+	const first = "<html><body><svg><circle r='1'/></svg></body></html>"
+	const last = "<html><body><svg><circle r='2'/></svg></body></html>"
+	const fence = "```html\n"
+	for _, tc := range []struct {
+		document string
+		complete bool
+	}{
+		{fence + first + "\n```\n" + fence + last, true},
+		{first + last, true},
+		{fence + first + "\n```\n最终作品\n" + last, true},
+		{fence + first + "\n```\n最终作品\n" + strings.TrimSuffix(last, "</body></html>"), false},
+		{fence + last + "\n```\n画面中的 <svg> 绘制了车轮。", true},
+		{fence + first + "\n```\n" + fence + strings.TrimSuffix(last, "</body></html>"), false},
+	} {
+		evidence := PelicanEvidence{Status: "inconclusive"}
+		evidence.grade("pelican", tc.document, "")
+		require.Equal(t, tc.document, evidence.RawAnswer)
+		if tc.complete {
+			require.Equal(t, "pending_review", evidence.Status)
+			require.Contains(t, evidence.Answer, "r='2'")
+		} else {
+			require.Equal(t, "inconclusive", evidence.Status)
+			require.Empty(t, evidence.Answer)
+		}
 	}
 }

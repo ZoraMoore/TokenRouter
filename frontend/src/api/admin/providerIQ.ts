@@ -1,6 +1,6 @@
 import { apiClient, buildApiUrl } from '@/api/client'
 import { ADMIN_UI_REQUEST_HEADER } from '@/api/adminUIRequest'
-import type { PelicanQuestionKind, PelicanStatus } from '@/api/pelicanTests'
+import { pelicanQuestionKinds, type PelicanQuestionKind, type PelicanStatus } from '@/api/pelicanTests'
 import type { Provider } from '@/types'
 import { isValidOpenAIModelID } from '@/utils/modelMappingRules'
 
@@ -17,7 +17,7 @@ export interface IQQuestionInput extends IQModelInput {
 }
 
 export interface IQQuestionResult {
-  question_kind: string
+  question_kind: PelicanQuestionKind
   round_id: string
   requested_model: string
   mapped_model?: string
@@ -26,6 +26,7 @@ export interface IQQuestionResult {
   prompt: string
   criteria?: string[]
   answer?: string
+  raw_answer?: string
   status: PelicanStatus
   detail_code?: string
   started_at: string
@@ -209,9 +210,10 @@ export function readIQStateProbe(value: unknown): IQStateProbeResult | null {
 }
 
 export function isIQQuestion(value: unknown): value is IQQuestionResult {
-  return record(value) && typeof value.question_kind === 'string' && typeof value.started_at === 'string' &&
+  return record(value) && pelicanQuestionKinds.some(kind => kind === value.question_kind) && typeof value.started_at === 'string' &&
     typeof value.requested_model === 'string' && typeof value.prompt === 'string' &&
     typeof value.latency_ms === 'number' && (value.answer == null || typeof value.answer === 'string') &&
+    (value.raw_answer == null || typeof value.raw_answer === 'string') &&
     (value.criteria == null || Array.isArray(value.criteria) && value.criteria.every(item => typeof item === 'string')) &&
     ['passed', 'suspected', 'pending_review', 'inconclusive'].includes(String(value.status))
 }

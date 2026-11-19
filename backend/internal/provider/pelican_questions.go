@@ -10,11 +10,13 @@ import (
 )
 
 const (
-	// 题库及糖果答案格式取自 ranxi2001/sub2api 的 52a745d9 版本。
-	pelicanBankVersion  = "svg-motion-v1"
-	pelicanCyclingTask  = "鹈鹕骑自行车：画出长喙和喉囊、双轮车架、脚踏与腿部联动，背景路标向后移动。"
-	candyExpectedAnswer = "21"
-	candyPrompt         = `在一个黑色的袋子里放有三种口味的糖果，每种糖果有两种不同的形状（圆形和五角星形，不同的形状靠手感可以分辨）。现已知不同口味的糖和不同形状的数量统计如下表。参赛者需要在活动前决定摸出的糖果数目，那么，最少取出多少个糖果才能保证手中同时拥有不同形状的苹果味和桃子味的糖？（同时手中有圆形苹果味匹配五角星桃子味糖果，或者有圆形桃子味匹配五角星苹果味糖果都满足要求）
+	// 绘图题面与交付要求取自 ranxi2001/sub2api 的 0591a206 版本。
+	pelicanFixedPrompt      = "创建一个 HTML，内容是 SVG 绘制一个鹈鹕骑自行车的 2D 动画，你不需要任何测试"
+	pelicanDeliveryContract = "所有账号使用相同交付约定：直接返回独立 HTML，不使用 Markdown 代码块或外部依赖。只输出 HTML，不要解释。"
+	pelicanBankVersion      = "svg-motion-v1"
+	pelicanCyclingTask      = "鹈鹕骑自行车：画出长喙和喉囊、双轮车架、脚踏与腿部联动，背景路标向后移动。"
+	candyExpectedAnswer     = "21"
+	candyPrompt             = `在一个黑色的袋子里放有三种口味的糖果，每种糖果有两种不同的形状（圆形和五角星形，不同的形状靠手感可以分辨）。现已知不同口味的糖和不同形状的数量统计如下表。参赛者需要在活动前决定摸出的糖果数目，那么，最少取出多少个糖果才能保证手中同时拥有不同形状的苹果味和桃子味的糖？（同时手中有圆形苹果味匹配五角星桃子味糖果，或者有圆形桃子味匹配五角星苹果味糖果都满足要求）
 苹果味 桃子味 西瓜味
 圆形 7 9 8
 五角星形 7 6 4
@@ -81,9 +83,14 @@ type PelicanQuestionDefault struct {
 // PelicanQuestionDefaults 返回固定的鹈鹕骑车题和糖果原题，每次调用使用独立的切片。
 func PelicanQuestionDefaults() []PelicanQuestionDefault {
 	return []PelicanQuestionDefault{
-		{QuestionKind: "pelican", QuestionName: "鹈鹕 SVG", QuestionPrompt: pelicanSVGPrompt(pelicanCyclingTask)},
+		{QuestionKind: "pelican", QuestionName: "鹈鹕 SVG", QuestionPrompt: pelicanFixedPrompt},
 		{QuestionKind: "candy", QuestionName: "糖果题", QuestionPrompt: candyPrompt, ExpectedAnswer: candyExpectedAnswer},
 	}
+}
+
+// IsStandardPelicanCandy 识别允许自动停调的题面和答案。
+func IsStandardPelicanCandy(prompt, answer string) bool {
+	return (prompt == "" || prompt == candyPrompt) && usesStandardCandyAnswer("candy", answer)
 }
 
 func pelicanQuestion(kind, round string, config PelicanQuestionConfig) PelicanEvidence {
@@ -106,10 +113,8 @@ func pelicanQuestion(kind, round string, config PelicanQuestionConfig) PelicanEv
 			hash := sha256.Sum256([]byte(pelicanBankVersion + ":" + round))
 			task := pelicanBank[binary.BigEndian.Uint64(hash[:8])%uint64(len(pelicanBank))]
 			prompt = pelicanSVGPrompt(task.task)
-		} else if kind == "custom_svg" {
-			prompt += "\n\n请返回一个完整的内联 SVG，把图形和样式写在 SVG 内。需要动画时使用 CSS 或 SMIL。引用仅指向图内元素，请勿使用脚本或外部资源。"
 		}
-		result.Prompt = prompt
+		result.Prompt = prompt + "\n\n" + pelicanDeliveryContract
 		result.Criteria = pelicanVisualCriteria(prompt)
 	case "candy", "custom_text":
 		if kind == "candy" && prompt == "" {
@@ -128,14 +133,16 @@ func pelicanQuestion(kind, round string, config PelicanQuestionConfig) PelicanEv
 	return result
 }
 
-// pelicanSVGPrompt 拼出题库的完整题面，管理端和执行器共用同一份文字。
+// pelicanSVGPrompt 拼接按轮次抽取的动画题。
 func pelicanSVGPrompt(task string) string {
-	return "创建一个独立 HTML，在一个内联 SVG 中绘制循环的 2D 动画。" + task +
-		"将动画写在 SVG 内，使用 CSS 或 SMIL，图像应能单独预览。直接返回完整代码，所有样式和图形都放在 SVG 内。"
+	return "创建一个独立 HTML，使用内联 SVG 绘制循环的 2D 动画。" + task + "不得使用外部资源。"
 }
 
 // pelicanVisualCriteria 仅在题面与题库原文相同时附上该场景的评判要求。
 func pelicanVisualCriteria(prompt string) []string {
+	if prompt == pelicanFixedPrompt {
+		return append([]string(nil), pelicanBank[0].criteria[:]...)
+	}
 	for _, question := range pelicanBank {
 		if prompt == pelicanSVGPrompt(question.task) {
 			return append([]string(nil), question.criteria[:]...)

@@ -3,11 +3,12 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
 import { createPinia } from 'pinia'
 import { clearPelicanVisibility, pelicanVisibility, readPelicanVisibility, setPelicanVisibility } from '@/composables/usePelicanVisibility'
+import { extractPelicanMarkup } from '@/components/pelican/pelicanMarkup'
 import enPelican from '@/i18n/locales/en/pelicanTests'
 import zhPelican from '@/i18n/locales/zh/pelicanTests'
 import AdminPelicanTestsView from '@/views/admin/PelicanTestsView.vue'
 import UserPelicanTestsView from '@/views/user/PelicanTestsView.vue'
-import { pelicanPreviewDocument } from '@/components/pelican/pelicanArtwork'
+import { createPelicanFrame, readPelicanCanvas } from '@/components/pelican/pelicanFrame'
 
 const language = ref('zh-Hans')
 const http = vi.hoisted(() => ({
@@ -163,9 +164,31 @@ describe('作品展示设置', () => {
 })
 
 describe('管理员测试计划', () => {
+  it('标准糖果计划可选择全站停调，改答案后隐藏开关', async () => {
+    const candy = { ...plan, question_kind: 'candy', provider_id: null }
+    mockReads(path => path.endsWith('/plans') ? [candy] : [])
+    http.put.mockResolvedValue({ data: candy })
+    const view = mount(AdminPelicanTestsView, { global })
+    await flushPromises()
+    await view.get('[data-testid="edit-plan-8"]').trigger('click')
+    await flushPromises()
+    const dialog = view.get('[role="dialog"]')
+    const toggle = '#pelican-suspend-on-wrong-answer'
+    expect(dialog.get(toggle).attributes('aria-checked')).toBe('false')
+    await dialog.get(toggle).trigger('click')
+    await dialog.get('#pelican-expected-answer').setValue('20')
+    expect(dialog.find(toggle).exists()).toBe(false)
+    await dialog.get('#pelican-expected-answer').setValue('21')
+    await dialog.get('form').trigger('submit')
+    await flushPromises()
+    expect(http.put).toHaveBeenCalledWith('/admin/pelican-tests/plans/8', expect.objectContaining({
+      provider_id: null, question_kind: 'candy', suspend_on_wrong_answer: true,
+    }))
+  })
+
   it.each([true, false])('探针计划只允许选定可做探针的账号，资格为 %s', async eligible => {
     mockReads(path => {
-      if (path === '/admin/groups/all') return [{ id: 2, name: 'Group A' }]
+      if (path === '/admin/groups/options') return [{ id: 2, name: 'Group A' }]
       if (path === '/admin/providers/3') return { id: 3, name: 'Provider A', group_ids: [2] }
       if (path.endsWith('/groups/2/providers')) return [{ id: 3, name: 'Provider A', supports_state_probe: eligible }]
       return []
@@ -192,7 +215,7 @@ describe('管理员测试计划', () => {
 
   it('从智商测试新建计划时选择当前账号和它所属的分组', async () => {
     mockReads(path => {
-      if (path === '/admin/groups/all') return [{ id: 2, name: 'Group A' }, { id: 4, name: 'Group B' }]
+      if (path === '/admin/groups/options') return [{ id: 2, name: 'Group A' }, { id: 4, name: 'Group B' }]
       if (path === '/admin/providers/3') return { id: 3, name: 'Provider A', group_ids: [2] }
       if (path.endsWith('/groups/2/providers')) return [{ id: 3, name: 'Provider A' }]
       return []
@@ -251,7 +274,7 @@ describe('管理员测试计划', () => {
   it('回填两种内置题，新建糖果计划时写入当前题面和编辑后的参考答案', async () => {
     mockReads(path => {
       if (path.endsWith('/plans')) return []
-      if (path === '/admin/groups/all') return [{ id: 2, name: 'Group A' }]
+      if (path === '/admin/groups/options') return [{ id: 2, name: 'Group A' }]
       if (path.endsWith('/providers')) return []
       if (path.endsWith('models-list-candidates')) return { models: [] }
       throw Error(path)
@@ -288,7 +311,7 @@ describe('管理员测试计划', () => {
     const renamed = { ...plan, id: 12, question_name: '旧题改名' }
     mockReads(path => {
       if (path.endsWith('/plans')) return [plan, renamed]
-      if (path === '/admin/groups/all') return [{ id: 2, name: 'Group A' }]
+      if (path === '/admin/groups/options') return [{ id: 2, name: 'Group A' }]
       if (path.endsWith('/providers')) return [{ id: 3, name: 'Provider A' }]
       if (path.endsWith('models-list-candidates')) return { models: [] }
       throw Error(path)
@@ -344,7 +367,7 @@ describe('管理员测试计划', () => {
     let fail = true
     mockReads(path => {
       if (path.endsWith('/plans')) return []
-      if (path === '/admin/groups/all') return [{ id: 2, name: 'Group A' }]
+      if (path === '/admin/groups/options') return [{ id: 2, name: 'Group A' }]
       if (path.endsWith('/providers')) return []
       if (path.endsWith('models-list-candidates')) return { models: [] }
       throw Error(path)
@@ -376,7 +399,7 @@ describe('管理员测试计划', () => {
     }
     mockReads(path => {
       if (path.endsWith('/plans')) return [source]
-      if (path === '/admin/groups/all') return [{ id: 2, name: 'Group A' }]
+      if (path === '/admin/groups/options') return [{ id: 2, name: 'Group A' }]
       if (path.endsWith('/providers')) return []
       if (path.endsWith('models-list-candidates')) return { models: [] }
       throw Error(path)
@@ -454,7 +477,7 @@ describe('管理员测试计划', () => {
     let releaseFirst!: (value: unknown) => void
     mockReads(path => {
       if (path.endsWith('/plans')) return []
-      if (path === '/admin/groups/all') return [{ id: 2, name: 'Group A' }, { id: 7, name: 'Group B' }]
+      if (path === '/admin/groups/options') return [{ id: 2, name: 'Group A' }, { id: 7, name: 'Group B' }]
       if (path.endsWith('/2/providers')) return new Promise(resolve => { releaseFirst = resolve })
       if (path.endsWith('/7/providers')) return [{ id: 17, name: 'Provider B' }]
       if (path.endsWith('models-list-candidates')) return { models: ['catalog-model'] }
@@ -533,7 +556,7 @@ describe('管理员测试计划', () => {
       if (path.endsWith('/plans')) return [plan]
       if (path.endsWith('/providers')) return [{ id: 3, name: 'Provider A' }]
       if (path.endsWith('models-list-candidates')) return { models: [] }
-      if (path === '/admin/groups/all') return [{ id: 2, name: 'Group A' }]
+      if (path === '/admin/groups/options') return [{ id: 2, name: 'Group A' }]
       throw Error(path)
     })
     http.put.mockResolvedValue({ data: plan })
@@ -682,18 +705,28 @@ describe('用户样本', () => {
     expect(view.find('[role="note"]').exists()).toBe(false)
   })
 
-  it('样本详情保存完整代码，并隔离预览 SVG 外的样式和脚本', async () => {
+  it('画廊卡片与样本详情都预览 SVG 外的样式和脚本', async () => {
     const raw = '<!doctype html><html><head><style>.wheel{stroke:red}</style></head><body><svg viewBox="0 0 600 400"><circle class="wheel" r="4"/></svg><script>document.querySelector("circle").setAttribute("r","8")</script></body></html>'
     mockReads(path => path === '/pelican-tests'
       ? [{ group_id: 2, group_name: 'Group A', models: [{ ...plan, latest: result }] }]
       : { ...detail, raw_answer: raw })
     const view = mount(UserPelicanTestsView, { global })
     await flushPromises()
+    await view.get('[data-testid="open-sample-26"]').trigger('focus')
+    await flushPromises()
+    const thumbnail = view.get('[data-testid="artwork-strip"] iframe')
+    expect(thumbnail.attributes('srcdoc')).toContain('.wheel{stroke:red}')
+    expect(thumbnail.attributes('srcdoc')).toContain('document.querySelector')
+    expect(thumbnail.element.closest('button')).toBeNull()
+    expect(thumbnail.attributes('tabindex')).toBe('-1')
     await view.get('[data-testid="open-sample-26"]').trigger('click')
     await flushPromises()
     const dialog = view.get('[role="dialog"]')
     const frame = dialog.get('iframe')
-    expect(frame.attributes('sandbox')).toBe('allow-scripts')
+    expect(frame.attributes('tabindex')).toBeUndefined()
+    expect(frame.classes()).not.toContain('pointer-events-none')
+    expect(frame.attributes('sandbox')).toBe('allow-scripts allow-pointer-lock')
+    expect(dialog.get('details > summary').text()).toContain('pelicanTests.prompt')
     expect(frame.attributes('referrerpolicy')).toBe('no-referrer')
     expect(frame.attributes('srcdoc')).toContain('.wheel{stroke:red}')
     expect(frame.attributes('srcdoc')).toContain('document.querySelector')
@@ -706,22 +739,121 @@ describe('用户样本', () => {
     expect(decodeURIComponent(dialog.get('[data-testid="pelican-download-source"]').attributes('href').split(',')[1])).toBe(raw)
   })
 
-  it('预览处理代码围栏、刷新标签与本站 CSP nonce，原文保持不变', () => {
+  it('裸 SVG 后的说明不占画布，画布外的样式与动画仍进入作品', () => {
+    const svg = '<svg viewBox="0 0 600 300"><path d="M5 5h75"/></svg>'
+    expect(extractPelicanMarkup('作品如下。\n' + svg + '\n这是完成后的鹈鹕。')).toBe(svg)
+    const animated = '<style>path{stroke:blue}</style>' + svg + '<script>document.querySelector("path").style.fill="gold"</script>'
+    expect(extractPelicanMarkup(animated + '\n完成。')).toBe(animated)
+  })
+
+  it('有多份作品时展示模型最后写出的文档，末份残缺时等待完整作品', () => {
+    const first = '<html><body><svg><title>草稿</title><circle r="5"/></svg></body></html>'
+    const last = '<!DOCTYPE html><html><body><canvas></canvas><script>const literal = "<html> "</script></body></html>'
+    for (const wrap of [(s: string) => s, (s: string) => '```html\n' + s + '\n```']) {
+      expect(extractPelicanMarkup(wrap(first) + '\n' + wrap(last))).toBe(last)
+      expect(extractPelicanMarkup(wrap(first) + '\n' + wrap(last.slice(0, -7)))).toBe('')
+    }
+    const sketch = '```svg\n<svg><circle r="2"/></svg>\n```'
+    expect(extractPelicanMarkup(sketch + '\n最终作品如下。\n' + last)).toBe(last)
+    expect(extractPelicanMarkup(sketch + '\n最终作品如下。\n' + last.slice(0, -7))).toBe('')
+    expect(extractPelicanMarkup(sketch + '\n这幅画使用 <svg> 标记。')).toBe('<svg><circle r="2"/></svg>')
+    expect(extractPelicanMarkup('<svg><path d="M1 2h3"/></svg><script>draw(')).toBe('')
+  })
+
+  it.each([
+    '<html><body><svg><path d="M1 2h3"/></svg><script>const ending = "</html>"',
+    '<!doctype html><html><body><svg><circle r="5"/></svg><!-- </html> -->',
+    '<svg viewBox="0 0 100 100"><svg><circle r="4"/></svg>',
+    '<svg><circle r="5"/></svg><script',
+  ])('历史样本有未闭合的原文时，卡片和详情都没有作品预览', async raw => {
+    mockReads(path => path === '/pelican-tests'
+      ? [{ group_id: 2, group_name: 'Group A', models: [{ ...plan, latest: result }] }]
+      : { ...detail, raw_answer: raw })
+    const view = mount(UserPelicanTestsView, { global })
+    await flushPromises()
+    await view.get('[data-testid="open-sample-26"]').trigger('focus')
+    await flushPromises()
+    await view.get('[data-testid="open-sample-26"]').trigger('click')
+    await flushPromises()
+    expect(view.find('[data-testid="pelican-artwork-preview"]').exists()).toBe(false)
+    expect(view.get('[role="dialog"]').text()).toContain('pelicanTests.reason.incomplete')
+  })
+
+  it('作品移出视口时卸载动画，重新进入时用缓存预览 HTML 画布', async () => {
+    let intersect!: (visible: boolean) => void
+    class Observer {
+      constructor(callback: (entries: { isIntersecting: boolean }[]) => void) {
+        intersect = visible => callback([{ isIntersecting: visible }])
+      }
+      observe() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('IntersectionObserver', Observer)
+    try {
+      const raw = '<!doctype html><html><body><canvas width="1200" height="900"></canvas></body></html>'
+      mockReads(path => path === '/pelican-tests'
+        ? [{ group_id: 2, group_name: 'Group A', models: [{ ...plan, latest: result }] }]
+        : { ...detail, answer: '', raw_answer: raw })
+      const view = mount(UserPelicanTestsView, { global })
+      await flushPromises()
+      expect(view.find('iframe').exists()).toBe(false)
+      intersect(true)
+      await flushPromises()
+      expect(view.get('iframe').attributes('srcdoc')).toContain('canvas')
+      intersect(false)
+      await flushPromises()
+      expect(view.find('iframe').exists()).toBe(false)
+      intersect(true)
+      await flushPromises()
+      expect(view.find('iframe').exists()).toBe(true)
+      expect(http.get.mock.calls.map(call => call[0])).toEqual(['/pelican-tests', '/pelican-tests/results/26'])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('预览去掉导航标签并在隔离框架中为内联动画加 nonce', () => {
     const nonce = document.createElement('script')
     nonce.nonce = 'page-nonce'
     document.head.appendChild(nonce)
     try {
-      const raw = '```html\n<html><head><base href="https://fixture.invalid"><meta http-equiv="refresh" content="0;url=https://fixture.invalid"><style>.wheel{stroke:red}</style></head><body><svg/><script>window.frame=1</script></body></html>\n```'
-      const preview = pelicanPreviewDocument(raw)
-      const parsed = new DOMParser().parseFromString(preview, 'text/html')
+      const raw = '作品如下。\n```html\n<html><head><base href="https://fixture.invalid"><meta http-equiv="refresh" content="0;url=https://fixture.invalid"><style>.wheel{stroke:red}</style></head><body><svg><script href="https://fixture.invalid/remote.js" nonce="author"></script></svg><script src="https://fixture.invalid/remote.js"></script><script>window.frame=1</script></body></html>\n```'
+      const { srcdoc } = createPelicanFrame(extractPelicanMarkup(raw))
+      const parser = new DOMParser()
+      const wrapper = parser.parseFromString(srcdoc, 'text/html')
+      expect(wrapper.head.firstElementChild?.getAttribute('content')).toContain("frame-src 'none'")
+      const frame = wrapper.querySelector('template')!.content.querySelector('iframe')!
+      expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
+      const parsed = parser.parseFromString(frame.srcdoc, 'text/html')
       expect(parsed.querySelector('base,meta[http-equiv="refresh"]')).toBeNull()
-      expect(parsed.querySelector('script')?.nonce).toBe('page-nonce')
+      expect(Array.from(parsed.scripts).map(script => script.nonce)).toEqual(['page-nonce', 'page-nonce'])
+      expect(parsed.querySelector('script[src],script[href]')).toBeNull()
       expect(parsed.head.firstElementChild?.getAttribute('http-equiv')).toBe('Content-Security-Policy')
-      expect(preview).not.toContain('```')
-      expect(preview).toContain('window.frame=1')
+      expect(frame.srcdoc).not.toContain('```')
+      expect(frame.srcdoc).toContain('window.frame=1')
       expect(raw).toContain('```html')
     } finally {
       nonce.remove()
+    }
+  })
+
+  it('画布尺寸来自当前作品框架，并且在允许的像素范围内', () => {
+    const frame = document.createElement('iframe')
+    document.body.appendChild(frame)
+    try {
+      const source = frame.contentWindow!
+      const data = { type: 'pelican-preview:size', token: 'active', width: 1800, height: 900 }
+      function read(event: MessageEventInit) {
+        return readPelicanCanvas(new MessageEvent('message', { source, origin: 'null', data, ...event }), source, 'active')
+      }
+      expect(read({})).toEqual({ width: 1800, height: 900 })
+      expect(read({ source: window })).toBeNull()
+      expect(read({ origin: 'https://fixture.invalid' })).toBeNull()
+      expect(read({ data: { ...data, token: 'past' } })).toBeNull()
+      expect(read({ data: { ...data, width: 8193 } })).toBeNull()
+      expect(read({ data: { ...data, height: Infinity } })).toBeNull()
+    } finally {
+      frame.remove()
     }
   })
 
@@ -771,7 +903,7 @@ describe('用户样本', () => {
       const card = view.get('[data-testid="open-sample-26"]')
       await card.trigger('focus')
       await flushPromises()
-      const thumbnail = card.get<HTMLImageElement>('img').element
+      const thumbnail = view.get<HTMLImageElement>('[data-testid="artwork-strip"] img').element
       expect(thumbnail.style.width).toBe('1200px')
       expect(thumbnail.style.height).toBe('600px')
       expect(thumbnail.style.transform).toBe('scale(0.25)')
@@ -826,7 +958,7 @@ describe('用户样本', () => {
     ])
     const [drawing, candy] = sections
     const card = drawing.get('[data-testid="open-sample-26"]')
-    expect(card.text()).toContain('pelicanTests.effort.low')
+    expect(drawing.get('[data-testid="artwork-strip"]').text()).toContain('pelicanTests.effort.low')
     expect(drawing.get('model-icon-stub').attributes('model')).toBe(artwork.model_id)
     expect(drawing.findAll('ul')).toHaveLength(1)
     expect(drawing.text()).not.toContain('pelicanTests.configuredEffort')
@@ -1004,12 +1136,12 @@ describe('用户样本', () => {
       const target = Array.from(targets.keys()).find(el => el === card.element || el.contains(card.element))!
       targets.get(target)!(true)
       await flushPromises()
-      const source = card.get('img').attributes('src')
+      const source = rows[0].get('img').attributes('src')
       expect(source).toMatch(/^data:image\/svg\+xml/)
       expect(decodeURIComponent(source)).not.toContain('<main>')
       await view.get('[data-testid="refresh-samples"]').trigger('click')
       await flushPromises()
-      expect(card.get('img').attributes('src')).toBe(source)
+      expect(rows[0].get('img').attributes('src')).toBe(source)
       expect(http.get.mock.calls.map(call => call[0])).toEqual(['/pelican-tests', '/pelican-tests/results/26', '/pelican-tests'])
       await view.get('[data-testid="open-sample-31"]').trigger('click')
       await flushPromises()
@@ -1042,7 +1174,7 @@ describe('用户样本', () => {
 
   it('合并同题同分组的糖果作答，按时间和编号倒序展示正文、模型和实际档位', async () => {
     const first = { ...result, id: 45, question_kind: 'candy', status: 'passed', answer_preview: '<b>21</b>', reasoning_effort: 'default', latency_ms: 7, tested_at: '2026-11-18T09:00:00.123456Z' }
-    const wrong = { ...first, id: 46, status: 'suspected', answer_preview: '20 颗', reasoning_effort: 'none' }
+    const wrong = { ...first, id: 46, status: 'suspected', answer_preview: '20 颗', reasoning_effort: 'none', schedule_action: 'disabled' }
     const older = { ...first, id: 60, model_id: 'model-b', answer_preview: '二十一颗糖。\n这个结论来自三个袋子中糖果数量的总和。', reasoning_effort: undefined, tested_at: '2026-11-18T09:00:00.123455Z' }
     const failed = { ...result, id: 51, question_kind: 'candy', status: 'inconclusive', tested_at: '2026-11-18T09:00:01Z' }
     const otherGroup = { ...first, id: 62, answer_preview: 'B 组的答案' }
@@ -1077,6 +1209,7 @@ describe('用户样本', () => {
     expect(card.text()).toContain('pelicanTests.status.passed')
     expect(card.get('time').attributes('datetime')).toBe(first.tested_at)
     expect(strips[0].get('[data-testid="open-sample-46"]').text()).toContain('pelicanTests.status.suspected')
+    expect(strips[0].get('[data-testid="open-sample-46"]').text()).toContain('pelicanTests.candySuspension.disabled')
     expect(strips[0].text()).toContain('pelicanTests.effort.none')
     expect(strips[0].text()).toContain('pelicanTests.effort.unknown')
     expect(strips[0].get('[data-testid="open-sample-60"]').text()).toContain(older.answer_preview)
@@ -1199,14 +1332,14 @@ describe('用户样本', () => {
       })
       const view = mount(UserPelicanTestsView, { global })
       await flushPromises()
-      expect(view.get('[data-testid="open-sample-26"]').text()).toContain('pelicanTests.effort.none')
+      expect(view.get('[data-testid="artwork-strip"]').text()).toContain('pelicanTests.effort.none')
       await view.get('[data-testid="open-sample-27"]').trigger('click')
       await flushPromises()
       expect(view.get('[role="dialog"]').text()).toContain('pelicanTests.reason.unsupported_effort')
       reviewed = true
       await vi.advanceTimersByTimeAsync(30000)
       await flushPromises()
-      expect(view.get('[data-testid="open-sample-26"]').text()).toContain('pelicanTests.status.passed')
+      expect(view.get('[data-testid="artwork-strip"]').text()).toContain('pelicanTests.status.passed')
       await vi.advanceTimersByTimeAsync(60000)
       expect(http.get.mock.calls.map(call => call[0])).toEqual(['/pelican-tests', '/pelican-tests/results/27', '/pelican-tests'])
     } finally {

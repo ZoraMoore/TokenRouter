@@ -12,10 +12,11 @@ import (
 
 const (
 	pelicanSettingsFields = `enabled, api_enabled, max_items, auto_cleanup, retention_days`
-	pelicanFreshDrawing   = `r.published AND (NOT s.auto_cleanup OR
+	pelicanFreshSample    = `r.published AND (NOT s.auto_cleanup OR
 		r.tested_at >= statement_timestamp() - s.retention_days * interval '24 hours')`
-	pelicanPublishedDrawing = pelicanHasDrawing + ` AND r.status IN ` + pelicanDrawingStatuses + ` AND ` + pelicanFreshDrawing
-	pelicanPlanSample       = `(r.question_kind NOT IN ` + pelicanDrawingKinds + ` OR r.status='inconclusive')`
+	pelicanPublishedDrawing = pelicanHasDrawing + ` AND r.status IN ` + pelicanDrawingStatuses + ` AND ` + pelicanFreshSample
+	pelicanPublishedCandy   = pelicanHasCandy + ` AND ` + pelicanFreshSample
+	pelicanPlanSample       = `(r.question_kind IN ('custom_text','state_probe') OR r.status='inconclusive' OR (` + pelicanPublishedCandy + `))`
 )
 
 // ShowcaseSettings 读取网页、API 展示开关和分组作品保留设置。
@@ -79,7 +80,7 @@ func lockPelicanPublication(ctx context.Context, tx *sql.Tx, plan routing.Pelica
 		SELECT g.id, s.max_items, s.auto_cleanup, s.retention_days FROM pelican_showcase_settings s
 		CROSS JOIN pelican_test_plans p JOIN groups g ON g.id=p.group_id
 		WHERE s.singleton AND p.id=$1 AND p.lease_token=$2
-		FOR SHARE OF s FOR NO KEY UPDATE OF g`, plan.ID, plan.LeaseToken).Scan(
+		FOR SHARE OF s FOR NO KEY UPDATE OF g, p`, plan.ID, plan.LeaseToken).Scan(
 		&groupID, &settings.MaxItems, &settings.AutoCleanup, &settings.RetentionDays)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, settings, routing.ErrPelicanConflict
@@ -87,22 +88,28 @@ func lockPelicanPublication(ctx context.Context, tx *sql.Tx, plan routing.Pelica
 	return groupID, settings, err
 }
 
-// prunePelicanShowcase 按分组撤下作品，再从受影响计划中删除最近三十次作答以外的未收录记录。
+// prunePelicanShowcase 让同组的绘图和糖果各用一份上限，再清理未收录的过旧历史。
 func prunePelicanShowcase(ctx context.Context, tx *sql.Tx, settings routing.PelicanShowcaseSettings, groupID *int64, finishedPlan int64) error {
 	var affected pq.Int64Array
 	err := tx.QueryRowContext(ctx, `
 		WITH ranked AS (
 			SELECT r.id, r.tested_at, row_number() OVER (
-				PARTITION BY p.group_id ORDER BY r.tested_at DESC, r.id DESC
+				PARTITION BY p.group_id, r.question_kind='candy' ORDER BY r.tested_at DESC, r.id DESC
 			) AS position
 			FROM pelican_test_results r JOIN pelican_test_plans p ON p.id=r.plan_id
 			WHERE r.published AND ($1::bigint IS NULL OR p.group_id=$1)
+				AND (r.question_kind<>'candy' OR (`+pelicanCurrentTarget+`))
 		), withdrawn AS (
 			UPDATE pelican_test_results r SET published=false FROM ranked WHERE r.id=ranked.id
 				AND (ranked.position>$2 OR ($3 AND ranked.tested_at < statement_timestamp() - $4::int * interval '24 hours'))
 			RETURNING r.plan_id
+		), superseded AS (
+			UPDATE pelican_test_results r SET published=false FROM pelican_test_plans p
+			WHERE r.plan_id=p.id AND r.question_kind='candy' AND r.published
+				AND ($1::bigint IS NULL OR p.group_id=$1) AND NOT (`+pelicanCurrentTarget+`)
+			RETURNING r.plan_id
 		)
-		SELECT ARRAY(SELECT plan_id FROM withdrawn UNION SELECT $5::bigint WHERE $5::bigint>0)`,
+		SELECT ARRAY(SELECT plan_id FROM withdrawn UNION SELECT plan_id FROM superseded UNION SELECT $5::bigint WHERE $5::bigint>0)`,
 		groupID, settings.MaxItems, settings.AutoCleanup, settings.RetentionDays, finishedPlan).Scan(&affected)
 	if err != nil || len(affected) == 0 {
 		return err

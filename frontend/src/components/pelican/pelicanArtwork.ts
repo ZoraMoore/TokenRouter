@@ -1,5 +1,19 @@
-import { isPelicanArtwork, pelicanEfforts, type PelicanCandyAnswer, type PelicanGroup, type PelicanModel, type PelicanPlanKind, type PelicanResult } from '@/api/pelicanTests'
+import { isPelicanArtwork, pelicanEfforts, type PelicanCandyAnswer, type PelicanGroup, type PelicanModel, type PelicanPlanKind, type PelicanResult, type PelicanResultDetail } from '@/api/pelicanTests'
 import { overriddenQuestionName } from '@/i18n/pelicanQuestionNames'
+import { extractPelicanMarkup } from './pelicanMarkup'
+
+export type PelicanArtworkBody = { html: string; image?: never } | { image: string; html?: never }
+
+// 卡片和详情共用原文。早期记录只保存了可以独立显示的 SVG。
+export function pelicanArtworkBody(sample: Pick<PelicanResultDetail, 'question_kind' | 'status' | 'raw_answer'> & { answer?: string }): PelicanArtworkBody | null {
+  if (!isPelicanArtwork(sample.question_kind) || sample.status === 'inconclusive') return null
+  if (sample.raw_answer) {
+    const html = extractPelicanMarkup(sample.raw_answer)
+    return html ? { html } : null
+  }
+  const image = pelicanImageSource(sample.answer || '')
+  return image ? { image } : null
+}
 
 // 模型可能用 HTML 包住 SVG。取出 SVG 后，通过 img 的图片解码器显示。
 export function pelicanImageSource(answer: string): string {
@@ -16,25 +30,6 @@ export function pelicanImageSource(answer: string): string {
   } catch {
     return ''
   }
-}
-
-// pelicanPreviewDocument 为隔离预览构造页面，下载和存储使用未经改写的原文。
-export function pelicanPreviewDocument(raw: string): string {
-  if (!raw.trim()) return ''
-  const fenced = /^\s*```(?:html|svg|xml)?\s*\n([\s\S]*?)\n```\s*$/i.exec(raw)
-  const policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'"
-  const guard = `<meta http-equiv="Content-Security-Policy" content="${policy}">`
-  const parsed = new DOMParser().parseFromString(guard + (fenced?.[1] ?? raw), 'text/html')
-  // 原文中的刷新和 base 标签会改变预览位置。预览策略固定在 head 的首位。
-  parsed.querySelectorAll('base, meta[http-equiv]').forEach(element => element.remove())
-  const security = parsed.createElement('meta')
-  security.httpEquiv = 'Content-Security-Policy'
-  security.content = policy
-  parsed.head.prepend(security)
-  // srcdoc 继承本站 CSP，内联脚本使用当前页面的 nonce，并在独立源中执行。
-  const nonce = document.querySelector<HTMLScriptElement>('script[nonce]')?.nonce
-  if (nonce) parsed.querySelectorAll('script:not([src])').forEach(script => script.setAttribute('nonce', nonce))
-  return '<!doctype html>' + parsed.documentElement.outerHTML
 }
 
 const recordedEfforts = new Set<string>([...pelicanEfforts, 'default', 'none'])

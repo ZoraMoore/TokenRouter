@@ -216,6 +216,7 @@
           :selected-ids="selIds"
           :usage-loading="bulkUsageLoading"
           :upstream-usage-loading="upstreamUsageBulkLoading"
+          :bulk-probe-open="bulkProbeProviders !== null"
           :total-results="pagination.total"
           :selecting-all="selectingAllResults"
           :all-results-selected="allResultsSelected"
@@ -224,6 +225,7 @@
           @refresh-token="handleBulkRefreshToken"
           @query-usage="handleBulkQueryUsage"
           @query-upstream-usage="handleBulkQueryUpstreamUsage"
+          @run-bulk-probe="handleBulkProbe"
           @edit-selected="openBulkEditSelected"
           @clear="clearSelection"
           @select-page="selectPage"
@@ -481,6 +483,7 @@
     <ReAuthProviderModal :show="showReAuth" :provider="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleProviderUpdated" />
     <ProviderTestModal :show="showTest" :provider="testingAcc" @close="closeTestModal" />
     <ProviderIQTestModal v-if="iqProvider" :show="true" :provider="iqProvider" @close="iqProvider = null" />
+    <ProviderBulkProbeDialog v-if="bulkProbeProviders" :providers="bulkProbeProviders" @close="bulkProbeProviders = null" />
     <ProviderStatsModal :show="showStats" :provider="statsAcc" @close="closeStatsModal" />
     <AdvancedSchedulerScoreModal :show="showAdvancedSchedulerScore" :provider="advancedSchedulerScoreAcc" @close="closeAdvancedSchedulerScoreModal" />
     <CodexInviteResetModal :show="showInviteReset" :provider="inviteResetAcc" @close="closeInviteResetModal" @updated="handleInviteResetUpdated" />
@@ -549,6 +552,7 @@ import ImportDataModal from '@/components/admin/provider/ImportDataModal.vue'
 import ReAuthProviderModal from '@/components/admin/provider/ReAuthProviderModal.vue'
 import ProviderTestModal from '@/components/admin/provider/ProviderTestModal.vue'
 import ProviderIQTestModal from '@/components/admin/provider/ProviderIQTestModal.vue'
+import ProviderBulkProbeDialog from '@/components/admin/provider/ProviderBulkProbeDialog.vue'
 import ProviderStatsModal from '@/components/admin/provider/ProviderStatsModal.vue'
 import AdvancedSchedulerScoreModal from '@/components/admin/provider/AdvancedSchedulerScoreModal.vue'
 import CodexInviteResetModal from '@/components/admin/provider/CodexInviteResetModal.vue'
@@ -651,6 +655,7 @@ const showCreateShadowDialog = ref(false)
 const showReAuth = ref(false)
 const showTest = ref(false)
 const iqProvider = ref<Provider | null>(null)
+const bulkProbeProviders = ref<Pick<Provider, 'id' | 'name'>[] | null>(null)
 const quotaRefreshTokens = ref(new Map<number, number>())
 const showStats = ref(false)
 const showAdvancedSchedulerScore = ref(false)
@@ -1678,6 +1683,13 @@ const clearSelection = () => {
 
 const selectPage = () => {
   selectCurrentPage()
+}
+
+// 批次保存打开时的选中项，刷新列表和切换筛选时继续使用这份选择。
+const handleBulkProbe = () => {
+  if (bulkProbeProviders.value || selectingAllResults.value || selIds.value.length === 0) return
+  const names = new Map(providers.value.map(({ id, name }) => [id, name]))
+  bulkProbeProviders.value = selIds.value.map(id => ({ id, name: names.get(id) ?? '' }))
 }
 
 const swipeVirtualContext: SwipeSelectVirtualContext = {

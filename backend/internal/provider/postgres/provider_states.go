@@ -10,6 +10,7 @@ import (
 	"github.com/lib/pq"
 
 	dbprovider "github.com/TokenFlux/TokenRouter/ent/provider"
+	postgresinfra "github.com/TokenFlux/TokenRouter/internal/infra/postgres"
 	acctcore "github.com/TokenFlux/TokenRouter/internal/provider"
 )
 
@@ -411,6 +412,34 @@ func (r *ProviderStore) SetSchedulable(ctx context.Context, id int64, schedulabl
 		r.afterChange(ctx, id)
 	}
 	return nil
+}
+
+// DisableAfterCandyAnswer 在作答事务中复核账号版本和归组身份，再写入停调事件。
+func (r *ProviderStore) DisableAfterCandyAnswer(ctx context.Context, tx postgresinfra.Executor, id, groupID, revision int64, membership time.Time) (bool, error) {
+	update, err := tx.ExecContext(ctx, `
+		UPDATE providers v SET schedulable=false, updated_at=NOW()
+		WHERE v.id=$1 AND v.pelican_candy_revision=$3
+			AND v.schedulable AND v.status='active' AND v.deleted_at IS NULL
+			AND EXISTS (
+				SELECT 1 FROM provider_groups pg WHERE pg.provider_id=v.id AND pg.group_id=$2 AND pg.created_at=$4
+				FOR KEY SHARE OF pg
+			)`, id, groupID, revision, membership)
+	if err != nil {
+		return false, err
+	}
+	count, err := update.RowsAffected()
+	if err != nil || count == 0 {
+		return false, err
+	}
+	if err := r.enqueue(ctx, tx, ProviderChanged, &id, nil, nil); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// PublishCandyScheduling 刷新提交后的提供商和调度快照。
+func (r *ProviderStore) PublishCandyScheduling(ctx context.Context, id int64) {
+	r.afterChangeDetached(ctx, id)
 }
 
 func (r *ProviderStore) AutoPauseExpiredProviders(ctx context.Context, now time.Time) (int64, error) {

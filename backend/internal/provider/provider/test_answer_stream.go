@@ -41,9 +41,12 @@ type answerReadLimits struct {
 // answerText 按协议拼接可见文字，超限时整份回答作废。
 type answerText struct {
 	bytes.Buffer
-	limit    int
-	overflow bool
-	drawing  *drawingResponse
+	limit         int
+	overflow      bool
+	artwork       bool
+	sawStopReason bool
+	awaitChatTail bool
+	drawing       *drawingResponse
 }
 
 func testAnswerLimits(svg bool, mode string) answerReadLimits {
@@ -128,7 +131,11 @@ func completedTestAnswer(ctx context.Context, resp *http.Response, protocol answ
 		remaining -= advance
 		return advance, token, err
 	})
-	text := answerText{limit: limits.capture}
+	text := answerText{
+		limit:         limits.capture,
+		artwork:       limits.drawing,
+		awaitChatTail: limits.drawing && (protocol == answerChat || protocol == answerQoder),
+	}
 	if limits.drawing && protocol == answerResponses {
 		text.drawing = &drawingResponse{}
 	}
@@ -146,7 +153,7 @@ func completedTestAnswer(ctx context.Context, resp *http.Response, protocol answ
 		}
 		data = bytes.TrimSpace(data)
 		if bytes.Equal(data, []byte("[DONE]")) {
-			if protocol == answerChat || protocol == answerQoder {
+			if (protocol == answerChat || protocol == answerQoder) && (!text.artwork || text.sawStopReason) {
 				return text.result(limits.output)
 			}
 			return "", provider.ErrTestAnswerIncomplete
@@ -168,6 +175,10 @@ func completedTestAnswer(ctx context.Context, resp *http.Response, protocol answ
 	if reader.N == 0 || errors.Is(scanner.Err(), bufio.ErrTooLong) {
 		return "", provider.ErrTestAnswerLimit
 	}
+	// Chat 兼容端可以在 stop 后补发整条消息，也可以直接关闭响应体。
+	if text.awaitChatTail && text.sawStopReason && scanner.Err() == nil && ctx.Err() == nil {
+		return text.result(limits.output)
+	}
 	return "", provider.ErrTestAnswerIncomplete
 }
 
@@ -184,7 +195,7 @@ func completedJSONAnswer(ctx context.Context, reader *io.LimitedReader, protocol
 	if message.Get("error").Type != gjson.Null || message.Get("type").String() == "error" {
 		return "", answerRequestError(message.Get("error"))
 	}
-	text := answerText{limit: limits.output}
+	text := answerText{limit: limits.output, artwork: limits.drawing}
 	switch protocol {
 	case answerBedrock, answerClaude:
 		if !claudeAnswerFinished(message.Get("stop_reason").String()) {
@@ -235,10 +246,16 @@ func parseAnswerFrame(protocol answerProtocol, data gjson.Result, text *answerTe
 				text.addField(data.Get("delta.text"))
 			}
 		case "message_delta":
-			if reason := data.Get("delta.stop_reason").String(); reason != "" && !claudeAnswerFinished(reason) {
-				return false, provider.ErrTestAnswerIncomplete
+			if reason := data.Get("delta.stop_reason").String(); reason != "" {
+				if !claudeAnswerFinished(reason) {
+					return false, provider.ErrTestAnswerIncomplete
+				}
+				text.sawStopReason = true
 			}
 		case "message_stop":
+			if text.artwork && !text.sawStopReason {
+				return false, provider.ErrTestAnswerIncomplete
+			}
 			return true, nil
 		case "error":
 			return false, errAnswerUpstream
@@ -259,12 +276,7 @@ func parseAnswerFrame(protocol answerProtocol, data gjson.Result, text *answerTe
 		})
 		return answerFinishReason(candidate.Get("finishReason").String(), "STOP")
 	case answerChat:
-		choice := data.Get("choices.0")
-		text.addField(choice.Get("delta.content"))
-		if text.Len() == 0 {
-			text.addField(choice.Get("message.content"))
-		}
-		return answerFinishReason(choice.Get("finish_reason").String(), "stop")
+		return readChatAnswer(text, data.Get("choices.0"))
 	case answerResponses:
 		switch eventType := data.Get("type").String(); eventType {
 		case "response.output_text.delta":
@@ -324,12 +336,24 @@ func parseAnswerFrame(protocol answerProtocol, data gjson.Result, text *answerTe
 		}
 		// COSY 把 OpenAI 或 Claude 的结束原因装在 body 字符串中。
 		body := gjson.Parse(data.Get("body").String())
-		finished, err := answerFinishReason(body.Get("choices.0.finish_reason").String(), "stop")
+		choice := body.Get("choices.0")
+		if text.artwork && (choice.Get("message.content").Type == gjson.String || choice.Get("message.refusal").String() != "") {
+			return readChatAnswer(text, choice)
+		}
+		finished, err := answerFinishReason(choice.Get("finish_reason").String(), "stop")
 		if err != nil {
 			return false, err
 		}
-		if reason := body.Get("data.stop_reason").String(); reason != "" && !claudeAnswerFinished(reason) {
-			return false, provider.ErrTestAnswerIncomplete
+		text.sawStopReason = text.sawStopReason || finished
+		reason := body.Get("data.stop_reason").String()
+		if reason == "" {
+			reason = body.Get("data.delta.stop_reason").String()
+		}
+		if reason != "" {
+			if !claudeAnswerFinished(reason) {
+				return false, provider.ErrTestAnswerIncomplete
+			}
+			text.sawStopReason = true
 		}
 		for _, event := range events {
 			if event.Type == "text_delta" {
@@ -337,9 +361,33 @@ func parseAnswerFrame(protocol answerProtocol, data gjson.Result, text *answerTe
 			}
 			finished = finished || event.IsDone
 		}
-		return finished, nil
+		if finished && text.artwork && !text.sawStopReason {
+			return false, provider.ErrTestAnswerIncomplete
+		}
+		return finished && (!text.awaitChatTail || !choice.Exists()), nil
 	}
 	return false, nil
+}
+
+// readChatAnswer 收集 Chat 增量，绘图终态带有整条消息时取出该消息。
+func readChatAnswer(text *answerText, choice gjson.Result) (bool, error) {
+	snapshot := choice.Get("message.content")
+	if text.artwork && (choice.Get("message.refusal").String() != "" || choice.Get("delta.refusal").String() != "") {
+		return false, provider.ErrTestAnswerIncomplete
+	}
+	if text.artwork && snapshot.Type == gjson.String {
+		// message.content 是此刻的完整回答，可能已补全草稿里的图形。
+		text.Reset()
+		text.addField(snapshot)
+	} else {
+		text.addField(choice.Get("delta.content"))
+		if text.Len() == 0 {
+			text.addField(snapshot)
+		}
+	}
+	done, err := answerFinishReason(choice.Get("finish_reason").String(), "stop")
+	text.sawStopReason = text.sawStopReason || done
+	return done && !text.awaitChatTail, err
 }
 
 func appendResponseOutput(text *answerText, response gjson.Result) {

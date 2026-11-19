@@ -17,6 +17,7 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/infra/httpclient/tlsfingerprint"
 	"github.com/TokenFlux/TokenRouter/internal/provider"
 	"github.com/TokenFlux/TokenRouter/internal/routing/capability"
+	"github.com/TokenFlux/TokenRouter/internal/upstream/openai"
 	"github.com/TokenFlux/TokenRouter/internal/upstream/qoder"
 )
 
@@ -462,6 +463,7 @@ func TestPelicanDrawingReadsCompletedArtwork(t *testing.T) {
 			require.False(t, gjson.Get(transport.requests[0], "max_output_tokens").Exists())
 			require.Empty(t, detail)
 			require.Equal(t, "pending_review", status)
+			require.True(t, gjson.Get(transport.requests[0], "instructions").String() == openai.DefaultInstructions, "绘图请求应使用上游的默认系统指令")
 			require.Len(t, answer, len(drawing))
 			require.True(t, answer == drawing)
 		})
@@ -619,6 +621,120 @@ func TestIQModelTraceRestrictsMappedModelAndProtocol(t *testing.T) {
 			require.Len(t, transport.paths, 3)
 			for _, path := range transport.paths {
 				require.Equal(t, "/v1/chat/completions", path)
+			}
+		})
+	}
+}
+
+// TestPelicanChatDrawingFinalMessage 用尾部快照和协议结束原因区分草稿与成品。
+func TestPelicanChatDrawingFinalMessage(t *testing.T) {
+	const draft = `<svg xmlns="http://www.w3.org/2000/svg"><circle/></svg>`
+	const drawing = `<svg xmlns="http://www.w3.org/2000/svg"><circle/><path id="wing"/></svg>`
+	delta := "data: " + `{"choices":[{"delta":{"content":` + strconv.Quote(draft) + `}}]}` + "\n"
+	for _, tt := range []struct {
+		name, tail, want, detail string
+	}{
+		{"终态快照补全翅膀", "data: " + `{"choices":[{"message":{"content":` + strconv.Quote(drawing) + `},"finish_reason":"stop"}]}` + "\n", drawing, ""},
+		{"结束原因后还有成品快照", "data: " + `{"choices":[{"finish_reason":"stop"}]}` + "\n" + "data: " + `{"choices":[{"message":{"content":` + strconv.Quote(drawing) + `}}]}` + "\ndata: [DONE]\n", drawing, ""},
+		{"终态快照清空草稿", `data: {"choices":[{"message":{"content":""},"finish_reason":"stop"}]}` + "\n", "", "empty_output"},
+		{"最终消息拒绝作答", `data: {"choices":[{"message":{"content":null,"refusal":"declined"},"finish_reason":"stop"}]}` + "\n", "", "incomplete"},
+		{"上游未报告结束原因", "data: [DONE]\n", "", "incomplete"},
+		{"尾帧报告失败", "data: " + `{"choices":[{"finish_reason":"stop"}]}` + "\n" + `data: {"error":{"code":"stream_error"}}` + "\n", "", "upstream_error"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			record := &provider.Record{ID: 2, Platform: provider.PlatformOpenAI, Type: provider.ProviderTypeAPIKey, Credentials: map[string]any{"api_key": "fixture"}}
+			transport := &pelicanHTTPFixture{status: http.StatusOK, stream: delta + tt.tail}
+			ev := pelicanServiceForHTTP(record, transport).RunPelican(t.Context(), record.ID, "selected", "pelican", "round", "chat_completions")
+			require.Equal(t, tt.detail, ev.DetailCode)
+			require.Equal(t, tt.want, ev.Answer)
+			require.Equal(t, tt.want, ev.RawAnswer)
+		})
+	}
+}
+
+// TestPelicanClaudeDrawingRequiresStopReason 报文传输结束时，绘图还需给出本轮作答结束的原因。
+func TestPelicanClaudeDrawingRequiresStopReason(t *testing.T) {
+	const answer = `data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"<svg><path/></svg>"}}` + "\n"
+	const stop = `data: {"type":"message_stop"}` + "\n"
+	for _, tt := range []struct{ reason, detail string }{
+		{"end_turn", ""}, {"max_tokens", "incomplete"}, {"", "incomplete"},
+	} {
+		stopReason := `data: {"type":"message_delta","delta":{"stop_reason":` + strconv.Quote(tt.reason) + `}}` + "\n"
+		record := &provider.Record{ID: 2, Platform: provider.PlatformAnthropic, Type: provider.ProviderTypeAPIKey, Credentials: map[string]any{"api_key": "fixture"}}
+		transport := &pelicanHTTPFixture{status: http.StatusOK, stream: answer + stopReason + stop}
+		ev := pelicanServiceForHTTP(record, transport).RunPelican(t.Context(), record.ID, "selected", "pelican", "round", "")
+		require.Equal(t, tt.detail, ev.DetailCode)
+	}
+}
+
+// TestPelicanQoderDrawingRequiresStopReason 检查 COSY 外层与内层的流结束标记。
+func TestPelicanQoderDrawingRequiresStopReason(t *testing.T) {
+	delta := `{"choices":[{"delta":{"content":"<svg><path/></svg>"}}]}`
+	first := "data: " + `{"body":` + strconv.Quote(delta) + `}` + "\n"
+	const drawing = `<svg><path/><circle/></svg>`
+	final := `{"choices":[{"message":{"content":` + strconv.Quote(drawing) + `},"finish_reason":"stop"}]}`
+	stop := "data: " + `{"body":` + strconv.Quote(`{"choices":[{"finish_reason":"stop"}]}`) + "}\n"
+	snapshot := "data: " + `{"body":` + strconv.Quote(final) + "}\n"
+	for _, tt := range []struct{ tail, detail, answer string }{
+		{"data: [DONE]\n", "incomplete", ""},
+		{`data: {"body":"[DONE]"}` + "\n", "incomplete", ""},
+		{stop, "", "<svg><path/></svg>"},
+		{snapshot, "", drawing},
+		{stop + snapshot + `data: {"body":"[DONE]"}` + "\n", "", drawing},
+	} {
+		f := &pelicanQoderFixture{stream: first + tt.tail}
+		record := &provider.Record{ID: 2, Platform: provider.PlatformQoder, Type: provider.ProviderTypeCosy, Credentials: map[string]any{"site": "global"}}
+		s := provider.NewTestService(&TestTargets{Read: func(context.Context, int64) (*provider.Record, error) { return record, nil }, Qoder: &QoderProviderTest{Client: f, UserInfo: f, Sessions: f}}, provider.TestOptions{})
+		ev := s.RunPelican(t.Context(), record.ID, "selected", "pelican", "round", "")
+		require.Equal(t, tt.detail, ev.DetailCode)
+		require.Equal(t, tt.answer, ev.RawAnswer)
+	}
+}
+
+// TestPelicanClaudeDrawingModelEffort 对照映射后模型、发出的 Messages 报文与作答记录。
+func TestPelicanClaudeDrawingModelEffort(t *testing.T) {
+	for _, tt := range []struct {
+		account, model, selected, sent string
+		adaptive, manual               bool
+	}{
+		{provider.ProviderTypeAPIKey, "claude-sonnet-4-6", "medium", "medium", true, false},
+		{provider.ProviderTypeOAuth, "claude-opus-4-5-20251101", "high", "high", false, false},
+		{provider.ProviderTypeSetupToken, "anthropic/claude-opus-5.5", "xhigh", "xhigh", true, false},
+		{provider.ProviderTypeOAuth, "claude-sonnet-4-6", "xhigh", "default", false, true},
+		{provider.ProviderTypeAPIKey, "claude-opus-4-5", "max", "default", false, true},
+		{provider.ProviderTypeSetupToken, "claude-sonnet-4-5", "medium", "default", false, true},
+		{provider.ProviderTypeAPIKey, "claude-haiku-5-5", "max", "max", true, true},
+	} {
+		t.Run(tt.account+"/"+tt.model+"/"+tt.selected, func(t *testing.T) {
+			record := &provider.Record{ID: 2, Platform: provider.PlatformAnthropic, Type: tt.account, Credentials: map[string]any{
+				"access_token": "fixture", "api_key": "fixture", "model_mapping": map[string]any{"alias": tt.model},
+			}}
+			transport := &pelicanHTTPFixture{status: http.StatusOK, contentType: "application/json", stream: `{"type":"message","stop_reason":"end_turn","content":[{"type":"text","text":"<svg><path/></svg>"}]}`}
+			s := pelicanServiceForHTTP(record, transport)
+			var status, effort string
+			if tt.manual {
+				result, err := s.RunIQQuestion(t.Context(), record.ID, provider.IQTestRequest{ModelID: "alias", QuestionKind: "pelican", ReasoningEffort: tt.selected})
+				require.NoError(t, err)
+				status, effort = result.Status, result.ReasoningEffort
+			} else {
+				result := s.RunConfiguredPelican(t.Context(), record.ID, "alias", "pelican", "round", "", provider.PelicanQuestionConfig{ReasoningEffort: tt.selected})
+				status, effort = result.Status, result.ReasoningEffort
+			}
+			require.Equal(t, "pending_review", status)
+			require.Equal(t, tt.sent, effort)
+			require.Len(t, transport.requests, 1)
+			payload := gjson.Parse(transport.requests[0])
+			require.Equal(t, tt.model, payload.Get("model").String())
+			require.Equal(t, int64(pelicanMaxTokens), payload.Get("max_tokens").Int())
+			if tt.sent == "default" {
+				require.False(t, payload.Get("output_config").Exists())
+			} else {
+				require.Equal(t, tt.sent, payload.Get("output_config.effort").String())
+			}
+			if tt.adaptive {
+				require.Equal(t, "adaptive", payload.Get("thinking.type").String())
+			} else {
+				require.False(t, payload.Get("thinking").Exists())
 			}
 		})
 	}

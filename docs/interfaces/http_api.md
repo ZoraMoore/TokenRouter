@@ -224,13 +224,15 @@ POST /api/v1/creative/runs/{id}/outputs/{index}/ack
 
 答题计划的 `question_kind` 可以使用内置题型 `pelican`、`candy`，也可以使用自定义题型 `custom_svg`、`custom_text`。内置题型可按计划覆盖题名与题面，糖果题还可覆盖参考答案。旧计划中留空的字段使用内置值。自定义题型需要 `question_name`（最多 96 字节）和 `question_prompt`（最多 8192 字节）。文本题另需 `expected_answer`（最多 1024 字节）。同一分组和模型可按题名、题型与推理强度分别建立计划。计划的 `reasoning_effort` 接受空字符串、`low`、`medium`、`high` 和 `xhigh`。
 
+`suspend_on_wrong_answer=true` 适用于自动选号的标准糖果题计划。此时 `provider_id` 为空，题面使用内置糖果题，参考答案使用默认值或 `21`。管理员历史包含当次账号和 `round_id`。作答结果按实际处置返回 `schedule_action`，取值为 `disabled`、`already_disabled` 或 `account_changed`。用户接口返回处置字段供展示。
+
 管理员通过 `GET` 和 `PUT /api/v1/admin/pelican-showcase/settings` 读取和保存展示设置。保存时须提交全部五项：`enabled`、`api_enabled`、`max_items`（1–100）、`auto_cleanup`、`retention_days`（1–90）。
 
-登录用户通过 `GET /api/v1/pelican-tests/visibility` 读取网页和作品 API 的开放状态。网页开放时，`GET /api/v1/pelican-tests` 列出可见分组的计划、运行状态和当前配置的最近一次测试。每个计划的 `artworks` 包含仍在分组画廊中的作品。作品记录作答时的题型、题名、模型和推理强度，更换模型或将计划改为文本题后仍可读取。糖果计划的 `answers` 列出该计划最近 30 条记录中，符合当前配置且已有判定和作答的样本。`answer_preview` 取自模型当次的回答，长回答显示前 256 个字符并附省略号。两份列表都按完成时间倒序排列，同一时刻按样本 ID 倒序。`reasoning_effort` 是当次作答的推理强度。
+登录用户通过 `GET /api/v1/pelican-tests/visibility` 读取网页和作品 API 的开放状态。网页开放时，`GET /api/v1/pelican-tests` 列出可见分组的计划、运行状态和当前配置的最近一次测试。`artworks` 包含仍在分组画廊中的作品。`answers` 包含符合当前计划配置的已收录糖果回答。每个分组最多收录 `max_items` 幅作品和 `max_items` 条糖果回答。`answer_preview` 取作答的前 256 个字符，超过时附省略号。两份列表都按完成时间倒序排列，同一时刻按样本 ID 倒序。`reasoning_effort` 是当次作答的推理强度。
 
 打开样本时，`GET /api/v1/pelican-tests/results/:id` 返回题目、判据和完整作答。关闭网页展示或请求不可见的样本时返回 404。
 
-绘图详情的 `answer` 是提取出的 SVG，`raw_answer` 是模型完成回答后的原文，包含 HTML、CSS 和 JavaScript。管理员详情与组内用户详情均返回 `raw_answer`，列表摘要省略正文。历史记录没有保存原文时省略该字段。原文最多 2 MiB，随样本记录清理。预览使用隔离页面，下载使用原文。
+绘图详情的 `raw_answer` 是模型完成回答后的原文，包含 HTML、CSS 和 JavaScript。可以独立预览的单幅 SVG 另存于 `answer`。多幅 SVG 组成的页面或脚本生成的画布可以只有 `raw_answer`。管理员详情与组内用户详情均返回 `raw_answer`，列表摘要省略正文。历史记录没有保存原文时省略该字段。原文最多 2 MiB，随样本记录清理。预览使用隔离页面，下载使用原文。
 
 两个展示开关均开启时，本站 API Key 可通过 `GET /api/v1/public/pelican-showcase` 读取作品目录，通过 `GET /api/v1/public/pelican-showcase/items/:id` 读取单幅作品。两条路径都支持 HEAD。凭据放在 Authorization Bearer、X-API-Key 或 X-Goog-API-Key 请求头中。目录只列出该 Key 绑定且用户当前有权使用的分组。清单的 `max_items_per_group` 是每组张数上限，`latest_generated_at` 是当前可见作品中最新的生成时间。每幅作品的 `content_url` 指向详情，`response_text` 提供 SVG 正文。读取使用已保存的数据，不消耗模型额度。详情与网页遵循相同的留存范围。
 

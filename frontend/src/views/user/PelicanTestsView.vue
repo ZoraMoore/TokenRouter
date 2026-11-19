@@ -62,6 +62,9 @@
               <PelicanStatus v-if="model.latest" :status="model.latest.status" :probe="question.kind === 'state_probe'" />
               <span v-else class="badge badge-gray">{{ t('pelicanTests.noSample') }}</span>
               <span v-if="model.run_state && model.run_state !== 'idle'" class="badge badge-primary">{{ t(`pelicanTests.runState.${model.run_state}`) }}</span>
+              <span v-if="model.latest?.detail_code === 'candy_exhausted' || model.latest?.detail_code === 'candy_busy'">
+                {{ t(`pelicanTests.reason.${model.latest.detail_code}`) }}
+              </span>
               <template v-if="model.latest && !row.samples.some(sample => sample.id === model.latest?.id)">
                 <time :datetime="model.latest.tested_at">{{ formatDateTimeToMinute(model.latest.tested_at) }}</time>
                 <span v-if="question.kind !== 'state_probe'">{{ t('pelicanTests.reasoningEffort') }} {{ t(effortLabel(model.latest.reasoning_effort)) }}</span>
@@ -91,7 +94,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getPelicanResult, isPelicanArtwork, listPelicanGroups } from '@/api/pelicanTests'
+import { getPelicanResult, listPelicanGroups } from '@/api/pelicanTests'
 import ContentSkeleton from '@/components/common/ContentSkeleton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ModelIcon from '@/components/common/ModelIcon.vue'
@@ -103,7 +106,7 @@ import PelicanResultDialog from '@/components/pelican/PelicanResultDialog.vue'
 import PelicanStatus from '@/components/pelican/PelicanStatus.vue'
 import PelicanShowcaseApiDialog from '@/components/pelican/PelicanShowcaseApiDialog.vue'
 import { pelicanViewerId, pelicanVisibility, readPelicanVisibility } from '@/composables/usePelicanVisibility'
-import { durationLabel, effortLabel, pelicanImageSource, pelicanQuestionSections } from '@/components/pelican/pelicanArtwork'
+import { durationLabel, effortLabel, pelicanArtworkBody, pelicanQuestionSections, type PelicanArtworkBody } from '@/components/pelican/pelicanArtwork'
 import { pelicanPollDelay, usePelicanResource } from '@/components/pelican/usePelicanResource'
 import { formatDateTimeToMinute, formatRelativeTime } from '@/utils/format'
 
@@ -111,7 +114,8 @@ const { t, locale } = useI18n()
 const sampleId = ref<number | null>(null)
 const apiOpen = ref(false)
 const accessLost = ref(false)
-const previews = new Map<number, string>()
+const maxCachedPreviews = 16
+const previews = new Map<number, PelicanArtworkBody | null>()
 // 分组名由服务端按显示语言返回，切换语言时重新读取。
 const { data: groups, loading, failed, refresh } = usePelicanResource(
   () => pelicanVisibility.value?.enabled && !accessLost.value ? JSON.stringify([pelicanViewerId.value, locale.value]) : null,
@@ -121,7 +125,7 @@ const { data: groups, loading, failed, refresh } = usePelicanResource(
 const questions = computed(() => pelicanQuestionSections(groups.value || []))
 const emptyGroups = computed(() => groups.value?.filter(group => !group.models.length))
 
-// 预览只在当前页面缓存。列表移除样本时一并释放图片，复核结论始终来自最新摘要和详情。
+// 缓存保存最近看过的作品正文。列表移除的样本随即清出缓存。
 const drawings = computed(() => questions.value.filter(question => question.drawing)
   .flatMap(question => question.rows.flatMap(row => row.samples)))
 const firstArtworkId = computed(() => drawings.value[0]?.id)
@@ -184,13 +188,23 @@ function loadResult(id: number, signal: AbortSignal) {
   return readWithinGallery(signal, () => getPelicanResult(id, signal))
 }
 
-async function loadPreview(id: number, signal: AbortSignal): Promise<string> {
+async function loadPreview(id: number, signal: AbortSignal): Promise<PelicanArtworkBody | null> {
   const cached = previews.get(id)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) {
+    previews.delete(id)
+    previews.set(id, cached)
+    return cached
+  }
   const detail = await loadResult(id, signal)
-  const source = isPelicanArtwork(detail.question_kind) ? pelicanImageSource(detail.answer || '') : ''
-  if (!signal.aborted) previews.set(id, source)
-  return source
+  const artwork = pelicanArtworkBody(detail)
+  if (!signal.aborted) {
+    previews.set(id, artwork)
+    if (previews.size > maxCachedPreviews) {
+      const oldest = previews.keys().next()
+      if (!oldest.done) previews.delete(oldest.value)
+    }
+  }
+  return artwork
 }
 </script>
 

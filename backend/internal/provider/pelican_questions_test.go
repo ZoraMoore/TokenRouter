@@ -25,12 +25,10 @@ func TestPelicanQuestionDefaultsMatchTheQuestionsSent(t *testing.T) {
 	require.Equal(t, "pelican", svg.QuestionKind)
 	require.Equal(t, "鹈鹕 SVG", svg.QuestionName)
 	require.Empty(t, svg.ExpectedAnswer)
-	for _, fragment := range []string{"鹈鹕骑自行车", "喉囊", "脚踏", "路标", "内联 SVG", "CSS", "SMIL"} {
-		require.Contains(t, svg.QuestionPrompt, fragment)
-	}
+	require.Equal(t, "创建一个 HTML，内容是 SVG 绘制一个鹈鹕骑自行车的 2D 动画，你不需要任何测试", svg.QuestionPrompt)
 	for _, round := range []string{"1", "2", "4", "7"} {
 		question := pelicanQuestion("pelican", round, PelicanQuestionConfig{Prompt: svg.QuestionPrompt})
-		require.Equal(t, svg.QuestionPrompt, question.Prompt)
+		require.Equal(t, svg.QuestionPrompt+"\n\n所有账号使用相同交付约定：直接返回独立 HTML，不使用 Markdown 代码块或外部依赖。只输出 HTML，不要解释。", question.Prompt)
 		require.Len(t, question.Criteria, 4)
 		require.Contains(t, question.Criteria[0], "喉囊")
 		require.Contains(t, question.Criteria[3], "路标")

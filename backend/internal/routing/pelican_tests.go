@@ -30,24 +30,27 @@ var (
 
 // PelicanPlan 指定分组的测试模型、作答账号和运行时间。
 type PelicanPlan struct {
-	ID              int64      `json:"id"`
-	GroupID         int64      `json:"group_id"`
-	GroupName       string     `json:"group_name"`
-	ProviderID      *int64     `json:"provider_id"`
-	ProviderName    string     `json:"provider_name,omitempty"`
-	ModelID         string     `json:"model_id"`
-	QuestionKind    string     `json:"question_kind"`
-	QuestionName    string     `json:"question_name,omitempty"`
-	QuestionPrompt  string     `json:"question_prompt,omitempty"`
-	ExpectedAnswer  string     `json:"expected_answer,omitempty"`
-	ReasoningEffort string     `json:"reasoning_effort,omitempty"`
-	CronExpression  string     `json:"cron_expression"`
-	Enabled         bool       `json:"enabled"`
-	NextRunAt       *time.Time `json:"next_run_at,omitempty"`
-	LastRunAt       *time.Time `json:"last_run_at,omitempty"`
-	RunState        string     `json:"run_state"`
-	LeaseToken      string     `json:"-"`
-	RoundAt         time.Time  `json:"-"`
+	ID                   int64      `json:"id"`
+	GroupID              int64      `json:"group_id"`
+	GroupName            string     `json:"group_name"`
+	ProviderID           *int64     `json:"provider_id"`
+	ProviderName         string     `json:"provider_name,omitempty"`
+	ModelID              string     `json:"model_id"`
+	QuestionKind         string     `json:"question_kind"`
+	QuestionName         string     `json:"question_name,omitempty"`
+	QuestionPrompt       string     `json:"question_prompt,omitempty"`
+	ExpectedAnswer       string     `json:"expected_answer,omitempty"`
+	ReasoningEffort      string     `json:"reasoning_effort,omitempty"`
+	CronExpression       string     `json:"cron_expression"`
+	Enabled              bool       `json:"enabled"`
+	NextRunAt            *time.Time `json:"next_run_at,omitempty"`
+	LastRunAt            *time.Time `json:"last_run_at,omitempty"`
+	RunState             string     `json:"run_state"`
+	SuspendOnWrongAnswer bool       `json:"suspend_on_wrong_answer,omitempty"`
+	LeaseToken           string     `json:"-"`
+	RoundAt              time.Time  `json:"-"`
+	Revision             int64      `json:"-"`
+	CandidateIDs         []int64    `json:"-"`
 }
 
 // PelicanSummary 是列表中展示的一次作答。
@@ -61,6 +64,7 @@ type PelicanSummary struct {
 	DetailCode      string    `json:"detail_code,omitempty"`
 	TestedAt        time.Time `json:"tested_at"`
 	LatencyMs       int64     `json:"latency_ms"`
+	ScheduleAction  string    `json:"schedule_action,omitempty"`
 }
 
 // PelicanResult 保存当次的题目、检查要点和回答，作答账号供管理员排查。
@@ -74,6 +78,7 @@ type PelicanResult struct {
 	Criteria     []string `json:"criteria,omitempty"`
 	Answer       string   `json:"answer,omitempty"`
 	RawAnswer    string   `json:"raw_answer,omitempty"`
+	RoundID      string   `json:"round_id,omitempty"`
 }
 
 // PelicanArtwork 是用户打开一次测试时可查看的题目和作答。
@@ -122,9 +127,10 @@ type PelicanProvider struct {
 
 // PelicanTarget 保存分组映射后的型号以及提供商测试使用的文字端点。
 type PelicanTarget struct {
-	ProviderID int64
-	ModelID    string
-	Protocol   string
+	ProviderID     int64
+	ModelID        string
+	Protocol       string
+	GroupUpdatedAt time.Time
 }
 
 // PelicanRepository 持久化分组计划和结果，按领取凭证提交一轮作答。
@@ -147,13 +153,16 @@ type PelicanRepository interface {
 
 // PelicanOptions 连接分组权限、选号、提供商测试和服务器时钟。
 type PelicanOptions struct {
-	Now           func() time.Time
-	Validate      func(context.Context, PelicanPlan) error
-	Providers     func(context.Context, int64) ([]PelicanProvider, error)
-	Acquire       func(context.Context, PelicanPlan) (PelicanTarget, func(), error)
-	Run           func(context.Context, int64, string, string, string, string, provider.PelicanQuestionConfig) provider.PelicanEvidence
-	RunStateProbe func(context.Context, int64, string) (provider.StateProbeResult, error)
-	UserGroups    func(context.Context, int64) ([]Group, error)
+	Now             func() time.Time
+	Validate        func(context.Context, PelicanPlan) error
+	Providers       func(context.Context, int64) ([]PelicanProvider, error)
+	Acquire         func(context.Context, PelicanPlan) (PelicanTarget, func(), error)
+	Run             func(context.Context, int64, string, string, string, string, provider.PelicanQuestionConfig) provider.PelicanEvidence
+	RunStateProbe   func(context.Context, int64, string) (provider.StateProbeResult, error)
+	UserGroups      func(context.Context, int64) ([]Group, error)
+	Candy           PelicanCandyRepository
+	CandyCandidates func(context.Context, PelicanPlan) ([]int64, error)
+	CandyChanged    func(context.Context, int64)
 }
 
 // PelicanService 管理测试计划、手动运行和分组展示。
@@ -174,7 +183,7 @@ func (s *PelicanService) Save(ctx context.Context, plan PelicanPlan) (*PelicanPl
 	if plan.GroupID <= 0 || plan.ProviderID != nil && *plan.ProviderID <= 0 ||
 		plan.ModelID == "" || len(plan.ModelID) > 128 || !utf8.ValidString(plan.ModelID) ||
 		strings.Contains(plan.ModelID, "*") || strings.IndexFunc(plan.ModelID, func(r rune) bool { return unicode.IsControl(r) || unicode.IsSpace(r) }) >= 0 ||
-		!plan.validQuestion() {
+		!plan.validQuestion() || plan.SuspendOnWrongAnswer && !plan.standardAutoCandy() {
 		return nil, ErrPelicanInvalid
 	}
 	next, err := nextPelicanRun(plan.CronExpression, s.options.Now())

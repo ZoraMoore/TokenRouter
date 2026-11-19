@@ -40,7 +40,7 @@ export function useProviderIQTest(props: { show: boolean; provider: Provider | n
   const tab = ref<'results' | 'history'>('results')
   const model = ref('')
   const requestedModel = computed(() => model.value.trim() || (mode.value === 'probe' ? stateProbeDefaultModel : ''))
-  const effort = ref('')
+  const selectedEffort = ref<string | null>(null)
   const count = ref(1)
   const kind = ref<QuestionKind>('candy')
   const draftPrompt = ref<string | null>(null)
@@ -69,8 +69,14 @@ export function useProviderIQTest(props: { show: boolean; provider: Provider | n
   const modes = computed(() => modeNames.map(value => ({ value, label: t('providerIQ.modes.' + value), testid: 'iq-mode-' + value })))
   const tabs = computed(() => (['results', 'history'] as const).map(value => ({ value, label: t('providerIQ.' + value), testid: 'iq-' + value })))
   const kinds = computed(() => questionKinds.map(value => ({ value, label: t('pelicanTests.kind.' + value) })))
+  const supportsEffort = computed(() => {
+    const provider = props.provider
+    if (!provider) return false
+    if (provider.platform === 'openai') return provider.type === 'apikey' || provider.type === 'oauth'
+    return provider.platform === 'anthropic' && ['apikey', 'oauth', 'setup-token'].includes(provider.type)
+  })
   const efforts = computed(() => {
-    const supported = props.provider && ['openai', 'anthropic'].includes(props.provider.platform) ? levels : []
+    const supported = supportsEffort.value ? levels : []
     return [{ value: '', label: t('pelicanTests.effort.default') }, ...supported.map(value => ({ value, label: value === 'none' ? t('pelicanTests.effort.none') : value }))]
   })
   const custom = computed(() => kind.value === 'custom_svg' || kind.value === 'custom_text')
@@ -96,6 +102,15 @@ export function useProviderIQTest(props: { show: boolean; provider: Provider | n
       if (!protocols.some(protocol => textProtocols.includes(protocol))) return 'providerIQ.traceProtocol'
     }
     return model.value.trim() && !isIQTextModel(provider, model.value) ? 'providerIQ.traceTextOnly' : ''
+  })
+  // 单独选择鹈鹕题时使用题库的推理强度。手选“模型默认”同样属于已选档位。
+  const effort = computed({
+    get: () => {
+      if (selectedEffort.value !== null) return selectedEffort.value
+      if (mode.value !== 'question' || kind.value !== 'pelican' || !supportsEffort.value || !props.provider) return ''
+      return isIQTextModel(props.provider, requestedModel.value) ? 'medium' : ''
+    },
+    set: (value: string) => { selectedEffort.value = value },
   })
   const validation = computed(() => {
     if (mode.value === 'probe') return ''
@@ -244,7 +259,7 @@ export function useProviderIQTest(props: { show: boolean; provider: Provider | n
     mode.value = 'question'
     tab.value = 'results'
     model.value = ''
-    effort.value = ''
+    selectedEffort.value = null
     count.value = 1
     setKind('candy')
     history.value = key ? readIQHistory(key) : []

@@ -11,6 +11,7 @@ import (
 
 	"github.com/TokenFlux/TokenRouter/internal/routing"
 	"github.com/TokenFlux/TokenRouter/internal/testutil/postgrescontainer"
+	"github.com/TokenFlux/TokenRouter/migrations"
 )
 
 // TestPelicanShowcaseGroupLimit 覆盖同组多个计划收录、修改上限和管理员历史留存。
@@ -164,13 +165,111 @@ func TestPelicanShowcaseExpiry(t *testing.T) {
 	require.Equal(t, "inconclusive", findShowcasePlan(t, store, plan).Latest.Status)
 	textPlan := newShowcasePlan(t, store, groupID, "text", "candy")
 	failed.Status = "passed"
+	failed.TestedAt = now
 	failed.Answer = "21"
 	require.NoError(t, store.Finish(ctx, claimShowcasePlan(t, store, textPlan), failed, nil))
 	text := findShowcasePlan(t, store, textPlan)
 	require.Empty(t, text.Artworks)
+	require.NotNil(t, text.Latest)
 	detail, err := store.Result(ctx, text.Latest.ID, []int64{groupID})
 	require.NoError(t, err)
 	require.Equal(t, "21", detail.Answer)
+}
+
+// TestPelicanShowcaseCandyLimit 让同组糖果计划共享上限，并验证旧详情退出用户展示。
+func TestPelicanShowcaseCandyLimit(t *testing.T) {
+	db := postgrescontainer.New(t)
+	store := NewPelicanTestStore(db)
+	ctx := t.Context()
+	firstGroup := newPelicanGroup(t, db, "candy-limits")
+	otherGroup := newPelicanGroup(t, db, "separate-candy-limits")
+	settings := routing.PelicanShowcaseSettings{Enabled: true, APIEnabled: true, MaxItems: 100, RetentionDays: 7}
+	_, err := store.SaveShowcaseSettings(ctx, settings)
+	require.NoError(t, err)
+	first := newShowcasePlan(t, store, firstGroup, "first", "candy")
+	second := newShowcasePlan(t, store, firstGroup, "second", "candy")
+	drawing := newShowcasePlan(t, store, firstGroup, "drawing", "pelican")
+	other := newShowcasePlan(t, store, otherGroup, "other", "candy")
+	sample := routing.PelicanResult{
+		PelicanSummary: routing.PelicanSummary{Status: "passed", TestedAt: time.Now().UTC()},
+		Answer:         "21",
+	}
+	for range 31 {
+		require.NoError(t, store.Finish(ctx, claimShowcasePlan(t, store, first), sample, nil))
+	}
+	firstAnswers := findShowcasePlan(t, store, first).Answers
+	require.Len(t, firstAnswers, 31)
+	require.NoError(t, store.Finish(ctx, claimShowcasePlan(t, store, second), sample, nil))
+	require.NoError(t, store.Finish(ctx, claimShowcasePlan(t, store, other), sample, nil))
+	sample.Status, sample.Answer = "pending_review", "<svg><circle r='4'/></svg>"
+	require.NoError(t, store.Finish(ctx, claimShowcasePlan(t, store, drawing), sample, nil))
+
+	settings.MaxItems = 1
+	_, err = store.SaveShowcaseSettings(ctx, settings)
+	require.NoError(t, err)
+	require.Empty(t, findShowcasePlan(t, store, first).Answers)
+	require.Nil(t, findShowcasePlan(t, store, first).Latest)
+	require.Len(t, findShowcasePlan(t, store, second).Answers, 1)
+	require.Len(t, findShowcasePlan(t, store, other).Answers, 1)
+	require.Len(t, findShowcasePlan(t, store, drawing).Artworks, 1)
+	_, err = store.Result(ctx, firstAnswers[0].ID, []int64{firstGroup})
+	require.ErrorIs(t, err, routing.ErrPelicanNotFound)
+	_, err = store.Result(ctx, firstAnswers[0].ID, nil)
+	require.NoError(t, err)
+}
+
+// TestPelicanShowcaseCandyBackfill 验证升级时同组历史候选只收录最新的一条。
+func TestPelicanShowcaseCandyBackfill(t *testing.T) {
+	db := postgrescontainer.New(t)
+	store := NewPelicanTestStore(db)
+	ctx := t.Context()
+	group := newPelicanGroup(t, db, "candy-backfill")
+	plan := newShowcasePlan(t, store, group, "candy", "candy")
+	settings := routing.PelicanShowcaseSettings{Enabled: true, MaxItems: 1, AutoCleanup: true, RetentionDays: 7}
+	_, err := store.SaveShowcaseSettings(ctx, settings)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO pelican_test_results
+			(plan_id, model_id, question_kind, status, prompt, criteria, answer, tested_at, latency_ms, plan_revision)
+		VALUES ($1,'candy','candy','passed','','[]','21',NOW()-interval '8 days',0,1),
+		       ($1,'candy','candy','suspected','','[]','20',NOW()-interval '5 minutes',0,1),
+		       ($1,'candy','candy','passed','','[]','21',NOW()-interval '1 minute',0,1),
+		       ($1,'candy','candy','suspected','','[]','22',NOW(),0,0)`, plan.ID)
+	require.NoError(t, err)
+	require.Empty(t, findShowcasePlan(t, store, plan).Answers)
+	backfill, err := migrations.FS.ReadFile("304_pelican_publish_candy_results.sql")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, string(backfill))
+	require.NoError(t, err)
+	candy := findShowcasePlan(t, store, plan).Answers
+	require.Len(t, candy, 1)
+	require.Equal(t, "21", candy[0].AnswerPreview)
+	require.Equal(t, "passed", candy[0].Status)
+}
+
+// TestPelicanShowcaseCanvasForWeb 确保完整画布可以在网页复核，作品接口发布独立 SVG。
+func TestPelicanShowcaseCanvasForWeb(t *testing.T) {
+	db := postgrescontainer.New(t)
+	store := NewPelicanTestStore(db)
+	ctx := t.Context()
+	group := newPelicanGroup(t, db, "html-canvas")
+	plan := newShowcasePlan(t, store, group, "canvas", "pelican")
+	now := time.Now()
+	sample := routing.PelicanResult{
+		PelicanSummary: routing.PelicanSummary{Status: "pending_review", TestedAt: now},
+		RawAnswer:      "<html><body><canvas></canvas></body></html>",
+	}
+	require.NoError(t, store.Finish(ctx, claimShowcasePlan(t, store, plan), sample, nil))
+	web := findShowcasePlan(t, store, plan).Artworks
+	require.Len(t, web, 1)
+	detail, err := store.Result(ctx, web[0].ID, []int64{group})
+	require.NoError(t, err)
+	require.Equal(t, sample.RawAnswer, detail.RawAnswer)
+	require.NoError(t, store.Review(ctx, detail.ID, "passed"))
+	api, err := store.LatestDrawings(ctx, []int64{group})
+	require.NoError(t, err)
+	require.Len(t, api, 1)
+	require.Empty(t, api[0].Artworks)
 }
 
 func newShowcasePlan(t *testing.T, store *PelicanTestStore, groupID int64, model, kind string) routing.PelicanPlan {

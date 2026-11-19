@@ -70,4 +70,31 @@ describe('ProviderBulkActionsBar', () => {
     expect(wrapper.text()).not.toContain('admin.providers.bulkActions.probeUpstreamBilling')
     wrapper.unmount()
   })
+
+  it('选择完成后通过更多菜单启动批量探针', async () => {
+    const wrapper = mount(ProviderBulkActionsBar, {
+      props: {
+        selectedIds: [8, 21],
+        totalResults: 45,
+        selectingAll: true,
+        allResultsSelected: false
+      },
+      global: { stubs: { Teleport: true } }
+    })
+    const more = wrapper.findAll('button').find((button) => button.text() === 'admin.providers.bulkActions.more')!
+    const probeAction = () => wrapper.findAll('[role="menuitem"]').find((button) => button.text() === 'admin.providers.bulkActions.runBulkProbe')!
+
+    await more.trigger('click')
+    expect(probeAction().attributes('disabled')).toBeDefined()
+
+    await wrapper.setProps({ selectingAll: false })
+    await probeAction().trigger('click')
+    expect(wrapper.emitted('run-bulk-probe')).toHaveLength(1)
+    expect(wrapper.find('[role="menu"]').exists()).toBe(false)
+
+    await wrapper.setProps({ bulkProbeOpen: true })
+    await more.trigger('click')
+    expect(probeAction().attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
 })

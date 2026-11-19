@@ -91,9 +91,10 @@ func testPelicanCandyAnswers(t *testing.T, db *sql.DB) {
 		var id int64
 		require.NoError(t, db.QueryRowContext(ctx, `INSERT INTO pelican_test_results
 			(plan_id, model_id, question_kind, question_name, plan_revision, target_provider_id, status,
-				detail_code, prompt, criteria, answer, tested_at, latency_ms, reasoning_effort)
+			 detail_code, prompt, criteria, answer, tested_at, latency_ms, reasoning_effort, published)
 			SELECT id, model_id, question_kind, question_name, plan_revision, $2, $3,
-				CASE WHEN $3='suspected' THEN 'answer_mismatch' ELSE '' END, question_prompt, '[]', $4, $5, 37, 'medium'
+				CASE WHEN $3='suspected' THEN 'answer_mismatch' ELSE '' END, question_prompt, '[]', $4, $5, 37, 'medium',
+				question_kind='candy' AND $3 IN ('passed','suspected') AND $4 ~ '[^[:space:]]'
 			FROM pelican_test_plans WHERE id=$1 RETURNING id`, p.ID, target, status, answer, now).Scan(&id))
 		return id
 	}
@@ -122,8 +123,8 @@ func testPelicanCandyAnswers(t *testing.T, db *sql.DB) {
 	}
 	// 放入超过三十次的原始历史，其中一部分早于作品展示期限。
 	_, err := db.ExecContext(ctx, `INSERT INTO pelican_test_results
-		(plan_id, model_id, question_kind, question_name, status, prompt, criteria, answer, tested_at, latency_ms)
-		SELECT $1, 'model-a','candy','分糖果','passed','','[]', n::text, $2::timestamptz + n * interval '1 minute', 1
+		(plan_id, model_id, question_kind, question_name, status, prompt, criteria, answer, tested_at, latency_ms, published)
+		SELECT $1, 'model-a','candy','分糖果','passed','','[]', n::text, $2::timestamptz + n * interval '1 minute', 1, true
 		FROM generate_series(1,33) AS series(n) ORDER BY series.n DESC`, plan.ID, now.Add(-40*24*time.Hour))
 	require.NoError(t, err)
 	long := strings.Repeat("🍬", 256)
@@ -146,7 +147,7 @@ func testPelicanCandyAnswers(t *testing.T, db *sql.DB) {
 	add(otherPlan, "passed", "同组另一强度的回答", nil)
 
 	got := answers(plan)
-	require.Len(t, got, 25)
+	require.Len(t, got, 3)
 	require.Equal(t, wrong, got[0].ID)
 	require.Equal(t, "最后还剩 20 颗。", got[0].AnswerPreview)
 	require.Equal(t, "suspected", got[0].Status)
@@ -158,8 +159,6 @@ func testPelicanCandyAnswers(t *testing.T, db *sql.DB) {
 	require.Equal(t, strings.Repeat("糖", 256), got[1].AnswerPreview)
 	require.Equal(t, passed, got[2].ID)
 	require.Equal(t, long+"…", got[2].AnswerPreview)
-	require.Equal(t, "33", got[3].AnswerPreview)
-	require.Equal(t, "12", got[len(got)-1].AnswerPreview)
 	require.Empty(t, answers(custom))
 	otherAnswers := answers(otherPlan)
 	require.Len(t, otherAnswers, 1)
@@ -457,8 +456,9 @@ func testPelicanRetention(t *testing.T, db *sql.DB) {
 	require.NoError(t, err)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	_, err = db.ExecContext(ctx, `INSERT INTO pelican_test_results
-		(plan_id, model_id, question_kind, status, detail_code, prompt, criteria, answer, tested_at, latency_ms)
-		SELECT $1,'model-a','candy','passed','','', '[]'::jsonb, '',$2,0 FROM generate_series(1,30)`, plan.ID, now)
+		(plan_id, model_id, question_kind, status, detail_code, prompt, criteria, answer, tested_at, latency_ms, published)
+		SELECT $1,'model-a','candy','passed','','', '[]'::jsonb, CASE WHEN n=30 THEN '21' ELSE '' END,$2,0,n=30
+		FROM generate_series(1,30) AS series(n)`, plan.ID, now)
 	require.NoError(t, err)
 	// 旧样本使用默认版本，管理员调整时间后仍可从用户页查看。
 	plan.CronExpression = "30 * * * *"

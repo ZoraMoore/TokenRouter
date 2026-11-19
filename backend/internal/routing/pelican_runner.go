@@ -135,6 +135,9 @@ func (r *PelicanRunner) pruneShowcase(ctx context.Context) {
 
 // finishRound 用计划预定时刻出题，同一时刻到期的账号拿到相同题目。
 func (s *PelicanService) finishRound(ctx context.Context, plan PelicanPlan) error {
+	if plan.SuspendOnWrongAnswer {
+		return s.runCandyAttempt(ctx, plan)
+	}
 	started := s.options.Now()
 	runCtx, cancel := context.WithTimeout(ctx, provider.PelicanQuestionTimeout(plan.QuestionKind))
 	evidence, providerID := s.runRound(runCtx, plan)
@@ -147,25 +150,33 @@ func (s *PelicanService) finishRound(ctx context.Context, plan PelicanPlan) erro
 		return err
 	}
 	finished := s.options.Now()
-	var next *time.Time
-	if plan.Enabled {
-		due, err := nextPelicanRun(plan.CronExpression, finished)
-		if err != nil {
-			return err
-		}
-		next = &due
+	next, err := pelicanNextRound(plan, finished)
+	if err != nil {
+		return err
 	}
+	result := pelicanResult(plan, evidence, providerID, started, finished)
+	saveCtx, stop := context.WithTimeout(ctx, 15*time.Second)
+	defer stop()
+	return s.repo.Finish(saveCtx, plan, result, next)
+}
+
+func pelicanNextRound(plan PelicanPlan, finished time.Time) (*time.Time, error) {
+	if !plan.Enabled {
+		return nil, nil
+	}
+	next, err := nextPelicanRun(plan.CronExpression, finished)
+	return &next, err
+}
+
+func pelicanResult(plan PelicanPlan, evidence provider.PelicanEvidence, providerID *int64, started, finished time.Time) PelicanResult {
 	if evidence.Criteria == nil {
 		evidence.Criteria = []string{}
 	}
-	result := PelicanResult{
+	return PelicanResult{
 		PelicanSummary: PelicanSummary{QuestionName: plan.QuestionName, ReasoningEffort: evidence.ReasoningEffort, ModelID: plan.ModelID, QuestionKind: plan.QuestionKind, Status: evidence.Status, DetailCode: evidence.DetailCode, TestedAt: finished, LatencyMs: max(0, finished.Sub(started).Milliseconds())},
 		PlanID:         plan.ID, GroupID: plan.GroupID, ProviderID: providerID,
 		Prompt: evidence.Prompt, Criteria: evidence.Criteria, Answer: evidence.Answer, RawAnswer: evidence.RawAnswer,
 	}
-	saveCtx, stop := context.WithTimeout(ctx, 15*time.Second)
-	defer stop()
-	return s.repo.Finish(saveCtx, plan, result, next)
 }
 
 // runRound 持有选定账号的并发槽位，直到该轮的请求全部结束。

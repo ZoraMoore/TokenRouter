@@ -19,16 +19,17 @@ type PelicanHandler struct {
 }
 
 type pelicanPlanInput struct {
-	GroupID         int64  `json:"group_id"`
-	ProviderID      *int64 `json:"provider_id"`
-	ModelID         string `json:"model_id"`
-	QuestionKind    string `json:"question_kind"`
-	QuestionName    string `json:"question_name,omitempty"`
-	QuestionPrompt  string `json:"question_prompt,omitempty"`
-	ExpectedAnswer  string `json:"expected_answer,omitempty"`
-	ReasoningEffort string `json:"reasoning_effort,omitempty"`
-	CronExpression  string `json:"cron_expression"`
-	Enabled         *bool  `json:"enabled" binding:"required"`
+	GroupID              int64  `json:"group_id"`
+	ProviderID           *int64 `json:"provider_id"`
+	ModelID              string `json:"model_id"`
+	QuestionKind         string `json:"question_kind"`
+	QuestionName         string `json:"question_name,omitempty"`
+	QuestionPrompt       string `json:"question_prompt,omitempty"`
+	ExpectedAnswer       string `json:"expected_answer,omitempty"`
+	ReasoningEffort      string `json:"reasoning_effort,omitempty"`
+	CronExpression       string `json:"cron_expression"`
+	Enabled              *bool  `json:"enabled" binding:"required"`
+	SuspendOnWrongAnswer bool   `json:"suspend_on_wrong_answer,omitempty"`
 }
 
 func NewPelicanHandler(service *routing.PelicanService) *PelicanHandler {
@@ -111,6 +112,7 @@ func (h *PelicanHandler) Save(c *gin.Context) {
 		QuestionName: req.QuestionName, QuestionPrompt: req.QuestionPrompt,
 		ExpectedAnswer: req.ExpectedAnswer, ReasoningEffort: req.ReasoningEffort,
 		QuestionKind: req.QuestionKind, CronExpression: req.CronExpression, Enabled: *req.Enabled,
+		SuspendOnWrongAnswer: req.SuspendOnWrongAnswer,
 	}
 	if c.Param("id") != "" {
 		id, ok := pelicanID(c)

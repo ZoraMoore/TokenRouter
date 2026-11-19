@@ -107,6 +107,16 @@
               <Icon name="cloud" size="sm" />
               {{ t('admin.providers.bulkActions.queryUpstreamUsage') }}
             </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="menu-item disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="selectingAll || bulkProbeOpen"
+              @click="runMenuAction('run-bulk-probe')"
+            >
+              <Icon name="brain" size="sm" />
+              {{ t('admin.providers.bulkActions.runBulkProbe') }}
+            </button>
           </div>
           <div class="menu-section">
             <button type="button" role="menuitem" class="menu-item menu-item-danger" @click="runMenuAction('delete')">
@@ -126,16 +136,17 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import { getFloatingPanelPosition, type FloatingPanelPosition } from '@/utils/floatingPanel'
 
-type MenuAction = 'reset-status' | 'refresh-token' | 'query-usage' | 'query-upstream-usage' | 'delete'
+type MenuAction = 'reset-status' | 'refresh-token' | 'query-usage' | 'query-upstream-usage' | 'run-bulk-probe' | 'delete'
 
 // 「更多」菜单宽度与预估高度，供浮层定位判断是否需要向上翻转。
 const MORE_MENU_WIDTH = 208
-const MORE_MENU_HEIGHT = 240
+const MORE_MENU_HEIGHT = 276
 
 const props = defineProps<{
   selectedIds: number[]
   usageLoading?: boolean
   upstreamUsageLoading?: boolean
+  bulkProbeOpen?: boolean
   totalResults: number
   selectingAll: boolean
   allResultsSelected: boolean
@@ -152,6 +163,7 @@ const emit = defineEmits<{
   'refresh-token': []
   'query-usage': []
   'query-upstream-usage': []
+  'run-bulk-probe': []
 }>()
 
 const { t } = useI18n()
@@ -180,13 +192,14 @@ const toggleMoreMenu = () => {
   moreMenuOpen.value = true
 }
 
-// 菜单动作先关闭浮层，再显示确认弹窗。
+// 先收起菜单，再把焦点交给所选操作。
 const runMenuAction = (action: MenuAction) => {
   closeMoreMenu()
   if (action === 'reset-status') emit('reset-status')
   else if (action === 'refresh-token') emit('refresh-token')
   else if (action === 'query-usage') emit('query-usage')
   else if (action === 'query-upstream-usage') emit('query-upstream-usage')
+  else if (action === 'run-bulk-probe') emit('run-bulk-probe')
   else emit('delete')
 }
 

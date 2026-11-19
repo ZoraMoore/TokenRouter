@@ -4,7 +4,8 @@
     :title="t('pelicanTests.sample')"
     :subtitle="sample?.model_id"
     :z-index="review ? Z_INDEX.MODAL_NESTED : undefined"
-    :width="!review && imageSource ? 'full' : 'wide'"
+    :width="galleryArtwork ? 'full' : 'wide'"
+    :body-scroll="!galleryArtwork"
     @close="close"
   >
     <ContentSkeleton v-if="loading && !sample" variant="article" />
@@ -12,9 +13,9 @@
       {{ t('pelicanTests.sampleLoadFailed') }}
       <button type="button" class="ml-2 underline" @click="refresh">{{ t('common.retry') }}</button>
     </SettingsNotice>
-    <div v-if="sample" class="space-y-4">
+    <div v-if="sample" :class="galleryArtwork ? 'flex h-[90dvh] min-h-0 flex-col gap-3 overflow-y-auto' : 'space-y-4'">
       <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600 dark:text-dark-300">
-        <PelicanStatus :status="sample.status" :probe="isProbe" />
+        <PelicanStatus :status="missingArtwork ? 'inconclusive' : sample.status" :probe="isProbe" />
         <span>{{ overriddenQuestionName(sample) || t(`pelicanTests.kind.${sample.question_kind}`) }}</span>
         <span v-if="!isProbe">{{ t('pelicanTests.reasoningEffort') }} {{ t(effortLabel(sample.reasoning_effort)) }}</span>
         <time :datetime="sample.tested_at">{{ formatDateTime(sample.tested_at) }}</time>
@@ -24,24 +25,16 @@
         </span>
       </div>
       <SettingsNotice v-if="reason">{{ reason }}</SettingsNotice>
+      <SettingsNotice v-if="sample.schedule_action">{{ t(`pelicanTests.candySuspension.${sample.schedule_action}`) }}</SettingsNotice>
 
-      <section v-if="sample.prompt || sample.criteria?.length" class="rounded-surface border border-gray-200 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800">
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-dark-50">{{ t(isProbe ? 'pelicanTests.probe.method' : 'pelicanTests.prompt') }}</h3>
-        <p class="mt-2 whitespace-pre-wrap break-words text-sm text-gray-700 dark:text-dark-200">{{ sample.prompt }}</p>
-        <template v-if="sample.criteria?.length">
-          <h4 class="mb-1 mt-4 text-sm font-semibold text-gray-900 dark:text-dark-50">{{ t(isProbe ? 'pelicanTests.probe.interpretation' : 'pelicanTests.criteria') }}</h4>
-          <ul class="list-disc space-y-1 pl-5 text-sm text-gray-700 dark:text-dark-200">
-            <li v-for="(criterion, index) in sample.criteria" :key="index">{{ criterion }}</li>
-          </ul>
-        </template>
-      </section>
-      <section>
+      <PelicanSamplePrompt v-if="!galleryArtwork" :sample="sample" />
+      <section :class="{ 'flex min-h-[35dvh] flex-1 flex-col': galleryArtwork }">
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 class="text-sm font-semibold text-gray-900 dark:text-dark-50">
             {{ t(isProbe ? 'pelicanTests.probe.observation' : isPelicanArtwork(sample.question_kind) ? 'pelicanTests.artwork' : 'pelicanTests.answer') }}
           </h3>
           <div
-            v-if="(imageSource || originalDocument) && !imageFailed" v-segmented class="segmented"
+            v-if="artwork && !imageFailed" v-segmented class="segmented"
             role="group" :aria-label="t('pelicanTests.showcase.previewSizing')"
           >
             <button
@@ -52,10 +45,10 @@
           </div>
         </div>
         <PelicanArtworkPreview
-          v-if="(imageSource || originalDocument) && !imageFailed" :key="sample.id" :source="imageSource" :mode="previewMode"
-          :document="originalDocument"
+          v-if="artwork && !imageFailed" :key="sample.id" :artwork="artwork" :mode="previewMode" interactive
           :alt="t('pelicanTests.artworkAlt', { model: sample.model_id })"
-          class="h-[60dvh] rounded-surface border border-gray-200 dark:border-dark-700"
+          class="rounded-surface border border-gray-200 dark:border-dark-700"
+          :class="galleryArtwork ? 'min-h-0 flex-1' : 'h-[60dvh]'"
           @error="imageFailed = true"
         />
         <p
@@ -64,7 +57,8 @@
         >{{ sample.answer }}</p>
         <p v-else class="text-sm text-gray-500 dark:text-dark-400">{{ t(isProbe ? 'pelicanTests.probe.noObservation' : 'pelicanTests.noAnswer') }}</p>
       </section>
-      <section v-if="originalDocument" class="space-y-2">
+      <PelicanSamplePrompt v-if="galleryArtwork" :sample="sample" collapsible />
+      <section v-if="isPelicanArtwork(sample.question_kind) && sample.raw_answer" class="shrink-0 space-y-2">
         <div class="flex flex-wrap gap-2">
           <button
             type="button" class="btn btn-secondary btn-sm" data-testid="pelican-show-source"
@@ -86,7 +80,7 @@
     <template #footer>
       <div class="flex flex-wrap justify-end gap-2">
         <button type="button" class="btn btn-secondary" :disabled="!!reviewing" @click="close">{{ t('common.close') }}</button>
-        <template v-if="review && sample && isPelicanArtwork(sample.question_kind) && sample.status === 'pending_review'">
+        <template v-if="review && sample && artwork && isPelicanArtwork(sample.question_kind) && sample.status === 'pending_review'">
           <button
             type="button" class="btn btn-secondary" data-testid="review-suspected"
             :disabled="!!reviewing || loading" @click="submitReview('suspected')"
@@ -115,7 +109,8 @@ import { overriddenQuestionName } from '@/i18n/pelicanQuestionNames'
 import { formatDateTime } from '@/utils/format'
 import PelicanArtworkPreview from './PelicanArtworkPreview.vue'
 import PelicanStatus from './PelicanStatus.vue'
-import { effortLabel, pelicanImageSource, pelicanPreviewDocument } from './pelicanArtwork'
+import PelicanSamplePrompt from './PelicanSamplePrompt.vue'
+import { effortLabel, pelicanArtworkBody } from './pelicanArtwork'
 import { PELICAN_SLOW_POLL_MS, usePelicanResource } from './usePelicanResource'
 
 const props = defineProps<{
@@ -145,17 +140,19 @@ const probeReasons = new Set([
 ])
 const knownReasons = new Set([
   'no_provider', 'upstream_error', 'incomplete', 'empty_output', 'output_limit', 'invalid_artwork', 'answer_mismatch', 'unsupported_effort',
+  'candy_exhausted', 'candy_busy',
 ])
 const reason = computed(() => {
+  if (missingArtwork.value) return t('pelicanTests.reason.incomplete')
   const code = sample.value?.detail_code
   if (isProbe.value) return code && probeReasons.has(code) ? t(`pelicanTests.probe.reason.${code}`) : ''
   return code && knownReasons.has(code) ? t(`pelicanTests.reason.${code}`) : ''
 })
 
-const imageSource = computed(() => sample.value && isPelicanArtwork(sample.value.question_kind)
-  ? pelicanImageSource(sample.value.answer || '') : '')
-const originalDocument = computed(() => sample.value && isPelicanArtwork(sample.value.question_kind)
-  ? pelicanPreviewDocument(sample.value.raw_answer || '') : '')
+const artwork = computed(() => sample.value && pelicanArtworkBody(sample.value))
+const galleryArtwork = computed(() => !!artwork.value && !props.review)
+const missingArtwork = computed(() => !!sample.value?.raw_answer && sample.value.status !== 'inconclusive' &&
+  isPelicanArtwork(sample.value.question_kind) && !artwork.value)
 const sourceDownload = computed(() => 'data:text/plain;charset=utf-8,' + encodeURIComponent(sample.value?.raw_answer || ''))
 
 watch(() => props.resultId, () => {

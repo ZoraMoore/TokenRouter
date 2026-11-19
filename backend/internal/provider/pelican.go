@@ -159,11 +159,12 @@ func (e *PelicanEvidence) grade(kind, raw, expected string) {
 			e.Status, e.DetailCode = "suspected", "answer_mismatch"
 		}
 	default:
-		e.Answer = pelicanSVG(text)
-		if e.Answer == "" {
+		answer, complete := pelicanArtwork(text)
+		if !complete {
 			e.DetailCode = "invalid_artwork"
 			return
 		}
+		e.Answer = answer
 		e.Status = "pending_review"
 		e.DetailCode = ""
 	}

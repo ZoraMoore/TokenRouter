@@ -217,7 +217,7 @@ func (s *TestService) execute(ctx context.Context, target TestTarget, request Te
 		}
 	}
 	info := target.Information()
-	claudeIQ := request.IQMode != "" && info.Platform == PlatformAnthropic && (info.Type == ProviderTypeAPIKey || info.Type == ProviderTypeOAuth || info.Type == ProviderTypeSetupToken)
+	claudeIQ := (request.SVGAnswer || request.IQMode != "") && info.Platform == PlatformAnthropic && (info.Type == ProviderTypeAPIKey || info.Type == ProviderTypeOAuth || info.Type == ProviderTypeSetupToken)
 	if request.FullAnswer && request.ReasoningEffort != "" && info.Platform != PlatformOpenAI && !claudeIQ {
 		return ErrTestAnswerEffort
 	}

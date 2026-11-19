@@ -125,6 +125,12 @@
                 <template v-if="result.question_kind !== 'state_probe'"> · {{ t('pelicanTests.reasoningEffort') }} {{ t(effortLabel(result.reasoning_effort)) }}</template>
                 <template v-if="result.provider_name"> · {{ result.provider_name }}</template>
               </p>
+              <p v-if="result.schedule_action" class="text-xs text-gray-600 dark:text-dark-300">
+                {{ t(`pelicanTests.candySuspension.${result.schedule_action}`) }}
+              </p>
+              <p v-if="result.detail_code === 'candy_exhausted' || result.detail_code === 'candy_busy'" class="text-xs text-gray-600 dark:text-dark-300">
+                {{ t(`pelicanTests.reason.${result.detail_code}`) }}
+              </p>
             </div>
             <button type="button" class="btn btn-secondary btn-sm" :data-testid="`open-sample-${result.id}`" @click="sampleId = result.id">
               <Icon name="eye" size="sm" />{{ t('pelicanTests.openSample') }}

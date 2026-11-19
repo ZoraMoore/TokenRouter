@@ -94,18 +94,22 @@ func providePelicanService(
 	manager *lifecycle.Manager,
 ) *routing.PelicanService {
 	targets := pelicanTargets{groups: groups, providers: providers, selector: selector}
+	repo.BindCandyDisabler(providers.DisableAfterCandyAnswer)
 	location := time.Local
 	if configured, err := time.LoadLocation(cfg.Timezone); cfg.Timezone != "" && err == nil {
 		location = configured
 	}
 	service := routing.NewPelicanService(repo, routing.PelicanOptions{
-		Now:           func() time.Time { return time.Now().In(location) },
-		Providers:     targets.list,
-		Validate:      targets.validate,
-		Acquire:       targets.acquire,
-		Run:           tests.RunConfiguredPelican,
-		RunStateProbe: tests.RunStateProbe,
-		UserGroups:    keys.GetAvailableGroups,
+		Now:             func() time.Time { return time.Now().In(location) },
+		Providers:       targets.list,
+		Validate:        targets.validate,
+		Acquire:         targets.acquire,
+		Run:             tests.RunConfiguredPelican,
+		RunStateProbe:   tests.RunStateProbe,
+		UserGroups:      keys.GetAvailableGroups,
+		Candy:           repo,
+		CandyCandidates: targets.candyCandidates,
+		CandyChanged:    providers.PublishCandyScheduling,
 	})
 	runner := routing.NewPelicanRunner(service)
 	manager.Register(lifecycle.Hook{
@@ -169,6 +173,34 @@ func pelicanProbeTarget(record *provider.Record, plan routing.PelicanPlan, polic
 	return provider.ValidStateProbeModelName(requested) && provider.SupportsStateProbeModel(mapped)
 }
 
+// candyCandidates 冻结本轮允许测试的账号，实际测试仍检查空闲槽位。
+func (t pelicanTargets) candyCandidates(ctx context.Context, plan routing.PelicanPlan) ([]int64, error) {
+	group, err := t.groups.GetByIDLite(ctx, plan.GroupID)
+	if err != nil {
+		return nil, err
+	}
+	if !group.IsActive() {
+		return nil, routing.ErrPelicanNotFound
+	}
+	records, err := t.providers.ListSchedulableByGroupID(ctx, plan.GroupID)
+	if err != nil {
+		return nil, err
+	}
+	candidates := pelicanCandidates(ctx, plan, group, group.ModelPolicyView(), records)
+	ids := make(map[int64]struct{})
+	for _, protocol := range group.AllowedProtocols {
+		for id := range candidates[protocol] {
+			ids[id] = struct{}{}
+		}
+	}
+	result := make([]int64, 0, len(ids))
+	for id := range ids {
+		result = append(result, id)
+	}
+	slices.Sort(result)
+	return result, nil
+}
+
 // acquire 在当前分组中查找能运行该文字题的账号，并持有它的并发槽位直到作答结束。
 func (t pelicanTargets) acquire(ctx context.Context, plan routing.PelicanPlan) (routing.PelicanTarget, func(), error) {
 	group, err := t.groups.GetByIDLite(ctx, plan.GroupID)
@@ -220,7 +252,10 @@ func (t pelicanTargets) acquire(ctx context.Context, plan routing.PelicanPlan) (
 			selected.ReleaseFunc()
 			continue
 		}
-		return routing.PelicanTarget{ProviderID: record.ID, ModelID: mapped, Protocol: pelicanTestProtocol(record, chosen.UpstreamProtocol)}, selected.ReleaseFunc, nil
+		return routing.PelicanTarget{
+			ProviderID: record.ID, ModelID: mapped,
+			Protocol: pelicanTestProtocol(record, chosen.UpstreamProtocol), GroupUpdatedAt: group.UpdatedAt,
+		}, selected.ReleaseFunc, nil
 	}
 	return routing.PelicanTarget{}, nil, scheduler.ErrNoAvailableProviders
 }
@@ -228,8 +263,15 @@ func (t pelicanTargets) acquire(ctx context.Context, plan routing.PelicanPlan) (
 // pelicanCandidates 按管理员选择的账号和分组模型白名单筛选各文字协议的候选。
 func pelicanCandidates(ctx context.Context, plan routing.PelicanPlan, group *routing.Group, policy *routing.GroupPolicyView, records []provider.Record) map[capability.ProtocolID]map[int64]struct{} {
 	out := make(map[capability.ProtocolID]map[int64]struct{})
+	allowed := make(map[int64]struct{}, len(plan.CandidateIDs))
+	for _, id := range plan.CandidateIDs {
+		allowed[id] = struct{}{}
+	}
 	for i := range records {
 		record := &records[i]
+		if _, ok := allowed[record.ID]; plan.CandidateIDs != nil && !ok {
+			continue
+		}
 		if plan.ProviderID != nil && *plan.ProviderID != record.ID || group.RequirePrivacySet && !record.IsPrivacySet() {
 			continue
 		}

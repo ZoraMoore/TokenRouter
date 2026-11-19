@@ -1,6 +1,7 @@
 import { useProtocolCatalogFixture } from '@/__tests__/helpers/protocolCatalog'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import type { IQStateProbeResult } from '@/api/admin/providerIQ'
 
 import ProvidersView from '../ProvidersView.vue'
 
@@ -12,7 +13,8 @@ const {
   getAllProxies,
   getAllGroups,
   showWarning,
-  showError
+  showError,
+  runIQStateProbe
 } = vi.hoisted(() => ({
   listProviders: vi.fn(),
   listWithEtag: vi.fn(),
@@ -21,7 +23,13 @@ const {
   getAllProxies: vi.fn(),
   getAllGroups: vi.fn(),
   showWarning: vi.fn(),
-  showError: vi.fn()
+  showError: vi.fn(),
+  runIQStateProbe: vi.fn()
+}))
+
+vi.mock('@/api/admin/providerIQ', async original => ({
+  ...await original<typeof import('@/api/admin/providerIQ')>(),
+  runIQStateProbe
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -83,7 +91,7 @@ const makeProviders = (count: number) => Array.from({ length: count }, (_, index
 
 const ProviderBulkActionsBarStub = {
   props: ['selectedIds', 'totalResults', 'selectingAll', 'allResultsSelected'],
-  emits: ['select-all-results', 'select-page', 'clear'],
+  emits: ['select-all-results', 'select-page', 'clear', 'run-bulk-probe'],
   template: `
     <div>
       <span data-test="selected-count">{{ selectedIds.length }}</span>
@@ -92,6 +100,7 @@ const ProviderBulkActionsBarStub = {
       <button data-test="select-page" @click="$emit('select-page')">select page</button>
       <button data-test="select-all-results" @click="$emit('select-all-results')">select all</button>
       <button data-test="clear" @click="$emit('clear')">clear</button>
+      <button data-test="run-bulk-probe" @click="$emit('run-bulk-probe')">run probe</button>
     </div>
   `
 }
@@ -111,6 +120,7 @@ const mountView = () => mount(ProvidersView, {
       DataTable: { props: ['data'], template: '<div data-test="data-table"></div>' },
       Pagination: true,
       ConfirmDialog: true,
+      BaseDialog: { template: '<section><slot /><slot name="footer" /></section>' },
       TotpStepUpDialog: true,
       ProviderTableActions: { template: '<div><slot name="beforeCreate" /><slot name="after" /></div>' },
       ProviderTableFilters: ProviderTableFiltersStub,
@@ -140,6 +150,30 @@ const mountView = () => mount(ProvidersView, {
   }
 })
 
+function probeResult(id: number, verdict: IQStateProbeResult['verdict'] = 'healthy'): IQStateProbeResult {
+  return {
+    account_id: id,
+    requested_model: 'gpt-6-astra',
+    model: 'gpt-6-astra',
+    verdict,
+    mint_status: 200,
+    continue_status: verdict === 'inconclusive' ? 429 : 200,
+    mint_completed: true,
+    continue_completed: verdict !== 'inconclusive',
+    mint_latency_ms: 18,
+    continue_latency_ms: 24,
+    new_ticket: verdict === 'degraded',
+    finished_at: '2026-11-19T00:00:00Z',
+    latency_ms: 42
+  }
+}
+
+function pendingProbe() {
+  let resolve!: (result: IQStateProbeResult) => void
+  const promise = new Promise<IQStateProbeResult>(done => { resolve = done })
+  return { promise, resolve }
+}
+
 describe('admin ProvidersView select all filtered results', () => {
   beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -152,6 +186,7 @@ describe('admin ProvidersView select all filtered results', () => {
     getAllGroups.mockReset()
     showError.mockReset()
     showWarning.mockReset()
+    runIQStateProbe.mockReset()
 
     listWithEtag.mockResolvedValue({
       notModified: true,
@@ -297,6 +332,111 @@ describe('admin ProvidersView select all filtered results', () => {
     expect(wrapper.get('[data-test="selected-count"]').text()).toBe('20')
     expect(wrapper.get('[data-test="all-results-selected"]').text()).toBe('false')
     expect(showError).toHaveBeenCalledWith('admin.providers.bulkActions.selectAllFailed')
+  })
+
+  it('批量探针使用跨页选择快照，按三个并发处理每个账号并显示各自结果', async () => {
+    const allProviders = makeProviders(7)
+    listProviders.mockImplementation(async (_page: number, pageSize: number) => ({
+      items: pageSize === 1000 ? allProviders : allProviders.slice(0, 3), total: 7
+    }))
+    const pending = allProviders.slice(0, 3).map(pendingProbe)
+    runIQStateProbe
+      .mockReturnValueOnce(pending[0].promise)
+      .mockReturnValueOnce(pending[1].promise)
+      .mockReturnValueOnce(pending[2].promise)
+      .mockRejectedValueOnce({ reason: 'IQ_TEST_UNSUPPORTED' })
+      .mockRejectedValueOnce({ reason: 'IQ_TEST_BUSY' })
+      .mockRejectedValueOnce({ reason: 'IQ_TEST_NOT_FOUND' })
+      .mockRejectedValueOnce({ reason: 'IQ_TEST_FAILED' })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="select-all-results"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="run-bulk-probe"]').trigger('click')
+    expect(runIQStateProbe).toHaveBeenCalledTimes(3)
+    expect(runIQStateProbe).toHaveBeenLastCalledWith(3, { model_id: 'gpt-6-astra' }, expect.any(AbortSignal))
+
+    await wrapper.get('[data-test="run-bulk-probe"]').trigger('click')
+    await wrapper.get('[data-test="clear"]').trigger('click')
+    expect(runIQStateProbe).toHaveBeenCalledTimes(3)
+
+    pending[0].resolve(probeResult(1))
+    pending[1].resolve(probeResult(2, 'degraded'))
+    pending[2].resolve(probeResult(3, 'inconclusive'))
+    await flushPromises()
+    expect(runIQStateProbe.mock.calls.map(([id]) => id)).toEqual([1, 2, 3, 4, 5, 6, 7])
+    const row = (id: number) => wrapper.get(`[data-testid="provider-bulk-probe-row-${id}"]`)
+    expect(row(1).text()).toContain('provider-1')
+    expect(row(1).text()).toContain('pelicanTests.probe.status.passed')
+    expect(row(2).text()).toContain('pelicanTests.probe.status.suspected')
+    expect(row(3).text()).toContain('pelicanTests.probe.status.inconclusive')
+    expect(row(4).text()).toContain('#4')
+    expect(row(4).text()).toContain('admin.providers.bulkProbe.state.unsupported')
+    expect(row(5).text()).toContain('admin.providers.bulkProbe.state.busy')
+    expect(row(6).text()).toContain('admin.providers.bulkProbe.state.missing')
+    expect(row(7).text()).toContain('admin.providers.bulkProbe.state.failed')
+    expect(wrapper.get('[role="progressbar"]').attributes('aria-valuenow')).toBe('7')
+    await row(2).get('button').trigger('click')
+    expect(row(2).get('[data-testid="iq-probe-next-status"]').text()).toBe('200')
+    expect(allProviders.every(provider => provider.schedulable)).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('停止探针后保留已完成结果，忽略迟到的响应和剩余队列', async () => {
+    listProviders.mockResolvedValue({ items: makeProviders(5), total: 5, pages: 1 })
+    const pending = pendingProbe()
+    runIQStateProbe.mockResolvedValueOnce(probeResult(1)).mockReturnValue(pending.promise)
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="select-page"]').trigger('click')
+    await wrapper.get('[data-test="run-bulk-probe"]').trigger('click')
+    await flushPromises()
+    expect(runIQStateProbe).toHaveBeenCalledTimes(4)
+
+    await wrapper.get('[data-testid="provider-bulk-probe-stop"]').trigger('click')
+    expect(runIQStateProbe.mock.calls.every(([, , signal]) => signal.aborted)).toBe(true)
+    pending.resolve(probeResult(2, 'degraded'))
+    await flushPromises()
+    expect(runIQStateProbe).toHaveBeenCalledTimes(4)
+    expect(wrapper.get('[data-testid="provider-bulk-probe-row-1"]').text()).toContain('pelicanTests.probe.status.passed')
+    for (const id of [2, 3, 4, 5]) {
+      expect(wrapper.get(`[data-testid="provider-bulk-probe-row-${id}"]`).text()).toContain('admin.providers.bulkProbe.state.cancelled')
+    }
+    wrapper.unmount()
+  })
+
+  it('全部账号不支持探针时显示每个账号的原因并结束测试', async () => {
+    listProviders.mockResolvedValue({ items: makeProviders(4), total: 4, pages: 1 })
+    runIQStateProbe.mockRejectedValue({ reason: 'IQ_TEST_UNSUPPORTED' })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="select-page"]').trigger('click')
+    await wrapper.get('[data-test="run-bulk-probe"]').trigger('click')
+    await flushPromises()
+
+    expect(runIQStateProbe.mock.calls.map(([id]) => id)).toEqual([1, 2, 3, 4])
+    const rows = wrapper.findAll('[data-testid^="provider-bulk-probe-row-"]')
+    expect(rows).toHaveLength(4)
+    expect(rows.every(row => row.text().includes('admin.providers.bulkProbe.state.unsupported'))).toBe(true)
+    expect(wrapper.find('[data-testid="provider-bulk-probe-stop"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('离开提供商页面时取消在途探针和剩余队列', async () => {
+    listProviders.mockResolvedValue({ items: makeProviders(4), total: 4, pages: 1 })
+    const pending = pendingProbe()
+    runIQStateProbe.mockReturnValue(pending.promise)
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="select-page"]').trigger('click')
+    await wrapper.get('[data-test="run-bulk-probe"]').trigger('click')
+    expect(runIQStateProbe).toHaveBeenCalledTimes(3)
+
+    wrapper.unmount()
+    expect(runIQStateProbe.mock.calls.every(([, , signal]) => signal.aborted)).toBe(true)
+    pending.resolve(probeResult(1))
+    await flushPromises()
+    expect(runIQStateProbe).toHaveBeenCalledTimes(3)
   })
 })
 

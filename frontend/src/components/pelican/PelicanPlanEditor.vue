@@ -113,6 +113,11 @@
         <p id="pelican-cron-hint" class="input-hint">{{ t('pelicanTests.cronHint') }}</p>
       </div>
       <SettingToggleRow
+        v-if="canSuspendOnWrongAnswer" id="pelican-suspend-on-wrong-answer"
+        v-model="form.suspend_on_wrong_answer" :disabled="saving"
+        :label="t('pelicanTests.candySuspension.label')" :hint="t('pelicanTests.candySuspension.hint')"
+      />
+      <SettingToggleRow
         id="pelican-enabled" v-model="form.enabled" :disabled="saving"
         :label="t('pelicanTests.schedule')" :hint="t('pelicanTests.scheduleHint')"
       />
@@ -149,7 +154,10 @@ import { usePelicanResource } from './usePelicanResource'
 const props = defineProps<{ show: boolean; plan: PelicanPlan | null; plans: PelicanPlan[]; target?: PelicanPlanTarget | null }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 const { t, locale } = useI18n()
-type Draft = Omit<PelicanPlanInput, 'group_id'> & { group_id: number | null }
+type Draft = Omit<PelicanPlanInput, 'group_id' | 'suspend_on_wrong_answer'> & {
+  group_id: number | null
+  suspend_on_wrong_answer: boolean
+}
 const questionFields = ['question_name', 'question_prompt', 'expected_answer'] as const
 type QuestionField = typeof questionFields[number]
 type QuestionDraft = Pick<PelicanPlanInput, QuestionField>
@@ -172,6 +180,7 @@ function draft(plan: PelicanPlan | null): Draft {
     reasoning_effort: plan?.reasoning_effort ?? '',
     cron_expression: plan?.cron_expression ?? pelicanFrequencies.daily,
     enabled: plan?.enabled ?? true,
+    suspend_on_wrong_answer: plan?.suspend_on_wrong_answer ?? false,
   }
 }
 
@@ -219,6 +228,9 @@ function questionField(key: QuestionField) {
 const questionName = questionField('question_name')
 const questionPrompt = questionField('question_prompt')
 const expectedAnswer = questionField('expected_answer')
+const canSuspendOnWrongAnswer = computed(() => form.value.group_id !== null &&
+  form.value.question_kind === 'candy' && form.value.provider_id === null && !!defaultQuestion.value &&
+  questionPrompt.value.trim() === defaultQuestion.value.question_prompt && expectedAnswer.value.trim() === '21')
 
 const frequencyOptions = computed(() => [...Object.keys(pelicanFrequencies), 'custom']
   .map(value => ({ value, label: t(`pelicanTests.frequency.${value}`) })))
@@ -303,6 +315,7 @@ function selectGroup(value: unknown) {
   if (props.plan || saving.value || typeof value !== 'number' || value === form.value.group_id) return
   form.value.group_id = value
   form.value.provider_id = props.target?.provider_id ?? null
+  form.value.suspend_on_wrong_answer = false
 }
 
 function selectKind(value: PelicanPlanKind | null) {
@@ -365,6 +378,7 @@ async function save() {
   const input: PelicanPlanInput = {
     ...form.value, group_id: group, model_id: model, cron_expression: cron,
     question_name: questionName.value.trim(), question_prompt: questionPrompt.value.trim(), expected_answer: expectedAnswer.value.trim(),
+    suspend_on_wrong_answer: canSuspendOnWrongAnswer.value && form.value.suspend_on_wrong_answer,
   }
   // 原计划未覆盖的字段与默认值相同时继续留空，保留鹈鹕题库轮换和糖果题的默认判分。
   const previous = props.plan

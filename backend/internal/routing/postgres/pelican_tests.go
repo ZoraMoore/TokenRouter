@@ -16,19 +16,19 @@ const (
 	// 手动排队时间在完成时清除。领取后先显示租约状态。
 	pelicanRunState = `CASE
 		WHEN p.lease_until > CURRENT_TIMESTAMP THEN 'running'
-		WHEN p.queued_at IS NOT NULL THEN 'queued'
+		WHEN p.queued_at IS NOT NULL OR EXISTS (SELECT 1 FROM pelican_candy_rounds cr WHERE cr.plan_id=p.id) THEN 'queued'
 		ELSE 'idle' END`
 	pelicanPlanFields = `p.id, p.group_id, g.name, p.provider_id, COALESCE(v.name,''),
 		p.model_id, p.question_kind, p.question_name, p.question_prompt, p.expected_answer, p.reasoning_effort,
 		p.cron_expression, p.enabled, p.last_run_at, p.next_run_at,
-		` + pelicanRunState + `, COALESCE(p.queued_at, p.next_run_at)`
+		` + pelicanRunState + `, COALESCE(p.queued_at, p.next_run_at), p.plan_revision, p.suspend_on_wrong_answer`
 	pelicanPlanJoins = ` JOIN groups g ON g.id=p.group_id LEFT JOIN providers v ON v.id=p.provider_id `
 
 	// 历史记录的提供商名称取自实际作答账号，指定账号由计划单独存入结果。
 	pelicanSummaryFields = `r.id, r.model_id, r.question_kind, r.question_name, r.reasoning_effort,
-		r.status, r.detail_code, r.tested_at, r.latency_ms`
-	pelicanResultFields     = `r.plan_id, p.group_id, r.provider_id, COALESCE(v.name,''), ` + pelicanSummaryFields
-	pelicanUserResultFields = `r.plan_id, p.group_id, NULL::bigint, ''::text, ` + pelicanSummaryFields
+		r.status, r.detail_code, r.tested_at, r.latency_ms, r.schedule_action`
+	pelicanResultFields     = `r.plan_id, p.group_id, r.provider_id, COALESCE(v.name,''), r.round_id, ` + pelicanSummaryFields
+	pelicanUserResultFields = `r.plan_id, p.group_id, NULL::bigint, ''::text, ''::text, ` + pelicanSummaryFields
 	pelicanResultFrom       = ` FROM pelican_test_results r
 		JOIN pelican_test_plans p ON p.id=r.plan_id
 		JOIN groups g ON g.id=p.group_id `
@@ -38,27 +38,25 @@ const (
 		AND r.target_provider_id IS NOT DISTINCT FROM p.provider_id`
 	pelicanDrawingKinds    = `('pelican', 'custom_svg')`
 	pelicanDrawingStatuses = `('pending_review', 'passed', 'suspected')`
-	pelicanHasDrawing      = `r.question_kind IN ` + pelicanDrawingKinds + ` AND octet_length(r.answer)>0`
+	pelicanHasDrawing      = `r.question_kind IN ` + pelicanDrawingKinds + ` AND (r.answer<>'' OR r.raw_answer<>'')`
+	pelicanHasCandy        = `r.question_kind='candy' AND r.status IN ('passed','suspected') AND r.answer ~ '[^[:space:]]'`
 
-	// 先取计划最近三十次作答，再按当前配置和判定结果筛选。预览保留前 256 个字符。
+	// 糖果预览读取分组裁剪后的样本，正文在详情按同一条件读取。
 	pelicanCandyAnswers = `CASE WHEN NOT $2 AND p.question_kind='candy' THEN (
 		SELECT json_agg(sample ORDER BY sample.tested_at DESC, sample.id DESC)
 		FROM (
 			SELECT ` + pelicanSummaryFields + `,
 				left(r.answer, 256) || CASE WHEN substring(r.answer FROM 257 FOR 1) <> '' THEN '…' ELSE '' END AS answer_preview
-			FROM (
-				SELECT ` + pelicanSummaryFields + `, r.plan_revision, r.target_provider_id, r.answer
-				FROM pelican_test_results r WHERE r.plan_id=p.id
-				ORDER BY r.tested_at DESC, r.id DESC LIMIT 30
-			) r
-			WHERE ` + pelicanCurrentTarget + ` AND r.status IN ('passed','suspected') AND r.answer ~ '[^[:space:]]'
+			FROM pelican_test_results r
+			WHERE r.plan_id=p.id AND ` + pelicanCurrentTarget + ` AND ` + pelicanPublishedCandy + `
 		) sample
 	) END`
 )
 
 // PelicanTestStore 保存分组测智计划、领取凭证和每次作答。
 type PelicanTestStore struct {
-	db *sql.DB
+	db           *sql.DB
+	disableCandy pelicanCandyDisabler
 }
 
 // NewPelicanTestStore 使用应用的 PostgreSQL 连接池保存测智任务。
@@ -91,30 +89,38 @@ func (s *PelicanTestStore) ListPlans(ctx context.Context) ([]routing.PelicanPlan
 func (s *PelicanTestStore) SavePlan(ctx context.Context, plan routing.PelicanPlan) (*routing.PelicanPlan, error) {
 	mutation := `INSERT INTO pelican_test_plans
 		(group_id, provider_id, model_id, question_kind, cron_expression, enabled, next_run_at,
-		 question_name, question_prompt, expected_answer, reasoning_effort)
-		SELECT g.id, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11 FROM groups g
+		 question_name, question_prompt, expected_answer, reasoning_effort, suspend_on_wrong_answer)
+		SELECT g.id, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12 FROM groups g
 		WHERE g.id=$1 AND g.deleted_at IS NULL RETURNING *`
 	args := []any{
 		plan.GroupID, plan.ProviderID, plan.ModelID, plan.QuestionKind, plan.CronExpression, plan.Enabled, plan.NextRunAt,
-		plan.QuestionName, plan.QuestionPrompt, plan.ExpectedAnswer, plan.ReasoningEffort,
+		plan.QuestionName, plan.QuestionPrompt, plan.ExpectedAnswer, plan.ReasoningEffort, plan.SuspendOnWrongAnswer,
 	}
 	if plan.ID != 0 {
 		// 改题或调整推理强度会重置计划的最近结论。已发布作品按分组单独保留。
 		mutation = `UPDATE pelican_test_plans p SET
 			provider_id=$2, model_id=$3, question_kind=$4, cron_expression=$5, enabled=$6,
 			next_run_at=$7, lease_token=NULL, lease_until=NULL,
-			question_name=$8, question_prompt=$9, expected_answer=$10, reasoning_effort=$11,
+			question_name=$8, question_prompt=$9, expected_answer=$10, reasoning_effort=$11, suspend_on_wrong_answer=$12,
 			plan_revision=p.plan_revision + CASE WHEN
 				(p.question_kind, p.question_name, p.question_prompt, p.expected_answer, p.reasoning_effort)
-				IS DISTINCT FROM ($4, $8, $9, $10, $11) THEN 1 ELSE 0 END
-			FROM groups g WHERE p.id=$12 AND p.group_id=$1 AND p.group_id=g.id AND g.deleted_at IS NULL
+					IS DISTINCT FROM ($4, $8, $9, $10, $11)
+				OR (p.question_kind='candy' AND (p.provider_id, p.model_id) IS DISTINCT FROM ($2, $3))
+				THEN 1 ELSE 0 END
+			FROM groups g WHERE p.id=$13 AND p.group_id=$1 AND p.group_id=g.id AND g.deleted_at IS NULL
 				AND p.queued_at IS NULL AND (p.lease_until IS NULL OR p.lease_until <= CURRENT_TIMESTAMP)
 			RETURNING p.*`
 		args = append(args, plan.ID)
 	}
 	saved, err := scanPelicanPlan(s.db.QueryRowContext(ctx,
-		`WITH saved AS (`+mutation+`) SELECT `+pelicanPlanFields+` FROM saved p `+pelicanPlanJoins, args...))
+		`WITH saved AS (`+mutation+`), canceled AS (
+			DELETE FROM pelican_candy_rounds cr USING saved WHERE cr.plan_id=saved.id
+		)
+		SELECT `+pelicanPlanFields+` FROM saved p `+pelicanPlanJoins, args...))
 	if !errors.Is(err, sql.ErrNoRows) {
+		if err == nil {
+			saved.RunState = "idle"
+		}
 		return saved, pelicanWriteError(err)
 	}
 	if plan.ID == 0 {
@@ -153,6 +159,7 @@ func (s *PelicanTestStore) QueuePlan(ctx context.Context, id int64) error {
 			UPDATE pelican_test_plans p SET queued_at=CURRENT_TIMESTAMP, lease_token=NULL, lease_until=NULL
 			FROM target WHERE p.id=target.id AND target.queued_at IS NULL
 				AND (target.lease_until IS NULL OR target.lease_until <= CURRENT_TIMESTAMP)
+				AND NOT EXISTS (SELECT 1 FROM pelican_candy_rounds cr WHERE cr.plan_id=p.id)
 			RETURNING p.id
 		)
 		SELECT EXISTS(SELECT 1 FROM target), EXISTS(SELECT 1 FROM queued)`, id))
@@ -166,9 +173,11 @@ func (s *PelicanTestStore) ClaimNext(ctx context.Context, now, until time.Time, 
 	plan, err := scanPelicanPlan(s.db.QueryRowContext(ctx, `
 		WITH due AS (
 			SELECT p.id FROM pelican_test_plans p JOIN groups g ON g.id=p.group_id
+			LEFT JOIN pelican_candy_rounds cr ON cr.plan_id=p.id
 			WHERE g.status='active' AND g.deleted_at IS NULL
 				AND (p.queued_at IS NOT NULL OR (p.enabled AND p.next_run_at <= $1))
 				AND (p.lease_until IS NULL OR p.lease_until <= $1)
+				AND (cr.retry_at IS NULL OR cr.retry_at <= $1)
 			ORDER BY COALESCE(p.queued_at, p.next_run_at), p.id
 			LIMIT 1 FOR UPDATE OF p SKIP LOCKED
 		), claimed AS (
@@ -194,13 +203,6 @@ func (s *PelicanTestStore) Finish(ctx context.Context, plan routing.PelicanPlan,
 	if plan.LeaseToken == "" {
 		return routing.ErrPelicanConflict
 	}
-	if result.Criteria == nil {
-		result.Criteria = []string{}
-	}
-	criteria, err := json.Marshal(result.Criteria)
-	if err != nil {
-		return err
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -211,29 +213,51 @@ func (s *PelicanTestStore) Finish(ctx context.Context, plan routing.PelicanPlan,
 	if err != nil {
 		return err
 	}
-	// 结果使用被锁定的计划配置，自动选号时也要保存当次实际作答账号。
-	insert, err := tx.ExecContext(ctx, `
-		WITH finished AS (
-			UPDATE pelican_test_plans SET last_run_at=$4, queued_at=NULL, lease_token=NULL, lease_until=NULL,
-				next_run_at=CASE WHEN enabled THEN $3::timestamptz END
-			WHERE id=$1 AND lease_token=$2
-			RETURNING id, provider_id, model_id, question_kind, question_name, plan_revision
-		)
-		INSERT INTO pelican_test_results
-			(plan_id, target_provider_id, provider_id, model_id, question_kind, question_name, plan_revision,
-			 status, detail_code, prompt, criteria, answer, tested_at, latency_ms, reasoning_effort, published, raw_answer)
-		SELECT id, provider_id, $5, model_id, question_kind, question_name, plan_revision,
-			$6, $7, $8, $9::jsonb, $10, $4, $11, $12,
-			question_kind IN `+pelicanDrawingKinds+` AND $6::text IN `+pelicanDrawingStatuses+` AND octet_length($10::text)>0, $13
-		FROM finished`, plan.ID, plan.LeaseToken, next, result.TestedAt, result.ProviderID, result.Status,
-		result.DetailCode, result.Prompt, string(criteria), result.Answer, result.LatencyMs, result.ReasoningEffort, result.RawAnswer)
-	if err := checkPelicanAffected(insert, err, routing.ErrPelicanConflict); err != nil {
+	if err := insertPelicanResult(ctx, tx, plan, result); err != nil {
+		return err
+	}
+	if err := advancePelicanPlan(ctx, tx, plan, result.TestedAt, next); err != nil {
 		return err
 	}
 	if err := prunePelicanShowcase(ctx, tx, settings, &groupID, plan.ID); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+func insertPelicanResult(ctx context.Context, tx *sql.Tx, plan routing.PelicanPlan, result routing.PelicanResult) error {
+	if result.Criteria == nil {
+		result.Criteria = []string{}
+	}
+	criteria, err := json.Marshal(result.Criteria)
+	if err != nil {
+		return err
+	}
+	// 结果使用被锁定的计划配置，自动选号时也要保存当次实际作答账号。
+	insert, err := tx.ExecContext(ctx, `
+		INSERT INTO pelican_test_results
+			(plan_id, target_provider_id, provider_id, model_id, question_kind, question_name, plan_revision,
+			 status, detail_code, prompt, criteria, answer, tested_at, latency_ms, reasoning_effort, published, raw_answer,
+			 round_id, schedule_action)
+		SELECT id, provider_id, $3, model_id, question_kind, question_name, plan_revision,
+			$4, $5, $6, $7::jsonb, $8, $9, $10, $11,
+			CASE
+				WHEN question_kind IN `+pelicanDrawingKinds+` THEN $4::text IN `+pelicanDrawingStatuses+` AND ($8::text<>'' OR $12::text<>'')
+				WHEN question_kind='candy' THEN $4::text IN ('passed','suspected') AND $8::text ~ '[^[:space:]]'
+				ELSE false
+			END, $12, $13, $14
+		FROM pelican_test_plans WHERE id=$1 AND lease_token=$2`, plan.ID, plan.LeaseToken, result.ProviderID, result.Status,
+		result.DetailCode, result.Prompt, string(criteria), result.Answer, result.TestedAt, result.LatencyMs,
+		result.ReasoningEffort, result.RawAnswer, result.RoundID, result.ScheduleAction)
+	return checkPelicanAffected(insert, err, routing.ErrPelicanConflict)
+}
+
+func advancePelicanPlan(ctx context.Context, tx *sql.Tx, plan routing.PelicanPlan, tested time.Time, next *time.Time) error {
+	update, err := tx.ExecContext(ctx, `
+		UPDATE pelican_test_plans SET last_run_at=$3, queued_at=NULL, lease_token=NULL, lease_until=NULL,
+			next_run_at=CASE WHEN enabled THEN $4::timestamptz END
+		WHERE id=$1 AND lease_token=$2`, plan.ID, plan.LeaseToken, tested, next)
+	return checkPelicanAffected(update, err, routing.ErrPelicanConflict)
 }
 
 // ListResults 返回管理员可查的计划历史，正文在打开详情时读取。
@@ -316,7 +340,7 @@ func (s *PelicanTestStore) latest(ctx context.Context, allowed []int64, drawings
 			SELECT COALESCE(json_agg(drawing ORDER BY drawing.tested_at DESC, drawing.id DESC), '[]') AS artworks
 			FROM (
 				SELECT `+pelicanSummaryFields+` FROM pelican_test_results r
-				WHERE r.plan_id=p.id AND `+pelicanPublishedDrawing+`
+				WHERE r.plan_id=p.id AND `+pelicanPublishedDrawing+` AND (NOT $2 OR r.answer LIKE '<svg%')
 			) drawing
 		) gallery
 		WHERE s.singleton AND p.group_id=ANY($1) AND g.status='active' AND g.deleted_at IS NULL
@@ -376,7 +400,7 @@ func scanPelicanPlan(row interface{ Scan(...any) error }) (*routing.PelicanPlan,
 	err := row.Scan(&plan.ID, &plan.GroupID, &plan.GroupName, &plan.ProviderID, &plan.ProviderName,
 		&plan.ModelID, &plan.QuestionKind, &plan.QuestionName, &plan.QuestionPrompt, &plan.ExpectedAnswer,
 		&plan.ReasoningEffort, &plan.CronExpression, &plan.Enabled, &plan.LastRunAt,
-		&plan.NextRunAt, &plan.RunState, &roundAt)
+		&plan.NextRunAt, &plan.RunState, &roundAt, &plan.Revision, &plan.SuspendOnWrongAnswer)
 	if err != nil {
 		return nil, err
 	}
@@ -388,8 +412,8 @@ func scanPelicanPlan(row interface{ Scan(...any) error }) (*routing.PelicanPlan,
 
 func pelicanResultDest(r *routing.PelicanResult) []any {
 	return []any{
-		&r.PlanID, &r.GroupID, &r.ProviderID, &r.ProviderName, &r.ID, &r.ModelID, &r.QuestionKind,
-		&r.QuestionName, &r.ReasoningEffort, &r.Status, &r.DetailCode, &r.TestedAt, &r.LatencyMs,
+		&r.PlanID, &r.GroupID, &r.ProviderID, &r.ProviderName, &r.RoundID, &r.ID, &r.ModelID, &r.QuestionKind,
+		&r.QuestionName, &r.ReasoningEffort, &r.Status, &r.DetailCode, &r.TestedAt, &r.LatencyMs, &r.ScheduleAction,
 	}
 }
 
