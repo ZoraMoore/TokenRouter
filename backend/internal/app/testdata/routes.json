@@ -98,6 +98,7 @@
   "GET /api/v1/admin/groups/all",
   "GET /api/v1/admin/groups/capacity-summary",
   "GET /api/v1/admin/groups/live-capability",
+  "GET /api/v1/admin/groups/options",
   "GET /api/v1/admin/groups/usage-summary",
   "GET /api/v1/admin/model-attributes/configs",
   "GET /api/v1/admin/model-attributes/configs/:id",

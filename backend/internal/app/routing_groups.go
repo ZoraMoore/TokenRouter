@@ -74,6 +74,7 @@ func provideGroupReader(store *routingpostgres.GroupStore) routing.GroupReposito
 
 func provideRoutingGroupAdmin(catalog *catalogprovider.Service, store *routingpostgres.GroupStore, providers *providerpostgres.ProviderStore, keys *apikeypostgres.KeyStore, invalidator apikey.APIKeyAuthCacheInvalidator, modelConfigs *routing.PricingConfigService, settings *settingscore.Store, defaults *scheduler.AdminDefaults) *routing.GroupAdmin {
 	return routing.NewGroupAdmin(store, store, store, routingGroupProviders{Store: providers}, keys, invalidator, modelConfigs, routing.GroupAdminOptions{
+		ReadViews:     store,
 		DefaultModels: func(string) []string { return catalog.ModelIDs() },
 		ModelResolver: routing.RequestableResolver{
 			GroupPolicies: modelConfigs,

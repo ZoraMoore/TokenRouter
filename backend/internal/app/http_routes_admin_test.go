@@ -260,6 +260,32 @@ func TestRetiredAdminStatisticsNativeRoutes(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
+// TestGroupReadViewsRequireAdminAuthentication 检查分组查询使用管理员鉴权。
+func TestGroupReadViewsRequireAdminAuthentication(t *testing.T) {
+	router := gin.New()
+	handlers := &routeTestHandlers{Admin: &routeTestAdminHandlers{Group: routinghttpapi.NewGroupHandler(nil)}}
+	adminAuth := identityhttp.AdminAuthMiddleware(func(c *gin.Context) {
+		if c.GetHeader("Authorization") == "" {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		c.AbortWithStatus(http.StatusForbidden)
+	})
+	RegisterAdminRoutes(router.Group("/api/v1"), handlers, adminAuth, nil, nil, nil, func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	for _, path := range []string{"/api/v1/admin/groups/options", "/api/v1/admin/groups?view=table"} {
+		anonymous := httptest.NewRecorder()
+		router.ServeHTTP(anonymous, httptest.NewRequest(http.MethodGet, path, nil))
+		require.Equal(t, http.StatusUnauthorized, anonymous.Code)
+
+		user := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Header.Set("Authorization", "Bearer user-token")
+		router.ServeHTTP(user, request)
+		require.Equal(t, http.StatusForbidden, user.Code)
+	}
+}
+
 func TestOpsAdminRoutesRequireAdminAuthentication(t *testing.T) {
 	router := gin.New()
 	handlers := &routeTestHandlers{Admin: &routeTestAdminHandlers{Ops: opshttp.NewOpsHandler(nil)}}

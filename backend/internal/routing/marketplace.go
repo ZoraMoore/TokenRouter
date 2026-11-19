@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/TokenFlux/TokenRouter/internal/billing/pricing"
+	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry/timing"
 	"github.com/TokenFlux/TokenRouter/internal/pkg/locale"
 	"github.com/TokenFlux/TokenRouter/internal/routing/capability"
 )
@@ -75,14 +76,14 @@ type MarketplaceModelDef struct {
 }
 
 type MarketplaceGroups interface {
-	ListActive(context.Context) ([]Group, error)
+	ListMarketplaceGroups(context.Context) ([]Group, error)
 }
 type MarketplaceSettings interface {
 	GetMultiple(context.Context, []string) (map[string]string, error)
 }
 type MarketplaceModels interface {
 	Prefetch(context.Context) ([]CatalogueProvider, bool, error)
-	ResolveRequestableModels(context.Context, *int64, string) RequestableModelsResult
+	ResolveMarketplaceGroup(context.Context, *Group) RequestableModelsResult
 }
 type MarketplaceCapacity interface {
 	GetGroupCapacityByIDs(context.Context, []int64) (map[int64]GroupCapacitySummary, error)
@@ -126,12 +127,17 @@ func NewMarketplace(groups MarketplaceGroups, settings MarketplaceSettings, mode
 // ListPublic 批量读取可见分组的属性，并按需附带容量。
 // @project-doc docs/interfaces/model_catalog_and_marketplace.md#model_catalog_resolution
 func (s *Marketplace) ListPublic(ctx context.Context, options MarketplaceListOptions) ([]ModelMarketplaceGroup, error) {
-	groups, err := s.groups.ListActive(ctx)
+	finishGroups := timing.Observe(ctx, "marketplace_groups")
+	groups, err := s.groups.ListMarketplaceGroups(ctx)
+	finishGroups()
 	if err != nil {
 		return nil, fmt.Errorf("list active groups: %w", err)
 	}
 
+	finishProviders := timing.Observe(ctx, "marketplace_providers")
 	providersByGroup, providersPrefetched := s.PrefetchProviders(ctx)
+	finishProviders()
+	finishModels := timing.Observe(ctx, "marketplace_models")
 	visibleGroups := make([]Group, 0, len(groups))
 	definitions := make(map[int64][]MarketplaceModelDef, len(groups))
 	for i := range groups {
@@ -152,17 +158,26 @@ func (s *Marketplace) ListPublic(ctx context.Context, options MarketplaceListOpt
 		visibleGroups = append(visibleGroups, *group)
 		definitions[group.ID] = models
 	}
+	finishModels()
 	if len(visibleGroups) == 0 {
 		return []ModelMarketplaceGroup{}, nil
 	}
 
+	finishAttributes := timing.Observe(ctx, "marketplace_attributes")
 	attributes := s.readAttributes(ctx, definitions)
+	finishAttributes()
 	discountConfig, showDiscount := s.getOfficialPriceRatioConfig(ctx)
 	var capacityMap map[int64]GroupCapacitySummary
 	if options.IncludeCapacity {
+		finishCapacity := timing.Observe(ctx, "marketplace_capacity")
 		capacityMap = s.getPublicCapacityMap(ctx, visibleGroups)
+		finishCapacity()
 	}
+	finishAvailability := timing.Observe(ctx, "marketplace_availability")
 	availabilityMap := s.getPublicAvailabilityMap(ctx, visibleGroups)
+	finishAvailability()
+	finishCards := timing.Observe(ctx, "marketplace_cards")
+	defer finishCards()
 	out := make([]ModelMarketplaceGroup, 0, len(visibleGroups))
 	for i := range visibleGroups {
 		group := &visibleGroups[i]
@@ -206,7 +221,9 @@ func (s *Marketplace) PrefetchProviders(ctx context.Context) (map[int64][]Catalo
 		return nil, false
 	}
 	if err != nil {
-		s.options.Warn("failed to prefetch marketplace providers", "error", err)
+		if s.options.Warn != nil {
+			s.options.Warn("failed to prefetch marketplace providers", "error", err)
+		}
 		return nil, false
 	}
 
@@ -511,20 +528,11 @@ func (s *Marketplace) PublicModelPricing(ctx context.Context, group *Group, mode
 }
 
 func (s *Marketplace) resolveGroupModels(ctx context.Context, group *Group) []MarketplaceModelDef {
-	if s.models != nil && group != nil {
-		groupID := group.ID
-		resolution := s.models.ResolveRequestableModels(ctx, &groupID, "")
-		if len(resolution.Models) > 0 {
-			return buildMarketplaceModelDefsFromRequestable(resolution.Models)
-		}
-		// 已完成提供商和分组策略解析后，空结果必须保持为空，不能再次回退平台默认模型。
+	if s.models == nil || group == nil {
 		return nil
 	}
-
-	if group == nil {
-		return nil
-	}
-	return nil
+	resolution := s.models.ResolveMarketplaceGroup(ctx, group)
+	return buildMarketplaceModelDefsFromRequestable(resolution.Models)
 }
 
 // resolveGroupModelsWithProviders 直接使用预取提供商生成候选和执行 R -> G -> U 校验。
@@ -532,15 +540,14 @@ func (s *Marketplace) resolveGroupModelsWithProviders(ctx context.Context, group
 	if s == nil || s.models == nil || group == nil {
 		return nil
 	}
-	groupID := group.ID
-	resolution := s.requestable.ResolveWithProviders(ctx, &groupID, "", nil, providers)
-	if len(resolution.Models) == 0 {
-		return nil
-	}
+	resolution := s.requestable.resolveWithGroup(ctx, group, providers)
 	return buildMarketplaceModelDefsFromRequestable(resolution.Models)
 }
 
 func buildMarketplaceModelDefsFromRequestable(models []RequestableModel) []MarketplaceModelDef {
+	if len(models) == 0 {
+		return nil
+	}
 	defs := make([]MarketplaceModelDef, 0, len(models))
 	for _, model := range models {
 		defs = append(defs, MarketplaceModelDef{

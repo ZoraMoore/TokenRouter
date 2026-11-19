@@ -37,6 +37,7 @@ type Service struct {
 	options          *Options
 	remoteClient     RemoteClient
 	mu               sync.RWMutex
+	generation       uint64
 	pricingData      map[string]*CatalogModelPricing
 	lastUpdated      time.Time
 	localHash        string
@@ -330,26 +331,11 @@ func (s *Service) validateCatalogURL(raw string) (string, error) {
 	return normalized, nil
 }
 
-// GetModelPricing 在原有锁边界内调用纯目录查询。
+// GetModelPricing 按当前目录版本查询完整型号。
 func (s *Service) GetModelPricing(modelName string) *CatalogModelPricing {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	query := s.catalogQuery()
-	if s.modelCatalog != nil {
-		candidates := []string{modelName}
-		if query.Candidates != nil {
-			candidates = append(candidates, query.Candidates(modelName)...)
-		}
-		for _, name := range s.modelCatalog.IdentityCandidates(modelName, candidates) {
-			if value := s.pricingData[strings.ToLower(strings.TrimSpace(name))]; value != nil {
-				return value
-			}
-		}
-		if s.modelCatalog.RequiresExact(modelName) {
-			return &CatalogModelPricing{Source: "unpriced", TokenPricingAbsent: true}
-		}
-	}
-	return query.GetModelPricing(modelName)
+	return lookupModelPricing(modelName, s.modelCatalog, s.catalogQuery())
 }
 
 // GetModelModalities 在原有锁边界内调用纯目录查询。
@@ -441,15 +427,34 @@ func (s *Service) Wait() {
 
 // catalogQuery 为本次查询取得一份完整模型身份候选。
 func (s *Service) catalogQuery() *purepricing.CatalogQuery {
-	options := s.currentOptions()
-	var candidates func(string) []string
-	if options.ModelLookupCandidates != nil {
-		candidates = options.ModelLookupCandidates()
+	return newCatalogQuery(s.pricingData, s.currentOptions().ModelLookupCandidates)
+}
+
+func newCatalogQuery(entries map[string]*CatalogModelPricing, factory func() func(string) []string) *purepricing.CatalogQuery {
+	query := &purepricing.CatalogQuery{Entries: entries}
+	if factory != nil {
+		query.Candidates = factory()
 	}
-	return &purepricing.CatalogQuery{
-		Entries:    s.pricingData,
-		Candidates: candidates,
+	return query
+}
+
+// lookupModelPricing 先查目录身份，再查允许回退到本地补充的型号。
+func lookupModelPricing(modelName string, catalog *modelcatalog.Catalog, query *purepricing.CatalogQuery) *CatalogModelPricing {
+	if catalog != nil {
+		candidates := []string{modelName}
+		if query.Candidates != nil {
+			candidates = append(candidates, query.Candidates(modelName)...)
+		}
+		for _, name := range catalog.IdentityCandidates(modelName, candidates) {
+			if value := query.Entries[strings.ToLower(strings.TrimSpace(name))]; value != nil {
+				return value
+			}
+		}
+		if catalog.RequiresExact(modelName) {
+			return &CatalogModelPricing{Source: "unpriced", TokenPricingAbsent: true}
+		}
 	}
+	return query.GetModelPricing(modelName)
 }
 
 // ReadOnlySnapshot 返回固定目录供一次管理查询使用，不加载文件、不访问网络。

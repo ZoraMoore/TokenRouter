@@ -35,6 +35,12 @@ type GroupRepository interface {
 	UpdateSortOrders(ctx context.Context, updates []GroupSortOrderUpdate) error
 }
 
+// GroupAdminViews 读取管理页面和选择器需要的分组字段。
+type GroupAdminViews interface {
+	ListAdminGroupOptions(context.Context, bool) ([]AdminGroupOption, error)
+	ListAdminGroupTable(context.Context, pagination.PaginationParams, string, string, *bool) ([]AdminGroupTableRow, *pagination.PaginationResult, error)
+}
+
 type GroupDuplicateRepository interface {
 	// FindByDuplicateOperationID 在幂等存储结果不明确时执行只读恢复查询。
 	FindByDuplicateOperationID(ctx context.Context, operationID string) (*Group, error)
@@ -51,4 +57,34 @@ type GroupSortOrderRepository interface {
 type GroupSortOrderUpdate struct {
 	ID        int64 `json:"id"`
 	SortOrder int   `json:"sort_order"`
+}
+
+// AdminGroupOption 提供分组绑定、排序和回退选项需要的字段。
+type AdminGroupOption struct {
+	ID                              int64   `json:"id"`
+	Name                            string  `json:"name"`
+	Description                     string  `json:"description"`
+	Status                          string  `json:"status"`
+	IsExclusive                     bool    `json:"is_exclusive"`
+	DisplayBrand                    string  `json:"display_brand"`
+	RateMultiplier                  float64 `json:"rate_multiplier"`
+	SortOrder                       int     `json:"sort_order"`
+	ClaudeCodeOnly                  bool    `json:"claude_code_only"`
+	FallbackGroupIDOnInvalidRequest *int64  `json:"fallback_group_id_on_invalid_request"`
+	ProviderCount                   int64   `json:"provider_count"`
+}
+
+// AdminGroupTableRow 提供管理表格的分组属性和提供商计数。
+type AdminGroupTableRow struct {
+	ID                       int64   `json:"id"`
+	Name                     string  `json:"name"`
+	Status                   string  `json:"status"`
+	IsExclusive              bool    `json:"is_exclusive"`
+	DisplayBrand             string  `json:"display_brand"`
+	RateMultiplier           float64 `json:"rate_multiplier"`
+	SessionIsolationEnabled  bool    `json:"session_isolation_enabled"`
+	RPMLimit                 int     `json:"rpm_limit"`
+	ProviderCount            int64   `json:"provider_count"`
+	ActiveProviderCount      int64   `json:"active_provider_count"`
+	RateLimitedProviderCount int64   `json:"rate_limited_provider_count"`
 }

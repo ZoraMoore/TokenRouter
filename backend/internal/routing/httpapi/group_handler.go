@@ -152,6 +152,8 @@ type UpdateSortOrderRequest struct {
 // GroupAdministration 提供路由管理所需的操作。
 type GroupAdministration interface {
 	ListGroups(context.Context, int, int, string, string, string, *bool, string, string) ([]routing.Group, int64, error)
+	ListGroupTableRows(context.Context, int, int, string, string, *bool, string, string) ([]routing.AdminGroupTableRow, int64, error)
+	GetGroupOptions(context.Context, bool) ([]routing.AdminGroupOption, error)
 	GetAllGroups(context.Context) ([]routing.Group, error)
 	GetAllGroupsIncludingInactive(context.Context) ([]routing.Group, error)
 	GetGroup(context.Context, int64) (*routing.Group, error)
@@ -206,6 +208,16 @@ func (h *GroupHandler) List(c *gin.Context) {
 		isExclusive = &val
 	}
 
+	if c.Query("view") == "table" {
+		rows, total, err := h.adminService.ListGroupTableRows(c.Request.Context(), page, pageSize, status, search, isExclusive, sortBy, sortOrder)
+		if err != nil {
+			httpx.ErrorFrom(c, err)
+			return
+		}
+		httpx.Paginated(c, rows, total, page, pageSize)
+		return
+	}
+
 	groups, total, err := h.adminService.ListGroups(c.Request.Context(), page, pageSize, platform, status, search, isExclusive, sortBy, sortOrder)
 	if err != nil {
 		httpx.ErrorFrom(c, err)
@@ -249,6 +261,20 @@ func (h *GroupHandler) GetAll(c *gin.Context) {
 		outGroups = append(outGroups, *groupdto.AdminGroupFromRouting[struct{}](&groups[i]))
 	}
 	httpx.Success(c, outGroups)
+}
+
+// GetOptions 返回按 sort_order 和 ID 排序的分组选项。
+func (h *GroupHandler) GetOptions(c *gin.Context) {
+	if _, supplied := c.GetQuery("platform"); supplied {
+		httpx.ErrorFrom(c, infraerrors.BadRequest("REMOVED_GROUP_FIELD", "groups no longer have a platform"))
+		return
+	}
+	options, err := h.adminService.GetGroupOptions(c.Request.Context(), c.Query("include_inactive") == "true")
+	if err != nil {
+		httpx.ErrorFrom(c, err)
+		return
+	}
+	httpx.Success(c, options)
 }
 
 // GetByID handles getting a group by ID

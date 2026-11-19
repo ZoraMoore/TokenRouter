@@ -21,7 +21,7 @@ type marketplaceHTTPCapacity struct{ calls int }
 // marketplaceHTTPModels 提供真实目录解析形状，测试容量查询参数。
 type marketplaceHTTPModels struct{}
 
-func (marketplaceHTTPGroups) ListActive(context.Context) ([]routing.Group, error) {
+func (marketplaceHTTPGroups) ListMarketplaceGroups(context.Context) ([]routing.Group, error) {
 	return []routing.Group{{ID: 1, ActiveProviderCount: 1}}, nil
 }
 
@@ -64,7 +64,7 @@ func TestMarketplaceCapacityQuery(t *testing.T) {
 	}
 }
 
-func (marketplaceHTTPModels) ResolveRequestableModels(context.Context, *int64, string) routing.RequestableModelsResult {
+func (marketplaceHTTPModels) ResolveMarketplaceGroup(context.Context, *routing.Group) routing.RequestableModelsResult {
 	return routing.RequestableModelsResult{Models: []routing.RequestableModel{{ID: "model"}}}
 }
 

@@ -7,8 +7,8 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/billing/pricing"
 )
 
-// WithPriceCatalog 在独立目录快照上复用相同算法、数据规则。
-func (s *Calculator) WithPriceCatalog(catalog PriceCatalog) *Calculator {
+// WithPriceCatalog 固定本次报价使用的目录和时刻。
+func (s *Calculator) WithPriceCatalog(catalog CatalogPriceReader) *Calculator {
 	out := *s
 	out.catalog = catalog
 	now := s.options.Now()
@@ -18,21 +18,20 @@ func (s *Calculator) WithPriceCatalog(catalog PriceCatalog) *Calculator {
 
 // DefaultModelPrice 返回模型的基础计费规则，配置的零价按已定价处理。
 func (s *Calculator) DefaultModelPrice(model, platform, mode string) pricing.DefaultModelPrice {
-	result := pricing.DefaultModelPrice{Model: model, Platform: platform, BillingMode: "token", PriceStatus: "unpriced", Prices: []pricing.DefaultPriceValue{}}
+	raw := s.RawModelPricing(model)
+	billingMode, hasMediaPrice := defaultModelBillingMode(model, mode, raw)
+	result := pricing.DefaultModelPrice{Model: model, Platform: platform, BillingMode: billingMode, PriceStatus: "unpriced", Prices: []pricing.DefaultPriceValue{}}
 	add := func(key string, value float64, unit string) {
 		result.Prices = append(result.Prices, pricing.DefaultPriceValue{Key: key, Value: &value, Unit: unit})
 	}
-	raw := s.RawModelPricing(model)
 	if raw != nil {
 		result.Source = raw.Source
 		result.PriceSources = maps.Clone(raw.PriceSources)
 	}
-	knownVideo := raw != nil && len(raw.VideoPrices) > 0
-	if knownVideo {
+	if billingMode == "video" && hasMediaPrice {
 		if result.PriceSources == nil {
 			result.PriceSources = map[string]string{}
 		}
-		result.BillingMode = "video"
 		for _, size := range []string{"480p", "720p", "1080p"} {
 			price, ok := pricing.DefaultVideoPrice(raw, size)
 			if !ok {
@@ -48,26 +47,15 @@ func (s *Calculator) DefaultModelPrice(model, platform, mode string) pricing.Def
 		result.PriceStatus = "priced"
 		return result
 	}
-	knownImage := raw != nil && len(raw.ImagePrices) > 0
-	imageModel := mode == "image" || pricing.HasExplicitImageGenerationPricing(raw) || pricing.LooksLikeImageModel(model)
-	// 聊天模型附带的图片元数据不切换 token 模式；纯按张价和明确的图片模型使用媒体单位。
-	hasImagePrice := knownImage || pricing.HasImageUnitPrice(raw) && (imageModel || raw.TokenPricingAbsent)
-	switch mode {
-	case "video", "image":
-		result.BillingMode = mode
-	case "image_generation":
-		result.BillingMode = "image"
-	}
-	if hasImagePrice {
+	if billingMode == "image" && hasMediaPrice {
 		if result.PriceSources == nil {
 			result.PriceSources = map[string]string{}
 		}
-		result.BillingMode = "image"
 		imageSource := result.PriceSources["image"]
 		if imageSource == "" {
 			imageSource = result.Source
 		}
-		if knownImage {
+		if len(raw.ImagePrices) > 0 {
 			if source := raw.PriceSources["image_prices"]; source != "" {
 				imageSource = source
 			}
@@ -87,10 +75,6 @@ func (s *Calculator) DefaultModelPrice(model, platform, mode string) pricing.Def
 	base, err := pricing.ResolveModelPricing(model, raw)
 	if err != nil || base == nil {
 		return result
-	}
-	// 媒体维度缺价时仍可展示已有 token 报价，不借用通用按张或按秒兜底。
-	if !hasImagePrice {
-		result.BillingMode = "token"
 	}
 	result.PriceStatus = "priced"
 	base = s.applyCatalogTimePricing(base, s.options.Now())
@@ -187,4 +171,34 @@ func (s *Calculator) DefaultModelPrice(model, platform, mode string) pricing.Def
 		base, result.Prices = root, rootPrices
 	}
 	return result
+}
+
+// DefaultModelBillingMode 返回默认报价的计费模式，可用于分页前的筛选。
+func DefaultModelBillingMode(model, mode string, raw *CatalogModelPricing) string {
+	billingMode, _ := defaultModelBillingMode(model, mode, raw)
+	return billingMode
+}
+
+// defaultModelBillingMode 优先使用模型的媒体单价，缺价时按 token 报价或目录模式展示。
+func defaultModelBillingMode(model, mode string, raw *CatalogModelPricing) (billingMode string, hasMediaPrice bool) {
+	if raw != nil && len(raw.VideoPrices) > 0 {
+		return "video", true
+	}
+	if raw != nil {
+		imageModel := mode == "image" || pricing.HasExplicitImageGenerationPricing(raw) || pricing.LooksLikeImageModel(model)
+		if len(raw.ImagePrices) > 0 || pricing.HasImageUnitPrice(raw) && (imageModel || raw.TokenPricingAbsent) {
+			return "image", true
+		}
+	}
+	if pricing.HasCatalogTokenPricing(raw) {
+		return "token", false
+	}
+	switch mode {
+	case "video", "image":
+		return mode, false
+	case "image_generation":
+		return "image", false
+	default:
+		return "token", false
+	}
 }

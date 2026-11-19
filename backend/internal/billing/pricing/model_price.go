@@ -9,7 +9,7 @@ import (
 func ResolveModelPricing(model string, catalogPrice *CatalogModelPricing) (*ModelPricing, error) {
 	// 标准化模型名称（转小写）
 	model = strings.ToLower(model)
-	if catalogPrice == nil || catalogPrice.Source == "unpriced" || catalogPrice.TokenPricingAbsent {
+	if !HasCatalogTokenPricing(catalogPrice) {
 		return nil, fmt.Errorf("%w for model: %s", ErrModelPricingUnavailable, model)
 	}
 
@@ -69,4 +69,9 @@ func ResolveModelPricing(model string, catalogPrice *CatalogModelPricing) (*Mode
 		ImageOutputPriceExplicit:      catalogPricing.ImageOutputPricePresent,
 		MaxReasoningEffortMultiplier:  rules.MaxReasoningEffortMultiplier,
 	}, nil
+}
+
+// HasCatalogTokenPricing 判定目录条目能否提供 token 单价，零价也可以计费。
+func HasCatalogTokenPricing(price *CatalogModelPricing) bool {
+	return price != nil && price.Source != "unpriced" && !price.TokenPricingAbsent
 }

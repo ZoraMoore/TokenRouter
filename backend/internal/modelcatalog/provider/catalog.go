@@ -40,6 +40,63 @@ type AttributeSnapshot struct {
 	LastError   string               `json:"last_error,omitempty"`
 }
 
+// DefaultPricingView 包含同一版目录的价格、属性和查询状态。
+type DefaultPricingView struct {
+	Generation uint64
+	Version    string
+	LastError  string
+	UpdatedAt  time.Time
+	catalog    *modelcatalog.Catalog
+	prices     map[string]*CatalogModelPricing
+	candidates func() func(string) []string
+}
+
+// DefaultPricingView 在一次读锁内取得已发布目录。目录更新会整份替换数据。
+func (s *Service) DefaultPricingView() DefaultPricingView {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return DefaultPricingView{
+		Generation: s.generation,
+		Version:    s.localHash,
+		LastError:  s.lastCatalogError,
+		UpdatedAt:  s.lastUpdated,
+		catalog:    s.modelCatalog,
+		prices:     s.pricingData,
+		candidates: s.currentOptions().ModelLookupCandidates,
+	}
+}
+
+// GetModelPricing 按视图版本查价，调用方将条目视为只读。
+func (v DefaultPricingView) GetModelPricing(model string) *CatalogModelPricing {
+	return lookupModelPricing(model, v.catalog, newCatalogQuery(v.prices, v.candidates))
+}
+
+// EachModel 枚举后台价格页的模型，同名时采用价格条目的平台和模式。
+func (v DefaultPricingView) EachModel(visit func(model, platform, mode string)) {
+	for model, value := range v.prices {
+		if value == nil {
+			continue
+		}
+		platform := value.Provider
+		switch platform {
+		case "xai":
+			platform = "grok"
+		case "moonshot":
+			platform = "kimi"
+		case "":
+			platform = "other"
+		}
+		visit(model, platform, value.Mode)
+	}
+	if v.catalog != nil {
+		for model, entry := range v.catalog.Entries {
+			if v.prices[model] == nil {
+				visit(model, entry.Provider, "")
+			}
+		}
+	}
+}
+
 // AttributesSnapshot 返回当前目录的独立属性快照，不触发网络请求。
 func (s *Service) AttributesSnapshot() AttributeSnapshot {
 	s.mu.RLock()
@@ -257,6 +314,7 @@ func (s *Service) publishModelsCatalog(body []byte, updated time.Time, persist b
 	s.catalogBody = append([]byte(nil), body...)
 	s.lastUpdated, s.localHash, s.lastCatalogError = updated, catalog.Version, ""
 	s.customFilesHash = fingerprint
+	s.generation++
 	s.mu.Unlock()
 	return nil
 }
@@ -320,6 +378,7 @@ func (s *Service) loadModelsCatalog() (err error) {
 		s.catalogBody = bootstrap.catalogBody
 		s.lastUpdated, s.localHash = bootstrap.lastUpdated, bootstrap.localHash
 		s.lastCatalogError = candidateErr.Error()
+		s.generation++
 		s.mu.Unlock()
 		return nil
 	}

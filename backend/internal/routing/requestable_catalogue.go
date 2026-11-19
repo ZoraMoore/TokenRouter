@@ -17,6 +17,21 @@ func (c *RequestableCatalogue) Prefetch(ctx context.Context) ([]CatalogueProvide
 	return values, err == nil, err
 }
 
+// ResolveMarketplaceGroup 预取失败时查询组内提供商，并复用页面已经读取的分组策略。
+func (c *RequestableCatalogue) ResolveMarketplaceGroup(ctx context.Context, group *Group) RequestableModelsResult {
+	if c == nil || c.Read == nil || group == nil {
+		return RequestableModelsResult{}
+	}
+	providers, err := c.Read(ctx, &group.ID)
+	if err != nil {
+		if c.Warn != nil {
+			c.Warn("failed to load marketplace providers", "group_id", group.ID, "error", err)
+		}
+		return RequestableModelsResult{Restricted: true}
+	}
+	return c.Resolver.resolveWithGroup(ctx, group, providers)
+}
+
 // ResolveRequestableModels 合并目录与配置，并用当前提供商复核候选。
 func (c *RequestableCatalogue) ResolveRequestableModels(ctx context.Context, groupID *int64, platform string) RequestableModelsResult {
 	if c == nil || c.Read == nil {

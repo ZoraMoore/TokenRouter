@@ -25,6 +25,7 @@ func RegisterGroupRoutes(admin *gin.RouterGroup, endpoint *GroupHandler) {
 	{
 		groups.GET("", endpoint.List)
 		groups.GET("/all", endpoint.GetAll)
+		groups.GET("/options", endpoint.GetOptions)
 		groups.GET("/usage-summary", endpoint.GetUsageSummary)
 		groups.GET("/capacity-summary", endpoint.GetCapacitySummary)
 		groups.GET("/live-capability", endpoint.GetLiveCapability)

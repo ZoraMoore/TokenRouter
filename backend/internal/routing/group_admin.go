@@ -27,6 +27,21 @@ func (s *GroupAdmin) ListGroups(ctx context.Context, page, pageSize int, platfor
 	return groups, result.Total, nil
 }
 
+// ListGroupTableRows 查询管理表格的当前页和分组总数。
+func (s *GroupAdmin) ListGroupTableRows(ctx context.Context, page, pageSize int, status, search string, isExclusive *bool, sortBy, sortOrder string) ([]AdminGroupTableRow, int64, error) {
+	params := pagination.PaginationParams{Page: page, PageSize: pageSize, SortBy: sortBy, SortOrder: sortOrder}
+	groups, result, err := s.options.ReadViews.ListAdminGroupTable(ctx, params, status, search, isExclusive)
+	if err != nil {
+		return nil, 0, err
+	}
+	return groups, result.Total, nil
+}
+
+// GetGroupOptions 查询管理员可以绑定或排序的分组选项。
+func (s *GroupAdmin) GetGroupOptions(ctx context.Context, includeInactive bool) ([]AdminGroupOption, error) {
+	return s.options.ReadViews.ListAdminGroupOptions(ctx, includeInactive)
+}
+
 func (s *GroupAdmin) GetAllGroups(ctx context.Context) ([]Group, error) {
 	return s.groupRepo.ListActive(ctx)
 }

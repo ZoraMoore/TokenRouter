@@ -409,6 +409,80 @@ func (r *GroupStore) List(ctx context.Context, params pagination.PaginationParam
 }
 
 func (r *GroupStore) ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, status, search string, isExclusive *bool) ([]routing.Group, *pagination.PaginationResult, error) {
+	return r.listWithFilters(ctx, params, status, search, isExclusive)
+}
+
+// ListAdminGroupOptions 读取选择器、排序和回退控件使用的分组字段。
+func (r *GroupStore) ListAdminGroupOptions(ctx context.Context, includeInactive bool) ([]routing.AdminGroupOption, error) {
+	query := clientFromContext(ctx, r.client).Group.Query().Where(group.DeletedAtIsNil())
+	if !includeInactive {
+		query.Where(group.StatusEQ(routing.StatusActive))
+	}
+	groups, err := query.
+		Order(dbent.Asc(group.FieldSortOrder), dbent.Asc(group.FieldID)).
+		Select(
+			group.FieldID, group.FieldName, group.FieldDescription, group.FieldStatus, group.FieldIsExclusive,
+			group.FieldDisplayBrand, group.FieldRateMultiplier, group.FieldSortOrder,
+			group.FieldClaudeCodeOnly, group.FieldFallbackGroupIDOnInvalidRequest,
+		).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]int64, len(groups))
+	for i, g := range groups {
+		ids[i] = g.ID
+	}
+	// 绑定选择器在计数查询失败时仍展示分组。
+	counts, _ := r.loadProviderCounts(ctx, ids)
+	options := make([]routing.AdminGroupOption, 0, len(groups))
+	for _, g := range groups {
+		options = append(options, routing.AdminGroupOption{
+			ID:                              g.ID,
+			Name:                            g.Name,
+			Description:                     derefString(g.Description),
+			Status:                          g.Status,
+			IsExclusive:                     g.IsExclusive,
+			DisplayBrand:                    g.DisplayBrand,
+			RateMultiplier:                  g.RateMultiplier,
+			SortOrder:                       g.SortOrder,
+			ClaudeCodeOnly:                  g.ClaudeCodeOnly,
+			FallbackGroupIDOnInvalidRequest: g.FallbackGroupIDOnInvalidRequest,
+			ProviderCount:                   counts[g.ID].Total,
+		})
+	}
+	return options, nil
+}
+
+// ListAdminGroupTable 在数据库中选取表格展示的字段。
+func (r *GroupStore) ListAdminGroupTable(ctx context.Context, params pagination.PaginationParams, status, search string, isExclusive *bool) ([]routing.AdminGroupTableRow, *pagination.PaginationResult, error) {
+	groups, result, err := r.listWithFilters(ctx, params, status, search, isExclusive,
+		group.FieldID, group.FieldName, group.FieldStatus, group.FieldIsExclusive,
+		group.FieldDisplayBrand, group.FieldRateMultiplier, group.FieldSessionIsolationEnabled, group.FieldRpmLimit,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	rows := make([]routing.AdminGroupTableRow, 0, len(groups))
+	for _, g := range groups {
+		rows = append(rows, routing.AdminGroupTableRow{
+			ID:                       g.ID,
+			Name:                     g.Name,
+			Status:                   g.Status,
+			IsExclusive:              g.IsExclusive,
+			DisplayBrand:             g.DisplayBrand,
+			RateMultiplier:           g.RateMultiplier,
+			SessionIsolationEnabled:  g.SessionIsolationEnabled,
+			RPMLimit:                 g.RPMLimit,
+			ProviderCount:            g.ProviderCount,
+			ActiveProviderCount:      g.ActiveProviderCount,
+			RateLimitedProviderCount: g.RateLimitedProviderCount,
+		})
+	}
+	return rows, result, nil
+}
+
+func (r *GroupStore) listWithFilters(ctx context.Context, params pagination.PaginationParams, status, search string, isExclusive *bool, fields ...string) ([]routing.Group, *pagination.PaginationResult, error) {
 	client := clientFromContext(ctx, r.client)
 	q := client.Group.Query()
 
@@ -432,7 +506,7 @@ func (r *GroupStore) ListWithFilters(ctx context.Context, params pagination.Pagi
 	}
 
 	if strings.EqualFold(strings.TrimSpace(params.SortBy), "provider_count") {
-		return r.listWithProviderCountSort(ctx, q, params, total)
+		return r.listWithProviderCountSort(ctx, q, params, total, fields)
 	}
 
 	groupsQuery := q.
@@ -442,7 +516,7 @@ func (r *GroupStore) ListWithFilters(ctx context.Context, params pagination.Pagi
 		groupsQuery = groupsQuery.Order(order)
 	}
 
-	groups, err := groupsQuery.All(ctx)
+	groups, err := loadGroupPage(ctx, groupsQuery, fields)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -468,7 +542,7 @@ func (r *GroupStore) ListWithFilters(ctx context.Context, params pagination.Pagi
 	return outGroups, pagination.ResultFromTotal(int64(total), params), nil
 }
 
-func (r *GroupStore) listWithProviderCountSort(ctx context.Context, q *dbent.GroupQuery, params pagination.PaginationParams, total int) ([]routing.Group, *pagination.PaginationResult, error) {
+func (r *GroupStore) listWithProviderCountSort(ctx context.Context, q *dbent.GroupQuery, params pagination.PaginationParams, total int, fields []string) ([]routing.Group, *pagination.PaginationResult, error) {
 	// 先查询全部 ID 和 sort_order，供 provider_count 全量排序。
 	rows, err := q.Clone().
 		Select(group.FieldID, group.FieldSortOrder).
@@ -520,7 +594,7 @@ func (r *GroupStore) listWithProviderCountSort(ctx context.Context, q *dbent.Gro
 		return entries[i].providerCount > entries[j].providerCount
 	})
 
-	// 分页后加载当前页的完整分组。
+	// 分页后读取当前页的分组。
 	page := pagination.Slice(entries, params)
 	if len(page) == 0 {
 		return nil, pagination.ResultFromTotal(int64(total), params), nil
@@ -533,9 +607,8 @@ func (r *GroupStore) listWithProviderCountSort(ctx context.Context, q *dbent.Gro
 		pageIdx[e.id] = i
 	}
 
-	groups, err := r.client.Group.Query().
-		Where(group.IDIn(pageIDs...)).
-		All(ctx)
+	pageQuery := clientFromContext(ctx, r.client).Group.Query().Where(group.IDIn(pageIDs...))
+	groups, err := loadGroupPage(ctx, pageQuery, fields)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -553,6 +626,14 @@ func (r *GroupStore) listWithProviderCountSort(ctx context.Context, q *dbent.Gro
 	}
 
 	return outGroups, pagination.ResultFromTotal(int64(total), params), nil
+}
+
+// loadGroupPage 应用展示所需的列。调用方未指定列时查询完整分组。
+func loadGroupPage(ctx context.Context, query *dbent.GroupQuery, fields []string) ([]*dbent.Group, error) {
+	if len(fields) > 0 {
+		return query.Unique(false).Select(fields...).All(ctx)
+	}
+	return query.All(ctx)
 }
 
 func groupListOrder(params pagination.PaginationParams) []func(*entsql.Selector) {

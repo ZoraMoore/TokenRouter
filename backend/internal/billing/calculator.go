@@ -41,9 +41,14 @@ type ModelDisplayPricing = purepricing.ModelDisplayPricing
 // audioPriceConfig 保留旧用量/定价类型入口。
 type audioPriceConfig = purepricing.AudioPriceConfig
 
-// PriceCatalog 暴露目录读取及既有维护操作，不向核心暴露文件或网络客户端。
-type PriceCatalog interface {
+// CatalogPriceReader 按完整型号读取目录价格。
+type CatalogPriceReader interface {
 	GetModelPricing(string) *purepricing.CatalogModelPricing
+}
+
+// PriceCatalog 提供目录查价和手动更新。
+type PriceCatalog interface {
+	CatalogPriceReader
 	ForceUpdate() error
 }
 
@@ -55,7 +60,7 @@ type CalculatorOptions struct {
 
 // Calculator 统一拥有查价及计费编排；价卡算法由 pricing 唯一实现。
 type Calculator struct {
-	catalog PriceCatalog
+	catalog CatalogPriceReader
 	options CalculatorOptions
 }
 
@@ -182,8 +187,8 @@ func (s *Calculator) CalculateCostInternal(model string, tokens UsageTokens, rat
 
 // ForceUpdatePricing 强制更新价格数据。
 func (s *Calculator) ForceUpdatePricing() error {
-	if s.catalog != nil {
-		return s.catalog.ForceUpdate()
+	if catalog, ok := s.catalog.(PriceCatalog); ok {
+		return catalog.ForceUpdate()
 	}
 	return fmt.Errorf("pricing service not initialized")
 }

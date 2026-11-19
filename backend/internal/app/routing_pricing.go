@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 	"log/slog"
-	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TokenFlux/TokenRouter/internal/apikey"
@@ -28,48 +28,48 @@ func providePricingConfigService(repo *routingpostgres.PricingConfigStore, group
 	}})
 }
 
+// providePricingCatalog 将目录版本与后台分页读取绑定。
 func providePricingCatalog(calculator *billing.Calculator, prices *catalogprovider.Service) *routing.PricingCatalog {
-	return &routing.PricingCatalog{Prices: calculator, Update: calculator.ForceUpdatePricing, Snapshot: func() routing.DefaultPricingSnapshot {
-		snapshot := prices.ReadOnlySnapshot()
-		data := snapshot.Snapshot()
-		frozen := calculator.WithPriceCatalog(snapshot)
-		entries := make(map[string]string)
-		modes := make(map[string]string)
-		for model, value := range data.Data {
-			if value == nil {
-				continue
-			}
-			platform := value.Provider
-			switch platform {
-			case "xai":
-				platform = "grok"
-			case "moonshot":
-				platform = "kimi"
-			}
-			if platform == "" {
-				platform = "other"
-			}
-			entries[model] = platform
-			modes[model] = value.Mode
+	var mu sync.Mutex
+	var index *routing.DefaultPricingIndex
+	var generation uint64
+	currentIndex := func() (catalogprovider.DefaultPricingView, *routing.DefaultPricingIndex) {
+		mu.Lock()
+		defer mu.Unlock()
+		// 在索引锁内读取目录，索引按发布代数向前更新。
+		view := prices.DefaultPricingView()
+		if index == nil || generation != view.Generation {
+			index = buildDefaultPricingIndex(view)
+			generation = view.Generation
 		}
-		for _, entry := range prices.AttributesSnapshot().Items {
-			if _, exists := entries[entry.Model]; !exists {
-				entries[entry.Model] = entry.Provider
-			}
+		return view, index
+	}
+	return &routing.PricingCatalog{
+		Prices: calculator,
+		Update: calculator.ForceUpdatePricing,
+		List: func(query routing.DefaultPricingQuery) routing.DefaultPricingPage {
+			view, index := currentIndex()
+			frozen := calculator.WithPriceCatalog(view)
+			result := index.Page(query, frozen.DefaultModelPrice)
+			result.UpdatedAt, result.Version, result.LastError = view.UpdatedAt, view.Version, view.LastError
+			return result
+		},
+	}
+}
+
+// buildDefaultPricingIndex 计算与时刻无关的筛选字段。
+func buildDefaultPricingIndex(view catalogprovider.DefaultPricingView) *routing.DefaultPricingIndex {
+	var models []routing.DefaultPricingModel
+	view.EachModel(func(model, platform, mode string) {
+		if strings.Contains(model, "grok-imagine-video") {
+			mode = "video"
 		}
-		names := make([]string, 0, len(entries))
-		for model := range entries {
-			names = append(names, model)
-		}
-		sort.Strings(names)
-		result := routing.DefaultPricingSnapshot{UpdatedAt: data.LastUpdated, Version: data.LocalHash, LastError: data.LastError}
-		for _, model := range names {
-			mode := modes[model]
-			if strings.Contains(model, "grok-imagine-video") {
-				mode = "video"
-			}
-			result.Prices = append(result.Prices, frozen.DefaultModelPrice(model, entries[model], mode))
-		}
-		return result
-	}}
+		models = append(models, routing.DefaultPricingModel{
+			Model:       model,
+			Platform:    platform,
+			Mode:        mode,
+			BillingMode: billing.DefaultModelBillingMode(model, mode, view.GetModelPricing(model)),
+		})
+	})
+	return routing.NewDefaultPricingIndex(models)
 }

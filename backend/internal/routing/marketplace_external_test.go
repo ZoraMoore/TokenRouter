@@ -12,9 +12,11 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/billing"
 	billingpricing "github.com/TokenFlux/TokenRouter/internal/billing/pricing"
 	billingtestkit "github.com/TokenFlux/TokenRouter/internal/billing/testkit"
+	gatewayprovider "github.com/TokenFlux/TokenRouter/internal/gateway/provider"
 	"github.com/TokenFlux/TokenRouter/internal/gateway/provider/modelidentity"
 	"github.com/TokenFlux/TokenRouter/internal/modelcatalog"
 	"github.com/TokenFlux/TokenRouter/internal/modelcatalog/provider"
+	providerrecord "github.com/TokenFlux/TokenRouter/internal/provider"
 	"github.com/TokenFlux/TokenRouter/internal/routing"
 	"github.com/TokenFlux/TokenRouter/internal/routing/capability"
 	routingtestkit "github.com/TokenFlux/TokenRouter/internal/routing/testkit"
@@ -123,6 +125,55 @@ func TestMarketplaceBatchAttributesAndOptionalCapacity(t *testing.T) {
 				require.Equal(t, modalities, result[1].Models[0].InputModalities)
 			}
 		}
+	}
+}
+
+// TestMarketplaceUsesLoadedGroupPolicy 验证公开列表复用分组配置并保留报价和模型限制。
+func TestMarketplaceUsesLoadedGroupPolicy(t *testing.T) {
+	for _, prefetchFails := range []bool{false, true} {
+		group := routing.Group{
+			ID: 1, ActiveProviderCount: 1, RateMultiplier: 2,
+			AllowedProtocols: []capability.ProtocolID{capability.ProtocolOpenAIResponses},
+			ModelsListConfig: routing.GroupModelsListConfig{Models: []string{"stale-disabled-entry"}},
+			RoutingPolicy: routing.GroupRoutingPolicy{
+				Enabled: true, RestrictModels: true, RestrictionModelSource: routing.BillingModelSourceRequested,
+				AllowedModels: []string{"alias"}, ModelMapping: map[string]string{"alias": "gpt-5.6-sol"},
+			},
+		}
+		policyReads := 0
+		resolver := routing.RequestableResolver{GroupPolicies: &countedCataloguePolicies{
+			PricingConfigService: routing.NewPricingConfigService(nil, nil, routing.PricingConfigOptions{
+				ReadGroup: func(context.Context, int64) (*routing.Group, error) {
+					policyReads++
+					return &group, nil
+				},
+			}),
+		}}
+		groups := &marketplaceGroupRepoStub{groups: []routing.Group{
+			group, {ID: 2, IsExclusive: true, ActiveProviderCount: 1},
+		}}
+		providers := gatewayprovider.CatalogueProviders([]providerrecord.Record{{
+			ID: 1, Platform: "openai", Type: "apikey", Credentials: map[string]any{},
+		}})
+		providers[0].GroupIDs = []int64{1, 2}
+		catalogue := &routing.RequestableCatalogue{
+			Resolver: resolver,
+			Read: func(_ context.Context, groupID *int64) ([]routing.CatalogueProvider, error) {
+				if groupID == nil && prefetchFails {
+					return nil, errors.New("prefetch failed")
+				}
+				return providers, nil
+			},
+		}
+		prices := &marketplaceLoadingPrices{}
+		svc := routing.NewMarketplace(groups, nil, catalogue, resolver, prices, nil, nil, routing.MarketplaceOptions{})
+		result, err := svc.ListPublic(context.Background(), routing.MarketplaceListOptions{})
+		require.NoError(t, err)
+		require.Len(t, result, 1)
+		require.Len(t, result[0].Models, 1)
+		require.Equal(t, "alias", result[0].Models[0].ID)
+		require.Equal(t, "gpt-5.6-sol", prices.requests[0].Model)
+		require.Zero(t, policyReads)
 	}
 }
 
@@ -802,8 +853,8 @@ func (marketplaceLoadingModels) Prefetch(context.Context) ([]routing.CataloguePr
 	return nil, false, nil
 }
 
-func (marketplaceLoadingModels) ResolveRequestableModels(_ context.Context, id *int64, _ string) routing.RequestableModelsResult {
-	if *id > 2 {
+func (marketplaceLoadingModels) ResolveMarketplaceGroup(_ context.Context, group *routing.Group) routing.RequestableModelsResult {
+	if group.ID > 2 {
 		return routing.RequestableModelsResult{}
 	}
 	return routing.RequestableModelsResult{Models: []routing.RequestableModel{{ID: "alias", PricingModel: "priced", UpstreamModels: []string{"upstream"}, Protocols: marketplaceLoadingProtocols, NativeProtocols: marketplaceLoadingProtocols[:1]}}}
@@ -863,7 +914,7 @@ func marketplaceWithConfig(calculator *billing.Calculator, groupID int64, settin
 	return newMarketplaceFixture(nil, nil, calculator, NewModelPricingResolver(configs, calculator))
 }
 
-func (s *marketplaceGroupRepoStub) ListActive(context.Context) ([]routing.Group, error) {
+func (s *marketplaceGroupRepoStub) ListMarketplaceGroups(context.Context) ([]routing.Group, error) {
 	return s.groups, nil
 }
 

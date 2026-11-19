@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,6 +191,62 @@ func TestGroupHandlerEndpoints(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
+// TestGroupReadViewsKeepFullDetail 检查选项和表格响应大小，并核对详情保留模型顺序。
+func TestGroupReadViewsKeepFullDetail(t *testing.T) {
+	router, svc := setupGroupAdminContractRouter()
+	for i := 0; i < 13529; i++ {
+		svc.groups[0].ModelsListConfig.Models = append(svc.groups[0].ModelsListConfig.Models, fmt.Sprintf("test-model-%05d", i))
+	}
+	call := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups"+path, nil))
+		return recorder
+	}
+
+	full := call("")
+	require.Equal(t, http.StatusOK, full.Code)
+	require.Contains(t, full.Body.String(), `"models_list_config"`)
+	require.Contains(t, full.Body.String(), `"total":1`)
+
+	table := call("?view=table")
+	require.Equal(t, http.StatusOK, table.Code)
+	require.Contains(t, table.Body.String(), `"total":1`)
+	require.NotContains(t, table.Body.String(), `"models_list_config"`)
+	require.Less(t, table.Body.Len(), 50*1024)
+
+	options := call("/options")
+	require.Equal(t, http.StatusOK, options.Code)
+	require.Contains(t, options.Body.String(), `"id":2`)
+	require.NotContains(t, options.Body.String(), `"models_list_config"`)
+	require.Less(t, options.Body.Len(), 10*1024)
+
+	svc.groups = append(svc.groups, routing.Group{ID: 3, Name: "inactive group", Status: "inactive"})
+	require.NotContains(t, call("/options").Body.String(), `"id":3`)
+	require.Contains(t, call("/options?include_inactive=true").Body.String(), `"id":3`)
+
+	detail := call("/2")
+	require.Equal(t, http.StatusOK, detail.Code)
+	expectedOrder, err := json.Marshal(svc.groups[0].ModelsListConfig.Models)
+	require.NoError(t, err)
+	require.True(t, strings.Contains(detail.Body.String(), string(expectedOrder)))
+
+	for i := 0; i < 11; i++ {
+		svc.groups = append(svc.groups, routing.Group{
+			ID:     int64(i + 4),
+			Name:   fmt.Sprintf("group-%02d", i),
+			Status: billing.StatusActive,
+		})
+	}
+	allOptions := call("/options?include_inactive=true")
+	tablePage := call("?view=table")
+	require.Contains(t, tablePage.Body.String(), `"total":13`)
+	require.Less(t, allOptions.Body.Len(), 10*1024)
+	require.Less(t, tablePage.Body.Len(), 50*1024)
+	t.Logf("13 个夹具分组选项 %d 字节，表格 %d 字节，含模型清单的详情 %d 字节",
+		allOptions.Body.Len(), tablePage.Body.Len(), detail.Body.Len())
+}
+
 // TestGroupRequestsDecodeOpenAIFast 检查管理请求能区分免费 Fast 的 true、false 和省略状态。
 func TestGroupRequestsDecodeOpenAIFast(t *testing.T) {
 	var createReq CreateGroupRequest
@@ -316,6 +374,24 @@ func (s *groupAdminFixture) ListGroups(ctx context.Context, page, pageSize int, 
 	return s.groups, int64(len(s.groups)), nil
 }
 
+func (s *groupAdminFixture) ListGroupTableRows(_ context.Context, _, _ int, _ string, _ string, _ *bool, _, _ string) ([]routing.AdminGroupTableRow, int64, error) {
+	rows := make([]routing.AdminGroupTableRow, 0, len(s.groups))
+	for _, g := range s.groups {
+		rows = append(rows, routing.AdminGroupTableRow{ID: g.ID, Name: g.Name, Status: g.Status})
+	}
+	return rows, int64(len(rows)), nil
+}
+
+func (s *groupAdminFixture) GetGroupOptions(_ context.Context, includeInactive bool) ([]routing.AdminGroupOption, error) {
+	options := make([]routing.AdminGroupOption, 0, len(s.groups))
+	for _, g := range s.groups {
+		if includeInactive || g.Status == billing.StatusActive {
+			options = append(options, routing.AdminGroupOption{ID: g.ID, Name: g.Name, Status: g.Status})
+		}
+	}
+	return options, nil
+}
+
 func (s *groupAdminFixture) GetAllGroups(ctx context.Context) ([]routing.Group, error) {
 	return s.groups, nil
 }
@@ -330,6 +406,11 @@ func (s *groupAdminFixture) GetAllGroupsIncludingInactive(ctx context.Context) (
 
 func (s *groupAdminFixture) GetGroup(ctx context.Context, id int64) (*routing.Group, error) {
 	s.getGroupCalls++
+	for i := range s.groups {
+		if s.groups[i].ID == id {
+			return &s.groups[i], nil
+		}
+	}
 	group := routing.Group{ID: id, Name: "group", Status: billing.StatusActive}
 	return &group, nil
 }

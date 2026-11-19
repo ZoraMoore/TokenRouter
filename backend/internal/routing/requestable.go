@@ -70,7 +70,15 @@ type requestableQuery struct {
 
 // ResolveWithProviders 校验配置中的具体型号，提供商可由多分组查询预取。
 func (s *RequestableResolver) ResolveWithProviders(ctx context.Context, groupID *int64, platform string, baseModels []string, providers []CatalogueProvider) RequestableModelsResult {
-	query := s.prepare(ctx, groupID, platform, baseModels, providers)
+	return s.prepare(ctx, groupID, nil, platform, baseModels, providers).resolveAll(ctx)
+}
+
+// resolveWithGroup 使用当前分组记录的策略和协议。
+func (s *RequestableResolver) resolveWithGroup(ctx context.Context, group *Group, providers []CatalogueProvider) RequestableModelsResult {
+	return s.prepare(ctx, &group.ID, group, "", nil, providers).resolveAll(ctx)
+}
+
+func (query requestableQuery) resolveAll(ctx context.Context) RequestableModelsResult {
 	result := query.result
 	for _, requestedModel := range query.candidates {
 		if ctx.Err() != nil {
@@ -85,7 +93,7 @@ func (s *RequestableResolver) ResolveWithProviders(ctx context.Context, groupID 
 
 // ResolveSelectedWithProviders 校验指定的有限型号集合，供单型号查询及其 Key 别名使用。
 func (s *RequestableResolver) ResolveSelectedWithProviders(ctx context.Context, groupID *int64, platform string, selected []string, providers []CatalogueProvider) RequestableModelsResult {
-	query := s.prepare(ctx, groupID, platform, nil, providers)
+	query := s.prepare(ctx, groupID, nil, platform, nil, providers)
 	result := query.result
 	seen := make(map[string]bool, len(selected))
 	for _, model := range selected {
@@ -103,7 +111,7 @@ func (s *RequestableResolver) ResolveSelectedWithProviders(ctx context.Context, 
 	return result
 }
 
-func (s *RequestableResolver) prepare(ctx context.Context, groupID *int64, platform string, baseModels []string, providers []CatalogueProvider) requestableQuery {
+func (s *RequestableResolver) prepare(ctx context.Context, groupID *int64, group *Group, platform string, baseModels []string, providers []CatalogueProvider) requestableQuery {
 	providers = filterRequestableModelProviders(providers, platform)
 	query := requestableQuery{providers: providers, billingSource: BillingModelSourceRequested}
 	if len(providers) == 0 {
@@ -111,16 +119,21 @@ func (s *RequestableResolver) prepare(ctx context.Context, groupID *int64, platf
 	}
 	currentModels := ConfiguredRequestModelsFromProviders(providers, platform)
 	query.result.HadExplicitProviderModels = len(baseModels) > 0 || len(currentModels) > 0
+	if group != nil {
+		query.policy = group.ModelPolicyView()
+	}
 	if groupID != nil && s.GroupPolicies != nil {
-		policy, err := s.GroupPolicies.GetGroupPolicy(ctx, *groupID)
-		if err != nil {
-			if s.Warn != nil {
-				s.Warn("failed to load group policy for requestable model resolution", "group_id", *groupID, "platform", platform, "error", err)
+		if group == nil {
+			policy, err := s.GroupPolicies.GetGroupPolicy(ctx, *groupID)
+			if err != nil {
+				if s.Warn != nil {
+					s.Warn("failed to load group policy for requestable model resolution", "group_id", *groupID, "platform", platform, "error", err)
+				}
+				query.result.Restricted = true
+				return query
 			}
-			query.result.Restricted = true
-			return query
+			query.policy = policy
 		}
-		query.policy = policy
 		query.billingSource = BillingModelSourceGroupMapped
 		if config, err := s.GroupPolicies.GetPricingConfigForGroup(ctx, *groupID); err == nil && config != nil && config.BillingModelSource != "" {
 			query.billingSource = config.BillingModelSource
