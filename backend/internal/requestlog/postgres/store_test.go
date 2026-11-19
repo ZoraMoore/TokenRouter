@@ -14,6 +14,25 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/requestlog"
 )
 
+// TestSaveBatchUsesOneStatement 批量写入跨节点时只执行一条数据库语句。
+func TestSaveBatchUsesOneStatement(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	now := time.Now().UTC()
+	records := make([]telemetry.RequestRecord, 256)
+	for i := range records {
+		records[i] = telemetry.RequestRecord{
+			RequestID: fmt.Sprintf("req-%d", i), StartedAt: now, UpdatedAt: now,
+		}
+	}
+	mock.ExpectExec("INSERT INTO request_records.*jsonb_to_recordset").
+		WithArgs(sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, int64(len(records))))
+
+	require.NoError(t, NewStore(db).Save(t.Context(), records))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 // TestSaveClassifiesInvalidRecords 数据错误可丢弃，连接故障和数据库约束错误保留重试。
 func TestSaveClassifiesInvalidRecords(t *testing.T) {
 	for _, test := range []struct {
@@ -31,9 +50,7 @@ func TestSaveClassifiesInvalidRecords(t *testing.T) {
 			require.NoError(t, err)
 			defer func() { _ = db.Close() }()
 			failure := fmt.Errorf("write: %w", &pq.Error{Code: pq.ErrorCode(test.code)})
-			mock.ExpectBegin()
-			mock.ExpectPrepare("INSERT INTO request_records").ExpectExec().WillReturnError(failure)
-			mock.ExpectRollback()
+			mock.ExpectExec("INSERT INTO request_records").WillReturnError(failure)
 			err = NewStore(db).Save(t.Context(), []telemetry.RequestRecord{{RequestID: "id"}})
 			require.ErrorIs(t, err, failure)
 			if test.invalid {
@@ -51,11 +68,30 @@ func TestSaveRejectsUnencodableRecord(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
-	mock.ExpectBegin()
-	mock.ExpectPrepare("INSERT INTO request_records")
-	mock.ExpectRollback()
 	err = NewStore(db).Save(t.Context(), []telemetry.RequestRecord{{RequestID: "id", StartedAt: time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)}})
 	require.ErrorIs(t, err, requestlog.ErrInvalidRecord)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestSaveRepeatedRequestPreservesRevisionOrder 同一批中的旧记录和新记录按顺序应用。
+func TestSaveRepeatedRequestPreservesRevisionOrder(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	now := time.Now().UTC()
+	mock.ExpectBegin()
+	stmt := mock.ExpectPrepare("INSERT INTO request_records")
+	stmt.ExpectExec().WithArgs("id", "", int64(0), int64(0), now, now,
+		sqlmock.AnyArg(), sqlmock.AnyArg(), now.UnixNano()).WillReturnResult(sqlmock.NewResult(0, 1))
+	next := now.Add(time.Second)
+	stmt.ExpectExec().WithArgs("id", "", int64(0), int64(0), now, next,
+		sqlmock.AnyArg(), sqlmock.AnyArg(), next.UnixNano()).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	require.NoError(t, NewStore(db).Save(t.Context(), []telemetry.RequestRecord{
+		{RequestID: "id", StartedAt: now, UpdatedAt: now},
+		{RequestID: "id", StartedAt: now, UpdatedAt: next},
+	}))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

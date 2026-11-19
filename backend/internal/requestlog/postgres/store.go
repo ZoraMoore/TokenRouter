@@ -15,21 +15,11 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/requestlog"
 )
 
-// Store 保存请求快照，较旧的重放无法覆盖已经完成的记录。
-type Store struct{ db *sql.DB }
+const (
+	requestRecordInsert = `INSERT INTO request_records
+ (request_id,parent_request_id,user_id,team_id,started_at,updated_at,aliases,record,revision)`
 
-func NewStore(db *sql.DB) *Store { return &Store{db: db} }
-
-func (s *Store) Save(ctx context.Context, records []telemetry.RequestRecord) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO request_records
- (request_id,parent_request_id,user_id,team_id,started_at,updated_at,aliases,record,revision)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
- ON CONFLICT(request_id) DO UPDATE SET parent_request_id=COALESCE(NULLIF(request_records.parent_request_id,''),EXCLUDED.parent_request_id),
+	requestRecordConflict = ` ON CONFLICT(request_id) DO UPDATE SET parent_request_id=COALESCE(NULLIF(request_records.parent_request_id,''),EXCLUDED.parent_request_id),
  user_id=COALESCE(NULLIF(EXCLUDED.user_id,0),request_records.user_id),team_id=COALESCE(NULLIF(EXCLUDED.team_id,0),request_records.team_id),updated_at=EXCLUDED.updated_at,revision=EXCLUDED.revision,
  aliases=ARRAY(SELECT DISTINCT unnest(request_records.aliases || EXCLUDED.aliases)),
  record=(request_records.record || (EXCLUDED.record - 'started_at' - 'aliases')) || jsonb_build_object(
@@ -37,11 +27,35 @@ func (s *Store) Save(ctx context.Context, records []telemetry.RequestRecord) err
  'parent_request_id', COALESCE(NULLIF(request_records.parent_request_id,''),EXCLUDED.parent_request_id),
  'aliases', (SELECT COALESCE(jsonb_agg(DISTINCT item),'[]'::jsonb) FROM jsonb_array_elements(COALESCE(request_records.record->'aliases','[]'::jsonb) || COALESCE(EXCLUDED.record->'aliases','[]'::jsonb)) item),
  'state', CASE WHEN request_records.record->>'state' IN ('failed','canceled') OR (EXCLUDED.record->>'state'='running' AND request_records.record ? 'finished_at') THEN request_records.record->>'state' ELSE EXCLUDED.record->>'state' END)
- WHERE request_records.revision < EXCLUDED.revision`)
-	if err != nil {
-		return err
+ WHERE request_records.revision < EXCLUDED.revision`
+)
+
+// requestRecordRow 对应 PostgreSQL 批量插入的参数形状。
+type requestRecordRow struct {
+	RequestID       string          `json:"request_id"`
+	ParentRequestID string          `json:"parent_request_id"`
+	UserID          int64           `json:"user_id"`
+	TeamID          int64           `json:"team_id"`
+	StartedAt       time.Time       `json:"started_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+	Aliases         []string        `json:"aliases"`
+	Record          json.RawMessage `json:"record"`
+	Revision        int64           `json:"revision"`
+}
+
+// Store 保存请求快照，较旧的重放无法覆盖已经完成的记录。
+type Store struct{ db *sql.DB }
+
+func NewStore(db *sql.DB) *Store { return &Store{db: db} }
+
+// Save 用一条语句保存不同请求的快照，跨节点写入仅需一次往返。
+func (s *Store) Save(ctx context.Context, records []telemetry.RequestRecord) error {
+	if len(records) == 0 {
+		return nil
 	}
-	defer func() { _ = stmt.Close() }()
+	rows := make([]requestRecordRow, 0, len(records))
+	seen := make(map[string]struct{}, len(records))
+	repeated := false
 	for _, record := range records {
 		body, err := json.Marshal(record)
 		if err != nil {
@@ -53,16 +67,63 @@ func (s *Store) Save(ctx context.Context, records []telemetry.RequestRecord) err
 				aliases = append(aliases, alias.Value)
 			}
 		}
-		if _, err = stmt.ExecContext(ctx, record.RequestID, record.ParentRequestID, record.UserID, record.TeamID,
-			record.StartedAt, record.UpdatedAt, pq.Array(aliases), body, record.UpdatedAt.UnixNano()); err != nil {
-			// SQLSTATE 22 表示字段值无法转换或超出列范围，批写器会逐条定位无效快照。
-			if pgErr, ok := errors.AsType[*pq.Error](err); ok && pgErr.Code.Class() == "22" {
-				return fmt.Errorf("%w: %w", requestlog.ErrInvalidRecord, err)
-			}
-			return err
+		if _, exists := seen[record.RequestID]; exists {
+			repeated = true
+		}
+		seen[record.RequestID] = struct{}{}
+		rows = append(rows, requestRecordRow{
+			RequestID: record.RequestID, ParentRequestID: record.ParentRequestID,
+			UserID: record.UserID, TeamID: record.TeamID, StartedAt: record.StartedAt,
+			UpdatedAt: record.UpdatedAt, Aliases: aliases, Record: body,
+			Revision: record.UpdatedAt.UnixNano(),
+		})
+	}
+	if repeated {
+		return s.saveRevisions(ctx, rows)
+	}
+	payload, err := json.Marshal(rows)
+	if err != nil {
+		return fmt.Errorf("%w: %w", requestlog.ErrInvalidRecord, err)
+	}
+	_, err = s.db.ExecContext(ctx, requestRecordInsert+`
+ SELECT incoming.request_id,incoming.parent_request_id,incoming.user_id,incoming.team_id,
+ incoming.started_at,incoming.updated_at,incoming.aliases,incoming.record,incoming.revision
+ FROM jsonb_to_recordset($1::jsonb) AS incoming(
+ request_id text,parent_request_id text,user_id bigint,team_id bigint,
+ started_at timestamptz,updated_at timestamptz,aliases text[],record jsonb,revision bigint)
+ ORDER BY incoming.request_id`+requestRecordConflict, string(payload))
+	return classifySaveError(err)
+}
+
+// saveRevisions 按调用顺序应用同一请求的多份快照及其别名。
+func (s *Store) saveRevisions(ctx context.Context, rows []requestRecordRow) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	stmt, err := tx.PrepareContext(ctx, requestRecordInsert+`
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`+requestRecordConflict)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = stmt.Close() }()
+	for _, row := range rows {
+		_, err = stmt.ExecContext(ctx, row.RequestID, row.ParentRequestID, row.UserID, row.TeamID,
+			row.StartedAt, row.UpdatedAt, pq.Array(row.Aliases), []byte(row.Record), row.Revision)
+		if err != nil {
+			return classifySaveError(err)
 		}
 	}
 	return tx.Commit()
+}
+
+// classifySaveError 标出需要由队列逐条确认的 PostgreSQL 数据异常。
+func classifySaveError(err error) error {
+	if pgErr, ok := errors.AsType[*pq.Error](err); ok && pgErr.Code.Class() == "22" {
+		return fmt.Errorf("%w: %w", requestlog.ErrInvalidRecord, err)
+	}
+	return err
 }
 
 // Find 对每类来源分别检查归属，外部别名可以对应多条请求。
