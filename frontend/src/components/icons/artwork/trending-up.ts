@@ -1,7 +1,5 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/trending-up.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const SVG_VARIANTS: Variants = {
@@ -62,29 +60,29 @@ const icon: IconDefinition = {
   name: 'trending-up',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h(
-      motion.g,
+  render: (node) =>
+    node(
+      'g',
       {
-        animate: controls,
+        animate: true,
         initial: 'normal',
         variants: SVG_VARIANTS
       },
       () => [
-        h(
-          motion.polyline,
+        node(
+          'polyline',
           {
-            animate: controls,
+            animate: true,
             initial: 'normal',
             points: '22 7 13.5 15.5 8.5 10.5 2 17',
             variants: PATH_VARIANTS
           },
           () => []
         ),
-        h(
-          motion.polyline,
+        node(
+          'polyline',
           {
-            animate: controls,
+            animate: true,
             initial: 'normal',
             points: '16 7 22 7 22 13',
             variants: ARROW_VARIANTS

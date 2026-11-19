@@ -49,11 +49,11 @@ import MotionTransition from '@/components/common/MotionTransition.vue'
 import { onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
-import type { AdminGroup } from '@/types'
+import type { AdminGroupTableRow } from '@/types'
 
 const props = defineProps<{
   show: boolean
-  group: AdminGroup | null
+  group: AdminGroupTableRow | null
   position: { top: number; left: number } | null
   duplicating: boolean
 }>()
@@ -61,7 +61,7 @@ const props = defineProps<{
 type GroupAction = 'duplicate' | 'rate-multipliers' | 'rpm-overrides' | 'delete'
 const emit = defineEmits<{
   (event: 'close'): void
-  (event: GroupAction, group: AdminGroup): void
+  (event: GroupAction, group: AdminGroupTableRow): void
 }>()
 const { t } = useI18n()
 

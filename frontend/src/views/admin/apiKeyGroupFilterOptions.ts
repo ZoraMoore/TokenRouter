@@ -1,4 +1,4 @@
-import type { AdminGroup } from '@/types'
+import type { AdminGroupOption } from '@/types'
 
 export interface ApiKeyGroupFilterOption {
   value: number | null
@@ -32,7 +32,7 @@ const HEADER_DISABLED = -3
  * 分区标题行使用不同的负数哨兵值，Vue 的 v-for :key 因此能区分各标题行。
  */
 export function buildApiKeyGroupFilterOptions(
-  groups: AdminGroup[],
+  groups: AdminGroupOption[],
   labels: ApiKeyGroupFilterLabels
 ): ApiKeyGroupFilterOption[] {
   const exclusive: ApiKeyGroupFilterOption[] = []

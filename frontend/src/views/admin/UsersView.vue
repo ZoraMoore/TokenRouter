@@ -764,7 +764,7 @@ import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
 import { adminAPI } from '@/api/admin'
-import type { AdminUser, AdminGroup, UserAttributeDefinition } from '@/types'
+import type { AdminUser, AdminGroupOption, UserAttributeDefinition } from '@/types'
 import type { BatchUserUsageStats } from '@/api/admin/dashboard'
 import type { Column } from '@/components/common/types'
 import type { SelectOption } from '@/components/common/Select.vue'
@@ -1023,30 +1023,30 @@ const loadInitialSortState = (): { sort_by: string; sort_order: 'asc' | 'desc' }
 const sortState = reactive(loadInitialSortState())
 
 // 分组列和已有“授权分组”筛选器使用的分组数据（仅启用）。
-const allGroups = ref<AdminGroup[]>([])
+const allGroups = ref<AdminGroupOption[]>([])
 const loadAllGroups = async () => {
   if (allGroups.value.length > 0) return
   try {
-    allGroups.value = await adminAPI.groups.getAll()
+    allGroups.value = await adminAPI.groups.getOptions()
   } catch (e) {
     console.error('Failed to load groups:', e)
   }
 }
 
 // API Key 分组筛选器使用的分组数据；包含禁用分组，方便定位 Key 仍绑定在禁用分组上的用户。
-const allGroupsForApiKeyFilter = ref<AdminGroup[]>([])
+const allGroupsForApiKeyFilter = ref<AdminGroupOption[]>([])
 const loadAllGroupsForApiKeyFilter = async () => {
   if (allGroupsForApiKeyFilter.value.length > 0) return
   try {
-    allGroupsForApiKeyFilter.value = await adminAPI.groups.getAllIncludingInactive()
+    allGroupsForApiKeyFilter.value = await adminAPI.groups.getOptions({ includeInactive: true })
   } catch (e) {
     console.error('Failed to load groups for API key filter:', e)
   }
 }
 // 解析用户可访问分组：专属分组优先，其次公开分组。
 const getUserGroups = (user: AdminUser) => {
-  const exclusive: AdminGroup[] = []
-  const publicGroups: AdminGroup[] = []
+  const exclusive: AdminGroupOption[] = []
+  const publicGroups: AdminGroupOption[] = []
   const disabledPublicGroups = new Set(user.disabled_public_groups || [])
   for (const g of allGroups.value) {
     if (g.status !== 'active') continue

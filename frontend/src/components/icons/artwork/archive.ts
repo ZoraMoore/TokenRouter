@@ -1,7 +1,5 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/archive.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const RECT_VARIANTS: Variants = {
@@ -39,12 +37,12 @@ const icon: IconDefinition = {
   name: 'archive',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
-        motion.rect,
+  render: (node) =>
+    node('g', {}, [
+      node(
+        'rect',
         {
-          animate: controls,
+          animate: true,
           height: '5',
           initial: 'normal',
           rx: '1',
@@ -55,20 +53,20 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8',
           variants: PATH_VARIANTS,
           initial: 'normal'
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M10 12h4',
           variants: SECONDARY_PATH_VARIANTS,
           initial: 'normal'

@@ -10,6 +10,9 @@ export interface ModelsListItem {
 
 export interface ModelsListState {
   enabled: boolean
+  modified: boolean
+  selectionModified: boolean
+  hasSavedSelection: boolean
   savedModels: string[]
   candidateModels: string[]
   items: ModelsListItem[]
@@ -19,6 +22,9 @@ export const createModelsListState = (
   config?: Partial<ModelsListConfig> | null,
 ): ModelsListState => ({
   enabled: config?.enabled ?? false,
+  modified: false,
+  selectionModified: false,
+  hasSavedSelection: Boolean(config?.enabled || config?.models?.length),
   savedModels: normalizeModels(config?.models ?? []),
   candidateModels: [],
   items: [],
@@ -33,55 +39,53 @@ export const hydrateModelsListState = (
   return state
 }
 
-export const setModelsListCandidates = (
-  state: ModelsListState,
-  candidates: string[],
-) => {
+// 候选合并保持手选、保存顺序和暂时不可请求的型号。
+export const setModelsListCandidates = (state: ModelsListState, candidates: string[]) => {
   const normalizedCandidates = normalizeModels(candidates)
-  state.candidateModels = normalizedCandidates
-  const currentSelected = new Set(
-    state.items.filter(item => item.selected).map(item => item.id),
-  )
-  const currentKnown = new Set(state.items.map(item => item.id))
+  const available = new Set(normalizedCandidates)
+  const previouslySelected = new Map(state.items.map(item => [item.id, item.selected]))
   const savedSelected = new Set(state.savedModels)
-  const hasExistingItems = state.items.length > 0
-  const selectionOrder = normalizeModels([
-    ...state.items.map(item => item.id),
-    ...state.savedModels,
-    ...normalizedCandidates,
-  ])
+  const selectDefaults = state.items.length === 0 && !state.hasSavedSelection
+  state.candidateModels = normalizedCandidates
+  const order = new Set([...previouslySelected.keys(), ...savedSelected, ...available])
 
-  state.items = selectionOrder.map(id => {
-    const selected = hasExistingItems
-      ? currentSelected.has(id)
-      : state.savedModels.length > 0
-        ? savedSelected.has(id)
-        : normalizedCandidates.includes(id)
-
-    return {
-      id,
-      selected: selected && (currentKnown.has(id) || savedSelected.has(id) || state.savedModels.length === 0),
-    }
-  })
+  state.items = Array.from(order, id => ({
+    id,
+    selected: previouslySelected.get(id) ?? (savedSelected.has(id) || (selectDefaults && available.has(id))),
+  }))
 }
 
-export const toggleModelsListItem = (state: ModelsListState, modelID: string) => {
+// 初始化候选可以预选型号。表单只记录用户对开关或清单的操作。
+export const setModelsListEnabled = (state: ModelsListState, enabled: boolean) => {
+  if (state.enabled === enabled) return
+  state.enabled = enabled
+  state.modified = true
+}
+
+export const toggleModelsListItem = (state: ModelsListState, modelID: string, value?: boolean) => {
   const item = state.items.find(item => item.id === modelID)
-  if (item) {
-    item.selected = !item.selected
-  }
+  if (!item) return
+  const selected = value ?? !item.selected
+  if (item.selected === selected) return
+  item.selected = selected
+  state.modified = true
+  state.selectionModified = true
 }
 
 export const selectAllModelsListItems = (state: ModelsListState) => {
   state.items.forEach(item => {
     item.selected = true
   })
+  state.modified = true
+  state.selectionModified = true
 }
 
 export const invertModelsListSelection = (state: ModelsListState) => {
   state.items.forEach(item => {
     item.selected = !item.selected
   })
+  state.modified = true
+  state.selectionModified = true
 }
 
 export const moveModelsListItem = (
@@ -98,8 +102,12 @@ export const moveModelsListItem = (
   ) {
     return
   }
-  const [item] = state.items.splice(fromIndex, 1)
-  state.items.splice(toIndex, 0, item)
+  const items = [...state.items]
+  const [item] = items.splice(fromIndex, 1)
+  items.splice(toIndex, 0, item)
+  state.items = items
+  state.modified = true
+  state.selectionModified = true
 }
 
 export const buildModelsListConfig = (state: ModelsListState): ModelsListConfig => ({
@@ -108,6 +116,18 @@ export const buildModelsListConfig = (state: ModelsListState): ModelsListConfig 
     ? state.items.filter(item => item.selected).map(item => item.id)
     : [...state.savedModels],
 })
+
+// 新建关闭时发送空清单。编辑时省略未触碰的配置，存储中已有的顺序由服务端保管。
+export const buildCreateModelsListConfig = (state: ModelsListState): ModelsListConfig =>
+  state.enabled ? buildModelsListConfig(state) : { enabled: false, models: [] }
+
+export const buildUpdateModelsListConfig = (state: ModelsListState): ModelsListConfig | undefined => {
+  if (!state.modified) return undefined
+  if (!state.enabled && !state.selectionModified) {
+    return { enabled: false, models: [...state.savedModels] }
+  }
+  return buildModelsListConfig(state)
+}
 
 export const getAvailabilityProbeCandidateModels = (state: ModelsListState): string[] => {
   // 后端候选已应用分组映射和白名单，历史自定义列表不能重新加入不可请求的模型。

@@ -7,7 +7,7 @@ import RuleListEditor from '@/components/common/RuleListEditor.vue'
 import type { ModelAttributes } from '@/types/modelAttributes'
 
 vi.mock('@/api/admin/modelAttributes', () => ({ modelAttributesAPI: { list: vi.fn(), defaults: vi.fn(), getModelDefaultAttributes: vi.fn(), update: vi.fn(), save: vi.fn(), remove: vi.fn() } }))
-vi.mock('@/api/admin', () => ({ adminAPI: { groups: { getAll: vi.fn().mockResolvedValue([{ id: 7, name: 'Group' }]) } } }))
+vi.mock('@/api/admin', () => ({ adminAPI: { groups: { getOptions: vi.fn().mockResolvedValue([{ id: 7, name: 'Group' }]) } } }))
 vi.mock('vue-i18n', async () => ({ ...(await vi.importActual<typeof import('vue-i18n')>('vue-i18n')), useI18n: () => ({ t: (key: string) => key }) }))
 
 const stubs = {

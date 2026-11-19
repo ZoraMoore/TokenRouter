@@ -1,26 +1,24 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/audio-lines.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition } from '../types'
 
 const icon: IconDefinition = {
   name: 'audio-lines',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
+  render: (node) =>
+    node('g', {}, [
+      node(
         'path',
         {
           d: 'M2 10v3'
         },
         []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M6 6v11',
           variants: {
             normal: { d: 'M6 6v11' },
@@ -36,10 +34,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M10 3v18',
           variants: {
             normal: { d: 'M10 3v18' },
@@ -55,10 +53,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M14 8v7',
           variants: {
             normal: { d: 'M14 8v7' },
@@ -74,10 +72,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M18 5v13',
           variants: {
             normal: { d: 'M18 5v13' },
@@ -93,7 +91,7 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
+      node(
         'path',
         {
           d: 'M22 10v3'

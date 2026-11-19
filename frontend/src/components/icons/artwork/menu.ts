@@ -1,7 +1,5 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/menu.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const LINE_VARIANTS: Variants = {
@@ -26,12 +24,12 @@ const icon: IconDefinition = {
   name: 'menu',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
-        motion.line,
+  render: (node) =>
+    node('g', {}, [
+      node(
+        'line',
         {
-          animate: controls,
+          animate: true,
           custom: 1,
           initial: 'normal',
           variants: LINE_VARIANTS,
@@ -42,10 +40,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.line,
+      node(
+        'line',
         {
-          animate: controls,
+          animate: true,
           custom: 2,
           initial: 'normal',
           variants: LINE_VARIANTS,
@@ -56,10 +54,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.line,
+      node(
+        'line',
         {
-          animate: controls,
+          animate: true,
           custom: 3,
           initial: 'normal',
           variants: LINE_VARIANTS,

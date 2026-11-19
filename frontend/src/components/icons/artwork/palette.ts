@@ -1,7 +1,5 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/palette.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const DASH_LENGTH = 70
@@ -59,12 +57,12 @@ const icon: IconDefinition = {
   name: 'palette',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
-        motion.path,
+  render: (node) =>
+    node('g', {}, [
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M12 2a1 1 0 0 0 0 20l.25 0a1.75 1.75 0 0 0 1.4-2.8l-.3-.4a1.75 1.75 0 0 1 1.4-2.8h2.25a5 5 0 0 0 5-5 10 9 0 0 0-10-9z',
           initial: 'normal',
           strokeDasharray: DASH_LENGTH,
@@ -72,17 +70,17 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.g,
+      node(
+        'g',
         {
-          animate: controls,
+          animate: true,
           initial: 'normal',
           variants: DOTS_GROUP_VARIANTS
         },
         () => [
           DOTS.map((dot) =>
-            h(
-              motion.circle,
+            node(
+              'circle',
               {
                 cx: dot.cx,
                 cy: dot.cy,

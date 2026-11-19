@@ -132,7 +132,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getAll, getModelsListCandidates } from '@/api/admin/groups'
+import { getOptions, getModelsListCandidates } from '@/api/admin/groups'
 import { getById } from '@/api/admin/providers'
 import { createPlan, listProviders, listQuestionDefaults, updatePlan, type PelicanPlan, type PelicanPlanInput, type PelicanPlanTarget, type PelicanQuestionDefault } from '@/api/admin/pelicanTests'
 import { isCustomQuestion, isPelicanArtwork, pelicanEfforts, pelicanPlanKinds, type PelicanPlanKind } from '@/api/pelicanTests'
@@ -234,7 +234,7 @@ function selectFrequency(value: unknown) {
 }
 
 const { data: groups, loading: groupsLoading, failed: groupsFailed, refresh: refreshGroups } =
-  usePelicanResource(() => props.show && !props.plan ? true : null, () => getAll())
+  usePelicanResource(() => props.show && !props.plan ? true : null, () => getOptions())
 const { data: targetProvider, loading: targetLoading, failed: targetFailed, refresh: refreshTarget } =
   usePelicanResource(() => props.show ? props.target?.provider_id ?? null : null, getById)
 const groupOptions = computed(() => {

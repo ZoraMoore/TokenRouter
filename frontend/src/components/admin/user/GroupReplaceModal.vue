@@ -83,7 +83,7 @@ import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
-import type { AdminUser, AdminGroup } from '@/types'
+import type { AdminUser, AdminGroupOption } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 
@@ -91,7 +91,7 @@ interface Props {
   show: boolean
   user: AdminUser | null
   oldGroup: { id: number; name: string } | null
-  allGroups: AdminGroup[]
+  allGroups: AdminGroupOption[]
 }
 
 const props = defineProps<Props>()

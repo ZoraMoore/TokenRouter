@@ -44,7 +44,7 @@ vi.mock('@/stores', () => ({
 
 vi.mock('@/api', () => ({
   adminAPI: {
-    groups: { getAll: mocks.getGroups },
+    groups: { getOptions: mocks.getGroups },
   },
 }))
 

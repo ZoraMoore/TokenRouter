@@ -14,7 +14,7 @@ vi.mock('@/api/admin', () => ({
       getUserApiKeys: apiMocks.getUserApiKeys
     },
     groups: {
-      getAll: apiMocks.getAllGroups
+      getOptions: apiMocks.getAllGroups
     },
     apiKeys: {
       updateApiKeyGroup: apiMocks.updateApiKeyGroup

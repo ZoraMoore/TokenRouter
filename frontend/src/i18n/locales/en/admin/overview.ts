@@ -974,6 +974,7 @@ affiliates: {
         title: 'Custom {endpoint} Model List',
         hint: 'Only changes the {endpoint} response. Whitelist model calls and provider routing are unchanged.',
         loading: 'Loading model list...',
+        loadFailed: 'Could not load candidate models.',
         empty: 'No displayable models'
       },
       availabilityProbe: {

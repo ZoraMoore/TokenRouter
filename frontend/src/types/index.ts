@@ -693,6 +693,36 @@ export interface GroupRoutingPolicy {
   features_config: Record<string, unknown>
 }
 
+/** 选择器和排序弹窗读取的分组信息。 */
+export interface AdminGroupOption {
+  id: number
+  name: string
+  description: string | null
+  status: Group['status']
+  is_exclusive: boolean
+  display_brand?: string
+  rate_multiplier: number
+  sort_order: number
+  claude_code_only: boolean
+  fallback_group_id_on_invalid_request: number | null
+  provider_count: number
+}
+
+/** 管理表格的分组属性和提供商计数。 */
+export interface AdminGroupTableRow {
+  id: number
+  name: string
+  status: Group['status']
+  is_exclusive: boolean
+  display_brand?: string
+  rate_multiplier: number
+  session_isolation_enabled: boolean
+  rpm_limit: number
+  provider_count: number
+  active_provider_count: number
+  rate_limited_provider_count: number
+}
+
 export interface AdminGroup extends Group {
   localization?: LocalizedUpdate<{ display_name: string; description: string }>
   routing_policy: GroupRoutingPolicy

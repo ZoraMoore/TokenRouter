@@ -63,3 +63,15 @@ describe("groupsModelsListCandidates", () => {
     expect(tracker.isCurrent(editID, editRequest)).toBe(true);
   });
 });
+
+it("discards a dialog response after closing and reopening the same group", () => {
+  const tracker = createModelsListCandidatesTracker();
+  const request = { mode: "edit" as const, groupID: 10 };
+
+  const first = tracker.next(request);
+  tracker.invalidate("edit");
+  expect(tracker.isCurrent(first, request)).toBe(false);
+  const second = tracker.next(request);
+  expect(tracker.isCurrent(first, request)).toBe(false);
+  expect(tracker.isCurrent(second, request)).toBe(true);
+});

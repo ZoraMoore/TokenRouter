@@ -1,7 +1,8 @@
 <script lang="ts">
-import { defineComponent, h, normalizeClass, onMounted, onUpdated, ref, type PropType } from 'vue'
+import { defineComponent, h, normalizeClass, ref, shallowRef, type PropType } from 'vue'
+import AnimatedIconArtwork from './AnimatedIconArtwork'
 import { icons, type IconName } from './registry'
-import type { IconControls, IconDefinition } from './types'
+import { artworkFocusAttrs, renderStaticIconNode } from './renderIconNode'
 import { useIconAnimation } from './useIconAnimation'
 
 type IconSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
@@ -13,13 +14,6 @@ const SIZE_CLASSES: Record<IconSize, [string, string]> = {
   lg: ['h-6', 'w-6'],
   xl: ['h-8', 'w-8']
 }
-
-// 图形切换时重新挂载内部节点，根 SVG 继续保留焦点、尺寸和外层状态样式。
-const Artwork = (props: {
-  definition: IconDefinition
-  controls: IconControls
-  strokeWidth: number
-}) => props.definition.render(props.controls, props.strokeWidth)
 
 export default defineComponent({
   name: 'Icon',
@@ -33,27 +27,41 @@ export default defineComponent({
   },
   setup(props, { attrs, slots }) {
     const svgRef = ref<SVGSVGElement | null>(null)
-    const definition = () => icons[props.name]
-    const controls = useIconAnimation(
+    const animatedArtwork = shallowRef<InstanceType<typeof AnimatedIconArtwork> | null>(null)
+    const { phase, finishReset } = useIconAnimation(
       svgRef,
-      definition,
       () => props.animateOnHover,
-      () => props.animationActive
+      () => props.animationActive,
+      () => props.name,
+      () => animatedArtwork.value !== null
     )
 
-    // motion-v 给内部 SVG 节点注册 focus 事件后，浏览器可能将其加入 Tab 顺序。
-    // 挂载及换图后显式排除这些装饰节点，焦点和键盘操作继续由外层控件承担。
-    const excludeArtworkFromFocus = () => {
-      const artwork = svgRef.value?.querySelectorAll(
-        'g, path, circle, rect, line, polyline, polygon, ellipse'
-      )
-      artwork?.forEach((node) => {
-        node.setAttribute('tabindex', '-1')
-        node.setAttribute('focusable', 'false')
+    const drawArtwork = (name: IconName) => {
+      const definition = icons[name]
+      if ('scale' in definition) {
+        return h(
+          'g',
+          {
+            key: name,
+            ...artworkFocusAttrs,
+            class: phase.value === 'play' ? 'icon-scale-feedback' : undefined
+          },
+          definition.render(renderStaticIconNode, props.strokeWidth)
+        )
+      }
+      // 根 SVG 继续接收点击与焦点，播放时替换内部图形。
+      if (phase.value === 'idle') {
+        return definition.render(renderStaticIconNode, props.strokeWidth)
+      }
+      return h(AnimatedIconArtwork, {
+        key: name,
+        ref: animatedArtwork,
+        definition,
+        strokeWidth: props.strokeWidth,
+        phase: () => (props.name === name ? phase.value : 'idle'),
+        onReset: finishReset
       })
     }
-    onMounted(excludeArtworkFromFocus)
-    onUpdated(excludeArtworkFromFocus)
 
     return () => {
       const className = normalizeClass(attrs.class)
@@ -76,7 +84,7 @@ export default defineComponent({
           tabindex: -1,
           ...attrs,
           ref: svgRef,
-          'data-animated-icon': definition().name,
+          'data-animated-icon': icons[props.name].name,
           // 调用方传入尺寸时使用该尺寸，省略 size 档位的尺寸类。
           class: [
             'shrink-0 select-none',
@@ -89,17 +97,28 @@ export default defineComponent({
             className
           ]
         },
-        [
-          h(Artwork, {
-            key: props.name,
-            definition: definition(),
-            controls,
-            strokeWidth: props.strokeWidth
-          }),
-          slots.default?.()
-        ]
+        [drawArtwork(props.name), slots.default?.()]
       )
     }
   }
 })
 </script>
+
+<style>
+@keyframes icon-scale-feedback {
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.icon-scale-feedback {
+  transform-origin: 12px 12px;
+  animation: icon-scale-feedback 400ms cubic-bezier(0.42, 0, 0.58, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-scale-feedback {
+    animation: none;
+  }
+}
+</style>

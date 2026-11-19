@@ -138,7 +138,7 @@ import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import { formatDateTime } from '@/utils/format'
 import { getFloatingPanelPosition } from '@/utils/floatingPanel'
-import type { AdminUser, AdminGroup, ApiKey } from '@/types'
+import type { AdminUser, AdminGroupOption, ApiKey } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
@@ -150,7 +150,7 @@ const { t } = useI18n()
 const appStore = useAppStore()
 
 const apiKeys = ref<ApiKey[]>([])
-const allGroups = ref<AdminGroup[]>([])
+const allGroups = ref<AdminGroupOption[]>([])
 const loading = ref(false)
 const updatingKeyIds = ref(new Set<number>())
 const groupSelectorKeyId = ref<number | null>(null)
@@ -196,7 +196,7 @@ const load = async () => {
 
 const loadGroups = async () => {
   try {
-    const groups = await adminAPI.groups.getAll()
+    const groups = await adminAPI.groups.getOptions()
     allGroups.value = groups
   } catch (error) {
     console.error('Failed to load groups:', error)

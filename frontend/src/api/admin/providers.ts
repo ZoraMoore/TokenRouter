@@ -521,11 +521,11 @@ export interface BatchProviderUsageResponse {
   errors: Record<string, string>
 }
 
-export async function getBatchUsage(providerIds: number[], force?: boolean): Promise<BatchProviderUsageResponse> {
+export async function getBatchUsage(providerIds: number[], force?: boolean, signal?: AbortSignal): Promise<BatchProviderUsageResponse> {
   const { data } = await apiClient.post<BatchProviderUsageResponse>('/admin/providers/usage/batch', {
     provider_ids: providerIds,
     force: force === true
-  })
+  }, { signal })
   return data
 }
 

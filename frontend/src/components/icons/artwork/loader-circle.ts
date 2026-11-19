@@ -1,7 +1,6 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/loader-circle.tsx
-import { h } from 'vue'
-import { motion, type Transition } from 'motion-v'
+import type { Transition } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const G_VARIANTS: Variants = {
@@ -26,12 +25,12 @@ const icon: IconDefinition = {
   name: 'loader-circle',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
-        motion.path,
+  render: (node) =>
+    node('g', {}, [
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M21 12a9 9 0 1 1-6.219-8.56',
           style: { transformOrigin: '12px 12px' },
           transition: DEFAULT_TRANSITION,

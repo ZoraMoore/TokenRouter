@@ -14,7 +14,7 @@ import type { AdminGroup } from '@/types'
 
 const { groups, providers, showError } = vi.hoisted(() => ({
   groups: {
-    list: vi.fn(), getAll: vi.fn(), getModelsListCandidates: vi.fn(),
+    listTable: vi.fn(), getOptions: vi.fn(), getById: vi.fn(), getModelsListCandidates: vi.fn(),
     getUsageSummary: vi.fn(), getCapacitySummary: vi.fn(), getLiveCapability: vi.fn(),
     create: vi.fn(), update: vi.fn(),
   },
@@ -50,7 +50,8 @@ function group(): AdminGroup {
 }
 
 async function open(mode: 'create' | 'edit', _providerType: string, overrides: Partial<AdminGroup> = {}) {
-  groups.list.mockResolvedValue({ items: [{ ...group(), ...overrides }], total: 1, pages: 1 })
+  groups.listTable.mockResolvedValue({ items: [group()], total: 1, pages: 1 })
+  groups.getById.mockResolvedValue({ ...group(), ...overrides })
   const wrapper = mount(GroupsView, {
     attachTo: document.body,
     global: { plugins: [createPinia()], stubs: {
@@ -83,7 +84,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
   providers.list.mockResolvedValue({ items: [] })
-  groups.getAll.mockResolvedValue([])
+  groups.getOptions.mockResolvedValue([])
   groups.getModelsListCandidates.mockResolvedValue(['gpt-test'])
   groups.getUsageSummary.mockResolvedValue([])
   groups.getCapacitySummary.mockResolvedValue([])
@@ -385,4 +386,102 @@ it.each(['create', 'edit'] as const)('目录失败时阻止 %s 提交，重试�
     await flushPromises()
     expect(groups[mode === 'create' ? 'create' : 'update']).toHaveBeenCalledTimes(1)
   } finally { request.mockRestore() }
+})
+
+it('普通新建直到提交都不读取候选，发送关闭且没有预设模型的配置', async () => {
+  const wrapper = await open('create', 'mixed')
+  expect(groups.getModelsListCandidates).not.toHaveBeenCalled()
+  await wrapper.get('#create-group-form').trigger('submit')
+  await flushPromises()
+  expect(groups.create.mock.calls[0][0].models_list_config).toEqual({ enabled: false, models: [] })
+})
+
+it('编辑名称时不发送已有的模型清单', async () => {
+  const wrapper = await open('edit', 'mixed', {
+    models_list_config: { enabled: false, models: ['saved-model'] },
+  })
+  await wrapper.get('[data-group-field="name"] input').setValue('Renamed')
+  await wrapper.get('#edit-group-form').trigger('submit')
+  await flushPromises()
+  expect(groups.update.mock.calls[0][1]).not.toHaveProperty('models_list_config')
+})
+
+it('探测和自定义模型清单共享同一份候选请求', async () => {
+  const wrapper = await open('create', 'mixed')
+  expect(groups.getModelsListCandidates).not.toHaveBeenCalled()
+  let resolveCandidates!: (models: string[]) => void
+  groups.getModelsListCandidates.mockReturnValueOnce(new Promise(resolve => {
+    resolveCandidates = resolve
+  }))
+  await tab(wrapper, 'scheduling')
+  await wrapper.get('[data-setting="availability_probe_enabled"]').trigger('click')
+  expect(groups.getModelsListCandidates).toHaveBeenCalledTimes(1)
+  await tab(wrapper, 'models')
+  await wrapper.get('[data-settings-tab="models"] [data-setting="enabled"]').trigger('click')
+  expect(groups.getModelsListCandidates).toHaveBeenCalledTimes(1)
+  resolveCandidates(['gpt-test'])
+  await flushPromises()
+  const probe = wrapper.findAllComponents(Select).find(select => select.attributes('id') === 'create-group-probe-model')
+  expect(probe?.props('options')).toContainEqual({ label: 'gpt-test', value: 'gpt-test' })
+})
+
+it('详情读取失败后可以重试，保存按钮在详情到达前禁用', async () => {
+  groups.getById.mockRejectedValueOnce(new Error('detail unavailable'))
+  const wrapper = await open('edit', 'mixed', { name: 'Name in detail' })
+  expect(wrapper.find('#edit-group-form').exists()).toBe(false)
+  expect(wrapper.get('button[form="edit-group-form"]').attributes()).toHaveProperty('disabled')
+  const retry = wrapper.findAll('button').find(button => button.text() === 'common.retry')!
+  await retry.trigger('click')
+  await flushPromises()
+  expect(groups.getById).toHaveBeenCalledTimes(2)
+  expect((wrapper.get('#edit-group-name').element as HTMLInputElement).value).toBe('Name in detail')
+})
+
+it('关闭弹窗会取消详情请求，而且迟到的详情不会覆盖重新打开的表单', async () => {
+  let resolveStale!: (value: AdminGroup) => void
+  groups.getById.mockReturnValueOnce(new Promise(resolve => { resolveStale = resolve }))
+  const wrapper = await open('edit', 'mixed', { name: 'Current detail' })
+  await wrapper.findAll('button').find(button => button.text() === 'common.cancel')!.trigger('click')
+  expect(groups.getById.mock.calls[0][1].signal.aborted).toBe(true)
+  await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+  await flushPromises()
+  resolveStale({ ...group(), name: 'Stale detail' })
+  await flushPromises()
+  expect((wrapper.get('#edit-group-name').element as HTMLInputElement).value).toBe('Current detail')
+})
+
+it('已关闭表单的晚到候选无法覆盖当前表单', async () => {
+  const wrapper = await open('create', 'mixed')
+  let resolveStale!: (models: string[]) => void
+  groups.getModelsListCandidates.mockReturnValueOnce(new Promise(resolve => { resolveStale = resolve }))
+  await tab(wrapper, 'models')
+  await wrapper.get('[data-settings-tab="models"] [data-setting="enabled"]').trigger('click')
+  await wrapper.findAll('button').find(button => button.text() === 'common.cancel')!.trigger('click')
+  expect(groups.getModelsListCandidates.mock.calls[0][1].aborted).toBe(true)
+  await wrapper.get('[data-tour="groups-create-btn"]').trigger('click')
+  await tab(wrapper, 'models')
+  await wrapper.get('[data-settings-tab="models"] [data-setting="enabled"]').trigger('click')
+  await flushPromises()
+  resolveStale(['model-from-closed-dialog'])
+  await flushPromises()
+  const state = wrapper.getComponent(GroupSettingsForm).props('modelsList')
+  expect(state.candidateModels).toEqual(['gpt-test'])
+})
+
+it('候选加载失败会阻止依赖候选的提交，重试拿到空清单后可以提交', async () => {
+  const wrapper = await open('create', 'mixed')
+  groups.getModelsListCandidates
+    .mockRejectedValueOnce(new Error('candidates unavailable'))
+    .mockResolvedValueOnce([])
+  await tab(wrapper, 'models')
+  await wrapper.get('[data-settings-tab="models"] [data-setting="enabled"]').trigger('click')
+  await flushPromises()
+  await wrapper.get('#create-group-form').trigger('submit')
+  await flushPromises()
+  expect(groups.create).not.toHaveBeenCalled()
+  await wrapper.findAll('button').find(button => button.text() === 'common.retry')!.trigger('click')
+  await flushPromises()
+  await wrapper.get('#create-group-form').trigger('submit')
+  await flushPromises()
+  expect(groups.create.mock.calls[0][0].models_list_config).toEqual({ enabled: true, models: [] })
 })

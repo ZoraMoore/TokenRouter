@@ -1,7 +1,6 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/copy.tsx
-import { h } from 'vue'
-import { motion, type Transition } from 'motion-v'
+import type { Transition } from 'motion-v'
 import type { IconDefinition } from '../types'
 
 const DEFAULT_TRANSITION: Transition = {
@@ -15,12 +14,12 @@ const icon: IconDefinition = {
   name: 'copy',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
-        motion.rect,
+  render: (node) =>
+    node('g', {}, [
+      node(
+        'rect',
         {
-          animate: controls,
+          animate: true,
           height: '14',
           rx: '2',
           ry: '2',
@@ -36,10 +35,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2',
           transition: DEFAULT_TRANSITION,
           variants: {

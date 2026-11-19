@@ -10,7 +10,8 @@ const {
   listGroups,
   duplicateGroup,
   updateGroup,
-  getAll,
+  getOptions,
+  getById,
   getModelsListCandidates,
   getUsageSummary,
   getCapacitySummary,
@@ -21,7 +22,8 @@ const {
   listGroups: vi.fn(),
   duplicateGroup: vi.fn(),
   updateGroup: vi.fn(),
-  getAll: vi.fn(),
+  getOptions: vi.fn(),
+  getById: vi.fn(),
   getModelsListCandidates: vi.fn(),
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
@@ -33,13 +35,14 @@ const {
 vi.mock('@/api/admin', () => ({
   adminAPI: {
     groups: {
-      list: listGroups,
+      listTable: listGroups,
       duplicate: duplicateGroup,
       getModelsListCandidates,
       getUsageSummary,
       getCapacitySummary,
       getLiveCapability,
-      getAll,
+      getOptions,
+      getById,
       create: vi.fn(),
       update: updateGroup,
       delete: vi.fn(),
@@ -173,7 +176,8 @@ describe('GroupsView duplicate action', () => {
       listGroups,
       duplicateGroup,
       updateGroup,
-      getAll,
+      getOptions,
+      getById,
       getModelsListCandidates,
       getUsageSummary,
       getCapacitySummary,
@@ -183,7 +187,8 @@ describe('GroupsView duplicate action', () => {
     ]) {
       fn.mockReset()
     }
-    getAll.mockResolvedValue([])
+    getOptions.mockResolvedValue([])
+    getById.mockResolvedValue(sourceGroup)
 
     listGroups.mockResolvedValue({
       items: [sourceGroup],

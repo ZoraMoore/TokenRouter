@@ -336,7 +336,7 @@
           }"
           :routing-rules="createModelRoutingRules"
           :models-list="createModelsListState"
-          :models-list-loading="createModelsListLoading"
+          :models-list-status="modelsListStatus.create"
           :provider-search="{ keywords: providerSearchKeyword, results: providerSearchResults, open: showProviderDropdown }"
           :get-rule-key="getCreateRuleSearchKey"
           @patch="Object.assign(createForm, $event)"
@@ -348,8 +348,9 @@
           @focus-providers="rule => onProviderSearchFocus(rule)"
           @select-provider="(rule, provider) => selectProvider(rule, provider)"
           @remove-provider="(rule, id) => removeSelectedProvider(rule, id)"
-          @models-enabled="createModelsListState.enabled = $event"
-          @select-model="(id, value) => setModelSelection(createModelsListState, id, value)"
+          @load-models="loadModelsListCandidates('create')"
+          @models-enabled="setModelsListEnabled(createModelsListState, $event)"
+          @select-model="(id, value) => toggleModelsListItem(createModelsListState, id, value)"
           @select-all-models="selectAllModelsListItems(createModelsListState)"
           @invert-models="invertModelsListSelection(createModelsListState)"
           @move-model="(from, to) => moveModelsListItem(createModelsListState, from, to)"
@@ -385,7 +386,7 @@
       </template>
     </BaseDialog>
 
-    <!-- Edit Group Modal -->
+    <!-- 编辑表单从分组详情填充。 -->
     <BaseDialog
       :show="showEditModal"
       :body-scroll="false"
@@ -394,8 +395,15 @@
       width="wide"
       @close="closeEditModal"
     >
+      <ContentSkeleton v-if="editDetailLoading" class="p-4" variant="form" />
+      <div v-else-if="editDetailError" class="space-y-3 p-4">
+        <p role="alert">{{ t("admin.groups.failedToLoad") }}</p>
+        <button type="button" class="btn btn-secondary" @click="retryEditGroup">
+          {{ t("common.retry") }}
+        </button>
+      </div>
       <form
-        v-if="editingGroup"
+        v-else-if="editingGroup"
         id="edit-group-form"
         @submit.prevent="handleUpdateGroup"
         novalidate
@@ -414,10 +422,10 @@
           }"
           :routing-rules="editModelRoutingRules"
           :models-list="editModelsListState"
-          :models-list-loading="editModelsListLoading"
+          :models-list-status="modelsListStatus.edit"
           :provider-search="{ keywords: providerSearchKeyword, results: providerSearchResults, open: showProviderDropdown }"
           :get-rule-key="getEditRuleSearchKey"
-          @patch="Object.assign(editForm, $event)"
+          @patch="patchEditForm"
           @configure-scheduler="openAdvancedSchedulerOverrides('edit')"
           @add-rule="addEditRoutingRule"
           @remove-rule="removeEditRoutingRule"
@@ -426,8 +434,9 @@
           @focus-providers="rule => onProviderSearchFocus(rule, true)"
           @select-provider="(rule, provider) => selectProvider(rule, provider, true)"
           @remove-provider="(rule, id) => removeSelectedProvider(rule, id, true)"
-          @models-enabled="editModelsListState.enabled = $event"
-          @select-model="(id, value) => setModelSelection(editModelsListState, id, value)"
+          @load-models="loadModelsListCandidates('edit')"
+          @models-enabled="setModelsListEnabled(editModelsListState, $event)"
+          @select-model="(id, value) => toggleModelsListItem(editModelsListState, id, value)"
           @select-all-models="selectAllModelsListItems(editModelsListState)"
           @invert-models="invertModelsListSelection(editModelsListState)"
           @move-model="(from, to) => moveModelsListItem(editModelsListState, from, to)"
@@ -446,7 +455,7 @@
           <button
             type="submit"
             form="edit-group-form"
-            :disabled="submitting || !protocolCatalog"
+            :disabled="submitting || !protocolCatalog || !editingGroup"
             class="btn btn-primary"
             data-tour="group-form-submit"
           >
@@ -587,6 +596,8 @@ import { useBalanceDisplay } from "@/composables/useBalanceDisplay";
 import { SEARCH_DEBOUNCE_MS } from "@/constants/ui";
 import type {
   AdminGroup,
+  AdminGroupOption,
+  AdminGroupTableRow,
   GroupAvailabilityProbeConfig,
   ProtocolID,
   GroupSchedulerType,
@@ -598,6 +609,7 @@ import TablePageLayout from "@/components/layout/TablePageLayout.vue";
 import DataTable from "@/components/common/DataTable.vue";
 import Pagination from "@/components/common/Pagination.vue";
 import BaseDialog from "@/components/common/BaseDialog.vue";
+import ContentSkeleton from "@/components/common/ContentSkeleton.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
 import Select from "@/components/common/Select.vue";
@@ -613,7 +625,11 @@ import { loadProtocolCatalog, protocolCatalog } from '@/api/admin/protocolCapabi
 import GroupAdvancedSchedulerOverridesModal from "@/components/admin/group/GroupAdvancedSchedulerOverridesModal.vue";
 import { defaultRoutingPolicy, cloneRoutingPolicy } from '@/components/admin/group/routingPolicy';
 import GroupSettingsForm from "@/components/admin/group/GroupSettingsForm.vue";
-import type { GroupModelRoutingRule as ModelRoutingRule, GroupRoutingProvider as SimpleProvider } from "@/components/admin/group/groupSettingsTypes";
+import type {
+  GroupModelRoutingRule as ModelRoutingRule,
+  GroupRoutingProvider as SimpleProvider,
+  GroupSettingsDraft,
+} from "@/components/admin/group/groupSettingsTypes";
 import { VueDraggable } from "vue-draggable-plus";
 import { createStableObjectKeyResolver } from "@/utils/stableObjectKey";
 import { getFloatingPanelPosition } from "@/utils/floatingPanel";
@@ -629,15 +645,22 @@ import {
 import { useKeyedDebouncedSearch } from "@/composables/useKeyedDebouncedSearch";
 import { getPersistedPageSize } from "@/composables/usePersistedPageSize";
 import {
-  buildModelsListConfig,
+  buildCreateModelsListConfig,
+  buildUpdateModelsListConfig,
   createModelsListState as createInitialModelsListState,
   getAvailabilityProbeCandidateModels,
   invertModelsListSelection,
   moveModelsListItem,
   selectAllModelsListItems,
   setModelsListCandidates,
+  setModelsListEnabled,
+  toggleModelsListItem,
 } from "./groupsModelsList";
-import { createModelsListCandidatesTracker } from "./groupsModelsListCandidates";
+import {
+  createModelsListCandidatesTracker,
+  type ModelsListCandidatesMode,
+  type ModelsListCandidatesStatus,
+} from "./groupsModelsListCandidates";
 import {
   normalizeGroupOpenAIFastPolicy,
 } from "./groupsOpenAIFast";
@@ -985,9 +1008,9 @@ const copyProvidersGroupOptionsForEdit = computed(() => {
   }));
 });
 
-const groups = ref<AdminGroup[]>([]);
+const groups = ref<AdminGroupTableRow[]>([]);
 // 不可用回退分组需要跨分页选择，因此单独保存全量 active 分组选项来源。
-const unavailableFallbackGroups = ref<AdminGroup[]>([]);
+const unavailableFallbackGroups = ref<AdminGroupOption[]>([]);
 const loading = ref(false);
 const usageMap = ref<Map<number, { today_cost: number; yesterday_cost: number; total_cost: number }>>(
   new Map(),
@@ -1039,13 +1062,18 @@ const showSortModal = ref(false);
 const submitting = ref(false);
 const sortSubmitting = ref(false);
 const editingGroup = ref<AdminGroup | null>(null);
-const deletingGroup = ref<AdminGroup | null>(null);
+const editDetailLoading = ref(false);
+const editDetailError = ref(false);
+const editDetailID = ref<number | null>(null);
+let editDetailController: AbortController | null = null;
+const editProbeChanged = ref(false);
+const deletingGroup = ref<AdminGroupTableRow | null>(null);
 const duplicatingGroupIds = reactive(new Set<number>());
-const actionMenuGroup = ref<AdminGroup | null>(null);
+const actionMenuGroup = ref<AdminGroupTableRow | null>(null);
 const actionMenuPosition = ref<{ top: number; left: number } | null>(null);
 
 // 菜单按视口坐标定位到 body，脱离卡片和固定操作列的裁剪区域。
-const openGroupActionMenu = (group: AdminGroup, event: MouseEvent) => {
+const openGroupActionMenu = (group: AdminGroupTableRow, event: MouseEvent) => {
   if (actionMenuGroup.value?.id === group.id) {
     closeGroupActionMenu();
     return;
@@ -1071,25 +1099,34 @@ const closeGroupActionMenu = () => {
   actionMenuPosition.value = null;
 };
 const showRateMultipliersModal = ref(false);
-const rateMultipliersGroup = ref<AdminGroup | null>(null);
+const rateMultipliersGroup = ref<AdminGroupTableRow | null>(null);
 const showRPMOverridesModal = ref(false);
-const rpmOverridesGroup = ref<AdminGroup | null>(null);
+const rpmOverridesGroup = ref<AdminGroupTableRow | null>(null);
 const showAdvancedSchedulerOverridesModal = ref(false);
 const advancedSchedulerOverridesTarget = ref<"create" | "edit" | null>(null);
 const advancedSchedulerOverridesDraft = ref<GroupAdvancedSchedulerOverrides>({});
-const sortableGroups = ref<AdminGroup[]>([]);
+const sortableGroups = ref<AdminGroupOption[]>([]);
 const createModelsListState = reactive(createInitialModelsListState());
 const editModelsListState = reactive(createInitialModelsListState());
-const createModelsListLoading = ref(false);
-const editModelsListLoading = ref(false);
+const modelsListStatus = reactive<Record<ModelsListCandidatesMode, ModelsListCandidatesStatus>>({
+  create: "idle",
+  edit: "idle",
+});
+const modelsListControllers: Partial<Record<ModelsListCandidatesMode, AbortController>> = {};
 const createSettingsRef = ref<InstanceType<typeof GroupSettingsForm> | null>(null);
 const editSettingsRef = ref<InstanceType<typeof GroupSettingsForm> | null>(null);
 const modelsListCandidatesTracker = createModelsListCandidatesTracker();
 const createAvailabilityProbeModelOptions = computed(() =>
-  buildAvailabilityProbeModelOptions(getAvailabilityProbeCandidateModels(createModelsListState)),
+  buildAvailabilityProbeModelOptions(
+    createForm.availability_probe_enabled ? getAvailabilityProbeCandidateModels(createModelsListState) : [],
+    createForm.availability_probe_model_id,
+  ),
 );
 const editAvailabilityProbeModelOptions = computed(() =>
-  buildAvailabilityProbeModelOptions(getAvailabilityProbeCandidateModels(editModelsListState)),
+  buildAvailabilityProbeModelOptions(
+    editForm.availability_probe_enabled ? getAvailabilityProbeCandidateModels(editModelsListState) : [],
+    editForm.availability_probe_model_id,
+  ),
 );
 
 const createForm = reactive({
@@ -1298,67 +1335,47 @@ const resetModelsListState = (
   state: typeof createModelsListState,
   config?: Parameters<typeof createInitialModelsListState>[0],
 ) => {
-  const fresh = createInitialModelsListState(config);
-  state.enabled = fresh.enabled;
-  state.savedModels = fresh.savedModels;
-  state.candidateModels = fresh.candidateModels;
-  state.items = fresh.items;
+  Object.assign(state, createInitialModelsListState(config));
 };
 
-const loadModelsListCandidates = async (
-  mode: "create" | "edit",
-  groupID: number,
-) => {
+// 模型设置和探测选项共用本次表单的请求状态。
+const loadModelsListCandidates = async (mode: ModelsListCandidatesMode) => {
+  if (modelsListStatus[mode] === "loading" || modelsListStatus[mode] === "ready") return;
+  const groupID = mode === "create" ? 0 : editingGroup.value?.id;
+  if (groupID === undefined) return;
   const request = { mode, groupID };
   const requestID = modelsListCandidatesTracker.next(request);
   const state = mode === "create" ? createModelsListState : editModelsListState;
-  const loadingRef = mode === "create" ? createModelsListLoading : editModelsListLoading;
-  loadingRef.value = true;
+  const controller = new AbortController();
+  modelsListControllers[mode] = controller;
+  modelsListStatus[mode] = "loading";
   try {
-    const models = await adminAPI.groups.getModelsListCandidates(groupID);
-    if (!modelsListCandidatesTracker.isCurrent(requestID, request)) {
-      return;
-    }
+    const models = await adminAPI.groups.getModelsListCandidates(groupID, controller.signal);
+    if (!modelsListCandidatesTracker.isCurrent(requestID, request)) return;
     setModelsListCandidates(state, models);
-  } catch (error) {
-    if (!modelsListCandidatesTracker.isCurrent(requestID, request)) {
-      return;
-    }
-    console.error("Error loading group models list candidates:", error);
-  } finally {
+    modelsListStatus[mode] = "ready";
+  } catch {
     if (modelsListCandidatesTracker.isCurrent(requestID, request)) {
-      loadingRef.value = false;
+      modelsListStatus[mode] = "error";
     }
+  } finally {
+    if (modelsListControllers[mode] === controller) delete modelsListControllers[mode];
   }
 };
 
-// 列表组件只发出选择事件，页面更新独立草稿供保存和探测候选共同读取。
-function setModelSelection(state: typeof createModelsListState, id: string, value: boolean) {
-  const item = state.items.find(item => item.id === id);
-  if (item) item.selected = value;
-}
+const resetModelsListRequest = (mode: ModelsListCandidatesMode) => {
+  modelsListCandidatesTracker.invalidate(mode);
+  modelsListControllers[mode]?.abort();
+  delete modelsListControllers[mode];
+  modelsListStatus[mode] = "idle";
+};
 
-function buildAvailabilityProbeModelOptions(models: string[]) {
-  const seen = new Set<string>();
+function buildAvailabilityProbeModelOptions(models: string[], selected: string) {
   const options = [{ value: "", label: t("admin.groups.availabilityProbe.selectModel") }];
-  for (const raw of models) {
-    const model = raw.trim();
-    if (!model || seen.has(model)) {
-      continue;
-    }
-    seen.add(model);
-    options.push({ value: model, label: model });
-  }
-  return options;
+  // 当前保存的型号继续显示，管理员可以在候选可用后换成其他型号。
+  if (selected && !models.includes(selected)) options.push({ value: selected, label: selected });
+  return options.concat(models.map(model => ({ value: model, label: model })));
 }
-
-const isAvailabilityProbeModelAvailable = (
-  modelID: string,
-  options: ReturnType<typeof buildAvailabilityProbeModelOptions>,
-) => {
-  // 空值代表尚未选择，始终允许保留。
-  return !modelID || options.some((option) => option.value === modelID);
-};
 
 const resetAvailabilityProbeFormState = (
   form: typeof createForm | typeof editForm,
@@ -1426,6 +1443,7 @@ const convertRoutingRulesToApiFormat = (
 // 将 API 格式的路由规则转换为 UI 格式（需要加载提供商名称）
 const convertApiFormatToRoutingRules = async (
   apiFormat: Record<string, number[]> | null,
+  signal: AbortSignal,
 ): Promise<ModelRoutingRule[]> => {
   if (!apiFormat) return [];
 
@@ -1434,6 +1452,7 @@ const convertApiFormatToRoutingRules = async (
     // 加载提供商信息
     const providers: SimpleProvider[] = [];
     for (const id of providerIds) {
+      if (signal.aborted) return [];
       try {
         const provider = await adminAPI.providers.getById(id);
         providers.push({ id: provider.id, name: provider.name });
@@ -1566,11 +1585,11 @@ const loadGroups = async () => {
   const { signal } = currentController;
   loading.value = true;
   try {
-    const response = await adminAPI.groups.list(
+    const response = await adminAPI.groups.listTable(
       pagination.page,
       pagination.page_size,
       {
-        status: filters.status as any,
+        status: filters.status === "active" || filters.status === "inactive" ? filters.status : undefined,
         search: searchQuery.value.trim() || undefined,
         sort_by: sortState.sort_by,
         sort_order: sortState.sort_order,
@@ -1608,7 +1627,7 @@ const loadGroups = async () => {
 
 const loadUnavailableFallbackGroups = async () => {
   try {
-    unavailableFallbackGroups.value = await adminAPI.groups.getAll();
+    unavailableFallbackGroups.value = await adminAPI.groups.getOptions();
   } catch (error) {
     console.error("Error loading unavailable fallback groups:", error);
   }
@@ -1714,11 +1733,11 @@ const handleSort = (key: string, order: 'asc' | 'desc') => {
 
 const openCreateModal = () => {
   showCreateModal.value = true;
-  loadModelsListCandidates("create", 0);
 };
 
 const closeCreateModal = () => {
   showCreateModal.value = false;
+  resetModelsListRequest("create");
   createModelRoutingRules.value.forEach((rule) => {
     providerSearchRunner.clearKey(getCreateRuleSearchKey(rule));
   });
@@ -1769,8 +1788,21 @@ const validateGroupForm = async (target: "create" | "edit"): Promise<boolean> =>
     await tabs?.revealField('[data-group-field="name"]');
     return false;
   }
+  const modelsState = target === "create" ? createModelsListState : editModelsListState;
+  const configureModels = modelsState.enabled && (target === "create" || modelsState.modified);
+  const configureProbe = form.availability_probe_enabled && (target === "create" || editProbeChanged.value);
+  if ((configureModels || configureProbe) && modelsListStatus[target] !== "ready") {
+    appStore.showError(t(modelsListStatus[target] === "error"
+      ? "admin.groups.modelsList.loadFailed"
+      : "admin.groups.modelsList.loading"));
+    await tabs?.revealField(configureModels ? '[data-group-field="models-list"]' : '[data-group-field="probe-model"]');
+    return false;
+  }
   try {
-    buildAvailabilityProbeConfig(form);
+    if (configureProbe && !getAvailabilityProbeCandidateModels(modelsState).includes(form.availability_probe_model_id.trim())) {
+      throw new Error(t("admin.groups.availabilityProbe.modelRequired"));
+    }
+    if (target === "create" || editProbeChanged.value) buildAvailabilityProbeConfig(form);
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error));
     await tabs?.revealField(form.availability_probe_model_id.trim()
@@ -1806,7 +1838,7 @@ const handleCreateGroup = async () => {
       model_routing: convertRoutingRulesToApiFormat(
         createModelRoutingRules.value,
       ),
-      models_list_config: buildModelsListConfig(createModelsListState),
+      models_list_config: buildCreateModelsListConfig(createModelsListState),
       availability_probe_config: availabilityProbeConfig,
       openai_fast_policy: normalizeGroupOpenAIFastPolicy(
         createForm.openai_fast_policy,
@@ -1847,8 +1879,43 @@ const handleCreateGroup = async () => {
   }
 };
 
-const handleEdit = async (group: AdminGroup) => {
-  editingGroup.value = group;
+const handleEdit = (row: AdminGroupTableRow) => {
+  closeEditModal();
+  editDetailID.value = row.id;
+  showEditModal.value = true;
+  void loadEditGroup(row.id);
+};
+
+const retryEditGroup = () => {
+  if (editDetailID.value !== null) void loadEditGroup(editDetailID.value);
+};
+
+const loadEditGroup = async (id: number) => {
+  editDetailController?.abort();
+  const controller = new AbortController();
+  editDetailController = controller;
+  editDetailLoading.value = true;
+  editDetailError.value = false;
+  try {
+    const group = await adminAPI.groups.getById(id, { signal: controller.signal });
+    if (controller.signal.aborted || editDetailController !== controller) return;
+    // 显示规则前补齐提供商名，失效的详情请求不能替换当前表单。
+    const rules = await convertApiFormatToRoutingRules(group.model_routing, controller.signal);
+    if (controller.signal.aborted || editDetailController !== controller) return;
+    fillEditForm(group);
+    editModelRoutingRules.value = rules;
+    editingGroup.value = group;
+  } catch {
+    if (editDetailController === controller) editDetailError.value = true;
+  } finally {
+    if (editDetailController === controller) {
+      editDetailController = null;
+      editDetailLoading.value = false;
+    }
+  }
+};
+
+const fillEditForm = (group: AdminGroup) => {
   editForm.localization = group.localization ? JSON.parse(JSON.stringify(group.localization)) : undefined;
   editForm.name = group.name;
   editForm.description = group.description || "";
@@ -1903,15 +1970,23 @@ const handleEdit = async (group: AdminGroup) => {
   );
   resetAvailabilityProbeFormState(editForm, group.availability_probe_config);
   resetModelsListState(editModelsListState, group.models_list_config);
-  // 加载模型路由规则（异步加载提供商名称）
-  editModelRoutingRules.value = await convertApiFormatToRoutingRules(
-    group.model_routing,
-  );
-  loadModelsListCandidates("edit", group.id);
-  showEditModal.value = true;
+};
+
+const patchEditForm = (patch: Partial<GroupSettingsDraft>) => {
+  if (Object.keys(patch).some(key => key.startsWith("availability_probe_"))) {
+    editProbeChanged.value = true;
+  }
+  Object.assign(editForm, patch);
 };
 
 const closeEditModal = () => {
+  editDetailController?.abort();
+  editDetailController = null;
+  editDetailID.value = null;
+  editDetailLoading.value = false;
+  editDetailError.value = false;
+  editProbeChanged.value = false;
+  resetModelsListRequest("edit");
   editModelRoutingRules.value.forEach((rule) => {
     providerSearchRunner.clearKey(getEditRuleSearchKey(rule));
   });
@@ -1945,7 +2020,10 @@ const handleUpdateGroup = async () => {
 
   submitting.value = true;
   try {
-    const availabilityProbeConfig = buildAvailabilityProbeConfig(editForm);
+    const availabilityProbeConfig = editProbeChanged.value
+      ? buildAvailabilityProbeConfig(editForm)
+      : undefined;
+    const modelsListConfig = buildUpdateModelsListConfig(editModelsListState);
     // 转换 fallback_group_id: null -> 0 (后端使用 0 表示清除)
     const payload = {
       ...editForm,
@@ -1975,8 +2053,8 @@ const handleUpdateGroup = async () => {
       model_routing: convertRoutingRulesToApiFormat(
         editModelRoutingRules.value,
       ),
-      models_list_config: buildModelsListConfig(editModelsListState),
-      availability_probe_config: availabilityProbeConfig,
+      ...(modelsListConfig && { models_list_config: modelsListConfig }),
+      ...(availabilityProbeConfig && { availability_probe_config: availabilityProbeConfig }),
       openai_fast_policy: normalizeGroupOpenAIFastPolicy(
         editForm.openai_fast_policy,
       ),
@@ -2011,17 +2089,17 @@ const handleUpdateGroup = async () => {
   }
 };
 
-const handleRateMultipliers = (group: AdminGroup) => {
+const handleRateMultipliers = (group: AdminGroupTableRow) => {
   rateMultipliersGroup.value = group;
   showRateMultipliersModal.value = true;
 };
 
-const handleRPMOverrides = (group: AdminGroup) => {
+const handleRPMOverrides = (group: AdminGroupTableRow) => {
   rpmOverridesGroup.value = group;
   showRPMOverridesModal.value = true;
 };
 
-const handleDuplicate = async (group: AdminGroup) => {
+const handleDuplicate = async (group: AdminGroupTableRow) => {
   if (duplicatingGroupIds.has(group.id)) return;
 
   duplicatingGroupIds.add(group.id);
@@ -2040,7 +2118,7 @@ const handleDuplicate = async (group: AdminGroup) => {
   }
 };
 
-const handleDelete = (group: AdminGroup) => {
+const handleDelete = (group: AdminGroupTableRow) => {
   deletingGroup.value = group;
   showDeleteDialog.value = true;
 };
@@ -2063,34 +2141,6 @@ const confirmDelete = async () => {
   }
 };
 
-watch(createAvailabilityProbeModelOptions, (options) => {
-  if (!createModelsListState.enabled && createModelsListState.items.length === 0) {
-    return;
-  }
-  if (
-    !isAvailabilityProbeModelAvailable(
-      createForm.availability_probe_model_id,
-      options,
-    )
-  ) {
-    createForm.availability_probe_model_id = "";
-  }
-});
-
-watch(editAvailabilityProbeModelOptions, (options) => {
-  if (!editModelsListState.enabled && editModelsListState.items.length === 0) {
-    return;
-  }
-  if (
-    !isAvailabilityProbeModelAvailable(
-      editForm.availability_probe_model_id,
-      options,
-    )
-  ) {
-    editForm.availability_probe_model_id = "";
-  }
-});
-
 // 点击外部关闭提供商搜索下拉框
 const handleClickOutside = (event: MouseEvent) => {
   const target = event.target as HTMLElement;
@@ -2109,7 +2159,7 @@ const handleClickOutside = (event: MouseEvent) => {
 const openSortModal = async () => {
   try {
     // 获取所有分组（不分页）
-    const allGroups = await adminAPI.groups.getAll();
+    const allGroups = await adminAPI.groups.getOptions();
     // 按 sort_order 排序
     sortableGroups.value = [...allGroups].sort(
       (a, b) => a.sort_order - b.sort_order,
@@ -2155,12 +2205,16 @@ onMounted(async () => {
   loadGroups();
   loadUnavailableFallbackGroups();
   void loadLiveCapability();
-  loadModelsListCandidates("create", 0);
   document.addEventListener("click", handleClickOutside);
 });
 
 onUnmounted(() => {
   document.removeEventListener("click", handleClickOutside);
+  abortController?.abort();
+  editDetailController?.abort();
+  editDetailController = null;
+  resetModelsListRequest("create");
+  resetModelsListRequest("edit");
   providerSearchRunner.clearAll();
   clearAllProviderSearchState();
 });

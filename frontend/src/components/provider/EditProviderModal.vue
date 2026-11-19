@@ -863,7 +863,7 @@ import { useQuotaNotifyState } from '@/composables/useQuotaNotifyState'
 import type {
   Provider,
   Proxy,
-  AdminGroup,
+  AdminGroupOption,
   OpenAICompactMode,
   OpenAIOAuthClientPolicy,
   OllamaCloudUsageState,
@@ -968,7 +968,7 @@ interface Props {
   show: boolean
   provider: Provider | null
   proxies: Proxy[]
-  groups: AdminGroup[]
+  groups: AdminGroupOption[]
 }
 
 const props = defineProps<Props>()

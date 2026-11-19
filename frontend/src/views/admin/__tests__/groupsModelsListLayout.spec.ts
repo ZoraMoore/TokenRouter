@@ -15,7 +15,7 @@ const listSource = readFileSync(resolve(currentDir, "../../../components/admin/g
 describe("groups models list layout", () => {
   it("keeps the toolbar outside of the scrolling list content", () => {
     expect(listSource).toContain("overflow-hidden rounded-surface border");
-    expect(listSource).toContain("max-h-64 divide-y divide-gray-200 overflow-y-auto");
+    expect(listSource).toContain("max-h-64 overflow-y-auto");
     expect(groupsViewSource).not.toContain("sticky top-0");
   });
 

@@ -242,7 +242,7 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import type { GroupRateMultiplierEntry } from '@/api/admin/groups'
-import type { AdminGroup, AdminUser } from '@/types'
+import type { AdminGroupTableRow, AdminUser } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -251,7 +251,7 @@ interface LocalEntry extends GroupRateMultiplierEntry {}
 
 const props = defineProps<{
   show: boolean
-  group: AdminGroup | null
+  group: AdminGroupTableRow | null
 }>()
 
 const emit = defineEmits<{

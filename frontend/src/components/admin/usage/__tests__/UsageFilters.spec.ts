@@ -53,7 +53,7 @@ vi.mock('vue-i18n', async () => {
 // 管理端 API mock 由各用例按需控制返回值。
 const mockSearchUsers = vi.fn()
 const mockSearchApiKeys = vi.fn().mockResolvedValue([])
-const mockGroupsList = vi.fn().mockResolvedValue({ items: [] })
+const mockGroupOptions = vi.fn().mockResolvedValue([])
 const mockTeamsList = vi.fn().mockResolvedValue([])
 const mockGetModelStats = vi.fn().mockResolvedValue({ models: [] })
 const mockProvidersList = vi.fn().mockResolvedValue({ items: [] })
@@ -64,7 +64,7 @@ vi.mock('@/api/admin', () => ({
       searchUsers: (...args: any[]) => mockSearchUsers(...args),
       searchApiKeys: (...args: any[]) => mockSearchApiKeys(...args),
     },
-    groups: { list: (...args: any[]) => mockGroupsList(...args) },
+    groups: { getOptions: (...args: any[]) => mockGroupOptions(...args) },
     teams: { list: (...args: any[]) => mockTeamsList(...args) },
     dashboard: { getModelStats: (...args: any[]) => mockGetModelStats(...args) },
     providers: { list: (...args: any[]) => mockProvidersList(...args) },
@@ -122,7 +122,7 @@ describe('UsageFilters — user search dropdown', () => {
     mockSearchUsers.mockReset()
     mockSearchApiKeys.mockResolvedValue([])
     mockGetModelStats.mockClear()
-    mockGroupsList.mockClear()
+    mockGroupOptions.mockClear()
     mockTeamsList.mockClear()
     mockProvidersList.mockClear()
   })
@@ -232,7 +232,7 @@ describe('UsageFilters — model options come from prop (no dup request)', () =>
   beforeEach(() => {
     vi.useFakeTimers()
     mockGetModelStats.mockClear()
-    mockGroupsList.mockClear()
+    mockGroupOptions.mockClear()
     mockTeamsList.mockClear()
   })
 

@@ -1603,7 +1603,7 @@ import type { QoderSite, QoderTokenInfo } from '@/api/admin/qoder'
 import { useGrokOAuth } from '@/composables/useGrokOAuth'
 import type {
   Proxy,
-  AdminGroup,
+  AdminGroupOption,
   ProviderPlatform,
   ProviderType,
   CreateProviderRequest,
@@ -1789,7 +1789,7 @@ interface Props {
   show: boolean
   initialPlatform?: ProviderPlatform
   proxies: Proxy[]
-  groups: AdminGroup[]
+  groups: AdminGroupOption[]
 }
 
 const props = defineProps<Props>()

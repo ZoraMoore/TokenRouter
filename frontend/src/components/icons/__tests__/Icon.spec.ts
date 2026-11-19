@@ -1,7 +1,13 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import { useAnimationControls } from 'motion-v'
 import Icon from '../Icon.vue'
 import { icons, type IconName } from '../registry'
+
+vi.mock('motion-v', async (importOriginal) => {
+  const motion = await importOriginal<typeof import('motion-v')>()
+  return { ...motion, useAnimationControls: vi.fn(motion.useAnimationControls) }
+})
 
 // 这些名称是既有页面接口，迁移图形不能让旧调用静默丢失。
 const existingNames: IconName[] = [
@@ -95,6 +101,16 @@ const existingNames: IconName[] = [
 ]
 
 describe('统一图标入口', () => {
+  it('装饰图标渲染静态图形，等待交互再创建动画控制器', () => {
+    vi.mocked(useAnimationControls).mockClear()
+    const wrappers = (Object.keys(icons) as IconName[]).map((name) =>
+      mount(Icon, { props: { name } })
+    )
+
+    wrappers.forEach((wrapper) => wrapper.unmount())
+    expect(useAnimationControls).not.toHaveBeenCalled()
+  })
+
   it('保留所有既有语义名称，每种图形都有可见 SVG 节点', () => {
     expect(existingNames.every((name) => name in icons)).toBe(true)
     for (const name of Object.keys(icons) as IconName[]) {

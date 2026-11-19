@@ -22,7 +22,7 @@ vi.mock('@/api/admin', () => ({
       getModelDefaultPricing: vi.fn()
     },
     groups: {
-      getAll: getGroups
+      getOptions: getGroups
     },
     settings: {
       getWebSearchEmulationConfig

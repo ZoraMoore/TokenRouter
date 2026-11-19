@@ -496,7 +496,7 @@ async function loadDashboardAdvancedSettings() {
 
 async function loadGroups() {
   try {
-    const list = await adminAPI.groups.getAll()
+    const list = await adminAPI.groups.getOptions()
     groups.value = list.map((group) => ({ id: group.id, name: group.name }))
   } catch (err) {
     console.error('[OpsDashboard] Failed to load groups', err)

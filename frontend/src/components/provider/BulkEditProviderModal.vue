@@ -615,7 +615,7 @@ import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import type {
   Proxy as ProxyConfig,
-  AdminGroup,
+  AdminGroupOption,
   ProviderPlatform,
   ProviderType,
   Provider,
@@ -688,7 +688,7 @@ interface Props {
     selectedTypes?: ProviderType[]
   }
   proxies: ProxyConfig[]
-  groups: AdminGroup[]
+  groups: AdminGroupOption[]
 }
 
 const props = defineProps<Props>()

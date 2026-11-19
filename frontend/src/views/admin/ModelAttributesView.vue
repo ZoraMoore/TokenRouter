@@ -177,7 +177,7 @@ import ModelTagInput from '@/components/admin/pricing/ModelTagInput.vue'
 import ModelAttributesSummary from '@/components/common/ModelAttributesSummary.vue'
 import { modelAttributesAPI, type AttributeConfig, type AttributeRule, type DefaultAttributes } from '@/api/admin/modelAttributes'
 import { adminAPI } from '@/api/admin'
-import type { AdminGroup } from '@/types'
+import type { AdminGroupOption } from '@/types'
 import { attributeCapabilities } from '@/types/modelAttributes'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { SEARCH_DEBOUNCE_MS } from '@/constants/ui'
@@ -193,7 +193,7 @@ const page = ref(1), pageSize = ref(20), total = ref(0)
 const loading = ref(false), updating = ref(false), saving = ref(false), showEditor = ref(false), groupsLoading = ref(false)
 const error = ref(''), formError = ref(''), catalogError = ref(''), version = ref(''), updatedAt = ref('')
 const configs = ref<AttributeConfig[]>([]), defaults = ref<DefaultAttributes[]>([]), providers = ref<string[]>([])
-const groups = ref<AdminGroup[]>([])
+const groups = ref<AdminGroupOption[]>([])
 const detail = ref<DefaultAttributes | null>(null), deleting = ref<AttributeConfig | null>(null)
 const blank = (): AttributeConfig => ({ name: '', description: '', status: 'active', group_ids: [], rules: [] })
 const form = ref<AttributeConfig>(blank())
@@ -238,7 +238,7 @@ async function edit(config?: AttributeConfig) {
   formError.value = ''
   showEditor.value = true
   groupsLoading.value = true
-  try { groups.value = await adminAPI.groups.getAll() }
+  try { groups.value = await adminAPI.groups.getOptions() }
   catch (cause) { formError.value = extractApiErrorMessage(cause, t('common.error')) }
   finally { groupsLoading.value = false }
 }

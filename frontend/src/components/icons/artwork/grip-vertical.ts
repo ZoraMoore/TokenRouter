@@ -1,7 +1,5 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/grip-vertical.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const CIRCLES = [
@@ -37,13 +35,13 @@ const icon: IconDefinition = {
   name: 'grip-vertical',
   normal: 'normal',
   animate: ['animate', 'normal'],
-  render: (controls) =>
-    h('g', {}, [
+  render: (node) =>
+    node('g', {}, [
       CIRCLES.map((circle, index) =>
-        h(
-          motion.circle,
+        node(
+          'circle',
           {
-            animate: controls,
+            animate: true,
             custom: { index },
             cx: circle.cx,
             cy: circle.cy,

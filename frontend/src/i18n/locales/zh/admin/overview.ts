@@ -971,6 +971,7 @@ affiliates: {
         title: '自定义 {endpoint} 模型列表',
         hint: '仅影响 {endpoint} 展示结果，不影响白名单模型调用和提供商调度。',
         loading: '正在加载模型列表...',
+        loadFailed: '无法加载候选模型。',
         empty: '暂无可展示模型'
       },
       availabilityProbe: {

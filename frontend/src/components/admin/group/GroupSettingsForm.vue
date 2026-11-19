@@ -127,7 +127,8 @@
       <GroupModelsListFields
         :id-prefix="idPrefix"
         :state="modelsList"
-        :loading="modelsListLoading"
+        :status="modelsListStatus"
+        @retry="emit('loadModels')"
         @enabled="emit('modelsEnabled', $event)"
         @select="(id, value) => emit('selectModel', id, value)"
         @select-all="emit('selectAllModels')"
@@ -319,8 +320,18 @@
               v-model="form.availability_probe_model_id"
               data-group-field="probe-model"
               :options="options.probeModels"
+              :disabled="modelsListStatus !== 'ready'"
               searchable
             />
+            <p v-if="modelsListStatus === 'loading'" role="status" class="input-hint">
+              {{ t('admin.groups.modelsList.loading') }}
+            </p>
+            <div v-if="modelsListStatus === 'error'" class="mt-2 flex flex-wrap items-center gap-2">
+              <p role="alert" class="input-hint">{{ t('admin.groups.modelsList.loadFailed') }}</p>
+              <button type="button" class="btn btn-secondary btn-sm" @click="emit('loadModels')">
+                {{ t('common.retry') }}
+              </button>
+            </div>
           </div>
           <div>
             <label :for="`${idPrefix}-probe-interval`" class="input-label">{{
@@ -469,7 +480,7 @@
 
 <script setup lang="ts">
 import LocalizedFieldsEditor from '@/components/common/LocalizedFieldsEditor.vue'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Select from '@/components/common/Select.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
@@ -485,6 +496,7 @@ import GroupClientProtocolSelector from './GroupClientProtocolSelector.vue'
 import ReasoningEffortPolicyFields from './ReasoningEffortPolicyFields.vue'
 import GroupRequestCompatibilityFields from './GroupRequestCompatibilityFields.vue'
 import type { ModelsListState } from '@/views/admin/groupsModelsList'
+import type { ModelsListCandidatesStatus } from '@/views/admin/groupsModelsListCandidates'
 import type {
   GroupProviderSearchState,
   GroupModelRoutingRule,
@@ -499,7 +511,7 @@ const props = defineProps<{
   options: GroupSettingsOptions
   routingRules: GroupModelRoutingRule[]
   modelsList: ModelsListState
-  modelsListLoading: boolean
+  modelsListStatus: ModelsListCandidatesStatus
   providerSearch: GroupProviderSearchState
   getRuleKey: (rule: GroupModelRoutingRule) => string
 }>()
@@ -513,6 +525,7 @@ const emit = defineEmits<{
   focusProviders: [rule: GroupModelRoutingRule]
   selectProvider: [rule: GroupModelRoutingRule, provider: GroupRoutingProvider]
   removeProvider: [rule: GroupModelRoutingRule, providerId: number]
+  loadModels: []
   modelsEnabled: [value: boolean]
   selectModel: [id: string, value: boolean]
   selectAllModels: []
@@ -531,6 +544,15 @@ const tabsRef = ref<InstanceType<typeof SettingsTabs> | null>(null)
 const reasoningRef = ref<InstanceType<
   typeof ReasoningEffortPolicyFields
 > | null>(null)
+
+// 候选在对应页签可见且设置开启时读取。
+watch(
+  () => (tabsRef.value?.activeTab === 'models' && props.modelsList.enabled)
+    || (tabsRef.value?.activeTab === 'scheduling' && props.modelValue.availability_probe_enabled),
+  (needsModels) => {
+    if (needsModels) emit('loadModels')
+  },
+)
 
 // 字段更新以补丁交给页面，保留响应式草稿的身份以及页面持有的兼容字段。
 const form = computed(

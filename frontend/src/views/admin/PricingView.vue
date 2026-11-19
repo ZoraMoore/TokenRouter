@@ -449,7 +449,7 @@ import type { PricingConfig, ModelPricingEntry, CreatePricingConfigRequest, Upda
 import type { PricingFormEntry } from '@/components/admin/pricing/types'
 import { pricingEntryFromAPI, pricingEntryToAPI, validatePricingForm } from '@/components/admin/pricing/pricingForm'
 import { createDefaultTimePricingForm, hasExplicitPricing, toNullableNumber } from '@/components/admin/pricing/types'
-import type { AdminGroup } from '@/types'
+import type { AdminGroupOption } from '@/types'
 import type { Column } from '@/components/common/types'
 import { platformTextClass } from '@/utils/platformColors'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -565,7 +565,7 @@ function onDialogTabKeydown(event: KeyboardEvent, key: string) {
 }
 
 // Groups
-const allGroups = ref<AdminGroup[]>([])
+const allGroups = ref<AdminGroupOption[]>([])
 const groupsLoading = ref(false)
 
 // 关联冲突检查使用独立的价格配置列表，不受当前分页影响。
@@ -872,7 +872,7 @@ async function loadPricingConfigs() {
 async function loadGroups() {
   groupsLoading.value = true
   try {
-    allGroups.value = await adminAPI.groups.getAll()
+    allGroups.value = await adminAPI.groups.getOptions()
   } catch (error) {
     console.error('Error loading groups:', error)
   } finally {

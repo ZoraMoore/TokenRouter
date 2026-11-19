@@ -1,6 +1,6 @@
-import { onBeforeUnmount, onMounted, watch, type Ref } from 'vue'
-import { useAnimationControls } from 'motion-v'
-import type { IconDefinition } from './types'
+import { onBeforeUnmount, onMounted, shallowRef, watch, type Ref } from 'vue'
+
+export type IconAnimationPhase = 'idle' | 'play' | 'reset'
 
 const INTERACTIVE_SELECTOR = [
   'button',
@@ -22,163 +22,135 @@ const INTERACTIVE_SELECTOR = [
 /** 图标动画绑定到最近的控件，悬停控件文字也会触发。 */
 export function useIconAnimation(
   svgRef: Ref<SVGSVGElement | null>,
-  definition: () => IconDefinition,
   enabled: () => boolean,
-  animationActive: () => boolean = () => false
+  animationActive: () => boolean,
+  name: () => string,
+  hasAnimatedArtwork: () => boolean
 ) {
-  const controls = useAnimationControls()
+  const phase = shallowRef<IconAnimationPhase>('idle')
   let cleanup: (() => void) | undefined
+  let update: (() => void) | undefined
 
   onMounted(() => {
     const svg = svgRef.value
     if (!svg) return
 
     const trigger = svg.closest(INTERACTIVE_SELECTOR) ?? svg
-    const labelledControl =
-      trigger instanceof HTMLLabelElement ? trigger.control : null
-    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const labelledControl = trigger instanceof HTMLLabelElement ? trigger.control : null
     let hovered = false
     let focused = false
-    let active = false
-    let generation = 0
+    let media: MediaQueryList | undefined
+    let observer: MutationObserver | undefined
 
-    const reset = (immediate: boolean) => {
-      controls.stop()
-      if (immediate) controls.set(definition().normal)
-      else void controls.start(definition().normal)
-    }
+    const check: () => void = () => {
+      const requested = animationActive() || (enabled() && (hovered || focused))
+      if (!requested && phase.value === 'idle') {
+        stopTracking()
+        return
+      }
 
-    const update = () => {
+      // 控件进入反馈状态后才观察减少动态效果、禁用和 inert 的变化。
+      if (!observer) {
+        media = window.matchMedia('(prefers-reduced-motion: reduce)')
+        media.addEventListener('change', check)
+        observer = new MutationObserver(check)
+        let ancestor: Element | null = svg
+        while (ancestor) {
+          observer.observe(ancestor, {
+            attributeFilter: ancestor === svg
+              ? ['disabled', 'aria-disabled', 'inert', 'class']
+              : ['disabled', 'aria-disabled', 'inert']
+          })
+          ancestor = ancestor.parentElement
+        }
+        if (labelledControl) {
+          observer.observe(labelledControl, {
+            attributeFilter: ['disabled', 'aria-disabled', 'inert']
+          })
+        }
+      }
+
       const suppressed =
         (!enabled() && !animationActive()) ||
-        media.matches ||
+        media?.matches ||
         trigger.matches(':disabled') ||
-        Boolean(
-          labelledControl?.matches(':disabled, [aria-disabled="true"]')
-        ) ||
-        Boolean(
-          svg.closest('fieldset:disabled, [aria-disabled="true"], [inert]')
-        ) ||
+        labelledControl?.matches(':disabled, [aria-disabled="true"], [inert]') ||
+        Boolean(svg.closest('fieldset:disabled, [aria-disabled="true"], [inert]')) ||
         svg.classList.contains('animate-spin')
-      const next =
-        !suppressed &&
-        (animationActive() || (enabled() && (hovered || focused)))
-      if (suppressed && !active) {
-        // 复位动画尚未结束时切换系统偏好，也必须立即停在静态图形。
-        ++generation
-        reset(true)
-        return
-      }
-      if (next === active) return
-      active = next
-      const current = ++generation
-      controls.stop()
-      if (!next) {
-        reset(suppressed)
-        return
-      }
 
-      // 序列依靠实际完成事件推进；旧序列不能在离开或卸载后启动下一段。
-      void (async () => {
-        for (const target of definition().animate) {
-          if (current !== generation) return
-          await controls.start(target)
-        }
-      })()
+      if (suppressed) phase.value = 'idle'
+      else if (requested) phase.value = 'play'
+      else if (phase.value === 'play') phase.value = hasAnimatedArtwork() ? 'reset' : 'idle'
+
+      if (!requested && phase.value === 'idle') stopTracking()
     }
 
+    const stopTracking = () => {
+      observer?.disconnect()
+      observer = undefined
+      media?.removeEventListener('change', check)
+      media = undefined
+    }
     const enter = (event: Event) => {
-      // 触屏不模拟悬停，防止点击后保持装饰动画状态。
+      // 触屏点击后可能出现模拟悬停，动画由实际聚焦或业务状态触发。
       if ('pointerType' in event && event.pointerType === 'touch') return
       hovered = true
-      update()
+      check()
     }
     const leave = () => {
       hovered = false
-      update()
+      check()
     }
     const focus = (event: Event) => {
-      // tabindex=-1 仍允许鼠标聚焦 SVG；将装饰图形的焦点交回外层控件。
-      // label 内的图标聚焦关联控件，独立图标或不可聚焦容器则清除装饰焦点。
+      // 鼠标可以聚焦 tabindex=-1 的 SVG。把焦点交给可操作的控件。
       if (event.target instanceof SVGElement && svg.contains(event.target)) {
         const control = labelledControl ?? trigger
-        if (control instanceof HTMLElement) {
-          control.focus({ preventScroll: true })
-        }
+        if (control instanceof HTMLElement) control.focus({ preventScroll: true })
         const activeElement = svg.ownerDocument.activeElement
         if (activeElement instanceof SVGElement && svg.contains(activeElement)) {
           activeElement.blur()
           focused = false
-          update()
+          check()
           return
         }
       }
       focused = true
-      update()
+      check()
     }
     const blur = (event: Event) => {
-      if (trigger.contains((event as FocusEvent).relatedTarget as Node | null))
-        return
+      const { relatedTarget } = event as FocusEvent
+      if (relatedTarget instanceof Node && trigger.contains(relatedTarget)) return
       focused = false
-      update()
+      check()
     }
 
     trigger.addEventListener('pointerenter', enter)
     trigger.addEventListener('pointerleave', leave)
     trigger.addEventListener('focusin', focus)
     trigger.addEventListener('focusout', blur)
-    media.addEventListener('change', update)
 
-    // 异步按钮可能在悬停中变为禁用或加载；同时覆盖父级 fieldset/inert。
-    const observer = new MutationObserver(update)
-    if (labelledControl) {
-      observer.observe(labelledControl, {
-        attributes: true,
-        attributeFilter: ['disabled', 'aria-disabled']
-      })
-    }
-    let ancestor: Element | null = svg
-    while (ancestor) {
-      observer.observe(ancestor, {
-        attributes: true,
-        attributeFilter:
-          ancestor === svg
-            ? ['disabled', 'aria-disabled', 'inert', 'class']
-            : ['disabled', 'aria-disabled', 'inert']
-      })
-      ancestor = ancestor.parentElement
-    }
-
-    const unwatchEnabled = watch(enabled, update)
-    // 业务时间轴可独立触发一次动画，仍遵守减少动态效果和禁用状态。
-    const unwatchActive = watch(animationActive, update)
-    const unwatchDefinition = watch(
-      definition,
-      () => {
-        ++generation
-        active = false
-        reset(true)
-        update()
-      },
-      { flush: 'post' }
-    )
-
+    const unwatch = watch([enabled, animationActive, name], ([, , currentName], [, , previousName]) => {
+      if (currentName !== previousName && phase.value === 'reset') phase.value = 'idle'
+      check()
+    })
+    update = check
     cleanup = () => {
-      ++generation
-      controls.stop()
-      observer.disconnect()
-      unwatchEnabled()
-      unwatchActive()
-      unwatchDefinition()
+      stopTracking()
+      unwatch()
       trigger.removeEventListener('pointerenter', enter)
       trigger.removeEventListener('pointerleave', leave)
       trigger.removeEventListener('focusin', focus)
       trigger.removeEventListener('focusout', blur)
-      media.removeEventListener('change', update)
     }
-    if (animationActive()) update()
+    check()
   })
 
+  const finishReset = () => {
+    if (phase.value !== 'reset') return
+    phase.value = 'idle'
+    update?.()
+  }
+
   onBeforeUnmount(() => cleanup?.())
-  return controls
+  return { phase, finishReset }
 }

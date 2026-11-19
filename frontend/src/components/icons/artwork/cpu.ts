@@ -1,7 +1,6 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/cpu.tsx
-import { h } from 'vue'
-import { motion, type Transition } from 'motion-v'
+import type { Transition } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const TRANSITION: Transition = {
@@ -38,9 +37,9 @@ const icon: IconDefinition = {
   name: 'cpu',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
+  render: (node) =>
+    node('g', {}, [
+      node(
         'rect',
         {
           height: '16',
@@ -51,7 +50,7 @@ const icon: IconDefinition = {
         },
         []
       ),
-      h(
+      node(
         'rect',
         {
           height: '6',
@@ -62,10 +61,10 @@ const icon: IconDefinition = {
         },
         []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M15 2v2',
           transition: TRANSITION,
           variants: Y_VARIANTS,
@@ -73,10 +72,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M15 20v2',
           transition: TRANSITION,
           variants: Y_VARIANTS,
@@ -84,10 +83,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M2 15h2',
           transition: TRANSITION,
           variants: X_VARIANTS,
@@ -95,10 +94,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M2 9h2',
           transition: TRANSITION,
           variants: X_VARIANTS,
@@ -106,10 +105,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M20 15h2',
           transition: TRANSITION,
           variants: X_VARIANTS,
@@ -117,10 +116,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M20 9h2',
           transition: TRANSITION,
           variants: X_VARIANTS,
@@ -128,10 +127,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M9 2v2',
           transition: TRANSITION,
           variants: Y_VARIANTS,
@@ -139,10 +138,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M9 20v2',
           transition: TRANSITION,
           variants: Y_VARIANTS,

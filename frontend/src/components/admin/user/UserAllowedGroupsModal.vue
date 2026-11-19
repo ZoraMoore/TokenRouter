@@ -200,7 +200,7 @@ import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
-import type { AdminUser, Group } from '@/types'
+import type { AdminUser, AdminGroupOption } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 
@@ -218,7 +218,7 @@ const emit = defineEmits(['close', 'success'])
 const { t } = useI18n()
 const appStore = useAppStore()
 
-const groups = ref<Group[]>([])
+const groups = ref<AdminGroupOption[]>([])
 const groupConfigs = ref<GroupRateConfig[]>([])
 const originalGroupRates = ref<Record<number, number>>({}) // 记录原始专属倍率，用于检测删除
 const loading = ref(false)
@@ -243,8 +243,7 @@ watch(
 const load = async () => {
   loading.value = true
   try {
-    const res = await adminAPI.groups.list(1, 1000)
-    groups.value = res.items.filter((g) => g.status === 'active')
+    groups.value = await adminAPI.groups.getOptions()
 
     // 初始化配置
     const userAllowedGroups = props.user?.allowed_groups || []

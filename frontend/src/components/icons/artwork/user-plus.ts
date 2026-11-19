@@ -1,7 +1,5 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/user-plus.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const PLUS_VARIANTS: Variants = {
@@ -31,16 +29,16 @@ const icon: IconDefinition = {
   name: 'user-plus',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
+  render: (node) =>
+    node('g', {}, [
+      node(
         'path',
         {
           d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'
         },
         []
       ),
-      h(
+      node(
         'circle',
         {
           cx: '9',
@@ -49,16 +47,16 @@ const icon: IconDefinition = {
         },
         []
       ),
-      h(
-        motion.g,
+      node(
+        'g',
         {
-          animate: controls,
+          animate: true,
           initial: 'normal',
           style: { transformOrigin: '19px 11px' },
           variants: PLUS_VARIANTS
         },
         () => [
-          h(
+          node(
             'line',
             {
               x1: '19',
@@ -68,7 +66,7 @@ const icon: IconDefinition = {
             },
             []
           ),
-          h(
+          node(
             'line',
             {
               x1: '22',

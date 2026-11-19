@@ -582,7 +582,7 @@ import type {
   UpstreamUsageQueryError,
   UpstreamUsageQueryResult,
   Proxy as ProviderProxy,
-  AdminGroup,
+  AdminGroupOption,
   WindowStats,
   ClaudeModel
 } from '@/types'
@@ -592,7 +592,7 @@ const appStore = useAppStore()
 const authStore = useAuthStore()
 
 const proxies = ref<ProviderProxy[]>([])
-const groups = ref<AdminGroup[]>([])
+const groups = ref<AdminGroupOption[]>([])
 const providerTableRef = ref<HTMLElement | null>(null)
 const dataTableRef = ref<InstanceType<typeof DataTable> | null>(null)
 type ProviderBulkEditTarget =
@@ -777,9 +777,9 @@ const usageBatchLoadingByProviderId = ref<Record<string, boolean>>({})
 const usageBatchRequestTokenByProviderId = ref<Record<string, number>>({})
 const usageBatchCache = new Map<number, { data: ProviderUsageInfo; ts: number }>()
 const USAGE_BATCH_CACHE_TTL = 5 * 60 * 1000
-const pendingUsageBatchIds = new Set<number>()
+const pendingUsageBatchIds = new Map<number, boolean>()
+const usageBatchLifetime = new AbortController()
 let usageBatchFlushTimer: ReturnType<typeof setTimeout> | null = null
-let queuedUsageBatchForce = false
 let usageBatchRequestToken = 0
 
 const upstreamUsageByProviderId = ref<Record<string, UpstreamUsageQueryResult | null>>({})
@@ -1246,22 +1246,34 @@ const handleProviderUsageLoaded = (providerID: number, usage: ProviderUsageInfo)
   setUsageBatchState(providerID, usage, null)
 }
 
-const flushQueuedUsageBatch = async () => {
+const flushQueuedUsageBatch = () => {
   usageBatchFlushTimer = null
-  const providerIDs = Array.from(pendingUsageBatchIds)
-  const force = queuedUsageBatchForce
+  const visibleIDs = new Set(providers.value.map(provider => provider.id))
+  const regular: number[] = []
+  const forced: number[] = []
+  for (const [id, force] of pendingUsageBatchIds) {
+    if (!visibleIDs.has(id) || hiddenColumns.has('usage')) {
+      setUsageBatchLoading(id, false)
+      continue
+    }
+    if (force) forced.push(id)
+    else regular.push(id)
+  }
   pendingUsageBatchIds.clear()
-  queuedUsageBatchForce = false
+  if (regular.length > 0) void loadUsageBatch(regular, false)
+  if (forced.length > 0) void loadUsageBatch(forced, true)
+}
 
-  if (providerIDs.length === 0) return
-
+const loadUsageBatch = async (providerIDs: number[], force: boolean) => {
+  const { signal } = usageBatchLifetime
   const requestTokensByProvider = providerIDs.reduce<Record<string, number>>((acc, providerID) => {
     acc[String(providerID)] = usageBatchRequestTokenByProviderId.value[String(providerID)] ?? 0
     return acc
   }, {})
 
   try {
-    const result = await adminAPI.providers.getBatchUsage(providerIDs, force)
+    const result = await adminAPI.providers.getBatchUsage(providerIDs, force, signal)
+    if (signal.aborted) return
 
     const usageMap = result.usage ?? {}
     const errorMap = result.errors ?? {}
@@ -1290,6 +1302,7 @@ const flushQueuedUsageBatch = async () => {
     usageBatchErrorByProviderId.value = nextErrors
     usageBatchLoadingByProviderId.value = nextLoading
   } catch (error) {
+    if (signal.aborted) return
     const nextErrors = { ...usageBatchErrorByProviderId.value }
     const nextLoading = { ...usageBatchLoadingByProviderId.value }
     for (const providerID of providerIDs) {
@@ -1307,12 +1320,14 @@ const flushQueuedUsageBatch = async () => {
 }
 
 const queueBatchedUsage = (provider: Provider, options?: { force?: boolean }) => {
-  if (!isDesktopViewport.value) return
+  if (!isDesktopViewport.value || hiddenColumns.has('usage')) return
   if (!providerSupportsBatchUsage(provider)) return
 
   const force = options?.force === true
   const cacheKey = provider.id
   const key = String(cacheKey)
+  // 行重复挂载时复用排队或在途请求。强制刷新有独立编号。
+  if (!force && usageBatchLoadingByProviderId.value[key]) return
 
   if (force) {
     usageBatchCache.delete(cacheKey)
@@ -1334,8 +1349,7 @@ const queueBatchedUsage = (provider: Provider, options?: { force?: boolean }) =>
     [key]: ++usageBatchRequestToken
   }
   setUsageBatchLoading(cacheKey, true)
-  pendingUsageBatchIds.add(cacheKey)
-  queuedUsageBatchForce = queuedUsageBatchForce || force
+  pendingUsageBatchIds.set(cacheKey, force)
 
   if (usageBatchFlushTimer !== null) return
   usageBatchFlushTimer = setTimeout(() => {
@@ -2968,7 +2982,7 @@ onMounted(async () => {
   load()
   const [proxiesResult, groupsResult] = await Promise.allSettled([
     adminAPI.proxies.getAll(),
-    adminAPI.groups.getAllIncludingInactive()
+    adminAPI.groups.getOptions({ includeInactive: true })
   ])
   if (proxiesResult.status === 'fulfilled') {
     proxies.value = proxiesResult.value
@@ -2993,6 +3007,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  usageBatchLifetime.abort()
   if (usageBatchFlushTimer !== null) {
     clearTimeout(usageBatchFlushTimer)
     usageBatchFlushTimer = null

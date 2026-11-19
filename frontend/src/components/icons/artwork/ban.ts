@@ -1,7 +1,5 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/ban.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const CIRCLE_VARIANTS: Variants = {
@@ -46,12 +44,12 @@ const icon: IconDefinition = {
   name: 'ban',
   normal: 'normal',
   animate: ['animate', 'slash'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
-        motion.circle,
+  render: (node) =>
+    node('g', {}, [
+      node(
+        'circle',
         {
-          animate: controls,
+          animate: true,
           cx: '12',
           cy: '12',
           initial: 'normal',
@@ -60,10 +58,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'm4.9 4.9 14.2 14.2',
           initial: 'normal',
           variants: LINE_VARIANTS

@@ -1515,7 +1515,7 @@ import type {
   ModerationMode,
   UpdateContentModerationConfig,
 } from '@/api/admin/riskControl'
-import type { AdminGroup, Proxy, SelectOption } from '@/types'
+import type { AdminGroupOption, Proxy, SelectOption } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatDateTime as formatDateTimeValue } from '@/utils/format'
@@ -1595,7 +1595,7 @@ const activeSettingsTab = ref<SettingsTab>('basic')
 const activeRecordTab = ref<RecordTab>('moderation')
 const groupSearch = ref('')
 const flaggedHashInput = ref('')
-const groups = ref<AdminGroup[]>([])
+const groups = ref<AdminGroupOption[]>([])
 const proxies = ref<Proxy[]>([])
 const logs = ref<ContentModerationLog[]>([])
 const cyberWarnings = ref<ContentModerationCyberWarning[]>([])
@@ -2172,7 +2172,7 @@ async function loadAll() {
   try {
     const [config, groupItems, runtimeStatus, proxyItems] = await Promise.all([
       adminAPI.riskControl.getConfig(),
-      adminAPI.groups.getAll(),
+      adminAPI.groups.getOptions(),
       adminAPI.riskControl.getStatus(),
       // 代理列表加载失败时返回空列表，风控配置继续加载。
       adminAPI.proxies.getAll().catch(() => [] as Proxy[]),

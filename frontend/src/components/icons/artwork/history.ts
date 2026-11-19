@@ -1,7 +1,6 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/history.tsx
-import { h } from 'vue'
-import { motion, type Transition } from 'motion-v'
+import type { Transition } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const ARROW_TRANSITION: Transition = {
@@ -59,25 +58,25 @@ const icon: IconDefinition = {
   name: 'history',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
-        motion.g,
+  render: (node) =>
+    node('g', {}, [
+      node(
+        'g',
         {
-          animate: controls,
+          animate: true,
           transition: ARROW_TRANSITION,
           variants: ARROW_VARIANTS,
           initial: 'normal'
         },
         () => [
-          h(
+          node(
             'path',
             {
               d: 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8'
             },
             []
           ),
-          h(
+          node(
             'path',
             {
               d: 'M3 3v5h5'
@@ -86,10 +85,10 @@ const icon: IconDefinition = {
           )
         ]
       ),
-      h(
-        motion.line,
+      node(
+        'line',
         {
-          animate: controls,
+          animate: true,
           initial: 'normal',
           transition: HAND_TRANSITION,
           variants: HAND_VARIANTS,
@@ -100,10 +99,10 @@ const icon: IconDefinition = {
         },
         () => []
       ),
-      h(
-        motion.line,
+      node(
+        'line',
         {
-          animate: controls,
+          animate: true,
           initial: 'normal',
           transition: MINUTE_HAND_TRANSITION,
           variants: MINUTE_HAND_VARIANTS,

@@ -66,13 +66,13 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GroupBadge from './GroupBadge.vue'
 import Icon from '@/components/icons/Icon.vue'
-import type { AdminGroup } from '@/types'
+import type { AdminGroupOption } from '@/types'
 
 const { t } = useI18n()
 
 interface Props {
   modelValue: number[]
-  groups: AdminGroup[]
+  groups: AdminGroupOption[]
   searchable?: boolean | 'auto'
 }
 
@@ -92,7 +92,7 @@ const isSearchable = computed(() => {
 
 // 提供商可以关联任意分组，搜索仅按名称和描述过滤。
 const filteredGroups = computed(() => {
-  let result: AdminGroup[] = props.groups
+  let result: AdminGroupOption[] = props.groups
   if (isSearchable.value && searchText.value) {
     const q = searchText.value.toLowerCase()
     result = result.filter(

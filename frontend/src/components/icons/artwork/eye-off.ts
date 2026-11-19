@@ -1,7 +1,5 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/eye-off.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const PATH_VARIANTS: Variants = {
@@ -18,33 +16,33 @@ const icon: IconDefinition = {
   name: 'eye-off',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
+  render: (node) =>
+    node('g', {}, [
+      node(
         'path',
         {
           d: 'M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49'
         },
         []
       ),
-      h(
+      node(
         'path',
         {
           d: 'M14.084 14.158a3 3 0 0 1-4.242-4.242'
         },
         []
       ),
-      h(
+      node(
         'path',
         {
           d: 'M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143'
         },
         []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'm2 2 20 20',
           variants: PATH_VARIANTS,
           initial: 'normal'

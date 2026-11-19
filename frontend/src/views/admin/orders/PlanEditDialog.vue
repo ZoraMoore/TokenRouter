@@ -149,7 +149,7 @@ import { groupsAPI } from '@/api/admin/groups'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatPaymentAmount } from '@/components/payment/currency'
 import type { SubscriptionPlan } from '@/types/payment'
-import type { AdminGroup } from '@/types'
+import type { AdminGroupOption } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
 
@@ -169,7 +169,7 @@ const appStore = useAppStore()
 
 const saving = ref(false)
 const groupsLoading = ref(false)
-const groups = ref<AdminGroup[]>([])
+const groups = ref<AdminGroupOption[]>([])
 // 套餐名称、介绍、权益和商品名共用一份译文，权益按行填写。
 const planCopyFields = computed(() => [
   { key: 'name' as const, label: t('payment.admin.planName'), required: true },
@@ -275,7 +275,7 @@ watch(
 async function loadGroups() {
   groupsLoading.value = true
   try {
-    groups.value = await groupsAPI.getAllIncludingInactive()
+    groups.value = await groupsAPI.getOptions({ includeInactive: true })
   } catch (error: unknown) {
     appStore.showError(extractApiErrorMessage(error, t('admin.groups.failedToLoad')))
   } finally {
@@ -318,7 +318,7 @@ function setGroupRate(groupId: number, event: Event) {
   planForm.group_rate_multipliers[groupId] = Number(value)
 }
 
-function formatGroupDefaultRate(group: AdminGroup): string {
+function formatGroupDefaultRate(group: AdminGroupOption): string {
   const rate = Number(group.rate_multiplier)
   if (!Number.isFinite(rate) || rate <= 0) return ''
   return `${rate}x`

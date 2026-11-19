@@ -1,30 +1,13 @@
-import { h } from 'vue'
-import { motion } from 'motion-v'
-import type { IconDefinition } from './types'
+import type { IconDefinition, IconTag } from './types'
 
-/** 为暂无官方动画的 Lucide 图形提供一次轻微缩放。 */
+/** 为暂无逐元素动画的 Lucide 图形提供 CSS 缩放反馈。 */
 export function createFallbackIcon(
   name: string,
-  nodes: Array<[string, Record<string, string>]>
+  nodes: Array<[IconTag, Record<string, string>]>
 ): IconDefinition {
   return {
     name,
-    normal: 'normal',
-    animate: ['animate'],
-    render: (controls) =>
-      h(
-        motion.g,
-        {
-          animate: controls,
-          initial: 'normal',
-          style: { transformOrigin: '12px 12px' },
-          variants: {
-            normal: { scale: 1 },
-            animate: { scale: [1, 1.06, 1] }
-          },
-          transition: { duration: 0.4, ease: 'easeInOut' }
-        },
-        () => nodes.map(([tag, attributes]) => h(tag, attributes))
-      )
+    scale: true,
+    render: (node) => nodes.map(([tag, attributes]) => node(tag, attributes))
   }
 }

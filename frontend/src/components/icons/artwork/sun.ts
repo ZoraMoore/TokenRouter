@@ -1,7 +1,5 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/sun.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const PATH_VARIANTS: Variants = {
@@ -16,9 +14,9 @@ const icon: IconDefinition = {
   name: 'sun',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
+  render: (node) =>
+    node('g', {}, [
+      node(
         'circle',
         {
           cx: '12',
@@ -37,10 +35,10 @@ const icon: IconDefinition = {
         'M2 12h2',
         'm4.93 4.93 1.41 1.41'
       ].map((d, index) =>
-        h(
-          motion.path,
+        node(
+          'path',
           {
-            animate: controls,
+            animate: true,
             custom: index + 1,
             d: d,
             key: d,

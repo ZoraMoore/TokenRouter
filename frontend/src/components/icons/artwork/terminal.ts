@@ -1,7 +1,5 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/terminal.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const LINE_VARIANTS: Variants = {
@@ -20,19 +18,19 @@ const icon: IconDefinition = {
   name: 'terminal',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
+  render: (node) =>
+    node('g', {}, [
+      node(
         'polyline',
         {
           points: '4 17 10 11 4 5'
         },
         []
       ),
-      h(
-        motion.line,
+      node(
+        'line',
         {
-          animate: controls,
+          animate: true,
           initial: 'normal',
           variants: LINE_VARIANTS,
           x1: '12',

@@ -1,7 +1,5 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/circle-dollar-sign.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const DOLLAR_MAIN_VARIANTS: Variants = {
@@ -50,9 +48,9 @@ const icon: IconDefinition = {
   name: 'circle-dollar-sign',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
+  render: (node) =>
+    node('g', {}, [
+      node(
         'circle',
         {
           cx: '12',
@@ -61,20 +59,20 @@ const icon: IconDefinition = {
         },
         []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8',
           initial: 'normal',
           variants: DOLLAR_MAIN_VARIANTS
         },
         () => []
       ),
-      h(
-        motion.path,
+      node(
+        'path',
         {
-          animate: controls,
+          animate: true,
           d: 'M12 18V6',
           initial: 'normal',
           variants: DOLLAR_SECONDARY_VARIANTS

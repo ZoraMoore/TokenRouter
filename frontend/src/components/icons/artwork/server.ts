@@ -1,7 +1,5 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/server.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition, IconVariants as Variants } from '../types'
 
 const TOP_RECT_VARIANTS: Variants = {
@@ -34,17 +32,17 @@ const icon: IconDefinition = {
   name: 'server',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h('g', {}, [
-      h(
-        motion.g,
+  render: (node) =>
+    node('g', {}, [
+      node(
+        'g',
         {
-          animate: controls,
+          animate: true,
           initial: 'normal',
           variants: TOP_RECT_VARIANTS
         },
         () => [
-          h(
+          node(
             'rect',
             {
               height: '8',
@@ -56,7 +54,7 @@ const icon: IconDefinition = {
             },
             []
           ),
-          h(
+          node(
             'line',
             {
               x1: '6',
@@ -68,15 +66,15 @@ const icon: IconDefinition = {
           )
         ]
       ),
-      h(
-        motion.g,
+      node(
+        'g',
         {
-          animate: controls,
+          animate: true,
           initial: 'normal',
           variants: BOTTOM_RECT_VARIANTS
         },
         () => [
-          h(
+          node(
             'rect',
             {
               height: '8',
@@ -88,7 +86,7 @@ const icon: IconDefinition = {
             },
             []
           ),
-          h(
+          node(
             'line',
             {
               x1: '6',

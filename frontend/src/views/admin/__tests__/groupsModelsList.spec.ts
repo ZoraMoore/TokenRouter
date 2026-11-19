@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildModelsListConfig,
+  buildCreateModelsListConfig,
+  buildUpdateModelsListConfig,
+  setModelsListEnabled,
   createModelsListState,
   getAvailabilityProbeCandidateModels,
   hydrateModelsListState,
@@ -166,4 +169,47 @@ describe("groupsModelsList", () => {
     setModelsListCandidates(state, []);
     expect(getAvailabilityProbeCandidateModels(state)).toEqual([]);
   });
+});
+
+it("deduplicates 13,529 candidates in input order", () => {
+  const models = Array.from({ length: 13_529 }, (_, i) => `model-${i}`);
+  const state = createModelsListState({ enabled: false, models: ["saved-elsewhere"] });
+
+  setModelsListCandidates(state, [" ", ...models, ` ${models[0]} `, models[3]]);
+
+  expect(state.candidateModels).toEqual(models);
+  expect(state.items).toHaveLength(13_530);
+  expect(state.items[0]).toEqual({ id: "saved-elsewhere", selected: true });
+  expect(state.items.at(-1)).toEqual({ id: models.at(-1), selected: false });
+  expect(buildUpdateModelsListConfig(state)).toBeUndefined();
+});
+
+it("keeps a disabled create payload empty after the probe loads candidates", () => {
+  const state = hydrateModelsListState(undefined, ["model-1", "model-2"]);
+  expect(buildCreateModelsListConfig(state)).toEqual({ enabled: false, models: [] });
+});
+
+it("can turn off and restore an edited ordering with a saved model outside the candidates", () => {
+  const state = hydrateModelsListState({ enabled: true, models: ["retired", "current"] }, ["current"]);
+  moveModelsListItem(state, 1, 0);
+  setModelsListEnabled(state, false);
+  expect(buildUpdateModelsListConfig(state)).toEqual({
+    enabled: false, models: ["current", "retired"],
+  });
+  setModelsListEnabled(state, true);
+  expect(buildUpdateModelsListConfig(state)).toEqual({
+    enabled: true, models: ["current", "retired"],
+  });
+});
+
+it("keeps a saved enabled empty selection empty when candidates load", () => {
+  const state = hydrateModelsListState({ enabled: true, models: [] }, ["model-1"]);
+  expect(state.items).toEqual([{ id: "model-1", selected: false }]);
+});
+
+it("does not save automatic selections when an editor opens and closes the model switch", () => {
+  const state = hydrateModelsListState({ enabled: false, models: [] }, ["model-1"]);
+  setModelsListEnabled(state, true);
+  setModelsListEnabled(state, false);
+  expect(buildUpdateModelsListConfig(state)).toEqual({ enabled: false, models: [] });
 });

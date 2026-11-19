@@ -1,6 +1,6 @@
 import { useProtocolCatalogFixture } from '@/__tests__/helpers/protocolCatalog'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { flushPromises, mount, shallowMount, type VueWrapper } from '@vue/test-utils'
 
 import ProvidersView from '../ProvidersView.vue'
 
@@ -8,6 +8,7 @@ const {
   listProviders,
   listWithEtag,
   getBatchTodayStats,
+  getBatchUsage,
   getById,
   getUsage,
   setPrivacy,
@@ -21,6 +22,7 @@ const {
   listProviders: vi.fn(),
   listWithEtag: vi.fn(),
   getBatchTodayStats: vi.fn(),
+  getBatchUsage: vi.fn(),
   getById: vi.fn(),
   getUsage: vi.fn(),
   setPrivacy: vi.fn(),
@@ -38,6 +40,7 @@ vi.mock('@/api/admin', () => ({
       list: listProviders,
       listWithEtag,
       getBatchTodayStats,
+      getBatchUsage,
       getById,
       getUsage,
       setPrivacy,
@@ -50,7 +53,7 @@ vi.mock('@/api/admin', () => ({
       getAll: getAllProxies
     },
     groups: {
-      getAllIncludingInactive: getAllGroupsIncludingInactive
+      getOptions: getAllGroupsIncludingInactive
     }
   }
 }))
@@ -135,6 +138,7 @@ describe('admin ProvidersView bulk edit scope', () => {
     listProviders.mockReset()
     listWithEtag.mockReset()
     getBatchTodayStats.mockReset()
+    getBatchUsage.mockReset()
     getById.mockReset()
     getUsage.mockReset()
     setPrivacy.mockReset()
@@ -158,11 +162,61 @@ describe('admin ProvidersView bulk edit scope', () => {
       data: null
     })
     getBatchTodayStats.mockResolvedValue({ stats: {} })
+    getBatchUsage.mockResolvedValue({ usage: {}, errors: {} })
     getById.mockRejectedValue(new Error('unexpected getById call'))
     getUsage.mockResolvedValue({ updated_at: null, five_hour: null, seven_day: null, seven_day_sonnet: null })
     setPrivacy.mockRejectedValue(new Error('unexpected setPrivacy call'))
     getAllProxies.mockResolvedValue([])
     getAllGroupsIncludingInactive.mockResolvedValue([])
+  })
+
+  it('sends forced usage separately and coalesces duplicate row requests', async () => {
+    const desktop = vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...({} as MediaQueryList),
+      media: query,
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+    listProviders.mockResolvedValue({
+      items: [1, 2].map(id => ({ id, name: String(id), platform: 'openai', type: 'oauth', status: 'active' })),
+      total: 2, page: 1, page_size: 20, pages: 1
+    })
+    let finishBatch: ((value: { usage: object; errors: object }) => void) | undefined
+    getBatchUsage.mockImplementationOnce(() => new Promise(resolve => { finishBatch = resolve }))
+    const wrapper = shallowMount(ProvidersView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: { template: '<div><slot name="table" /></div>' },
+          DataTable: {
+            props: ['data'],
+            template: '<div><div v-for="row in data" :key="row.id"><slot name="cell-usage" :row="row" /></div></div>'
+          },
+          ProviderUsageCell: {
+            props: ['provider', 'requestBatchedUsage'],
+            template: '<button @click="requestBatchedUsage(provider, { force: provider.id === 2 })">{{ provider.id }}</button>'
+          }
+        }
+      }
+    })
+    try {
+      await flushPromises()
+      const row = (id: number) => wrapper.findAll('button').find(button => button.text() === String(id))!
+      row(1).element.click()
+      row(2).element.click()
+      await vi.waitFor(() => expect(getBatchUsage).toHaveBeenCalledTimes(2))
+      const calls = getBatchUsage.mock.calls.map(args => args.slice(0, 2))
+      expect(calls).toContainEqual([[1], false])
+      expect(calls).toContainEqual([[2], true])
+      await row(1).trigger('click')
+      await new Promise(resolve => setTimeout(resolve, 20))
+      expect(getBatchUsage).toHaveBeenCalledTimes(2)
+    } finally {
+      finishBatch?.({ usage: {}, errors: {} })
+      wrapper.unmount()
+      desktop.mockRestore()
+    }
   })
 
   it('opens bulk edit in filtered-results mode from the bulk actions dropdown', async () => {

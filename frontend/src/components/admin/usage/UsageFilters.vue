@@ -536,8 +536,8 @@ onMounted(async () => {
   document.addEventListener('click', onDocumentClick)
   // 团队和分组选项相互独立，任一加载失败都不影响其他筛选器使用。
   await Promise.allSettled([
-    adminAPI.groups.list(1, 1000).then((gs) => {
-      groupOptions.value.push(...gs.items.map((g: any) => ({ value: g.id, label: g.name })))
+    adminAPI.groups.getOptions({ includeInactive: true }).then((gs) => {
+      groupOptions.value.push(...gs.map((g) => ({ value: g.id, label: g.name })))
     }),
     adminAPI.teams.list().then((teams) => {
       teamOptions.value.push(...teams.map((team) => ({ value: team.id, label: team.name })))

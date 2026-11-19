@@ -6,6 +6,8 @@
 import { apiClient } from '../client'
 import type {
   AdminGroup,
+  AdminGroupOption,
+  AdminGroupTableRow,
   CreateGroupRequest,
   UpdateGroupRequest,
   PaginatedResponse
@@ -17,35 +19,59 @@ export interface LiveCapability {
   reason?: string
 }
 
-/**
- * List all groups with pagination
- * @param page - Page number (default: 1)
- * @param pageSize - Items per page (default: 20)
- * @param filters - Optional filters (platform, status, is_exclusive, search)
- * @returns Paginated list of groups
- */
-export async function list(
-  page: number = 1,
-  pageSize: number = 20,
-  filters?: {
-    status?: 'active' | 'inactive'
-    is_exclusive?: boolean
-    search?: string
-    sort_by?: string
-    sort_order?: 'asc' | 'desc'
-  },
-  options?: {
-    signal?: AbortSignal
-  }
+interface GroupListFilters {
+  status?: 'active' | 'inactive'
+  is_exclusive?: boolean
+  search?: string
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
+}
+
+/** 分页读取含编辑配置的分组。 */
+export function list(
+  page = 1,
+  pageSize = 20,
+  filters?: GroupListFilters,
+  options?: { signal?: AbortSignal }
 ): Promise<PaginatedResponse<AdminGroup>> {
-  const { data } = await apiClient.get<PaginatedResponse<AdminGroup>>('/admin/groups', {
-    params: {
-      page,
-      page_size: pageSize,
-      ...filters
-    },
-    signal: options?.signal
+  return listGroups<AdminGroup>(page, pageSize, filters, options?.signal)
+}
+
+/** 分页读取分组表格所需的字段。 */
+export function listTable(
+  page: number,
+  pageSize: number,
+  filters?: GroupListFilters,
+  options?: { signal?: AbortSignal }
+): Promise<PaginatedResponse<AdminGroupTableRow>> {
+  return listGroups<AdminGroupTableRow>(page, pageSize, filters, options?.signal, 'table')
+}
+
+async function listGroups<T>(
+  page: number,
+  pageSize: number,
+  filters?: GroupListFilters,
+  signal?: AbortSignal,
+  view?: 'table'
+): Promise<PaginatedResponse<T>> {
+  const { data } = await apiClient.get<PaginatedResponse<T>>('/admin/groups', {
+    params: { page, page_size: pageSize, ...filters, view },
+    signal
   })
+  return data
+}
+
+/** 读取绑定、筛选和排序使用的分组选项。 */
+export async function getOptions(options?: { includeInactive?: boolean }): Promise<AdminGroupOption[]> {
+  const { data } = await apiClient.get<AdminGroupOption[]>('/admin/groups/options', {
+    params: { include_inactive: options?.includeInactive }
+  })
+  return data
+}
+
+/** 读取分组的编辑配置。 */
+export async function getById(id: number, options?: { signal?: AbortSignal }): Promise<AdminGroup> {
+  const { data } = await apiClient.get<AdminGroup>(`/admin/groups/${id}`, { signal: options?.signal })
   return data
 }
 
@@ -79,10 +105,12 @@ export async function getLiveCapability(): Promise<LiveCapability> {
  * id=0 表示创建分组流程，返回通用候选模型。
  */
 export async function getModelsListCandidates(
-  id: number
+  id: number,
+  signal?: AbortSignal
 ): Promise<string[]> {
   const { data } = await apiClient.get<{ models: string[] }>(
-    `/admin/groups/${id}/models-list-candidates`
+    `/admin/groups/${id}/models-list-candidates`,
+    { signal }
   )
   return data.models || []
 }
@@ -331,6 +359,9 @@ export async function getCapacitySummary(): Promise<
 
 export const groupsAPI = {
   list,
+  listTable,
+  getOptions,
+  getById,
   getAll,
   getAllIncludingInactive,
   getLiveCapability,

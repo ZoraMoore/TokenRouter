@@ -1,18 +1,16 @@
 // 图形与逐元素动效移植自 Lucide Animated；许可与版本见 ../README.md。
 // https://github.com/pqoqubbw/icons/blob/072c38b1b04ea738d90a084485ccaad4b890ddca/icons/key.tsx
-import { h } from 'vue'
-import { motion } from 'motion-v'
 import type { IconDefinition } from '../types'
 
 const icon: IconDefinition = {
   name: 'key',
   normal: 'normal',
   animate: ['animate'],
-  render: (controls) =>
-    h(
-      motion.g,
+  render: (node) =>
+    node(
+      'g',
       {
-        animate: controls,
+        animate: true,
         initial: 'normal',
         style: { originX: 0.3, originY: 0.7 },
         variants: {
@@ -36,21 +34,21 @@ const icon: IconDefinition = {
         }
       },
       () => [
-        h(
+        node(
           'path',
           {
             d: 'm15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4'
           },
           []
         ),
-        h(
+        node(
           'path',
           {
             d: 'm21 2-9.6 9.6'
           },
           []
         ),
-        h(
+        node(
           'circle',
           {
             cx: '7.5',

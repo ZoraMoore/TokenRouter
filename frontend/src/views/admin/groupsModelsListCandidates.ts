@@ -1,5 +1,6 @@
 
 export type ModelsListCandidatesMode = "create" | "edit";
+export type ModelsListCandidatesStatus = "idle" | "loading" | "ready" | "error";
 
 export interface ModelsListCandidatesRequest {
   mode: ModelsListCandidatesMode;
@@ -8,6 +9,7 @@ export interface ModelsListCandidatesRequest {
 
 export interface ModelsListCandidatesTracker {
   next(request: ModelsListCandidatesRequest): number;
+  invalidate(mode: ModelsListCandidatesMode): void;
   isCurrent(requestID: number, request: ModelsListCandidatesRequest): boolean;
 }
 
@@ -26,6 +28,10 @@ export const createModelsListCandidatesTracker = (): ModelsListCandidatesTracker
         request: { ...request },
       };
       return currentRequestID;
+    },
+    // 关闭表单后，响应序号随该表单失效。
+    invalidate(mode) {
+      delete currentByMode[mode];
     },
     isCurrent(requestID, request) {
       const current = currentByMode[request.mode];
