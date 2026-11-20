@@ -1,132 +1,67 @@
-<div align="center">
-  <img src="assets/logo.svg" alt="TokenRouter" width="112" />
+# 云桥词元
 
-  <h1>TokenRouter</h1>
+[访问站点](https://api.scienceedu.me/home) · [模型广场](https://api.scienceedu.me/models) · [接入文档](https://docs.scienceedu.me/)
 
-  <p>开源的大模型统一网关</p>
+云桥词元是一个多模型 API 服务。你可以在控制台创建 API Key，通过兼容 OpenAI、Anthropic 和 Gemini 的接口调用所选分组开放的模型，并在控制台查询用量和费用。
 
-  <p>
-    <a href="https://github.com/TokenFlux/TokenRouter/actions/workflows/ci.yml"><img src="https://github.com/TokenFlux/TokenRouter/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-    <a href="https://github.com/TokenFlux/TokenRouter/releases"><img src="https://img.shields.io/github/v/release/TokenFlux/TokenRouter?display_name=tag" alt="Release" /></a>
-    <a href="https://github.com/TokenFlux/TokenRouter/pkgs/container/tokenrouter"><img src="https://img.shields.io/badge/container-ghcr.io%2Ftokenflux%2Ftokenrouter-2496ED?logo=docker&logoColor=white" alt="Container" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-LGPL--3.0--or--later-4c1.svg" alt="License: LGPL-3.0-or-later" /></a>
-  </p>
+## 接入云桥词元
 
-  <p><strong>简体中文</strong> | <a href="README_EN.md">English</a></p>
-  <p><a href="https://discord.gg/4tPj7uk4">加入 Discord 群组</a></p>
-</div>
+1. 登录站点，根据所选分组的计费方式准备余额或订阅。[模型、分组与计费](https://docs.scienceedu.me/guide/models-and-billing)
+2. 在控制台创建 API Key，选择分组并保存完整密钥。密钥完整内容仅在创建时显示。[API 密钥页面](https://api.scienceedu.me/keys)
+3. 在客户端填入 API Key，再按客户端要求选择 Base URL。分组需要允许客户端使用的协议。[客户端接入指南](https://docs.scienceedu.me/guide/quickstart)
 
-## 简介
+| 客户端协议 | Base URL | 常用请求路径 |
+| --- | --- | --- |
+| OpenAI | `https://api.scienceedu.me/v1` | `POST /v1/responses`、`POST /v1/chat/completions` |
+| Anthropic | `https://api.scienceedu.me` | `POST /v1/messages` |
+| Gemini | `https://api.scienceedu.me` | `POST /v1beta/models/{model}:generateContent` |
 
-TokenRouter 是一个开源的大模型统一网关。它把 Anthropic、OpenAI、Gemini 等多家厂商的模型服务接到同一个入口，用户用一个 API Key 就能调用不同厂商的模型。
-
-## 界面预览
-
-<details open>
-<summary>浅色模式</summary>
-
-### 仪表盘
-
-<img src="assets/screenshots/dashboard-light.jpg" alt="TokenRouter 仪表盘 · 浅色模式" width="1600" />
-
-### 模型广场
-
-<img src="assets/screenshots/models-light.jpg" alt="TokenRouter 模型广场 · 浅色模式" width="1600" />
-
-</details>
-
-<details>
-<summary>深色模式</summary>
-
-### 仪表盘
-
-<img src="assets/screenshots/dashboard-dark.jpg" alt="TokenRouter 仪表盘 · 深色模式" width="1600" />
-
-### 模型广场
-
-<img src="assets/screenshots/models-dark.jpg" alt="TokenRouter 模型广场 · 深色模式" width="1600" />
-
-</details>
-
-在线示例可访问 [tokenflux.dev](https://tokenflux.dev)
-
-## 核心能力
-
-| 方向    | 可以做什么                                                                                                           |
-|-------|-----------------------------------------------------------------------------------------------------------------|
-| 模型接入  | 兼容 Anthropic Messages、OpenAI Responses、Chat Completions 和 Gemini 协议，分组允许的协议之间可以互相转换                             |
-| 上游平台  | 接入 Anthropic、OpenAI、Gemini、Antigravity、Grok、Qoder、Kimi、智谱和 DeepSeek，支持 OAuth 账号、API Key、AWS Bedrock 和 Vertex AI |
-| 调度与重试 | 按模型、协议能力、限流状态和粘性会话选择上游，上游出错时自动换下一个                                                                              |
-| 访问控制  | 管理用户、团队、分组和 API Key 的额度、并发与 RPM。登录支持邮箱密码、Passkey、两步验证，以及 GitHub、Google、LinuxDo、OIDC、微信和钉钉                       |
-| 计费与支付 | 按用量计费，支持余额、订阅套餐、额度包、兑换码和邀请返利。内置易支付、支付宝、微信支付、Stripe 和 Airwallex                                                  |
-| 内容审核  | 按关键词和哈希规则拦截请求，可以自动封禁违规用户                                                                                        |
-| 管理后台  | 查看用量日志和统计、配置监控告警和邮件报表、在线升级和回滚，网页创作台可以生成和编辑图片。界面支持简体中文和英语                                                        |
-
-### 协议与接口
-
-| 接口类型                    | 常用入口                                                                                              |
-|-------------------------|---------------------------------------------------------------------------------------------------|
-| Anthropic Messages      | `POST /v1/messages`                                                                               |
-| OpenAI Responses / Chat | `POST /v1/responses`、`POST /v1/chat/completions`                                                  |
-| Gemini                  | `POST /v1beta/models/{model}:generateContent`、`POST /v1beta/models/{model}:streamGenerateContent` |
-| WebSocket               | `GET /v1/responses`、`GET /v1/realtime`                                                            |
-| 向量                      | `POST /v1/embeddings`                                                                             |
-| 图片                      | `/v1/images/generations`、`/v1/images/edits`、`/v1/images/batches`                                  |
-| 视频                      | `/v1/videos/generations`、`/v1/videos/edits`、`/v1/videos/extensions`                               |
-| 语音                      | `/v1/tts`、`/v1/stt`、`/v1/custom-voices`                                                           |
-| 搜索                      | `/v1/web_search`、`/v1/x_search`、`/v1/alpha/search`                                                |
-| 模型与用量                   | `GET /v1/models`、`GET /v1/usage`                                                                  |
-
-详细见[上游提供商能力矩阵](docs/interfaces/upstream_provider_matrix.md)。
-
-## 快速开始
-
-使用 Docker Compose 部署：
+把密钥存入本地环境变量 `YUNQIAO_API_KEY` 后，可以用下面的请求查询该 Key 可见的模型。发起生成请求时使用返回列表中的模型 ID。
 
 ```bash
-mkdir -p tokenrouter-deploy && cd tokenrouter-deploy
-
-# 下载 Compose 文件和 .env，并生成数据库密码和密钥
-curl -sSL https://raw.githubusercontent.com/TokenFlux/TokenRouter/main/deploy/docker-deploy.sh | bash
-
-docker compose up -d
+curl -fsS https://api.scienceedu.me/v1/models \
+  -H "Authorization: Bearer ${YUNQIAO_API_KEY}"
 ```
 
-启动后打开 `http://localhost:8080`。管理员密码可以在 `.env` 的 `ADMIN_PASSWORD` 里设置，没有设置时会随机生成并打印到日志：
+完整的请求路径和各协议的鉴权方式见 [API 端点](https://docs.scienceedu.me/api/endpoints)。
+
+## 网关源码
+
+本仓库维护云桥词元使用的 TokenRouter 定制版本。TokenRouter 是从 Sub2API 演进而来的开源网关，负责接入上游模型服务、转发请求和记录用量。[上游项目 TokenFlux/TokenRouter](https://github.com/TokenFlux/TokenRouter)
+
+| 功能 | 网关如何处理 |
+| --- | --- |
+| 上游接入 | 可以接入 OpenAI、Anthropic、Gemini、Antigravity、Grok、Qoder、Kimi、智谱和 DeepSeek。按平台选择 OAuth、API Key、AWS Bedrock 或 Vertex AI 等接入方式。 |
+| 请求调度 | 按模型、协议、限流状态和粘性会话选择上游。分组可以配置协议转换，符合重试条件时网关可切换上游。 |
+| 账号与配额 | 按用户、团队、分组和 API Key 管理访问权限、额度、并发和每分钟请求数。登录支持邮箱密码、Passkey、两步验证，以及 GitHub、Google、LinuxDo、OIDC、微信和钉钉。 |
+| 计费与支付 | 记录调用用量和费用，管理余额、订阅、额度包、兑换码和邀请返利。可配置易支付、支付宝、微信支付、Stripe 和 Airwallex。 |
+| 运营管理 | 查询用量日志与统计，配置告警和邮件报表，管理升级和回滚。内容审核可以按关键词和哈希拦截请求，并自动封禁违规用户。控制台提供图片生成与编辑，支持简体中文和英语。 |
+
+图片、视频、语音、向量、搜索和 WebSocket 的支持情况取决于所用平台、模型与分组。[上游提供商能力矩阵](docs/interfaces/upstream_provider_matrix.md#public_gateway_protocols)
+
+TokenRouter 界面示例可查看[浅色仪表盘](assets/screenshots/dashboard-light.jpg)、[浅色模型广场](assets/screenshots/models-light.jpg)、[深色仪表盘](assets/screenshots/dashboard-dark.jpg)和[深色模型广场](assets/screenshots/models-dark.jpg)。
+
+## 部署与本地开发
+
+后端使用 Go，前端使用 Vue 3。Docker Compose 可以从当前检出的源码构建网关，并启动 PostgreSQL 和 Redis。
+
+首次运行时，先复制 `deploy/.env.example` 为 `deploy/.env`，再设置 `POSTGRES_PASSWORD` 和 `ADMIN_PASSWORD`。启动命令从仓库根目录运行。
 
 ```bash
-docker compose logs tokenrouter | grep "admin password"
+docker compose --env-file deploy/.env -f deploy/docker-compose.dev.yml up --build
 ```
 
-更多部署方式，见[部署指南](docs/guides/deployment/index.md)。
+使用默认配置时，在浏览器打开 `http://127.0.0.1:8080`。首次初始化时，如果 `ADMIN_PASSWORD` 留空，应用会随机生成管理员密码并写入启动日志。
 
-## 本地开发
+- [部署指南](docs/guides/deployment/index.md)介绍镜像部署、初始化和升级方法。
+- [开发、验证与上游同步](docs/operations/development_workflow.md)列出工具版本、前后端独立启动方式和测试命令。
+- [工程文档](docs/index.md)记录网关架构、业务规则、接口和运维要求。[升级说明](docs/operations/upgrade_notes.md)记录版本升级时需要处理的事项。
+- [使用与运维指南](docs/guides/index.md)包括部署、支付配置和外部系统集成。
 
-后端使用 Go，前端用 Vue 3。从源码启动完整环境：
-
-```bash
-docker compose -f deploy/docker-compose.dev.yml up --build
-```
-
-环境要求、分别启动前后端的方法和测试命令，见[开发、验证与上游同步](docs/operations/development_workflow.md)。
-
-## 文档
-
-- [使用与运维指南](docs/guides/index.md)：部署、支付配置和外部系统集成。
-- [工程文档](docs/index.md)：架构、业务规则、接口和运维约束，修改代码前从这里查。
-- [升级说明](docs/operations/upgrade_notes.md)：各版本需要注意的变化。
-
-## 许可证
+## 许可证与上游资源
 
 本项目依据 [GNU Lesser General Public License v3.0 或更高版本](LICENSE) 发布。
 
 Copyright (c) 2026 Wesley Liddick & TokenFlux
 
-## Star 趋势
-
-<a href="https://star-history.com/#TokenFlux/TokenRouter&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=TokenFlux/TokenRouter&type=Date&theme=dark" />
-    <img src="https://api.star-history.com/svg?repos=TokenFlux/TokenRouter&type=Date" alt="Star History Chart" />
-  </picture>
-</a>
+[TokenRouter 英文说明](README_EN.md) · [上游发布](https://github.com/TokenFlux/TokenRouter/releases) · [上游 Docker 镜像](https://github.com/TokenFlux/TokenRouter/pkgs/container/tokenrouter) · [上游 Discord](https://discord.gg/4tPj7uk4)
