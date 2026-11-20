@@ -39,6 +39,8 @@ func observePaymentExpiryRuntime(step string, count int, err error) {
 			slog.Warn("[PaymentOrderExpiry] failed to reconcile paid order fulfillment", "error", err)
 		case "expire":
 			slog.Error("[PaymentOrderExpiry] failed to expire orders", "error", err)
+		case "coupons":
+			slog.Warn("[PaymentOrderExpiry] failed to reconcile closed order coupons", "error", err)
 		}
 		return
 	}
@@ -54,5 +56,7 @@ func observePaymentExpiryRuntime(step string, count int, err error) {
 		slog.Info("[PaymentOrderExpiry] reconciled paid order fulfillment", "count", count)
 	case "expire":
 		slog.Info("[PaymentOrderExpiry] expired timed-out orders", "count", count)
+	case "coupons":
+		slog.Info("[PaymentOrderExpiry] released closed order coupons", "count", count)
 	}
 }

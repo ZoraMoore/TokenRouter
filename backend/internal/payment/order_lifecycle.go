@@ -18,6 +18,7 @@ const (
 	LifecyclePendingPaymentReconcileLimit = 20
 	LifecycleProcessingReconcileLimit     = 20
 	LifecycleFulfillmentReconcileLimit    = 20
+	LifecycleCouponReconcileLimit         = 20
 	LifecycleFulfillmentRetryDelay        = time.Minute
 	LifecycleProcessingStaleAfter         = 24 * time.Hour
 	LifecyclePaymentExpiryRetryDelay      = 15 * time.Minute
@@ -61,7 +62,7 @@ func (s *OrderLifecycle) ForceExpireOrder(ctx context.Context, orderID int64, re
 }
 
 func (s *OrderLifecycle) CancelCore(ctx context.Context, o *Order, fs, op, ad string) (string, error) {
-	releaseCoupon := false
+	releaseCoupon := o.CouponSnapshot != nil && o.PaymentTradeNo == "" && o.PaymentType == ""
 	if o.PaymentTradeNo != "" || o.PaymentType != "" {
 		prov, queryRef, resp, err := s.QueryPaymentOrderProvider(ctx, o)
 		if err != nil {
@@ -112,9 +113,16 @@ func (s *OrderLifecycle) CancelCore(ctx context.Context, o *Order, fs, op, ad st
 				}
 				return "", PaymentStatusUnavailableError(fmt.Errorf("cancel upstream payment: %w", cancelErr))
 			}
-			// 支付宝在查无此单时也返回关单成功。下单在途时继续占用优惠券。
+			// 支付宝查无订单时也会返回关单成功，释放前需确认本地已保存支付入口。
 			releaseCoupon = o.CouponSnapshot != nil &&
-				(prov.ProviderKey() != TypeAlipay || IsValidProviderAmount(resp.Amount))
+				(prov.ProviderKey() != TypeAlipay || IsValidProviderAmount(resp.Amount) || couponUnpaidConfirmed(o, resp))
+		} else if o.CouponSnapshot != nil {
+			if !couponUnpaidConfirmed(o, resp) {
+				err := fmt.Errorf("provider did not confirm that the order is unpaid")
+				s.RecordPaymentCancelFailure(ctx, o, prov, queryRef, err, resp)
+				return "", PaymentStatusUnavailableError(err)
+			}
+			releaseCoupon = true
 		}
 	}
 	return s.FinalizePendingOrder(ctx, o, fs, op, ad, releaseCoupon)
@@ -192,20 +200,37 @@ func (s *OrderLifecycle) CheckPaid(ctx context.Context, o *Order) (string, error
 		return "", nil
 	}
 	outcome, err := s.ApplyQueriedPaymentStatus(ctx, o, prov, queryRef, resp)
-	if err != nil || outcome != LifecycleCheckPaidResultFailed || !couponCloseConfirmed(o, prov, resp) {
+	if err != nil {
 		return outcome, err
+	}
+	releaseCoupon := outcome == LifecycleCheckPaidResultFailed && couponCloseConfirmed(o, prov, resp)
+	if !releaseCoupon && couponUnpaidConfirmed(o, resp) {
+		releaseCoupon = o.Status == OrderStatusCancelled ||
+			(o.Status == OrderStatusExpired && s.HasAuditLog(ctx, o.ID, "ORDER_EXPIRED"))
+	}
+	if !releaseCoupon {
+		return outcome, nil
 	}
 	switch o.Status {
 	case OrderStatusPending:
 		return s.FinalizePendingOrder(ctx, o, OrderStatusExpired, "system", "provider confirmed the order is closed", true)
 	case OrderStatusCancelled, OrderStatusExpired:
-		_, err = s.store.TransitionOrder(ctx, OrderTransition{
+		updated, err := s.store.TransitionOrder(ctx, OrderTransition{
 			ID: o.ID, From: []string{o.Status}, Status: o.Status, ReleaseCoupon: true,
 		})
+		if err == nil && updated > 0 {
+			return LifecycleCheckPaidResultCancelled, nil
+		}
 		return outcome, err
 	default:
 		return outcome, nil
 	}
+}
+
+// couponUnpaidConfirmed 需要渠道明确确认未付款，以及已经写入的下单结果。
+func couponUnpaidConfirmed(o *Order, resp *QueryOrderResponse) bool {
+	return o.CouponSnapshot != nil && resp.Status == ProviderStatusPending && resp.ConfirmedUnpaid &&
+		(o.PaymentTradeNo != "" || refundStringValue(o.PayURL) != "" || refundStringValue(o.QrCode) != "")
 }
 
 // couponCloseConfirmed 区分关闭凭证与还能继续支付的失败状态。
@@ -433,6 +458,37 @@ func (s *OrderLifecycle) ReconcilePendingPaymentOrders(ctx context.Context) (int
 	return recovered, nil
 }
 
+// ReconcileClosedCouponOrders 补查仍占券的终态订单，并为本次仍待确认的记录留出重试间隔。
+func (s *OrderLifecycle) ReconcileClosedCouponOrders(ctx context.Context) (int, error) {
+	before := s.runtime.Now().Add(-LifecyclePaymentExpiryRetryDelay)
+	orders, err := s.store.ClosedOrdersHoldingCoupons(ctx, before, LifecycleCouponReconcileLimit)
+	if err != nil {
+		return 0, fmt.Errorf("query closed orders holding coupons: %w", err)
+	}
+	released := 0
+	for _, order := range orders {
+		if err := ctx.Err(); err != nil {
+			return released, err
+		}
+		outcome, checkErr := s.CheckPaid(ctx, order)
+		if checkErr != nil {
+			s.runtime.Log("warn", "reconcile closed order coupon failed", "orderID", order.ID, "error", checkErr)
+		}
+		if outcome == LifecycleCheckPaidResultCancelled && checkErr == nil {
+			released++
+			continue
+		}
+		// 只更新查单时所读到的订单版本，付款回调可以继续推进状态。
+		_, err := s.store.TransitionOrder(ctx, OrderTransition{
+			ID: order.ID, From: []string{order.Status}, Status: order.Status, Version: &order.UpdatedAt,
+		})
+		if err != nil {
+			return released, fmt.Errorf("record coupon reconciliation retry: %w", err)
+		}
+	}
+	return released, nil
+}
+
 // VerifyOrderPublic returns the currently persisted public order state without
 // triggering any upstream reconciliation. Signed resume-token recovery is the
 // only public recovery path allowed to query upstream state.
@@ -487,7 +543,7 @@ func (s *OrderLifecycle) ExpireTimedOutOrdersAt(ctx context.Context, now time.Ti
 		if !s.ShouldRetryTimedOutOrder(ctx, o, now) {
 			continue
 		}
-		// 到期决策必须先确认上游状态并成功关闭待支付单据。
+		// 到期前先查单，渠道支持关单时同时关闭渠道订单。
 		outcome, cancelErr := s.CancelCore(ctx, o, OrderStatusExpired, "system", "order expired")
 		if cancelErr != nil {
 			s.runtime.Log("warn", "keep timed-out order pending after upstream cancellation failure", "orderID", o.ID, "error", cancelErr)

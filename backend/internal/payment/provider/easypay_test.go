@@ -175,6 +175,7 @@ func TestEasyPayQueryOrderStatusMapping(t *testing.T) {
 		wantStatus  string
 		wantTradeNo string
 		wantAmount  float64
+		wantUnpaid  bool
 	}{
 		{
 			name:        "top level trade success is paid",
@@ -217,10 +218,18 @@ func TestEasyPayQueryOrderStatusMapping(t *testing.T) {
 			wantStatus:  payment.ProviderStatusPending,
 			wantTradeNo: orderID,
 			wantAmount:  3.21,
+			wantUnpaid:  true,
 		},
 		{
-			name:        "query failure with missing status is pending",
+			name:        "query explicitly reports order not found",
 			body:        `{"code":0,"msg":"订单不存在"}`,
+			wantStatus:  payment.ProviderStatusPending,
+			wantTradeNo: orderID,
+			wantUnpaid:  true,
+		},
+		{
+			name:        "failed response does not confirm unpaid",
+			body:        `{"code":0,"status":0,"msg":"商户认证失败"}`,
 			wantStatus:  payment.ProviderStatusPending,
 			wantTradeNo: orderID,
 		},
@@ -269,6 +278,9 @@ func TestEasyPayQueryOrderStatusMapping(t *testing.T) {
 			}
 			if resp.Amount != tt.wantAmount {
 				t.Fatalf("amount = %v, want %v", resp.Amount, tt.wantAmount)
+			}
+			if resp.ConfirmedUnpaid != tt.wantUnpaid {
+				t.Errorf("confirmed unpaid = %t, want %t", resp.ConfirmedUnpaid, tt.wantUnpaid)
 			}
 			for key, want := range map[string]string{
 				"act":          "order",

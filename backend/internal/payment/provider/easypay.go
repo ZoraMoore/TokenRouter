@@ -23,6 +23,7 @@ import (
 // EasyPay constants.
 const (
 	easypayCodeSuccess     = 1
+	easypayStatusUnpaid    = 0
 	easypayStatusPaid      = 1
 	easypayHTTPTimeout     = 10 * time.Second
 	maxEasypayResponseSize = 1 << 20 // 1MB
@@ -390,11 +391,40 @@ func parseEasyPayQueryResponse(statusCode int, body []byte, fallbackTradeNo stri
 
 	amount, _ := strconv.ParseFloat(money, 64)
 	return &payment.QueryOrderResponse{
-		TradeNo:  responseTradeNo,
-		Status:   status,
-		Amount:   amount,
-		Metadata: metadata,
+		TradeNo:         responseTradeNo,
+		Status:          status,
+		Amount:          amount,
+		Metadata:        metadata,
+		ConfirmedUnpaid: status == payment.ProviderStatusPending && easyPayConfirmsUnpaid(resp),
 	}, nil
+}
+
+// easyPayConfirmsUnpaid 区分明确的未付款结果和缺少状态的兼容响应。
+func easyPayConfirmsUnpaid(resp easyPayQueryResponse) bool {
+	hasStatus := false
+	for _, status := range []*int{resp.Status, resp.Data.Status} {
+		if status == nil {
+			continue
+		}
+		if *status != easypayStatusUnpaid {
+			return false
+		}
+		hasStatus = true
+	}
+	for _, status := range []*string{resp.TradeStatus, resp.Data.TradeStatus} {
+		if status == nil {
+			continue
+		}
+		if *status != "WAITING" && *status != "WAIT_BUYER_PAY" {
+			return false
+		}
+		hasStatus = true
+	}
+	if resp.Code == easypayCodeSuccess {
+		return hasStatus
+	}
+	// 跳转收银台的订单可能在打开支付链接后才由渠道创建。
+	return !hasStatus && strings.TrimSpace(resp.Msg) == "订单不存在"
 }
 
 // VerifyNotification 检查易支付通知字段和签名后解析支付结果。

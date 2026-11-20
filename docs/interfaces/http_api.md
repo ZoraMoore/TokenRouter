@@ -109,6 +109,8 @@ Markdown 正文需要 JWT，并且菜单可见；管理员页面只对管理员�
 
 创建余额订单时可在 `POST /api/v1/payment/orders` 传入 `coupon_id` 和请求头 `Idempotency-Key`。服务端重验券的归属、币种、使用状态和金额。用券订单返回 `coupon_snapshot`。`minimum_minor`、`discount_minor`、`recharge_minor` 和 `charge_minor` 使用币种最小单位。
 
+取消余额订单时，支付渠道确认关单或易支付确认未付款后，订单和优惠券一起更新。取消成功后，可通过 `GET /api/v1/payment/coupons?available=true` 读取退回的券。支付状态无法确认时，取消接口返回 `PAYMENT_STATUS_UNAVAILABLE`。
+
 管理员生成类型为 `coupon` 的兑换码时，提供 `coupon_terms`，其中包含 `currency`、`minimum_minor` 和 `discount_minor`。用户在兑换码入口领取该券，使用状态通过充值券接口查询。
 
 ### 兑换码时段限领

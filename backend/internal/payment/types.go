@@ -158,12 +158,13 @@ type CreatePaymentResponse struct {
 
 // QueryOrderResponse describes the payment status from the upstream provider.
 type QueryOrderResponse struct {
-	TradeNo  string
-	Status   string  // "pending", "processing", "paid", "failed", "refunded"
-	Amount   float64 // 按服务商返回币种解释的金额
-	PaidAt   string  // RFC3339 timestamp or empty
-	Metadata map[string]string
-	Closed   bool // 渠道确认这笔订单已关闭
+	TradeNo         string
+	Status          string  // "pending", "processing", "paid", "failed", "refunded"
+	Amount          float64 // 按服务商返回币种解释的金额
+	PaidAt          string  // RFC3339 timestamp or empty
+	Metadata        map[string]string
+	Closed          bool // 渠道确认这笔订单已关闭
+	ConfirmedUnpaid bool // 渠道确认尚未付款或查无订单，该订单仍可能收到付款
 }
 
 // PaymentNotification is the parsed result of a webhook/notify callback.

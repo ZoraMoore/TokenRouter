@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"entgo.io/ent/dialect/sql"
+
 	dbent "github.com/TokenFlux/TokenRouter/ent"
 	"github.com/TokenFlux/TokenRouter/ent/paymentorder"
 	"github.com/TokenFlux/TokenRouter/internal/payment"
@@ -72,6 +74,27 @@ func (s *OrderStore) PendingReconciliation(ctx context.Context, now time.Time, l
 			),
 		).
 		Order(dbent.Asc(paymentorder.FieldCreatedAt)).
+		Limit(limit).
+		All(ctx)
+	return orderValues(rows), err
+}
+
+// ClosedOrdersHoldingCoupons 只选取仍有未核销优惠券的取消或过期订单。
+func (s *OrderStore) ClosedOrdersHoldingCoupons(ctx context.Context, before time.Time, limit int) ([]*payment.Order, error) {
+	rows, err := s.client.PaymentOrder.Query().
+		Where(
+			paymentorder.StatusIn(payment.OrderStatusCancelled, payment.OrderStatusExpired),
+			paymentorder.PaidAtIsNil(),
+			paymentorder.UpdatedAtLTE(before),
+			func(order *sql.Selector) {
+				coupon := sql.Table("recharge_coupons")
+				held := sql.Select(coupon.C("id")).From(coupon).
+					Where(sql.ColumnsEQ(coupon.C("order_id"), order.C(paymentorder.FieldID))).
+					Where(sql.IsNull(coupon.C("consumed_at")))
+				order.Where(sql.Exists(held))
+			},
+		).
+		Order(paymentorder.ByUpdatedAt(), paymentorder.ByID()).
 		Limit(limit).
 		All(ctx)
 	return orderValues(rows), err
