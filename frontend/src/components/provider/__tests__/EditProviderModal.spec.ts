@@ -3,13 +3,18 @@ import { isSwitchOn, setSwitch } from '@/__tests__/helpers/switches'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
+import type { AdminGroupOption } from '@/types'
 
-const { updateProviderMock, checkMixedChannelRiskMock, getWebSearchEmulationConfigMock, getSettingsMock, listTLSProfilesMock } = vi.hoisted(() => ({
+const { updateProviderMock, checkMixedChannelRiskMock, getWebSearchEmulationConfigMock, getSettingsMock, listTLSProfilesMock, startTrafficPush, listOperations, showError, showWarning } = vi.hoisted(() => ({
   updateProviderMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn(),
   getWebSearchEmulationConfigMock: vi.fn(),
   getSettingsMock: vi.fn(),
   listTLSProfilesMock: vi.fn(),
+  startTrafficPush: vi.fn(),
+  listOperations: vi.fn(),
+  showError: vi.fn(),
+  showWarning: vi.fn(),
 }))
 
 function coerceSelectStubValue(value: string, options: unknown[]): string | number | boolean | null {
@@ -19,7 +24,8 @@ function coerceSelectStubValue(value: string, options: unknown[]): string | numb
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
-    showError: vi.fn(),
+    showError,
+    showWarning,
     showSuccess: vi.fn(),
     showInfo: vi.fn()
   })
@@ -33,6 +39,8 @@ vi.mock('@/api/admin', () => ({
     },
     providers: {
       update: updateProviderMock,
+      startTrafficPush,
+      listOperations,
       checkMixedChannelRisk: checkMixedChannelRiskMock
     },
     tlsFingerprintProfiles: {
@@ -316,13 +324,13 @@ function buildGrokAPIKeyProvider() {
     concurrency: 2
   } as any
 }
-function mountModal(provider = buildProvider()) {
+function mountModal(provider = buildProvider(), groups: AdminGroupOption[] = []) {
   return mount(EditProviderModal, {
     props: {
       show: true,
       provider,
       proxies: [],
-      groups: []
+      groups
     },
     global: {
       stubs: {
@@ -344,10 +352,81 @@ describe('EditProviderModal', () => {
     getWebSearchEmulationConfigMock.mockReset()
     getSettingsMock.mockReset()
     listTLSProfilesMock.mockReset()
+    startTrafficPush.mockReset()
+    listOperations.mockReset().mockResolvedValue({ operations: [] })
+    showError.mockReset()
+    showWarning.mockReset()
     checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
     getSettingsMock.mockResolvedValue({ provider_quota_notify_enabled: false })
     getWebSearchEmulationConfigMock.mockResolvedValue({ enabled: false, providers: [] })
     listTLSProfilesMock.mockResolvedValue([])
+  })
+
+  it('asks for a source group and starts traffic push after a successful save', async () => {
+    const provider = { ...buildOpenAIOAuthProvider(), group_ids: [12, 34] }
+    const groups = [
+      { id: 12, name: 'First', status: 'active' },
+      { id: 34, name: 'Second', status: 'active' }
+    ] as AdminGroupOption[]
+    const operation = { id: 'push-7', provider_id: 7, provider_name: provider.name, kind: 'traffic_push', state: 'succeeded', result: { migrated_sessions: 4 } }
+    let finishSave!: (updatedProvider: typeof provider) => void
+    const save = new Promise<typeof provider>(resolve => { finishSave = resolve })
+    updateProviderMock.mockReturnValue(save)
+    startTrafficPush.mockResolvedValue(operation)
+    const wrapper = mountModal(provider, groups)
+    await flushPromises()
+    await wrapper.get('[data-settings-tab-button="scheduling"]').trigger('click')
+    const toggle = wrapper.get('[data-testid="edit-provider-traffic-push"]')
+    expect(isSwitchOn(toggle)).toBe(false)
+    await setSwitch(toggle, true)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(updateProviderMock).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith('admin.providers.operations.sourceGroupRequired')
+
+    await wrapper.get('[data-testid="edit-provider-traffic-push-group"]').setValue('34')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(updateProviderMock).toHaveBeenCalledTimes(1)
+    expect(startTrafficPush).not.toHaveBeenCalled()
+    finishSave(provider)
+    await flushPromises()
+    expect(startTrafficPush).toHaveBeenCalledExactlyOnceWith(7, 34)
+    expect(wrapper.emitted('updated')).toEqual([[provider]])
+    expect(wrapper.text()).toContain('admin.providers.operations.states.succeeded')
+    expect(isSwitchOn(toggle)).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('leaves a failed save unpushed and reports a failed push after the next successful save', async () => {
+    const provider = { ...buildOpenAIOAuthProvider(), group_ids: [12] }
+    const groups = [{ id: 12, name: 'First', status: 'active' }] as AdminGroupOption[]
+    updateProviderMock.mockRejectedValueOnce(new Error('Save failed')).mockResolvedValueOnce(provider)
+    startTrafficPush.mockRejectedValue(new Error('Push unavailable'))
+    const wrapper = mountModal(provider, groups)
+    await flushPromises()
+    await wrapper.get('[data-settings-tab-button="scheduling"]').trigger('click')
+    await setSwitch(wrapper.get('[data-testid="edit-provider-traffic-push"]'), true)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(startTrafficPush).not.toHaveBeenCalled()
+    expect(wrapper.emitted('updated')).toBeUndefined()
+
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(startTrafficPush).toHaveBeenCalledExactlyOnceWith(7, 12)
+    expect(wrapper.emitted('updated')).toEqual([[provider]])
+    expect(wrapper.text()).toContain('admin.providers.operations.savedPushFailed')
+    expect(wrapper.text()).toContain('Push unavailable')
+
+    listOperations.mockResolvedValue({ operations: [{ id: 'push-7', provider_id: 7, provider_name: provider.name, kind: 'traffic_push', state: 'succeeded' }] })
+    await wrapper.setProps({ show: false })
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    expect(wrapper.text()).toContain('admin.providers.operations.states.succeeded')
+    expect(isSwitchOn(wrapper.get('[data-testid="edit-provider-traffic-push"]'))).toBe(false)
+    expect(startTrafficPush).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 
   it('renders the shared provider model rule copy', async () => {

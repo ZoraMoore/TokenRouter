@@ -14,12 +14,40 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/scheduler/policy"
 )
 
+// OpenAIStickySessionPrefix 标识普通 OpenAI 会话的粘性命名空间。
+const OpenAIStickySessionPrefix = "openai:"
+
 // StickyCache 保存调度粘性绑定和会话所属分组。
 type StickyCache interface {
 	GetSessionProviderID(context.Context, int64, string) (int64, error)
 	SetSessionProviderID(context.Context, int64, string, int64, time.Duration) error
 	RefreshSessionTTL(context.Context, int64, string, time.Duration) error
 	DeleteSessionProviderID(context.Context, int64, string) error
+}
+
+// OpenAISessionMove 是普通 OpenAI 会话和它当前绑定的提供商。
+type OpenAISessionMove struct {
+	Hash     string
+	SourceID int64
+	APIKeyID int64
+}
+
+// OpenAISessionMoveBatch 指定一次推流要核对的目标和候选会话。
+type OpenAISessionMoveBatch struct {
+	JobID      string
+	Number     int
+	GroupID    int64
+	ProviderID int64
+	Limit      int
+	Moves      []OpenAISessionMove
+}
+
+// OpenAISessionMoveResult 按原候选顺序记录一次推流的结果。
+type OpenAISessionMoveResult struct {
+	Available   bool
+	Concurrency int
+	AppliedAt   time.Time
+	Moved       []bool
 }
 
 // StickyStats 保存进程内各次兼容入口共用的粘性观测。
@@ -91,6 +119,11 @@ func DeriveSessionHashes(sessionID string) (currentHash string, legacyHash strin
 	sum := sha256.Sum256([]byte(normalized))
 	legacyHash = hex.EncodeToString(sum[:])
 	return currentHash, legacyHash
+}
+
+// OpenAIWSSessionWindowHash 将 WS 会话窗口限定到当前下游 API Key。
+func OpenAIWSSessionWindowHash(apiKeyID int64, hash string) string {
+	return fmt.Sprintf("wspreempt:%d:%s", apiKeyID, strings.TrimSpace(hash))
 }
 
 func (s *StickySession) Get(ctx context.Context, groupID int64, sessionHash, legacyHash string) (int64, error) {

@@ -95,6 +95,8 @@ services:
       # =======================================================================
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@tokenrouter.local}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      # 可选，提供商一键重登所用的服务端密钥。
+      - REVIVE_API_KEY=${REVIVE_API_KEY:-}
 
       # =======================================================================
       # JWT Configuration

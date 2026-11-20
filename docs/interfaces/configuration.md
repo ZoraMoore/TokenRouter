@@ -86,6 +86,10 @@
 
 兼容键的优先级：新环境变量 > 旧环境变量 > 新 YAML 键 > 旧 YAML 键 > 默认值。空的环境变量按 Viper 的"未设置"处理，`0` 和 `false` 会作为有效值保留。使用过期名称不影响启动；映射之后仍按新字段校验类型、范围和组合。
 
+### 提供商一键重登
+
+`REVIVE_API_KEY` 从服务端进程环境读取。密钥需要 ReviveToken 的 `accounts:read`、`accounts:sync`、`pool:delete` 权限，并获准访问要恢复的档案。Docker 部署把密钥注入应用容器，再重启应用以读取新值。缺少密钥时，“一键重登”的预览会显示配置缺失。运维步骤见[一键重登和保存后推流](../operations/provider_maintenance.md#provider_operations)。
+
 ### 国产供应商用量监控
 
 国产供应商的周期用量监控属于启动时的进程配置 `gateway.cn_providers`。`monitor_enabled` 默认关闭；开启后，默认每 10 分钟运行一次，并发 4，单个提供商的探测超时 20 秒，每轮预算 300 秒，余额临时停调阈值 `balance_threshold` 默认 `0.5`。对应的键是 `interval_minutes`、`concurrency`、`probe_timeout_seconds` 和 `round_timeout_seconds`，修改后需要重启。管理员手动查询不受监控开关影响；对自定义中继的自动监控，还要求开启并命中 `security.url_allowlist.upstream_hosts`。

@@ -176,6 +176,18 @@ POST /api/v1/creative/runs/{id}/outputs/{index}/ack
 
 批量删除提供商使用 `POST /api/v1/admin/providers/batch-delete`，请求体是 `provider_ids`。服务端先去掉非正数和重复的 ID，再以最多 5 路并发执行删除。同一批里同时选了父提供商和它的影子时，只删除根提供商一次，级联的影响映射回每个提供商的结果里。响应按固定顺序返回 `success_ids`、`failed_ids` 和错误明细，某一项失败不会取消其他项。管理端"全选筛选结果"先按同一个筛选快照分页读取轻量的 ID；任何一页缺失或重复时，保留原来的选择；集合完整时才提交。
 
+### 提供商操作任务
+
+| 接口 | 输入和返回 |
+| --- | --- |
+| `POST /api/v1/admin/providers/relogin/preview` | 接受 `provider_ids`，返回 `items`。每项包含 `provider_id`、`name`、`eligible` 和可选的 `reason`。 |
+| `POST /api/v1/admin/providers/relogin` | 接受 `provider_ids`，逐项复核后返回 HTTP 202、`operations` 和 `skipped`。 |
+| `POST /api/v1/admin/providers/:id/traffic-push` | 接受 `group_id`，校验提供商和分组后返回 HTTP 202 及任务。相同账号和分组的在途推流复用原任务，其他在途操作返回 409。 |
+| `GET /api/v1/admin/providers/operations/:id` | 返回指定任务。 |
+| `GET /api/v1/admin/providers/operations` | 返回最近 100 项任务。可通过 `provider_id` 查看单个账号的记录。 |
+
+任务状态有 `queued`、`running`、`succeeded`、`failed`、`needs_action`。重登成功的 `result.provider_id` 是恢复后的账号 ID。推流结果中的 `migrated_sessions`、`successful_requests` 和 `peak_concurrency` 分别为迁移会话数、成功请求数和观察到的峰值并发。执行步骤见[提供商维护](../operations/provider_maintenance.md#provider_operations)。
+
 ### 连接测试
 
 管理员测试提供商连接使用 `POST /api/v1/admin/providers/:id/test`，响应是 SSE。请求体可以包含：

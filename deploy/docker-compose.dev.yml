@@ -67,6 +67,8 @@ services:
       - REDIS_ENABLE_TLS=${REDIS_ENABLE_TLS:-false}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@tokenrouter.local}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      # 可选，提供商一键重登所用的服务端密钥。
+      - REVIVE_API_KEY=${REVIVE_API_KEY:-}
       - JWT_SECRET=${JWT_SECRET:-}
       - JWT_EXPIRE_HOUR=${JWT_EXPIRE_HOUR:-24}
       - SETUP_MIGRATION_TIMEOUT_SECONDS=${SETUP_MIGRATION_TIMEOUT_SECONDS:-0}

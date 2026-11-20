@@ -426,6 +426,48 @@
                 <p class="input-hint">{{ t('admin.providers.billingRateMultiplierHint') }}</p>
               </div>
             </div>
+            <template v-if="supportsTrafficPush">
+              <SettingToggleRow
+                id="edit-provider-traffic-push"
+                v-model="trafficPushEnabled"
+                :label="t('admin.providers.operations.pushAfterSave')"
+                :hint="t('admin.providers.operations.pushAfterSaveHint')"
+                :disabled="submitting || trafficPushPending"
+                testid="edit-provider-traffic-push"
+                data-provider-field="traffic-push-toggle"
+              />
+              <div v-if="trafficPushEnabled && trafficPushGroupOptions.length > 1" data-provider-field="traffic-push-group">
+                <label for="edit-provider-traffic-push-group" class="input-label">{{ t('admin.providers.operations.sourceGroup') }}</label>
+                <Select
+                  id="edit-provider-traffic-push-group"
+                  v-model="trafficPushGroupId"
+                  :options="trafficPushGroupOptions"
+                  :aria-label="t('admin.providers.operations.sourceGroup')"
+                  :placeholder="t('admin.providers.operations.sourceGroupRequired')"
+                  :disabled="submitting"
+                  data-testid="edit-provider-traffic-push-group"
+                />
+              </div>
+              <SettingsNotice v-else-if="trafficPushEnabled && !trafficPushGroupOptions.length" tone="warning">
+                {{ t('admin.providers.operations.sourceGroupUnavailable') }}
+              </SettingsNotice>
+              <p v-else-if="trafficPushEnabled" class="input-hint">
+                {{ t('admin.providers.operations.sourceGroupSelected', { group: trafficPushGroupOptions[0]?.label }) }}
+              </p>
+              <div v-if="trafficPushOperations.length || trafficPushError || trafficPushHistoryError || trafficPushRefreshFailed" class="space-y-2" data-provider-field="traffic-push-result" tabindex="-1">
+                <SettingsNotice v-if="trafficPushError" tone="warning">
+                  <p>{{ t('admin.providers.operations.savedPushFailed') }}</p>
+                  <p v-if="trafficPushErrorMessage">{{ trafficPushErrorMessage }}</p>
+                </SettingsNotice>
+                <SettingsNotice v-else-if="trafficPushFailedAfterSave" tone="warning">
+                  {{ t('admin.providers.operations.savedPushIncomplete') }}
+                </SettingsNotice>
+                <SettingsNotice v-if="trafficPushHistoryError || trafficPushRefreshFailed" tone="warning">
+                  {{ t('admin.providers.operations.refreshFailed') }}
+                </SettingsNotice>
+                <ProviderOperationList :operations="trafficPushOperations" />
+              </div>
+            </template>
             <SettingToggleRow
               v-if="provider.platform === 'openai' && (provider.type === 'apikey' || provider.type === 'oauth')"
               id="edit-openai-ultrafast-billing"
@@ -820,7 +862,7 @@
 
     <template #footer>
       <div v-if="provider" class="flex justify-end gap-3">
-        <button @click="handleClose" type="button" class="btn btn-secondary">
+        <button @click="handleClose" type="button" class="btn btn-secondary" :disabled="savingWithTrafficPush">
           {{ t('common.cancel') }}
         </button>
         <button
@@ -859,6 +901,10 @@ import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
+import type { ProviderOperation } from '@/api/admin/providers'
+import ProviderOperationList from '@/components/admin/provider/ProviderOperationList.vue'
+import { isProviderOperationPending, useProviderOperationPolling } from '@/composables/useProviderOperationPolling'
+import { extractApiErrorMessage } from '@/utils/apiError'
 import { useQuotaNotifyState } from '@/composables/useQuotaNotifyState'
 import type {
   Provider,
@@ -1003,6 +1049,22 @@ const baseUrlHint = computed(() => {
 // Model mapping type
 // State
 const submitting = ref(false)
+const savingWithTrafficPush = ref(false)
+const trafficPushEnabled = ref(false)
+const trafficPushGroupId = ref<string | number | boolean | null>(null)
+const trafficPushError = ref(false)
+const trafficPushErrorMessage = ref('')
+const trafficPushHistoryError = ref(false)
+const trafficPushOperations = ref<ProviderOperation[]>([])
+const savedTrafficPushId = ref('')
+const trafficPushPending = computed(() => trafficPushOperations.value.some(isProviderOperationPending))
+const trafficPushFailedAfterSave = computed(() => trafficPushOperations.value.some(operation =>
+  operation.id === savedTrafficPushId.value && (operation.state === 'failed' || operation.state === 'needs_action')
+))
+const supportsTrafficPush = computed(() =>
+  props.provider?.platform === 'openai' && props.provider?.type === 'oauth'
+)
+const trafficPushRefreshFailed = useProviderOperationPolling(trafficPushOperations, () => props.show && supportsTrafficPush.value)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
 const upstreamUsageEnabled = ref(true)
@@ -1444,6 +1506,38 @@ const form = reactive({
   group_ids: [] as number[],
   expires_at: null as number | null
 })
+
+// 来源组以本次要保存的分组为准，多组时由管理员选择。
+const trafficPushGroupOptions = computed(() => props.groups
+  .filter(group => group.status === 'active' && form.group_ids.includes(group.id))
+  .map(group => ({ value: group.id, label: group.name })))
+
+watch(trafficPushEnabled, (enabled) => {
+  if (!enabled) trafficPushGroupId.value = null
+})
+
+// 每次打开都清空本次保存的选项，并查询该账号最近的推流任务。
+watch(() => props.show && supportsTrafficPush.value ? props.provider?.id : undefined, async (id, _previous, onCleanup) => {
+  trafficPushEnabled.value = false
+  trafficPushGroupId.value = null
+  trafficPushError.value = false
+  trafficPushErrorMessage.value = ''
+  trafficPushHistoryError.value = false
+  trafficPushOperations.value = []
+  savedTrafficPushId.value = ''
+  if (id === undefined) return
+
+  const controller = new AbortController()
+  onCleanup(() => controller.abort())
+  try {
+    const { operations } = await adminAPI.providers.listOperations(id, controller.signal)
+    if (controller.signal.aborted || trafficPushOperations.value.length) return
+    const latest = operations.find(operation => operation.kind === 'traffic_push' && operation.provider_id === id)
+    if (latest) trafficPushOperations.value = [latest]
+  } catch {
+    if (!controller.signal.aborted && !trafficPushOperations.value.length) trafficPushHistoryError.value = true
+  }
+}, { immediate: true })
 
 const statusOptions = computed(() => {
   const options = [
@@ -2349,11 +2443,12 @@ const parseDateTimeLocal = parseDateTimeLocalInput
 
 // Methods
 const handleClose = () => {
-  emit('close')
+  if (!savingWithTrafficPush.value) emit('close')
 }
 
-const submitUpdateProvider = async (providerID: number, updatePayload: Record<string, unknown>) => {
+const submitUpdateProvider = async (providerID: number, updatePayload: Record<string, unknown>, trafficPushSource: number | null) => {
   submitting.value = true
+  savingWithTrafficPush.value = trafficPushSource !== null
   try {
     if (props.provider && !props.provider.parent_provider_id) {
       await loadProtocolCatalog()
@@ -2365,25 +2460,63 @@ const submitUpdateProvider = async (providerID: number, updatePayload: Record<st
       if (extra) delete extra.openai_text_route_mode
     }
     const updatedProvider = await adminAPI.providers.update(providerID, updatePayload)
-    appStore.showSuccess(t('admin.providers.providerUpdated'))
     emit('updated', updatedProvider)
-    handleClose()
+    if (trafficPushSource === null) {
+      appStore.showSuccess(t('admin.providers.providerUpdated'))
+      handleClose()
+      return
+    }
+
+    // 配置保存成功后消耗开关。推流提交失败时显示已保存的结果。
+    trafficPushEnabled.value = false
+    trafficPushError.value = false
+    trafficPushErrorMessage.value = ''
+    trafficPushHistoryError.value = false
+    try {
+      const operation = await adminAPI.providers.startTrafficPush(providerID, trafficPushSource)
+      savedTrafficPushId.value = operation.id
+      trafficPushOperations.value = [operation]
+      appStore.showSuccess(t('admin.providers.providerUpdated'))
+    } catch (error) {
+      trafficPushError.value = true
+      trafficPushErrorMessage.value = extractApiErrorMessage(error, '')
+      appStore.showWarning(t('admin.providers.operations.savedPushFailed'))
+    }
+    await nextTick()
+    void tabsRef.value?.revealField('[data-provider-field="traffic-push-result"]')
   } catch (error: any) {
     appStore.showError(error.message || t('admin.providers.failedToUpdate'))
   } finally {
     submitting.value = false
+    savingWithTrafficPush.value = false
   }
 }
 
 const handleSubmit = async () => {
-  if (!props.provider) return
+  if (!props.provider || submitting.value) return
   const providerID = props.provider.id
   // 表单关闭了浏览器自带校验，隐藏页签中的必填项由页签组件定位后报告。
   if (tabsRef.value && !(await tabsRef.value.validate())) return
+  if (!props.show || props.provider?.id !== providerID || submitting.value) return
 
   if (form.status !== 'active' && form.status !== 'inactive' && form.status !== 'error') {
     failAt(t('admin.providers.pleaseSelectStatus'), 'status')
     return
+  }
+
+  let trafficPushSource: number | null = null
+  if (supportsTrafficPush.value && trafficPushEnabled.value) {
+    const options = trafficPushGroupOptions.value
+    if (!options.length) {
+      failAt(t('admin.providers.operations.sourceGroupUnavailable'), 'traffic-push-toggle')
+      return
+    }
+    const source = options.length === 1 ? options[0] : options.find(option => option.value === trafficPushGroupId.value)
+    if (!source) {
+      failAt(t('admin.providers.operations.sourceGroupRequired'), 'traffic-push-group')
+      return
+    }
+    trafficPushSource = source.value
   }
 
   const updatePayload: Record<string, unknown> = { ...form }
@@ -3081,7 +3214,7 @@ const handleSubmit = async () => {
       updatePayload.extra = newExtra
     }
 
-    await submitUpdateProvider(providerID, updatePayload)
+    await submitUpdateProvider(providerID, updatePayload, trafficPushSource)
   } catch (error: any) {
     appStore.showError(error.message || t('admin.providers.failedToUpdate'))
   }
