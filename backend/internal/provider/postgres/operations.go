@@ -105,7 +105,7 @@ func (s *OperationStore) List(ctx context.Context, providerID int64) ([]operatio
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	jobs := make([]operation.Job, 0)
 	for rows.Next() {
 		job, err := scanJob(rows)

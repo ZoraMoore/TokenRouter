@@ -148,8 +148,7 @@ func outcome(err error) (State, string, time.Duration) {
 	if err == nil {
 		return Succeeded, "", 0
 	}
-	var known *publicError
-	if errors.As(err, &known) {
+	if known, ok := errors.AsType[*publicError](err); ok {
 		if known.retry > 0 {
 			return Queued, known.message, known.retry
 		}

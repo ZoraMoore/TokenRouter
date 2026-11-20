@@ -17,7 +17,7 @@ func TestTrafficStoreSelectsCompletedHTTPResponsesWithinOneOwner(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	_, err := db.ExecContext(ctx, `
-INSERT INTO groups(id,name,platform) VALUES (92,'traffic-one','openai'),(93,'traffic-two','openai');
+INSERT INTO groups(id,name) VALUES (92,'traffic-one'),(93,'traffic-two');
 INSERT INTO users(id,email,password_hash) VALUES (91,'traffic@example.test','test'),(95,'other@example.test','test');
 INSERT INTO api_keys(id,user_id,key,name) VALUES (91,91,'traffic-key','test'),(95,95,'other-key','test');
 INSERT INTO providers(id,name,platform,type,credentials) VALUES
@@ -56,9 +56,9 @@ WITH samples AS (
         jsonb_build_object('state',state,'status_code',status,'provider_id',provider,'finished_at',$1)
  FROM samples
 )
-INSERT INTO usage_logs(request_id,session_id,user_id,api_key_id,group_id,provider_id,inbound_endpoint,openai_ws_mode,native_compaction_v2,
+INSERT INTO usage_logs(request_id,session_id,user_id,billing_user_id,api_key_id,group_id,provider_id,inbound_endpoint,openai_ws_mode,native_compaction_v2,
                        model,requested_model,upstream_model,created_at)
-SELECT req,session_id,user_id,key_id,group_id,provider,endpoint,ws,compact,
+SELECT req,session_id,user_id,user_id,key_id,group_id,provider,endpoint,ws,compact,
        'gpt-5','gpt-5','gpt-5',$1::timestamptz+at_seconds*interval '1 second'
  FROM samples`, now)
 	require.NoError(t, err)

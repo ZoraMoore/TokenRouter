@@ -88,8 +88,7 @@ func RetryAfter(message string, delay time.Duration) error {
 
 // PublicMessage 只取可向管理员展示的错误文本。
 func PublicMessage(err error) (string, bool) {
-	var known *publicError
-	if errors.As(err, &known) {
+	if known, ok := errors.AsType[*publicError](err); ok {
 		return known.message, true
 	}
 	return "", false

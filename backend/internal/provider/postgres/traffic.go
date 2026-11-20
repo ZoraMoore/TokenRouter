@@ -25,7 +25,7 @@ WITH recent AS (
     FROM usage_logs u
     LEFT JOIN providers p ON p.id = u.provider_id
     LEFT JOIN request_records r ON r.request_id = u.request_id
-   WHERE u.group_id = $1 AND u.created_at >= $3::timestamptz - interval '10 minutes'
+   WHERE u.group_id = $1 AND u.created_at BETWEEN $3::timestamptz - interval '10 minutes' AND $3::timestamptz
      AND u.session_id IS NOT NULL AND u.session_id <> ''
 ), candidates AS (
   SELECT session_id, (array_agg(provider_id ORDER BY created_at DESC, id DESC))[1] AS source_id,
@@ -87,7 +87,7 @@ func (s *TrafficStore) Candidates(ctx context.Context, providerID, groupID int64
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var sessions []traffic.Session
 	for rows.Next() {
@@ -110,7 +110,7 @@ func (s *TrafficStore) Observe(ctx context.Context, providerID, groupID int64, s
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var requests []traffic.CompletedRequest
 	for rows.Next() {

@@ -24,7 +24,7 @@ const (
 var (
 	reviveIDPattern     = regexp.MustCompile("^[0-9a-f]{32}$")
 	relogin401Pattern   = regexp.MustCompile(`^(?:token revoked \(401\)|unauthorized \(401\)|authentication failed \(401\)|oauth 401(?: \(no refresh_token\))?|upstream (?:http |status )?401)(?:$|[: .])`)
-	reloginEmailPattern = regexp.MustCompile("[a-zA-Z0-9.!#$%&'*+/=?^_{|}~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)+")
+	reloginEmailPattern = regexp.MustCompile(`[a-zA-Z0-9.!#$%&'*+/=?^_{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+`)
 )
 
 // ReloginService 从 ReviveToken 移除失效的号池绑定，重新登录并恢复调度配置。
