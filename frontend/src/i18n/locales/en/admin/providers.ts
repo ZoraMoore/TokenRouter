@@ -647,7 +647,7 @@ export default {
         refreshFailed: 'Could not refresh operation status.',
         reloginFailed: 'Could not submit relogin tasks.',
         pushAfterSave: 'Push traffic to this provider after saving',
-        pushAfterSaveHint: 'This save will attempt to move HTTP Responses sessions from the selected groups.',
+        pushAfterSaveHint: 'On save, move HTTP Responses sessions from the selected groups. EDU receives Gmail sessions, and Gmail receives EDU sessions.',
         sourceGroup: 'Traffic source groups',
         sourceGroupRequired: 'Choose at least one traffic source group.',
         sourceGroupUnavailable: 'Traffic push requires the provider to belong to an active group.',

@@ -741,7 +741,7 @@ export default {
         refreshFailed: '无法刷新任务进度。',
         reloginFailed: '无法提交重登任务。',
         pushAfterSave: '保存后自动推流给该账号',
-        pushAfterSaveHint: '本次保存后尝试从所选分组迁入 HTTP Responses 会话。',
+        pushAfterSaveHint: '保存后从所选分组迁入 HTTP Responses 会话。EDU 只接收 Gmail，Gmail 只接收 EDU。',
         sourceGroup: '推流来源分组',
         sourceGroupRequired: '请至少选择一个推流来源分组。',
         sourceGroupUnavailable: '推流需要账号属于至少一个启用的分组。',

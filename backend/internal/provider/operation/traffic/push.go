@@ -46,6 +46,7 @@ type CompletedRequest struct {
 
 // Observations 从用量和请求记录读取近期会话及上游错误。
 type Observations interface {
+	// Candidates 返回所选分组中来源类型和目标不同的候选会话。
 	Candidates(context.Context, int64, int64, time.Time) ([]Session, error)
 	Observe(context.Context, int64, int64, time.Time) ([]CompletedRequest, int, error)
 }
@@ -316,7 +317,7 @@ func (p *Push) planMove(ctx context.Context, job operation.Job, target *provider
 		state.Pending = pending
 		return save(stageMove, state)
 	}
-	return operation.NeedsAction("所选分组没有近期可迁移的 HTTP Responses 会话")
+	return operation.NeedsAction("所选分组没有来自另一类账号的可迁移会话")
 }
 
 func (p *Push) planGroup(ctx context.Context, providerID, groupID int64, rules *provider.ModelRulesSnapshot, attempted []string, now time.Time, count int) ([]assignment, error) {

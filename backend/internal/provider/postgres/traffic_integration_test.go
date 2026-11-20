@@ -21,7 +21,9 @@ INSERT INTO groups(id,name) VALUES (92,'traffic-one'),(93,'traffic-two');
 INSERT INTO users(id,email,password_hash) VALUES (91,'traffic@example.test','test'),(95,'other@example.test','test');
 INSERT INTO api_keys(id,user_id,key,name) VALUES (91,91,'traffic-key','test'),(95,95,'other-key','test');
 INSERT INTO providers(id,name,platform,type,credentials) VALUES
- (91,'traffic-target','openai','oauth','{}'),(92,'traffic-source','openai','oauth','{}'),(93,'traffic-api','openai','apikey','{}');
+ (91,'traffic-target','openai','oauth','{"plan_type":"edu_plus"}'),
+ (92,'traffic-source','openai','oauth','{"email":"source@gmail.com"}'),
+ (93,'traffic-api','openai','apikey','{}');
 INSERT INTO provider_groups(provider_id,group_id) VALUES (91,92),(92,92),(93,92),(92,93);`)
 	require.NoError(t, err)
 
@@ -82,4 +84,63 @@ VALUES (92,92,'upstream','rate_limit','[{"provider_id":91,"upstream_status_code"
 	require.Len(t, requests, 1)
 	require.Equal(t, "move", requests[0].SessionID)
 	require.Equal(t, now.Add(10*time.Second), requests[0].StartedAt.UTC())
+}
+
+// TestTrafficStoreCandidatesRequireDifferentAccountKinds 在混合分组中核对两个推流方向。
+func TestTrafficStoreCandidatesRequireDifferentAccountKinds(t *testing.T) {
+	db := postgrescontainer.New(t)
+	ctx := t.Context()
+	now := time.Now().UTC().Truncate(time.Second)
+	_, err := db.ExecContext(ctx, `
+INSERT INTO groups(id,name) VALUES (92,'traffic-types');
+INSERT INTO users(id,email,password_hash) VALUES (91,'traffic@example.test','test');
+INSERT INTO api_keys(id,user_id,key,name) VALUES (91,91,'traffic-type-key','test');
+INSERT INTO providers(id,name,platform,type,credentials,extra) VALUES
+ (91,'edu-with-gmail','openai','oauth','{"plan_type":" EDU_PLUS ","email":"student@gmail.com"}','{}'),
+ (92,'gmail','openai','oauth','{"plan_type":"free","email":"owner@gmail.com"}','{}'),
+ (93,'edu','openai','oauth','{"plan_type":"education"}','{}'),
+ (94,'googlemail','openai','oauth','{}','{"email_address":" Other@GOOGLEMAIL.COM "}'),
+ (95,'unknown','openai','oauth','{"email":"user@gmail.com.example.test"}','{}');
+INSERT INTO provider_groups(provider_id,group_id) VALUES (91,92),(92,92),(93,92),(94,92),(95,92);`)
+	require.NoError(t, err)
+
+	// 每个账号都有一个满足原有活跃度及协议要求的会话。
+	_, err = db.ExecContext(ctx, `
+WITH samples AS (
+ SELECT 'traffic-type-' || provider_id AS session_id,
+        'traffic-type-' || provider_id || '-' || sample AS request_id,
+        provider_id, $1::timestamptz - sample * interval '10 seconds' AS started_at
+ FROM generate_series(91,95) AS provider_id CROSS JOIN generate_series(1,2) AS sample
+), records AS (
+ INSERT INTO request_records(request_id,user_id,started_at,updated_at,revision,record)
+ SELECT request_id,91,started_at,$1,1,
+        jsonb_build_object('state','completed','status_code',200,'provider_id',provider_id,'finished_at',$1)
+ FROM samples
+)
+INSERT INTO usage_logs(request_id,session_id,user_id,billing_user_id,api_key_id,group_id,provider_id,inbound_endpoint,
+                       openai_ws_mode,native_compaction_v2,model,requested_model,upstream_model,created_at)
+SELECT request_id,session_id,91,91,91,92,provider_id,'/v1/responses',FALSE,FALSE,'gpt-5','gpt-5','gpt-5',started_at
+FROM samples`, now)
+	require.NoError(t, err)
+
+	store := NewTrafficStore(db)
+	for _, tt := range []struct {
+		name    string
+		target  int64
+		sources []int64
+	}{
+		{name: "EDU 接收 Gmail", target: 91, sources: []int64{92, 94}},
+		{name: "Gmail 接收 EDU", target: 92, sources: []int64{91, 93}},
+		{name: "未识别目标", target: 95},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			candidates, err := store.Candidates(t.Context(), tt.target, 92, now)
+			require.NoError(t, err)
+			sources := make([]int64, 0, len(candidates))
+			for _, candidate := range candidates {
+				sources = append(sources, candidate.SourceID)
+			}
+			require.ElementsMatch(t, tt.sources, sources)
+		})
+	}
 }

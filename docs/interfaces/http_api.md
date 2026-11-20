@@ -192,7 +192,7 @@ POST /api/v1/creative/runs/{id}/outputs/{index}/ack
 | --- | --- |
 | `POST /api/v1/admin/providers/relogin/preview` | 接受 `provider_ids`，返回 `items`。每项包含 `provider_id`、`name`、`eligible` 和可选的 `reason`。 |
 | `POST /api/v1/admin/providers/relogin` | 接受 `provider_ids`，逐项复核后返回 HTTP 202、`operations` 和 `skipped`。 |
-| `POST /api/v1/admin/providers/:id/traffic-push` | 接受 `group_ids`（1 至 100 个分组 ID），也接受单组客户端的 `group_id`。校验提供商与分组后返回 HTTP 202 及任务。账号和来源分组 ID 集合相同的在途推流复用原任务，其他在途操作返回 409。 |
+| `POST /api/v1/admin/providers/:id/traffic-push` | 接受 `group_ids`（1 至 100 个分组 ID），也接受单组客户端的 `group_id`。校验提供商与分组后返回 HTTP 202 及任务。任务在所选分组内从另一类账号迁入会话，EDU 和 Gmail 互为来源。账号和来源分组 ID 集合相同的在途推流复用原任务，其他在途操作返回 409。 |
 | `GET /api/v1/admin/providers/operations/:id` | 返回指定任务。 |
 | `GET /api/v1/admin/providers/operations` | 返回最近 100 项任务。可通过 `provider_id` 查看单个账号的记录。 |
 
