@@ -10,10 +10,12 @@ func RegisterRedeemCodeRoutes(admin *gin.RouterGroup, endpoint *AdminRedeemHandl
 	{
 		codes.GET("", endpoint.List)
 		codes.GET("/export", endpoint.Export)
+		codes.GET("/claim-limit", endpoint.GetClaimLimit)
 		codes.GET("/:id", endpoint.GetByID)
 		codes.POST("/create-and-redeem", endpoint.CreateAndRedeem)
 		codes.POST("/generate", endpoint.Generate)
 		codes.PUT("/:id", endpoint.Update)
+		codes.PUT("/claim-limit", endpoint.SetClaimLimit)
 		codes.DELETE("/:id", endpoint.Delete)
 		codes.POST("/batch-delete", endpoint.BatchDelete)
 		codes.POST("/batch-update", endpoint.BatchUpdate)

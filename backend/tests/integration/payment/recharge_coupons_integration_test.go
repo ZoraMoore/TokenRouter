@@ -5,6 +5,7 @@ package payment_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -123,4 +124,106 @@ func TestRechargeCouponOrderCompetitionAndLatePayment(t *testing.T) {
 	var usedBy int64
 	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT order_id FROM recharge_coupons WHERE id=$1 AND consumed_at IS NOT NULL", couponID).Scan(&usedBy))
 	require.Equal(t, settled.ID, usedBy)
+}
+
+// TestRedeemClaimLimitAcrossTypesAndPaidFulfillment 在同一时段并发兑换两种券，并检查支付到账。
+func TestRedeemClaimLimitAcrossTypesAndPaidFulfillment(t *testing.T) {
+	client := testEntClient(t)
+	ctx := t.Context()
+	first, err := client.User.Create().SetUsername("claim-first").SetEmail("claim-first@example.com").SetPasswordHash("hash").Save(ctx)
+	require.NoError(t, err)
+	second, err := client.User.Create().SetUsername("claim-second").SetEmail("claim-second@example.com").SetPasswordHash("hash").Save(ctx)
+	require.NoError(t, err)
+	repo := billingpostgres.NewRedeemCodeRepository(client)
+	service := billing.NewRedeemService(repo, couponTestUserReader{client}, nil, nil, nil, billingpostgres.NewRedeemMutations(client,
+		billingpostgres.RedeemWriters{Balances: billingpostgres.NewBalanceStore(client)}), nil, nil, billing.RedeemRuntime{})
+	original, err := service.GetClaimLimit(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, err := service.SetClaimLimit(context.Background(), original.RedeemClaimLimit)
+		require.NoError(t, err)
+	})
+	now := time.Now()
+	startsAt := now.Add(-time.Hour).Unix()
+	endsAt := now.Add(time.Hour).Unix()
+	limit := billing.RedeemClaimLimit{Enabled: true, StartsAt: &startsAt, EndsAt: &endsAt}
+	_, err = service.SetClaimLimit(ctx, billing.RedeemClaimLimit{Enabled: true, StartsAt: &endsAt, EndsAt: &startsAt})
+	require.ErrorIs(t, err, billing.ErrRedeemClaimWindowInvalid)
+	settings, err := service.SetClaimLimit(ctx, limit)
+	require.NoError(t, err)
+	require.Equal(t, limit, settings.RedeemClaimLimit)
+
+	store := paymentpostgres.NewOrderStore(client)
+	fulfillment := payment.NewFulfillment(store, nil, nil, service, nil, payment.FulfillmentRuntime{})
+	pay := func(tradeID string) {
+		t.Helper()
+		order, err := store.CreateCheckout(ctx, payment.CheckoutDraft{
+			Order: payment.Order{
+				UserID: first.ID, UserEmail: first.Email, UserName: first.Username,
+				Amount: 30, PayAmount: 30, PaymentType: payment.TypeAlipay, OrderType: payment.OrderTypeBalance,
+			},
+			MaxPending: 3, LimitAmount: 30, TimeoutMinutes: 30,
+		})
+		require.NoError(t, err)
+		require.NoError(t, fulfillment.ConfirmPayment(ctx, order, tradeID, 30, payment.TypeAlipay, nil))
+	}
+	pay("claim-limit-payment-before")
+
+	balance := &billing.RedeemCode{Code: "claim-window-balance", Type: billing.RedeemTypeBalance, Value: 5}
+	coupon := &billing.RedeemCode{
+		Code: "claim-window-coupon", Type: billing.RedeemTypeCoupon,
+		CouponTerms: &billing.RechargeCouponTerms{Currency: "CNY", MinimumMinor: 1000, DiscountMinor: 100},
+	}
+	require.NoError(t, service.CreateCode(ctx, balance))
+	require.NoError(t, service.CreateCode(ctx, coupon))
+
+	type claimResult struct {
+		code string
+		err  error
+	}
+	start := make(chan struct{})
+	results := make(chan claimResult, 2)
+	for _, code := range []*billing.RedeemCode{balance, coupon} {
+		go func() {
+			<-start
+			_, err := service.RedeemForUser(ctx, first.ID, code.Code)
+			results <- claimResult{code.Code, err}
+		}()
+	}
+	close(start)
+	successful := 0
+	rejectedCode := ""
+	balanceAwarded := 0.0
+	for range 2 {
+		result := <-results
+		if result.err == nil {
+			successful++
+			if result.code == balance.Code {
+				balanceAwarded = balance.Value
+			}
+		} else {
+			require.ErrorIs(t, result.err, billing.ErrRedeemClaimLimitReached)
+			rejectedCode = result.code
+		}
+	}
+	require.Equal(t, 1, successful)
+	require.NotEmpty(t, rejectedCode)
+	_, err = service.RedeemForUser(ctx, second.ID, rejectedCode)
+	require.NoError(t, err, "第二个用户能兑换第一人被拒绝的券")
+
+	pay("claim-limit-payment-after")
+	require.Equal(t, first.Balance+60+balanceAwarded, client.User.GetX(ctx, first.ID).Balance)
+	var claims int
+	require.NoError(t, integrationDB.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM redeem_user_claims WHERE user_id = $1", first.ID).Scan(&claims))
+	require.Equal(t, 1, claims, "两笔支付到账都不占用户兑换额度")
+
+	nextStart := now.Add(-3 * time.Hour).Unix()
+	nextEnd := now.Add(-2 * time.Hour).Unix()
+	_, err = service.SetClaimLimit(ctx, billing.RedeemClaimLimit{Enabled: true, StartsAt: &nextStart, EndsAt: &nextEnd})
+	require.NoError(t, err)
+	outside := &billing.RedeemCode{Code: "claim-outside-window", Type: billing.RedeemTypeBalance, Value: 5}
+	require.NoError(t, service.CreateCode(ctx, outside))
+	_, err = service.RedeemForUser(ctx, first.ID, outside.Code)
+	require.NoError(t, err, "已结束的时段不限制当前兑换")
 }

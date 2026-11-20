@@ -14,6 +14,28 @@ import type {
 } from '@/types'
 import type { RechargeCouponTerms } from '@/types/payment'
 
+export interface RedeemClaimLimit {
+  enabled: boolean
+  starts_at: number | null
+  ends_at: number | null
+}
+
+export interface RedeemClaimSettings extends RedeemClaimLimit {
+  tracking_since: number
+}
+
+// 限领时段由余额码和优惠券码共用。
+export async function getClaimLimit(signal?: AbortSignal): Promise<RedeemClaimSettings> {
+  const { data } = await apiClient.get<RedeemClaimSettings>('/admin/redeem-codes/claim-limit', { signal })
+  return data
+}
+
+// 开始和结束时间使用 Unix 秒。
+export async function setClaimLimit(limit: RedeemClaimLimit): Promise<RedeemClaimSettings> {
+  const { data } = await apiClient.put<RedeemClaimSettings>('/admin/redeem-codes/claim-limit', limit)
+  return data
+}
+
 /**
  * List all redeem codes with pagination
  * @param page - Page number (default: 1)
@@ -178,6 +200,8 @@ export async function exportCodes(filters?: {
 }
 
 export const redeemAPI = {
+  getClaimLimit,
+  setClaimLimit,
   list,
   generate,
   update,

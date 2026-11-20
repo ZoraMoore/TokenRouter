@@ -574,6 +574,7 @@ export default {
 // Redeem
   redeem: {
     paymentRequired: 'This code requires a previous successful payment. Please complete a payment first.',
+    claimLimitReached: 'You already claimed a balance or discount code in this period. Each account can claim one.',
     title: 'Redeem Code',
     description: 'Enter your redeem code to add balance, increase concurrency, or claim subscription access',
     currentBalance: 'Current Balance',

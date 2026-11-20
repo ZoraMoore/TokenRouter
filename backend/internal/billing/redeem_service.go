@@ -245,9 +245,18 @@ func unsupportedRedeemTypeError(codeType string) error {
 	return apperror.BadRequest("REDEEM_CODE_UNSUPPORTED_TYPE", fmt.Sprintf("unsupported redeem type: %s", codeType))
 }
 
-// Redeem 使用兑换码
-// @project-doc docs/domains/payments_and_entitlements.md#redeem_eligibility
+// Redeem 使用付款履约或管理员提供的兑换码发放权益。
 func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (*RedeemCode, error) {
+	return s.redeem(ctx, userID, code, false)
+}
+
+// RedeemForUser 处理用户主动兑换，并检查余额和优惠券的限领资格。
+// @project-doc docs/domains/payments_and_entitlements.md#redeem_eligibility
+func (s *RedeemService) RedeemForUser(ctx context.Context, userID int64, code string) (*RedeemCode, error) {
+	return s.redeem(ctx, userID, code, true)
+}
+
+func (s *RedeemService) redeem(ctx context.Context, userID int64, code string, userClaim bool) (*RedeemCode, error) {
 	code = strings.TrimSpace(code)
 	if code == "" {
 		return nil, ErrRedeemCodeNotFound
@@ -266,7 +275,7 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 	var redeemCode *RedeemCode
 	err := s.transactions.Within(ctx, func(txCtx context.Context) error {
 		var e error
-		redeemCode, e = s.redeemInTx(ctx, txCtx, userID, code)
+		redeemCode, e = s.redeemInTx(ctx, txCtx, userID, code, userClaim)
 		return e
 	})
 	if err != nil {
@@ -293,7 +302,7 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 }
 
 // redeemInTx 的全部写入使用事务 Adapter 提供的同一个 context；不在此发布副作用。
-func (s *RedeemService) redeemInTx(ctx, txCtx context.Context, userID int64, code string) (*RedeemCode, error) {
+func (s *RedeemService) redeemInTx(ctx, txCtx context.Context, userID int64, code string, userClaim bool) (*RedeemCode, error) {
 	redeemCode, err := s.redeemRepo.GetByCodeForUpdate(txCtx, code)
 	if err != nil {
 		if errors.Is(err, ErrRedeemCodeNotFound) {
@@ -344,6 +353,16 @@ func (s *RedeemService) redeemInTx(ctx, txCtx context.Context, userID int64, cod
 
 	// 执行兑换逻辑（兑换码已被锁定，此时可安全操作）
 	usageTime := s.runtime.Now()
+	if userClaim && (redeemCode.Type == RedeemTypeBalance || redeemCode.Type == RedeemTypeCoupon) {
+		store, ok := s.redeemRepo.(redeemClaimStore)
+		if !ok {
+			return nil, errors.New("redeem claim store is unavailable")
+		}
+		usageTime, err = store.RecordUserClaim(txCtx, userID, redeemCode.ID)
+		if err != nil {
+			return nil, fmt.Errorf("record user redeem claim: %w", err)
+		}
+	}
 	switch redeemCode.Type {
 	case RedeemTypeCoupon:
 		claimer, ok := s.redeemRepo.(redeemCouponClaimer)

@@ -245,3 +245,12 @@ describe('付款领取条件', () => {
     expect(mocks.refreshUser).not.toHaveBeenCalled()
   })
 })
+
+it('提示时段内已领券并保留用户输入', async () => {
+  mocks.redeem.mockRejectedValue({ status: 409, reason: 'REDEEM_CLAIM_LIMIT_REACHED' })
+  await mountView('zh')
+  await submit()
+  expect(mocks.app.showError).toHaveBeenCalledWith('本时段已领取过余额券或优惠券，每人限领一张。')
+  expect((wrapper!.get('input').element as HTMLInputElement).value).toBe('GIFT-CODE')
+  expect(mocks.refreshUser).not.toHaveBeenCalled()
+})

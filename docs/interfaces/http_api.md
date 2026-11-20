@@ -109,6 +109,12 @@ Markdown 正文需要 JWT，并且菜单可见；管理员页面只对管理员�
 
 管理员生成类型为 `coupon` 的兑换码时，提供 `coupon_terms`，其中包含 `currency`、`minimum_minor` 和 `discount_minor`。用户在兑换码入口领取该券，使用状态通过充值券接口查询。
 
+### 兑换码时段限领
+
+管理员通过 `GET /api/v1/admin/redeem-codes/claim-limit` 读取限领设置，使用同路径的 `PUT` 保存。请求必须包含布尔值 `enabled`。`starts_at` 和 `ends_at` 使用 Unix 秒，开始时间需早于结束时间。关闭限领可保留两个时间，也可同时清空。响应还包含 `tracking_since`，表示成功兑换开始计入限领统计的时间。
+
+在启用的时段内，用户再次通过 `POST /api/v1/redeem` 主动领取余额券或优惠券时返回 HTTP 409，错误原因为 `REDEEM_CLAIM_LIMIT_REACHED`。
+
 ## 支付管理恢复
 
 支付、推广和 Promo 的路由分别绑定 `payment/httpapi` 和 `promotion/httpapi`。Webhook 按原始的 body、query 和 Header 验签。
