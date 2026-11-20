@@ -87,8 +87,10 @@ type reloginState struct {
 	ChatGPTAccountID    string          `json:"chatgpt_account_id,omitempty"`
 	ChatGPTUserID       string          `json:"chatgpt_user_id,omitempty"`
 	DeleteKey           string          `json:"delete_key"`
+	DeleteAttempted     bool            `json:"delete_attempted,omitempty"`
 	DeleteOperationID   string          `json:"delete_operation_id,omitempty"`
 	SyncKey             string          `json:"sync_key"`
+	SyncAttempted       bool            `json:"sync_attempted,omitempty"`
 	SyncOperationID     string          `json:"sync_operation_id,omitempty"`
 	ReplacementID       int64           `json:"replacement_id,omitempty"`
 	Settings            ReloginSettings `json:"settings"`
