@@ -436,18 +436,29 @@
                 testid="edit-provider-traffic-push"
                 data-provider-field="traffic-push-toggle"
               />
-              <div v-if="trafficPushEnabled && trafficPushGroupOptions.length > 1" data-provider-field="traffic-push-group">
-                <label for="edit-provider-traffic-push-group" class="input-label">{{ t('admin.providers.operations.sourceGroup') }}</label>
-                <Select
-                  id="edit-provider-traffic-push-group"
-                  v-model="trafficPushGroupId"
-                  :options="trafficPushGroupOptions"
-                  :aria-label="t('admin.providers.operations.sourceGroup')"
-                  :placeholder="t('admin.providers.operations.sourceGroupRequired')"
-                  :disabled="submitting"
-                  data-testid="edit-provider-traffic-push-group"
-                />
-              </div>
+              <fieldset
+                v-if="trafficPushEnabled && trafficPushGroupOptions.length > 1"
+                :disabled="submitting"
+                data-provider-field="traffic-push-group"
+                data-testid="edit-provider-traffic-push-group"
+              >
+                <legend class="input-label">{{ t('admin.providers.operations.sourceGroup') }}</legend>
+                <div class="grid max-h-32 gap-1 overflow-y-auto rounded-control border border-gray-200 p-2 dark:border-dark-600 sm:grid-cols-2">
+                  <label
+                    v-for="group in trafficPushGroupOptions"
+                    :key="group.value"
+                    class="flex cursor-pointer items-center gap-2 rounded-compact px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-dark-700"
+                  >
+                    <input
+                      v-model="trafficPushGroupIds"
+                      type="checkbox"
+                      :value="group.value"
+                      class="h-3.5 w-3.5 shrink-0 rounded-compact border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
+                    />
+                    <span class="break-words text-sm">{{ group.label }}</span>
+                  </label>
+                </div>
+              </fieldset>
               <SettingsNotice v-else-if="trafficPushEnabled && !trafficPushGroupOptions.length" tone="warning">
                 {{ t('admin.providers.operations.sourceGroupUnavailable') }}
               </SettingsNotice>
@@ -1051,7 +1062,7 @@ const baseUrlHint = computed(() => {
 const submitting = ref(false)
 const savingWithTrafficPush = ref(false)
 const trafficPushEnabled = ref(false)
-const trafficPushGroupId = ref<string | number | boolean | null>(null)
+const trafficPushGroupIds = ref<number[]>([])
 const trafficPushError = ref(false)
 const trafficPushErrorMessage = ref('')
 const trafficPushHistoryError = ref(false)
@@ -1513,13 +1524,13 @@ const trafficPushGroupOptions = computed(() => props.groups
   .map(group => ({ value: group.id, label: group.name })))
 
 watch(trafficPushEnabled, (enabled) => {
-  if (!enabled) trafficPushGroupId.value = null
+  if (!enabled) trafficPushGroupIds.value = []
 })
 
 // 每次打开都清空本次保存的选项，并查询该账号最近的推流任务。
 watch(() => props.show && supportsTrafficPush.value ? props.provider?.id : undefined, async (id, _previous, onCleanup) => {
   trafficPushEnabled.value = false
-  trafficPushGroupId.value = null
+  trafficPushGroupIds.value = []
   trafficPushError.value = false
   trafficPushErrorMessage.value = ''
   trafficPushHistoryError.value = false
@@ -2446,9 +2457,9 @@ const handleClose = () => {
   if (!savingWithTrafficPush.value) emit('close')
 }
 
-const submitUpdateProvider = async (providerID: number, updatePayload: Record<string, unknown>, trafficPushSource: number | null) => {
+const submitUpdateProvider = async (providerID: number, updatePayload: Record<string, unknown>, trafficPushSources: number[] | null) => {
   submitting.value = true
-  savingWithTrafficPush.value = trafficPushSource !== null
+  savingWithTrafficPush.value = trafficPushSources !== null
   try {
     if (props.provider && !props.provider.parent_provider_id) {
       await loadProtocolCatalog()
@@ -2461,7 +2472,7 @@ const submitUpdateProvider = async (providerID: number, updatePayload: Record<st
     }
     const updatedProvider = await adminAPI.providers.update(providerID, updatePayload)
     emit('updated', updatedProvider)
-    if (trafficPushSource === null) {
+    if (trafficPushSources === null) {
       appStore.showSuccess(t('admin.providers.providerUpdated'))
       handleClose()
       return
@@ -2473,7 +2484,7 @@ const submitUpdateProvider = async (providerID: number, updatePayload: Record<st
     trafficPushErrorMessage.value = ''
     trafficPushHistoryError.value = false
     try {
-      const operation = await adminAPI.providers.startTrafficPush(providerID, trafficPushSource)
+      const operation = await adminAPI.providers.startTrafficPush(providerID, trafficPushSources)
       savedTrafficPushId.value = operation.id
       trafficPushOperations.value = [operation]
       appStore.showSuccess(t('admin.providers.providerUpdated'))
@@ -2504,19 +2515,19 @@ const handleSubmit = async () => {
     return
   }
 
-  let trafficPushSource: number | null = null
+  let trafficPushSources: number[] | null = null
   if (supportsTrafficPush.value && trafficPushEnabled.value) {
     const options = trafficPushGroupOptions.value
     if (!options.length) {
       failAt(t('admin.providers.operations.sourceGroupUnavailable'), 'traffic-push-toggle')
       return
     }
-    const source = options.length === 1 ? options[0] : options.find(option => option.value === trafficPushGroupId.value)
-    if (!source) {
+    const selected = options.filter(option => options.length === 1 || trafficPushGroupIds.value.includes(option.value))
+    if (!selected.length) {
       failAt(t('admin.providers.operations.sourceGroupRequired'), 'traffic-push-group')
       return
     }
-    trafficPushSource = source.value
+    trafficPushSources = selected.map(option => option.value)
   }
 
   const updatePayload: Record<string, unknown> = { ...form }
@@ -3214,7 +3225,7 @@ const handleSubmit = async () => {
       updatePayload.extra = newExtra
     }
 
-    await submitUpdateProvider(providerID, updatePayload, trafficPushSource)
+    await submitUpdateProvider(providerID, updatePayload, trafficPushSources)
   } catch (error: any) {
     appStore.showError(error.message || t('admin.providers.failedToUpdate'))
   }

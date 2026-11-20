@@ -36,6 +36,7 @@ type Job struct {
 	ProviderID   int64           `json:"provider_id"`
 	ProviderName string          `json:"provider_name"`
 	GroupID      int64           `json:"group_id,omitempty"`
+	GroupIDs     []int64         `json:"group_ids,omitempty"`
 	Kind         Kind            `json:"kind"`
 	State        State           `json:"state"`
 	Stage        string          `json:"stage,omitempty"`
@@ -46,10 +47,12 @@ type Job struct {
 
 // Result 分开记录替换后的提供商和推流的实测数据。
 type Result struct {
-	ProviderID         int64 `json:"provider_id,omitempty"`
-	MigratedSessions   int   `json:"migrated_sessions"`
-	SuccessfulRequests int   `json:"successful_requests"`
-	PeakConcurrency    int   `json:"peak_concurrency"`
+	ProviderID          int64 `json:"provider_id,omitempty"`
+	MigratedSessions    int   `json:"migrated_sessions"`
+	SuccessfulRequests  int   `json:"successful_requests"`
+	PeakConcurrency     int   `json:"peak_concurrency"`
+	TargetConcurrency   int   `json:"target_concurrency,omitempty"`
+	UnconfirmedSessions *int  `json:"unconfirmed_sessions,omitempty"`
 }
 
 // PreviewItem 记录所选账号是否满足重登条件。
@@ -69,6 +72,17 @@ type Runner func(context.Context, Job, Checkpoint) (Result, error)
 type publicError struct {
 	message string
 	retry   time.Duration
+}
+
+// TrafficGroups 返回任务的来源分组，兼容只保存一个分组的任务。
+func (j Job) TrafficGroups() []int64 {
+	if len(j.GroupIDs) != 0 {
+		return j.GroupIDs
+	}
+	if j.GroupID > 0 {
+		return []int64{j.GroupID}
+	}
+	return nil
 }
 
 // NeedsAction 结束本次操作并给管理员显示可处理的原因。

@@ -5,13 +5,14 @@ import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { AdminGroupOption } from '@/types'
 
-const { updateProviderMock, checkMixedChannelRiskMock, getWebSearchEmulationConfigMock, getSettingsMock, listTLSProfilesMock, startTrafficPush, listOperations, showError, showWarning } = vi.hoisted(() => ({
+const { updateProviderMock, checkMixedChannelRiskMock, getWebSearchEmulationConfigMock, getSettingsMock, listTLSProfilesMock, startTrafficPush, getOperation, listOperations, showError, showWarning } = vi.hoisted(() => ({
   updateProviderMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn(),
   getWebSearchEmulationConfigMock: vi.fn(),
   getSettingsMock: vi.fn(),
   listTLSProfilesMock: vi.fn(),
   startTrafficPush: vi.fn(),
+  getOperation: vi.fn(),
   listOperations: vi.fn(),
   showError: vi.fn(),
   showWarning: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock('@/api/admin', () => ({
     providers: {
       update: updateProviderMock,
       startTrafficPush,
+      getOperation,
       listOperations,
       checkMixedChannelRisk: checkMixedChannelRiskMock
     },
@@ -58,7 +60,9 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string) => key
+      t: (key: string, values?: Record<string, unknown>) =>
+        key.startsWith('admin.providers.operations.progress.') && values ? `${key} ${Object.values(values).join('/')}` : key,
+      te: () => true
     })
   }
 })
@@ -353,6 +357,7 @@ describe('EditProviderModal', () => {
     getSettingsMock.mockReset()
     listTLSProfilesMock.mockReset()
     startTrafficPush.mockReset()
+    getOperation.mockReset()
     listOperations.mockReset().mockResolvedValue({ operations: [] })
     showError.mockReset()
     showWarning.mockReset()
@@ -362,7 +367,7 @@ describe('EditProviderModal', () => {
     listTLSProfilesMock.mockResolvedValue([])
   })
 
-  it('asks for a source group and starts traffic push after a successful save', async () => {
+  it('requires source groups and submits both in one push after saving', async () => {
     const provider = { ...buildOpenAIOAuthProvider(), group_ids: [12, 34] }
     const groups = [
       { id: 12, name: 'First', status: 'active' },
@@ -384,14 +389,16 @@ describe('EditProviderModal', () => {
     expect(updateProviderMock).not.toHaveBeenCalled()
     expect(showError).toHaveBeenCalledWith('admin.providers.operations.sourceGroupRequired')
 
-    await wrapper.get('[data-testid="edit-provider-traffic-push-group"]').setValue('34')
+    const sources = wrapper.get('[data-testid="edit-provider-traffic-push-group"]')
+    await sources.get('input[value="12"]').setValue(true)
+    await sources.get('input[value="34"]').setValue(true)
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(updateProviderMock).toHaveBeenCalledTimes(1)
     expect(startTrafficPush).not.toHaveBeenCalled()
     finishSave(provider)
     await flushPromises()
-    expect(startTrafficPush).toHaveBeenCalledExactlyOnceWith(7, 34)
+    expect(startTrafficPush).toHaveBeenCalledExactlyOnceWith(7, [12, 34])
     expect(wrapper.emitted('updated')).toEqual([[provider]])
     expect(wrapper.text()).toContain('admin.providers.operations.states.succeeded')
     expect(isSwitchOn(toggle)).toBe(false)
@@ -414,7 +421,7 @@ describe('EditProviderModal', () => {
 
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(startTrafficPush).toHaveBeenCalledExactlyOnceWith(7, 12)
+    expect(startTrafficPush).toHaveBeenCalledExactlyOnceWith(7, [12])
     expect(wrapper.emitted('updated')).toEqual([[provider]])
     expect(wrapper.text()).toContain('admin.providers.operations.savedPushFailed')
     expect(wrapper.text()).toContain('Push unavailable')
@@ -426,6 +433,84 @@ describe('EditProviderModal', () => {
     expect(wrapper.text()).toContain('admin.providers.operations.states.succeeded')
     expect(isSwitchOn(wrapper.get('[data-testid="edit-provider-traffic-push"]'))).toBe(false)
     expect(startTrafficPush).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('shows live push progress from save to completion', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const provider = { ...buildOpenAIOAuthProvider(), group_ids: [12] }
+    const groups = [{ id: 12, name: 'First', status: 'active' }] as AdminGroupOption[]
+    const push = { id: 'push-7', provider_id: 7, provider_name: provider.name, kind: 'traffic_push' }
+    const running = {
+      ...push,
+      state: 'queued',
+      stage: 'observing',
+      result: { migrated_sessions: 2, peak_concurrency: 3, target_concurrency: 10, unconfirmed_sessions: 1 }
+    }
+    let observe!: (value: typeof running) => void
+    const observation = new Promise<typeof running>(resolve => { observe = resolve })
+    updateProviderMock.mockResolvedValue(provider)
+    startTrafficPush.mockResolvedValue({ ...push, state: 'queued' })
+    getOperation.mockReturnValueOnce(observation).mockResolvedValueOnce({
+      ...running,
+      state: 'succeeded',
+      result: { migrated_sessions: 2, peak_concurrency: 10, target_concurrency: 10, unconfirmed_sessions: 0 }
+    })
+    const wrapper = mountModal(provider, groups)
+    try {
+      await flushPromises()
+      await wrapper.get('[data-settings-tab-button="scheduling"]').trigger('click')
+      await setSwitch(wrapper.get('[data-testid="edit-provider-traffic-push"]'), true)
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+
+      const bar = () => wrapper.get('[role="progressbar"]')
+      expect(bar().attributes('aria-valuenow')).toBeUndefined()
+      expect(wrapper.text()).toContain('admin.providers.operations.progress.waiting')
+
+      observe(running)
+      await flushPromises()
+      expect(bar().attributes('aria-valuenow')).toBe('3')
+      expect(bar().attributes('aria-valuemax')).toBe('10')
+      expect(wrapper.text()).toContain('admin.providers.operations.states.running')
+      expect(wrapper.text()).toContain('admin.providers.operations.progress.remaining 7')
+      expect(wrapper.text()).toContain('admin.providers.operations.progress.unconfirmedSessions 1')
+
+      await vi.advanceTimersByTimeAsync(2500)
+      await flushPromises()
+      expect(bar().attributes('aria-valuenow')).toBe('10')
+      expect(wrapper.text()).toContain('admin.providers.operations.states.succeeded')
+      expect(wrapper.text()).toContain('admin.providers.operations.progress.remaining 0')
+      expect(wrapper.text()).toContain('admin.providers.operations.progress.unconfirmedSessions 0')
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the measured shortfall when reopening a provider with a stopped push', async () => {
+    const provider = buildOpenAIOAuthProvider()
+    listOperations.mockResolvedValue({
+      operations: [{
+        id: 'push-stopped',
+        provider_id: provider.id,
+        provider_name: provider.name,
+        kind: 'traffic_push',
+        state: 'needs_action',
+        message: '所选分组没有近期可迁移的 HTTP Responses 会话',
+        result: { peak_concurrency: 2, target_concurrency: 5, unconfirmed_sessions: 0 }
+      }]
+    })
+    const wrapper = mountModal(provider)
+    await flushPromises()
+    await wrapper.get('[data-settings-tab-button="scheduling"]').trigger('click')
+    const bar = wrapper.get('[role="progressbar"]')
+    expect(bar.attributes('aria-valuenow')).toBe('2')
+    expect(wrapper.text()).toContain('admin.providers.operations.progress.remaining 3')
+    expect(wrapper.text()).toContain('admin.providers.operations.states.needs_action')
+    expect(wrapper.text()).toContain('所选分组没有近期可迁移的 HTTP Responses 会话')
+    expect(wrapper.text()).not.toContain('admin.providers.operations.states.succeeded')
+    expect(getOperation).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

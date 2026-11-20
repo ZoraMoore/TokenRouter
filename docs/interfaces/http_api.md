@@ -182,11 +182,13 @@ POST /api/v1/creative/runs/{id}/outputs/{index}/ack
 | --- | --- |
 | `POST /api/v1/admin/providers/relogin/preview` | 接受 `provider_ids`，返回 `items`。每项包含 `provider_id`、`name`、`eligible` 和可选的 `reason`。 |
 | `POST /api/v1/admin/providers/relogin` | 接受 `provider_ids`，逐项复核后返回 HTTP 202、`operations` 和 `skipped`。 |
-| `POST /api/v1/admin/providers/:id/traffic-push` | 接受 `group_id`，校验提供商和分组后返回 HTTP 202 及任务。相同账号和分组的在途推流复用原任务，其他在途操作返回 409。 |
+| `POST /api/v1/admin/providers/:id/traffic-push` | 接受 `group_ids`（1 至 100 个分组 ID），也接受单组客户端的 `group_id`。校验提供商与分组后返回 HTTP 202 及任务。账号和来源分组 ID 集合相同的在途推流复用原任务，其他在途操作返回 409。 |
 | `GET /api/v1/admin/providers/operations/:id` | 返回指定任务。 |
 | `GET /api/v1/admin/providers/operations` | 返回最近 100 项任务。可通过 `provider_id` 查看单个账号的记录。 |
 
 任务状态有 `queued`、`running`、`succeeded`、`failed`、`needs_action`。重登成功的 `result.provider_id` 是恢复后的账号 ID。推流结果中的 `migrated_sessions`、`successful_requests` 和 `peak_concurrency` 分别为迁移会话数、成功请求数和观察到的峰值并发。执行步骤见[提供商维护](../operations/provider_maintenance.md#provider_operations)。
+
+推流任务读取到目标账号的并发上限后，`result.target_concurrency` 返回该上限，`result.unconfirmed_sessions` 返回已迁入却尚未观察到首次成功请求的会话数。同一会话完成多次请求时，待确认会话数减少一次。排队等待执行的任务和早期历史记录可以省略这两个字段。
 
 ### 连接测试
 

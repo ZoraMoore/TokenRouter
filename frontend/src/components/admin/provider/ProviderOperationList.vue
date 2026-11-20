@@ -11,13 +11,14 @@
           <span class="break-all font-medium text-gray-900 dark:text-gray-100">{{ operation.provider_name || `#${operation.provider_id}` }}</span>
           <span class="text-xs text-gray-500 dark:text-dark-400">{{ t(`admin.providers.operations.kinds.${operation.kind}`) }}</span>
         </div>
-        <span class="rounded-compact px-2 py-1 text-xs font-medium" :class="stateClasses[operation.state]">
-          {{ t(`admin.providers.operations.states.${operation.state}`) }}
+        <span class="rounded-compact px-2 py-1 text-xs font-medium" :class="stateClasses[displayState(operation)]">
+          {{ t(`admin.providers.operations.states.${displayState(operation)}`) }}
         </span>
       </div>
       <p v-if="isProviderOperationPending(operation) && operation.stage && te(`admin.providers.operations.stages.${operation.stage}`)" class="text-xs text-gray-600 dark:text-dark-300">
         {{ t(`admin.providers.operations.stages.${operation.stage}`) }}
       </p>
+      <ProviderTrafficPushProgress v-if="operation.kind === 'traffic_push'" :operation="operation" />
       <p v-if="operation.message" class="break-words text-xs text-gray-700 dark:text-dark-200">{{ operation.message }}</p>
       <dl v-if="operation.result" class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-dark-300">
         <div v-if="operation.kind === 'relogin' && operation.result.provider_id != null" class="flex gap-1">
@@ -47,6 +48,7 @@
 import { useI18n } from 'vue-i18n'
 import type { ProviderOperation } from '@/api/admin/providers'
 import { isProviderOperationPending } from '@/composables/useProviderOperationPolling'
+import ProviderTrafficPushProgress from './ProviderTrafficPushProgress.vue'
 
 defineProps<{ operations: ProviderOperation[]; flat?: boolean }>()
 
@@ -59,5 +61,12 @@ const stateClasses: Record<ProviderOperation['state'], string> = {
   succeeded: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200',
   failed: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300',
   needs_action: 'bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200'
+}
+
+// 已开始的推流会回到队列等观测结果，操作记录显示为执行中。
+function displayState(operation: ProviderOperation): ProviderOperation['state'] {
+  return operation.kind === 'traffic_push' && operation.state === 'queued' && operation.stage
+    ? 'running'
+    : operation.state
 }
 </script>

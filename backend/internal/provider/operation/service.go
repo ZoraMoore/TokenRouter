@@ -3,6 +3,7 @@ package operation
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 )
 
@@ -18,12 +19,12 @@ type TaskStore interface {
 type Service struct {
 	tasks   TaskStore
 	relogin func(context.Context, int64) (PreviewItem, error)
-	traffic func(context.Context, int64, int64) error
+	traffic func(context.Context, int64, []int64) error
 	name    func(context.Context, int64) (string, error)
 }
 
 // NewService 绑定任务读写和两类账号校验。
-func NewService(tasks TaskStore, relogin func(context.Context, int64) (PreviewItem, error), traffic func(context.Context, int64, int64) error, name func(context.Context, int64) (string, error)) *Service {
+func NewService(tasks TaskStore, relogin func(context.Context, int64) (PreviewItem, error), traffic func(context.Context, int64, []int64) error, name func(context.Context, int64) (string, error)) *Service {
 	return &Service{tasks: tasks, relogin: relogin, traffic: traffic, name: name}
 }
 
@@ -89,10 +90,19 @@ func (s *Service) SubmitRelogin(ctx context.Context, ids []int64) ([]Job, []Prev
 }
 
 // SubmitTraffic 按保存后的账号和管理员选择的分组校验推流资格。
-func (s *Service) SubmitTraffic(ctx context.Context, providerID, groupID int64) (Job, error) {
+func (s *Service) SubmitTraffic(ctx context.Context, providerID int64, groupIDs []int64) (Job, error) {
+	if len(groupIDs) == 0 || len(groupIDs) > 100 {
+		return Job{}, NeedsAction("请选择 1 到 100 个推流来源分组")
+	}
+	groupIDs = slices.Clone(groupIDs)
+	slices.Sort(groupIDs)
+	groupIDs = slices.Compact(groupIDs)
+	if groupIDs[0] <= 0 {
+		return Job{}, NeedsAction("推流来源分组 ID 必须为正整数")
+	}
 	current, err := s.tasks.Active(ctx, providerID)
 	if err == nil {
-		if current.Kind == TrafficPush && current.GroupID == groupID {
+		if current.Kind == TrafficPush && slices.Equal(current.TrafficGroups(), groupIDs) {
 			return current, nil
 		}
 		return Job{}, ErrBusy
@@ -100,14 +110,19 @@ func (s *Service) SubmitTraffic(ctx context.Context, providerID, groupID int64) 
 	if !errors.Is(err, ErrNotFound) {
 		return Job{}, err
 	}
-	if err := s.traffic(ctx, providerID, groupID); err != nil {
+	if err := s.traffic(ctx, providerID, groupIDs); err != nil {
 		return Job{}, err
 	}
 	name, err := s.name(ctx, providerID)
 	if err != nil {
 		return Job{}, err
 	}
-	return s.enqueue(ctx, Job{ProviderID: providerID, ProviderName: name, GroupID: groupID, Kind: TrafficPush})
+	job := Job{ProviderID: providerID, ProviderName: name, Kind: TrafficPush, GroupIDs: groupIDs}
+	if len(groupIDs) == 1 {
+		job.GroupID = groupIDs[0]
+		job.GroupIDs = nil
+	}
+	return s.enqueue(ctx, job)
 }
 
 // Get 查询单项持久化进度。
@@ -125,7 +140,7 @@ func (s *Service) enqueue(ctx context.Context, job Job) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
-	if saved.Kind != job.Kind || saved.GroupID != job.GroupID {
+	if saved.Kind != job.Kind || !slices.Equal(saved.TrafficGroups(), job.TrafficGroups()) {
 		return Job{}, ErrBusy
 	}
 	return saved, nil

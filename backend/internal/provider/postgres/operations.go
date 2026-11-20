@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 
 	"github.com/TokenFlux/TokenRouter/internal/provider/operation"
 )
 
 const (
-	jobFields = "id, provider_id, provider_name, group_id, kind, state, stage, message, checkpoint, result"
+	jobFields = "id, provider_id, provider_name, group_id, group_ids, kind, state, stage, message, checkpoint, result"
 )
 
 // OperationStore 持久化提供商操作、处理进度和恢复数据。
@@ -37,11 +38,11 @@ func (s *OperationStore) Enqueue(ctx context.Context, job operation.Job) (operat
 		return operation.Job{}, err
 	}
 	row := s.db.QueryRowContext(ctx, `
-		INSERT INTO provider_operations (id, provider_id, provider_name, group_id, kind, state)
-		VALUES ($1, $2, $3, $4, $5, 'queued')
+		INSERT INTO provider_operations (id, provider_id, provider_name, group_id, group_ids, kind, state)
+		VALUES ($1, $2, $3, $4, COALESCE($5::bigint[], ARRAY[]::bigint[]), $6, 'queued')
 		ON CONFLICT (provider_id) WHERE state IN ('queued', 'running')
 		DO UPDATE SET provider_id = EXCLUDED.provider_id
-		RETURNING `+jobFields, id, job.ProviderID, job.ProviderName, job.GroupID, job.Kind)
+		RETURNING `+jobFields, id, job.ProviderID, job.ProviderName, job.GroupID, pq.Array(job.GroupIDs), job.Kind)
 	return scanJob(row)
 }
 
@@ -120,7 +121,7 @@ func (s *OperationStore) List(ctx context.Context, providerID int64) ([]operatio
 func scanJob(row jobScanner) (operation.Job, error) {
 	var job operation.Job
 	var result []byte
-	err := row.Scan(&job.ID, &job.ProviderID, &job.ProviderName, &job.GroupID, &job.Kind, &job.State,
+	err := row.Scan(&job.ID, &job.ProviderID, &job.ProviderName, &job.GroupID, pq.Array(&job.GroupIDs), &job.Kind, &job.State,
 		&job.Stage, &job.Message, &job.Data, &result)
 	if errors.Is(err, sql.ErrNoRows) {
 		return operation.Job{}, operation.ErrNotFound

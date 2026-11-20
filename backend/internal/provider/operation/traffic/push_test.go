@@ -15,13 +15,16 @@ import (
 )
 
 type trafficFixture struct {
-	record     *provider.Record
-	candidates []Session
-	requests   []CompletedRequest
-	status     int
-	concurrent int
-	now        func() time.Time
-	batches    [][]scheduler.OpenAISessionMove
+	record       *provider.Record
+	candidates   []Session
+	requests     []CompletedRequest
+	status       int
+	concurrent   int
+	now          func() time.Time
+	batches      [][]scheduler.OpenAISessionMove
+	batchGroups  []int64
+	emptyGroup   int64
+	requestGroup int64
 }
 
 func TestPushWaitsForSuccessfulRequestBeforeAddingSessions(t *testing.T) {
@@ -41,22 +44,38 @@ func TestPushWaitsForSuccessfulRequestBeforeAddingSessions(t *testing.T) {
 	result, err := push.Run(ctx, job, checkpoint)
 	require.Error(t, err)
 	require.Equal(t, 2, result.MigratedSessions)
+	require.Equal(t, 10, result.TargetConcurrency)
+	require.NotNil(t, result.UnconfirmedSessions)
+	require.Equal(t, 2, *result.UnconfirmedSessions)
 	require.Len(t, fixture.batches, 1)
 
 	now = now.Add(10 * time.Second)
 	fixture.concurrent = 3
-	fixture.requests = []CompletedRequest{{SessionID: "a", UserID: 1, APIKeyID: 2, StartedAt: now}}
+	completedRequests := []CompletedRequest{
+		{SessionID: "a", UserID: 1, APIKeyID: 2, StartedAt: now},
+		{SessionID: "a", UserID: 1, APIKeyID: 2, StartedAt: now.Add(time.Second)},
+	}
+	fixture.requests = completedRequests
 	result, err = push.Run(ctx, job, checkpoint)
 	require.Error(t, err)
-	require.Equal(t, 1, result.SuccessfulRequests)
+	require.Equal(t, 2, result.SuccessfulRequests)
 	require.Equal(t, 3, result.PeakConcurrency)
+	require.Equal(t, 1, *result.UnconfirmedSessions)
 	require.Len(t, fixture.batches, 1)
+
+	// 续跑从检查点读回已确认会话，即使这次没有读到成功请求。
+	fixture.requests = nil
+	result, err = push.Run(ctx, job, checkpoint)
+	require.Error(t, err)
+	require.Equal(t, 1, *result.UnconfirmedSessions)
 
 	now = now.Add(trafficObservation)
 	fixture.concurrent = 0
+	fixture.requests = completedRequests
 	result, err = push.Run(ctx, job, checkpoint)
 	require.Error(t, err)
 	require.Equal(t, 6, result.MigratedSessions)
+	require.Equal(t, 5, *result.UnconfirmedSessions)
 	require.Len(t, fixture.batches, 2)
 	require.Len(t, fixture.batches[1], 4)
 }
@@ -78,6 +97,8 @@ func TestPushStopsAfterTargetRejectsTraffic(t *testing.T) {
 	result, err := push.Run(ctx, job, checkpoint)
 	require.EqualError(t, err, "目标提供商返回上游 429，已停止推流")
 	require.Equal(t, 2, result.MigratedSessions)
+	require.Equal(t, 10, result.TargetConcurrency)
+	require.Equal(t, 2, *result.UnconfirmedSessions)
 	require.Len(t, fixture.batches, 1)
 }
 
@@ -109,6 +130,44 @@ func TestPushRequiresCompletionFromCurrentSessionAndOwner(t *testing.T) {
 	require.Len(t, fixture.batches, 1)
 }
 
+// TestPushRotatesSelectedGroupsAfterCheckpoint 复用同一目标并发，并按分组隔离相同会话 ID。
+func TestPushRotatesSelectedGroupsAfterCheckpoint(t *testing.T) {
+	ctx := t.Context()
+	now := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+	fixture := newTrafficFixture()
+	fixture.record.GroupIDs = []int64{17, 18, 19}
+	fixture.record.Concurrency = 3
+	fixture.emptyGroup = 17
+	push := New(fixture, fixture, fixture, fixture, fixture, trafficTestModelRules, nil)
+	push.now = func() time.Time { return now }
+	fixture.now = push.now
+	job := operation.Job{ID: "job-multi", ProviderID: 91, GroupIDs: []int64{17, 18, 19}}
+	checkpoint := func(stage string, data any) error {
+		job.Stage = stage
+		var err error
+		job.Data, err = json.Marshal(data)
+		return err
+	}
+
+	result, err := push.Run(ctx, job, checkpoint)
+	require.Error(t, err)
+	require.Equal(t, 2, result.MigratedSessions)
+	require.Equal(t, []int64{18}, fixture.batchGroups)
+
+	now = now.Add(trafficObservation + time.Second)
+	fixture.concurrent = 2
+	fixture.requestGroup = 18
+	fixture.requests = []CompletedRequest{{SessionID: "a", UserID: 1, APIKeyID: 2, StartedAt: now}}
+	result, err = push.Run(ctx, job, checkpoint)
+	require.Error(t, err)
+	require.Equal(t, []int64{18, 19}, fixture.batchGroups)
+	require.Len(t, fixture.batches[1], 1)
+	require.Equal(t, fixture.batches[0][0].Hash, fixture.batches[1][0].Hash)
+	require.Equal(t, 3, result.MigratedSessions)
+	require.Equal(t, 1, result.SuccessfulRequests)
+	require.Equal(t, 2, result.PeakConcurrency)
+}
+
 func newTrafficFixture() *trafficFixture {
 	f := &trafficFixture{record: &provider.Record{
 		ID: 91, Platform: provider.PlatformOpenAI, Type: provider.ProviderTypeOAuth,
@@ -130,11 +189,17 @@ func (f *trafficFixture) GetByIDLite(_ context.Context, id int64) (*routing.Grou
 	return &routing.Group{ID: id, Status: routing.StatusActive}, nil
 }
 
-func (f *trafficFixture) Candidates(context.Context, int64, int64, time.Time) ([]Session, error) {
+func (f *trafficFixture) Candidates(_ context.Context, _ int64, groupID int64, _ time.Time) ([]Session, error) {
+	if f.emptyGroup == groupID {
+		return nil, nil
+	}
 	return f.candidates, nil
 }
 
-func (f *trafficFixture) Observe(context.Context, int64, int64, time.Time) ([]CompletedRequest, int, error) {
+func (f *trafficFixture) Observe(_ context.Context, _ int64, groupID int64, _ time.Time) ([]CompletedRequest, int, error) {
+	if f.requestGroup != 0 && f.requestGroup != groupID {
+		return nil, 0, nil
+	}
 	return f.requests, f.status, nil
 }
 
@@ -148,6 +213,7 @@ func (f *trafficFixture) EligibleOpenAISessionMoves(_ context.Context, _ int64, 
 
 func (f *trafficFixture) ApplyOpenAISessionMoves(_ context.Context, batch scheduler.OpenAISessionMoveBatch) (scheduler.OpenAISessionMoveResult, error) {
 	f.batches = append(f.batches, batch.Moves)
+	f.batchGroups = append(f.batchGroups, batch.GroupID)
 	moved := make([]bool, len(batch.Moves))
 	for index := range moved {
 		moved[index] = true

@@ -47,4 +47,34 @@ func TestOperationStoreResumesCheckpointAndReusesInFlightOperation(t *testing.T)
 	public, err := json.Marshal(history[0])
 	require.NoError(t, err)
 	require.NotContains(t, string(public), "test-operation")
+
+	groupIDs := []int64{18, 19}
+	push, err := store.Enqueue(ctx, operation.Job{Kind: operation.TrafficPush, ProviderID: 42, GroupIDs: groupIDs})
+	require.NoError(t, err)
+	require.Equal(t, groupIDs, push.TrafficGroups())
+	claimedPush, err := NewOperationStore(db).Claim(ctx, operation.TrafficPush)
+	require.NoError(t, err)
+	require.Equal(t, push.ID, claimedPush.ID)
+	require.Equal(t, groupIDs, claimedPush.TrafficGroups())
+
+	unconfirmed := 1
+	progress := operation.Result{
+		ProviderID:          42,
+		MigratedSessions:    2,
+		PeakConcurrency:     3,
+		TargetConcurrency:   5,
+		UnconfirmedSessions: &unconfirmed,
+	}
+	require.NoError(t, store.Finish(ctx, push.ID, operation.Queued, "", progress, 0))
+	resumed, err := NewOperationStore(db).Claim(ctx, operation.TrafficPush)
+	require.NoError(t, err)
+	require.Equal(t, progress, resumed.Result)
+
+	unconfirmed = 0
+	progress.PeakConcurrency = progress.TargetConcurrency
+	require.NoError(t, store.Finish(ctx, push.ID, operation.Succeeded, "", progress, 0))
+	completed, err := store.Get(ctx, push.ID)
+	require.NoError(t, err)
+	require.Equal(t, operation.Succeeded, completed.State)
+	require.Equal(t, progress, completed.Result)
 }

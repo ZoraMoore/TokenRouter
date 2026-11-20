@@ -38,6 +38,8 @@ export interface ProviderOperation {
   id: string
   provider_id: number
   provider_name: string
+  group_id?: number
+  group_ids?: number[]
   kind: 'relogin' | 'traffic_push'
   state: 'queued' | 'running' | 'succeeded' | 'failed' | 'needs_action'
   stage?: string
@@ -47,6 +49,8 @@ export interface ProviderOperation {
     migrated_sessions?: number
     successful_requests?: number
     peak_concurrency?: number
+    target_concurrency?: number
+    unconfirmed_sessions?: number
   }
 }
 
@@ -991,10 +995,10 @@ export async function startRelogin(providerIds: number[]): Promise<{ operations:
 }
 
 // 推流请求引用已保存的提供商及其来源分组。
-export async function startTrafficPush(id: number, groupID: number): Promise<ProviderOperation> {
+export async function startTrafficPush(id: number, groupIDs: number[]): Promise<ProviderOperation> {
   const { data } = await apiClient.post<ProviderOperation>(
     `/admin/providers/${id}/traffic-push`,
-    { group_id: groupID }
+    { group_ids: groupIDs }
   )
   return data
 }

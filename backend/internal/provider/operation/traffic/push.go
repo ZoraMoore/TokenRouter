@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/TokenFlux/TokenRouter/internal/provider"
@@ -36,6 +37,7 @@ type Session struct {
 
 // CompletedRequest 是在目标上完成的请求。StartedAt 用来排除迁移前已经发出的请求。
 type CompletedRequest struct {
+	GroupID   int64
 	SessionID string
 	UserID    int64
 	APIKeyID  int64
@@ -85,15 +87,18 @@ type Push struct {
 }
 
 type assignment struct {
-	Move   scheduler.OpenAISessionMove
-	UserID int64
-	At     time.Time
+	GroupID   int64
+	Move      scheduler.OpenAISessionMove
+	UserID    int64
+	At        time.Time
+	Confirmed bool `json:",omitempty"`
 }
 
 type progress struct {
 	Started      time.Time
 	Limit        int
 	Batch        int
+	BatchGroupID int64
 	Pending      []assignment
 	PlannedAt    time.Time
 	Moved        []assignment
@@ -109,8 +114,8 @@ func New(providers providerReader, groups groupReader, observations Observations
 }
 
 // Validate 在排队前检查目标是否具备接收指定分组流量的资格。
-func (p *Push) Validate(ctx context.Context, providerID, groupID int64) error {
-	_, err := p.target(ctx, providerID, groupID)
+func (p *Push) Validate(ctx context.Context, providerID int64, groupIDs []int64) error {
+	_, err := p.target(ctx, providerID, groupIDs)
 	return err
 }
 
@@ -123,12 +128,29 @@ func (p *Push) Run(ctx context.Context, job operation.Job, save operation.Checkp
 		}
 	}
 	err := p.run(ctx, job, &state, save)
-	return operation.Result{ProviderID: job.ProviderID, MigratedSessions: len(state.Moved), SuccessfulRequests: state.Completed, PeakConcurrency: state.Peak}, err
+	result := operation.Result{
+		ProviderID:         job.ProviderID,
+		MigratedSessions:   len(state.Moved),
+		SuccessfulRequests: state.Completed,
+		PeakConcurrency:    state.Peak,
+		TargetConcurrency:  state.Limit,
+	}
+	if state.Limit > 0 {
+		// 同一会话可以完成多次请求，待确认数按迁移的会话计算。
+		unconfirmed := 0
+		for _, moved := range state.Moved {
+			if !moved.Confirmed {
+				unconfirmed++
+			}
+		}
+		result.UnconfirmedSessions = &unconfirmed
+	}
+	return result, err
 }
 
 func (p *Push) run(ctx context.Context, job operation.Job, state *progress, save operation.Checkpoint) error {
 	now := p.now().UTC()
-	target, targetErr := p.target(ctx, job.ProviderID, job.GroupID)
+	target, targetErr := p.target(ctx, job.ProviderID, job.TrafficGroups())
 	if state.Started.IsZero() && targetErr == nil {
 		state.Started = now
 		state.Limit = target.Concurrency
@@ -163,7 +185,7 @@ func (p *Push) run(ctx context.Context, job operation.Job, state *progress, save
 		}
 	}
 
-	currentBatchCompleted := state.countCompletions(requests)
+	currentBatchCompleted := state.countCompletions(job.GroupID, requests)
 	if targetErr != nil {
 		return targetErr
 	}
@@ -206,8 +228,8 @@ func (p *Push) run(ctx context.Context, job operation.Job, state *progress, save
 	return operation.RetryAfter("等待本批请求完成", trafficPoll)
 }
 
-func (p *Push) target(ctx context.Context, providerID, groupID int64) (*provider.Record, error) {
-	if providerID <= 0 || groupID <= 0 {
+func (p *Push) target(ctx context.Context, providerID int64, groupIDs []int64) (*provider.Record, error) {
+	if providerID <= 0 || len(groupIDs) == 0 {
 		return nil, operation.NeedsAction("请选择目标提供商和分组")
 	}
 	record, err := p.providers.GetByID(ctx, providerID)
@@ -237,15 +259,17 @@ func (p *Push) target(ctx context.Context, providerID, groupID int64) (*provider
 	if paused || shortUtilization >= 100 || weeklyUtilization >= 100 {
 		return nil, operation.NeedsAction("目标提供商的额度达到停止调度阈值")
 	}
-	if !slices.Contains(record.GroupIDs, groupID) {
-		return nil, operation.NeedsAction("目标提供商不属于所选分组")
-	}
-	group, err := p.groups.GetByIDLite(ctx, groupID)
-	if errors.Is(err, routing.ErrGroupNotFound) || err == nil && (group == nil || !group.IsActive()) {
-		return nil, operation.NeedsAction("所选分组当前不可用")
-	}
-	if err != nil {
-		return nil, err
+	for _, groupID := range groupIDs {
+		if !slices.Contains(record.GroupIDs, groupID) {
+			return nil, operation.NeedsAction(fmt.Sprintf("目标提供商不属于分组 #%d", groupID))
+		}
+		group, err := p.groups.GetByIDLite(ctx, groupID)
+		if errors.Is(err, routing.ErrGroupNotFound) || err == nil && (group == nil || !group.IsActive()) {
+			return nil, operation.NeedsAction(fmt.Sprintf("分组 #%d 当前不可用", groupID))
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	return record, nil
 }
@@ -254,15 +278,52 @@ func (p *Push) readObservation(ctx context.Context, job operation.Job, state *pr
 	if state.Started.IsZero() {
 		return nil, 0, nil
 	}
-	return p.observations.Observe(ctx, job.ProviderID, job.GroupID, state.Started)
+	var requests []CompletedRequest
+	var status int
+	for _, groupID := range job.TrafficGroups() {
+		groupRequests, groupStatus, err := p.observations.Observe(ctx, job.ProviderID, groupID, state.Started)
+		if err != nil {
+			return nil, 0, err
+		}
+		if groupStatus != 0 && (status == 0 || groupStatus < status) {
+			status = groupStatus
+		}
+		for _, request := range groupRequests {
+			request.GroupID = groupID
+			requests = append(requests, request)
+		}
+	}
+	return requests, status, nil
 }
 
 func (p *Push) planMove(ctx context.Context, job operation.Job, target *provider.Record, state *progress, now time.Time, count int, save operation.Checkpoint) error {
-	candidates, err := p.observations.Candidates(ctx, job.ProviderID, job.GroupID, now)
-	if err != nil {
-		return err
-	}
+	// 每批只迁移一个分组。下一批从上次选中的分组之后开始找候选。
+	groups := job.TrafficGroups()
+	start := slices.Index(groups, state.BatchGroupID) + 1
 	rules := p.modelRules(target)
+	for offset := range groups {
+		groupID := groups[(start+offset)%len(groups)]
+		pending, err := p.planGroup(ctx, job.ProviderID, groupID, rules, state.Attempted, now, count)
+		if err != nil {
+			return err
+		}
+		if len(pending) == 0 {
+			continue
+		}
+		state.Batch++
+		state.BatchGroupID = groupID
+		state.PlannedAt = now
+		state.Pending = pending
+		return save(stageMove, state)
+	}
+	return operation.NeedsAction("所选分组没有近期可迁移的 HTTP Responses 会话")
+}
+
+func (p *Push) planGroup(ctx context.Context, providerID, groupID int64, rules *provider.ModelRulesSnapshot, attempted []string, now time.Time, count int) ([]assignment, error) {
+	candidates, err := p.observations.Candidates(ctx, providerID, groupID, now)
+	if err != nil {
+		return nil, err
+	}
 	known := make(map[string]int, len(candidates))
 	for _, candidate := range candidates {
 		hash, _ := scheduler.DeriveSessionHashes(candidate.ID)
@@ -272,8 +333,8 @@ func (p *Push) planMove(ctx context.Context, job operation.Job, target *provider
 	moves := make([]scheduler.OpenAISessionMove, 0, len(candidates))
 	for _, candidate := range candidates {
 		hash, _ := scheduler.DeriveSessionHashes(candidate.ID)
-		if hash == "" || known[hash] != 1 || slices.Contains(state.Attempted, hash) ||
-			candidate.SourceID <= 0 || candidate.SourceID == target.ID || candidate.UserID <= 0 || candidate.APIKeyID <= 0 ||
+		if hash == "" || known[hash] != 1 || (slices.Contains(attempted, hash) || slices.Contains(attempted, attemptKey(groupID, hash))) ||
+			candidate.SourceID <= 0 || candidate.SourceID == providerID || candidate.UserID <= 0 || candidate.APIKeyID <= 0 ||
 			!supportsModels(rules, candidate.Models) {
 			continue
 		}
@@ -281,20 +342,15 @@ func (p *Push) planMove(ctx context.Context, job operation.Job, target *provider
 		moves = append(moves, scheduler.OpenAISessionMove{Hash: hash, SourceID: candidate.SourceID, APIKeyID: candidate.APIKeyID})
 	}
 
-	eligible, err := p.sticky.EligibleOpenAISessionMoves(ctx, job.GroupID, moves, count)
+	eligible, err := p.sticky.EligibleOpenAISessionMoves(ctx, groupID, moves, count)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if len(eligible) == 0 {
-		return operation.NeedsAction("所选分组没有近期可迁移的 HTTP Responses 会话")
-	}
-	state.Batch++
-	state.PlannedAt = now
-	state.Pending = make([]assignment, 0, len(eligible))
+	pending := make([]assignment, 0, len(eligible))
 	for _, move := range eligible {
-		state.Pending = append(state.Pending, assignment{Move: move, UserID: users[move.Hash]})
+		pending = append(pending, assignment{GroupID: groupID, Move: move, UserID: users[move.Hash]})
 	}
-	return save(stageMove, state)
+	return pending, nil
 }
 
 func (p *Push) finishMove(ctx context.Context, job operation.Job, state *progress, limit int, save operation.Checkpoint) error {
@@ -302,8 +358,13 @@ func (p *Push) finishMove(ctx context.Context, job operation.Job, state *progres
 	for _, pending := range state.Pending {
 		moves = append(moves, pending.Move)
 	}
+	groupID := state.BatchGroupID
+	if groupID == 0 {
+		// 旧单组任务的检查点没有保存批次分组。
+		groupID = job.GroupID
+	}
 	result, err := p.sticky.ApplyOpenAISessionMoves(ctx, scheduler.OpenAISessionMoveBatch{
-		JobID: job.ID, Number: state.Batch, GroupID: job.GroupID,
+		JobID: job.ID, Number: state.Batch, GroupID: groupID,
 		ProviderID: job.ProviderID, Limit: limit, Moves: moves,
 	})
 	if err != nil {
@@ -325,7 +386,8 @@ func (p *Push) finishMove(ctx context.Context, job operation.Job, state *progres
 	state.Peak = max(state.Peak, result.Concurrency)
 	before := len(state.Moved)
 	for index, pending := range state.Pending {
-		state.Attempted = append(state.Attempted, pending.Move.Hash)
+		pending.GroupID = groupID
+		state.Attempted = append(state.Attempted, attemptKey(groupID, pending.Move.Hash))
 		if result.Moved[index] {
 			pending.At = result.AppliedAt
 			state.Moved = append(state.Moved, pending)
@@ -345,14 +407,24 @@ func (p *Push) finishMove(ctx context.Context, job operation.Job, state *progres
 	return save(stageObserve, state)
 }
 
-func (state *progress) countCompletions(requests []CompletedRequest) int {
+func attemptKey(groupID int64, hash string) string {
+	return strconv.FormatInt(groupID, 10) + ":" + hash
+}
+
+func (state *progress) countCompletions(legacyGroupID int64, requests []CompletedRequest) int {
 	all := 0
 	batch := 0
 	for _, request := range requests {
 		hash, _ := scheduler.DeriveSessionHashes(request.SessionID)
-		for _, moved := range state.Moved {
-			if hash == moved.Move.Hash && request.UserID == moved.UserID &&
+		for index := range state.Moved {
+			moved := &state.Moved[index]
+			groupID := moved.GroupID
+			if groupID == 0 {
+				groupID = legacyGroupID
+			}
+			if request.GroupID == groupID && hash == moved.Move.Hash && request.UserID == moved.UserID &&
 				request.APIKeyID == moved.Move.APIKeyID && !request.StartedAt.Before(moved.At) {
+				moved.Confirmed = true
 				all++
 				if moved.At.Equal(state.BatchStarted) {
 					batch++

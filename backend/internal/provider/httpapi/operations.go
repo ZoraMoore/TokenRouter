@@ -27,7 +27,8 @@ type reloginSelection struct {
 }
 
 type trafficPushRequest struct {
-	GroupID int64 `json:"group_id"`
+	GroupID  *int64  `json:"group_id"`
+	GroupIDs []int64 `json:"group_ids"`
 }
 
 // NewOperationHandler 绑定已装配的任务服务。
@@ -63,11 +64,14 @@ func (h *OperationHandler) StartTrafficPush(c *gin.Context) {
 	}
 	var req trafficPushRequest
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxOperationBody)
-	if err := httpx.BindJSONStrict(c, &req); err != nil || req.GroupID <= 0 {
-		httpx.BadRequest(c, "A positive group_id is required")
+	if err := httpx.BindJSONStrict(c, &req); err != nil || (req.GroupID != nil && req.GroupIDs != nil) {
+		httpx.BadRequest(c, "请选择一种推流分组格式")
 		return
 	}
-	job, err := h.service.SubmitTraffic(c.Request.Context(), providerID, req.GroupID)
+	if req.GroupID != nil {
+		req.GroupIDs = []int64{*req.GroupID}
+	}
+	job, err := h.service.SubmitTraffic(c.Request.Context(), providerID, req.GroupIDs)
 	if err != nil {
 		switch {
 		case errors.Is(err, operation.ErrBusy):
