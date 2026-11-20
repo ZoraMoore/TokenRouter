@@ -1635,6 +1635,50 @@ func TestForwardAsAnthropic_ForcedCodexInstructionsTemplatePrependsRenderedInstr
 	require.Equal(t, "server-prefix\n\nclient-system", gjson.GetBytes(upstream.lastBody, "instructions").String())
 }
 
+func TestForwardAsAnthropic_GPT62ForcedCodexTemplate(t *testing.T) {
+	t.Parallel()
+
+	const model = "gpt-6.2-sol"
+	for _, tt := range []struct {
+		name         string
+		template     string
+		system       string
+		wantPrefix   string
+		wantTopLevel string
+	}{
+		{name: "literal", template: "server rules", wantPrefix: "server rules"},
+		{name: "model field", template: "rules for {{ .UpstreamModel }}", wantPrefix: "rules for " + model},
+		{name: "client guidance", template: "server rules", system: "client rules", wantTopLevel: "server rules"},
+		{name: "client template", template: "server: {{ .ExistingInstructions }}", system: "client rules", wantTopLevel: "server: client rules"},
+		{name: "optional client guidance", template: "server{{ with .ExistingInstructions }}: {{ . }}{{ end }}", wantTopLevel: "server"},
+		{name: "indirect client field", template: `{{ template "rules" . }}{{ define "rules" }}server{{ .ExistingInstructions }}{{ end }}`, wantTopLevel: "server"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			body := []byte(fmt.Sprintf(`{"model":"project-model","system":%q,"max_tokens":16,"messages":[{"role":"user","content":"hello"}]}`, tt.system))
+			upstream := &auxiliaryHTTPRecorder{resp: openAICompatSSECompletedResponse("resp_template", model)}
+			svc := newResponsesFixture(responsesFixtureInputs{
+				options: &responsesFixtureOptions{ForcedTemplate: tt.template}, transport: upstream,
+			})
+			provider := rawGPT56ResponsesOAuthProvider("project-model", model)
+			c := adaptiveProtocolTestContext("/v1/messages", body)
+
+			_, err := svc.Text.Messages(context.Background(), c, provider, body, "", "")
+			require.NoError(t, err)
+			require.Equal(t, model, gjson.GetBytes(upstream.lastBody, "model").String())
+			require.Equal(t, tt.wantTopLevel, gjson.GetBytes(upstream.lastBody, "instructions").String())
+			prefix := tt.wantPrefix
+			if prefix == "" {
+				prefix = tt.system
+			}
+			if prefix != "" {
+				require.Equal(t, "developer", gjson.GetBytes(upstream.lastBody, "input.0.role").String())
+				content := gjson.GetBytes(upstream.lastBody, "input.0.content").Value()
+				require.Equal(t, prefix, openai.ExtractTextFromContent(content))
+			}
+		})
+	}
+}
+
 func TestForwardAsAnthropic_ForcedCodexInstructionsTemplateUsesCachedTemplateContent(t *testing.T) {
 	t.Parallel()
 
