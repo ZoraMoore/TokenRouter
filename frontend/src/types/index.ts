@@ -610,9 +610,10 @@ export interface MarketplaceGroup {
 }
 
 export interface MarketplaceStats {
-  today_tokens: number
-  total_tokens: number
-  total_users: number
+  today_tokens?: number
+  total_tokens?: number
+  total_users?: number
+  show_supported_models?: boolean
 }
 
 export interface GroupAvailabilityProbeConfig {

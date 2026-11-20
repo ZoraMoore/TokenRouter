@@ -49,6 +49,8 @@ export interface DefaultSubscriptionSetting {
 
 export type UsageRankingSortBy = "total_tokens" | "requests" | "actual_cost";
 
+export type PublicHomeStatsMetric = "today_tokens" | "total_tokens" | "total_users" | "supported_models";
+
 type DefaultSubscriptionInput = Partial<DefaultSubscriptionSetting> & {
   group_id?: number | null;
 };
@@ -503,6 +505,7 @@ export interface SystemSettings {
   doc_url: string;
   home_content: string;
   show_public_home_stats: boolean;
+  public_home_stats_metrics: PublicHomeStatsMetric[];
   hide_ccs_import_button: boolean;
   table_default_page_size: number;
   table_page_size_options: number[];
@@ -837,6 +840,7 @@ export interface UpdateSettingsRequest {
   doc_url?: string;
   home_content?: string;
   show_public_home_stats?: boolean;
+  public_home_stats_metrics?: PublicHomeStatsMetric[];
   hide_ccs_import_button?: boolean;
   table_default_page_size?: number;
   table_page_size_options?: number[];

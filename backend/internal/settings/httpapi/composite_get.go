@@ -189,6 +189,7 @@ func (h *Handler) GetSettings(c *gin.Context) {
 		FooterText:                                       settings.FooterText,
 		HomeFeaturedModels:                               sitedto.ParseHomeFeaturedModels(settings.HomeFeaturedModels),
 		ShowPublicHomeStats:                              settings.ShowPublicHomeStats,
+		PublicHomeStatsMetrics:                           settings.PublicHomeStatsMetrics,
 		DefaultConcurrency:                               settings.DefaultConcurrency,
 		DefaultBalance:                                   settings.DefaultBalance,
 		TeamEnabled:                                      settings.TeamEnabled,

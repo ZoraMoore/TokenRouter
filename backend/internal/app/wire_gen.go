@@ -125,7 +125,7 @@ func initializeApplication(ctx context.Context, cfg *config.Config, info BuildIn
 	dashboardStatsCache := provideUsageDashboardCache(redisClient, cfg)
 	usageOptions := provideUsageOptions(cfg, calendar)
 	dashboardService := provideUsageDashboard(postgresStore, dashboardAggregationRepository, dashboardStatsCache, usageOptions, preAggregationSettingsService, tasks)
-	marketplaceHandler := provideMarketplaceHTTP(marketplace, dashboardService, displaySettings)
+	marketplaceHandler := provideMarketplaceHTTP(marketplace, dashboardService, store)
 	publicHandler := provideSitePublicHTTP(publicService, info)
 	mailer := provideMailer(store)
 	notificationEmailService := provideNotification(store, mailer, userStore)

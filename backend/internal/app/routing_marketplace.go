@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/TokenFlux/TokenRouter/internal/billing"
@@ -25,8 +26,8 @@ type marketplacePrices struct {
 
 // marketplaceStats 返回公开首页需要的 Dashboard 计数。
 type marketplaceStats struct {
-	source  *usage.DashboardService
-	display *site.DisplaySettings
+	source *usage.DashboardService
+	store  *settings.Store
 }
 
 // provideMarketplace 绑定分组、设置和报价查询，平台模型信息在查询时读取。
@@ -35,16 +36,33 @@ func provideMarketplace(groups *routingpostgres.GroupStore, store *settings.Stor
 	return routing.NewMarketplace(groups, store, catalogue, catalogue.Resolver, marketplacePrices{prices, calculator}, capacity, availability, options)
 }
 
-// PublicStats 在查询计数前检查管理员保存的公开开关。
+// PublicStats 按管理员选中的子项返回计数。模型数由首页用公开模型列表计算。
 func (s marketplaceStats) PublicStats(ctx context.Context) (routingdto.ModelMarketplaceStats, error) {
-	if !s.display.ShowPublicHomeStats(ctx) {
+	metrics, enabled := site.ReadPublicHomeStatsMetrics(ctx, s.store)
+	if !enabled {
 		return routingdto.ModelMarketplaceStats{}, apperror.Forbidden("PUBLIC_HOME_STATS_DISABLED", "Public home page stats are disabled")
+	}
+	showTodayTokens := slices.Contains(metrics, site.HomeStatsTodayTokens)
+	showTotalTokens := slices.Contains(metrics, site.HomeStatsTotalTokens)
+	showTotalUsers := slices.Contains(metrics, site.HomeStatsTotalUsers)
+	stats := routingdto.ModelMarketplaceStats{ShowSupportedModels: slices.Contains(metrics, site.HomeStatsSupportedModels)}
+	if !showTodayTokens && !showTotalTokens && !showTotalUsers {
+		return stats, nil
 	}
 	value, err := s.source.GetPublicDashboardStats(ctx)
 	if err != nil {
 		return routingdto.ModelMarketplaceStats{}, err
 	}
-	return routingdto.ModelMarketplaceStats{TodayTokens: value.TodayTokens, TotalTokens: value.TotalTokens, TotalUsers: value.TotalUsers}, nil
+	if showTodayTokens {
+		stats.TodayTokens = &value.TodayTokens
+	}
+	if showTotalTokens {
+		stats.TotalTokens = &value.TotalTokens
+	}
+	if showTotalUsers {
+		stats.TotalUsers = &value.TotalUsers
+	}
+	return stats, nil
 }
 
 func (p marketplacePrices) Quote(ctx context.Context, request routing.MarketplaceQuoteRequest) pricing.ModelDisplayPricing {
@@ -58,6 +76,6 @@ func (p marketplacePrices) GetModelModalities(model string) ([]string, []string)
 }
 
 // provideMarketplaceHTTP 为市场 Handler 绑定公开统计查询。
-func provideMarketplaceHTTP(core *routing.Marketplace, dashboard *usage.DashboardService, display *site.DisplaySettings) *routinghttp.MarketplaceHandler {
-	return routinghttp.NewMarketplaceHandler(core, marketplaceStats{source: dashboard, display: display})
+func provideMarketplaceHTTP(core *routing.Marketplace, dashboard *usage.DashboardService, store *settings.Store) *routinghttp.MarketplaceHandler {
+	return routinghttp.NewMarketplaceHandler(core, marketplaceStats{source: dashboard, store: store})
 }

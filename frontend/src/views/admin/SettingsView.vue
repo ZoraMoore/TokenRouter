@@ -4332,6 +4332,19 @@
                 :label="t('admin.settings.features.homeStats.enabled')"
                 :hint="t('admin.settings.features.homeStats.enabledHint')"
               />
+              <fieldset id="public-home-stats-metrics" class="space-y-2">
+                <legend class="input-label">{{ t('admin.settings.features.homeStats.metrics') }}</legend>
+                <div class="grid gap-2 sm:grid-cols-2">
+                  <label
+                    v-for="metric in publicHomeStatsOptions"
+                    :key="metric.value"
+                    class="flex items-center gap-2 text-sm text-gray-700 dark:text-dark-200"
+                  >
+                    <input v-model="form.public_home_stats_metrics" type="checkbox" :value="metric.value" />
+                    {{ t(metric.label) }}
+                  </label>
+                </div>
+              </fieldset>
             </SettingsSection>
           </SettingsCard>
 
@@ -6065,6 +6078,14 @@ type SettingsForm = Omit<
 
 const schedulingThresholdPlatforms = SCHEDULING_THRESHOLD_PLATFORMS;
 
+// 管理端使用首页统计项的名称和顺序。
+const publicHomeStatsOptions = [
+  { value: "today_tokens", label: "home.stats.todayTokens" },
+  { value: "total_tokens", label: "home.stats.totalTokens" },
+  { value: "total_users", label: "home.stats.totalUsers" },
+  { value: "supported_models", label: "home.stats.supportedModels" },
+] as const;
+
 const form = reactive<SettingsForm>({
   registration_enabled: true,
   email_verify_enabled: false,
@@ -6117,6 +6138,7 @@ const form = reactive<SettingsForm>({
   doc_url: "",
   home_content: "",
   show_public_home_stats: false,
+  public_home_stats_metrics: publicHomeStatsOptions.map(metric => metric.value),
   backend_mode_enabled: false,
   hide_ccs_import_button: false,
   payment_enabled: false,
@@ -8381,6 +8403,7 @@ async function saveSettings(): Promise<boolean> {
       footer_links: normalizeFooterLinksForSave(),
       home_featured_models: normalizeHomeFeaturedModelsForSave(),
       show_public_home_stats: form.show_public_home_stats,
+      public_home_stats_metrics: form.public_home_stats_metrics,
       frontend_url: form.frontend_url,
       smtp_host: form.smtp_host,
       smtp_port: form.smtp_port,

@@ -43,7 +43,7 @@
 - 卡片 padding 有两档：独立卡片 `p-6`，嵌套面板、网格卡和统计卡 `p-4`。
 - header 和 main 的水平 padding 完全一致，都是 `px-4 md:px-6 lg:px-8`，两侧边缘在所有断点上对齐。
 - 默认首页和控制台共用 `AppHeader`，品牌、工具按钮、余额和用户菜单都在这里。首页通过 `public-page` 隐藏侧栏开关，保留模型广场和访客登录入口，并为固定顶栏预留高度；自定义 HTML 或 iframe 首页使用全页模式。操作台的返回仪表盘图标在品牌右侧。
-- 管理员开启“显示公开首页统计”后，默认首页在主按钮下方展示今日 Token、历史总 Token、注册用户数和已接入模型数。窄屏每行两项，宽屏同排展示四项。开关默认关闭。
+- 管理员开启“显示公开首页统计”后，默认首页在主按钮下方展示勾选的统计项。窄屏每行最多两项，宽屏同排展示。“已接入模型数”也控制默认首页模型区的模型数量。总开关默认关闭。
 - 布局尺寸 token 在 `style.css` 的 `:root` 里定义，各有一份：`--header-h`（3.5rem，顶栏高度）、`--sidebar-w`（14rem，侧栏展开宽度）、`--sidebar-w-collapsed`（4.5rem，侧栏折叠宽度）。顶栏高度、主区 `padding-top`、侧栏遮罩 `top`、侧栏宽度和主区 `lg:ml-*` 偏移都引用这些变量（例如 `h-[var(--header-h)]`），`h-14`、`top-14`、`w-56` 这类字面量会和变量脱节。吸顶偏移和锚点 `scroll-margin-top` 写成 `calc(var(--header-h) + 余量)`（参考 SettingsView 的 tabs 吸顶），并在注释里写明余量由什么组成。
 - 垂直空间由 AppLayout 的 flex 链分配：wrapper（`flex-col`，普通模式 `min-h-screen`，锁定模式 `h-full min-h-0`）→ `.app-main`（`flex-1 flex-col`）→ 页头（自然高度）+ 页面内容。需要撑满剩余高度的页面容器（例如 `TablePageLayout`、`CustomPageView` 的根元素）自己加 `flex-1 min-h-0`。手写 `calc(100vh - …)` 视口差值和用负 margin 抵消父级内边距都会破坏这条链；`--main-pad-*`、`--page-heading-space` 这类和布局重复的尺寸变量也不要引入。
 - 系统设置页的内容容器用 `w-full min-w-0` 填满主区，各页签的卡片同宽。容器不设居中外边距和最大宽度，否则在纵向 flex 布局里会按内容收缩。

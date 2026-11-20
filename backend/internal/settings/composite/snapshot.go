@@ -186,6 +186,7 @@ type Snapshot struct {
 	FooterText                  string // Extra footer text (ICP number etc.)
 	HomeFeaturedModels          string // JSON array of model IDs featured on the home page
 	ShowPublicHomeStats         bool
+	PublicHomeStatsMetrics      []string
 	// CreativeModelSettings 是创作台允许使用的全局分组+模型+能力白名单 JSON。
 	CreativeModelSettings []creative.CreativeModelSetting
 	// CreativeWorkerCount 是创作台任务 worker 数量，缺失时回退默认值。

@@ -223,6 +223,9 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 	if req.ShowPublicHomeStats == nil {
 		omitted[site.SettingKeyShowPublicHomeStats] = struct{}{}
 	}
+	if req.PublicHomeStatsMetrics == nil {
+		omitted[site.SettingKeyPublicHomeStatsMetrics] = struct{}{}
+	}
 
 	previousSettings, err := h.settingService.GetAllSettings(c.Request.Context())
 	if err != nil {
@@ -1246,6 +1249,11 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 		footerLinksJSON = string(groupBytes)
 	}
 
+	publicHomeStatsMetrics := previousSettings.PublicHomeStatsMetrics
+	if req.PublicHomeStatsMetrics != nil {
+		publicHomeStatsMetrics = *req.PublicHomeStatsMetrics
+	}
+
 	// 首页展示模型列表验证：限制数量、去空白、去重，保持管理员配置的顺序
 	const maxHomeFeaturedModels = 12
 	const maxHomeFeaturedModelIDLen = 200
@@ -1500,6 +1508,7 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 		FooterText:                             footerText,
 		HomeFeaturedModels:                     homeFeaturedModelsJSON,
 		ShowPublicHomeStats:                    boolValueOrDefault(req.ShowPublicHomeStats, previousSettings.ShowPublicHomeStats),
+		PublicHomeStatsMetrics:                 publicHomeStatsMetrics,
 		DefaultConcurrency:                     req.DefaultConcurrency,
 		DefaultBalance:                         req.DefaultBalance,
 		AffiliateEnabled:                       req.AffiliateEnabled,
@@ -2217,6 +2226,7 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 		FooterText:                                       updatedSettings.FooterText,
 		HomeFeaturedModels:                               sitedto.ParseHomeFeaturedModels(updatedSettings.HomeFeaturedModels),
 		ShowPublicHomeStats:                              updatedSettings.ShowPublicHomeStats,
+		PublicHomeStatsMetrics:                           updatedSettings.PublicHomeStatsMetrics,
 		DefaultConcurrency:                               updatedSettings.DefaultConcurrency,
 		DefaultBalance:                                   updatedSettings.DefaultBalance,
 		TeamEnabled:                                      updatedSettings.TeamEnabled,

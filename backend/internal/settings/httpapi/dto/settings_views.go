@@ -166,6 +166,7 @@ type SystemSettings struct {
 	FooterText                  string                          `json:"footer_text"`
 	HomeFeaturedModels          []string                        `json:"home_featured_models"`
 	ShowPublicHomeStats         bool                            `json:"show_public_home_stats"`
+	PublicHomeStatsMetrics      []string                        `json:"public_home_stats_metrics"`
 	CreativeModelSettings       []creative.CreativeModelSetting `json:"creative_model_settings"`
 	CreativeWorkerCount         int                             `json:"creative_worker_count"`
 

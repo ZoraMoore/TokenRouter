@@ -86,7 +86,7 @@ RequestLogger
 
 网站展示请求使用 `Accept-Language`，语言和回退规则见[用户侧国际化](user_localization.md)。`GET /api/v1/settings/legal/:id` 按语言返回协议，账户资料的 `preferred_locale` 用于保存用户选择。
 
-`GET /api/v1/marketplace/stats` 在 `show_public_home_stats` 开启时向访客返回 `today_tokens`、`total_tokens` 和 `total_users`。开关缺失、关闭或读取失败时，服务端在查询统计前返回 HTTP 403，`reason` 为 `PUBLIC_HOME_STATS_DISABLED`。响应使用 `Cache-Control: no-store`。历史 Token 从用量日聚合表汇总。关闭用量预聚合时，历史 Token 按用量日志保留天数查询。首页从公开模型广场的分组列表计算模型数，按各分组的模型条目求和。
+`GET /api/v1/marketplace/stats` 在 `show_public_home_stats` 开启时返回管理员选中的计数，可选字段为 `today_tokens`、`total_tokens` 和 `total_users`。勾选已接入模型数时，响应包含 `show_supported_models: true`，首页按公开模型广场各分组的模型条目求和。全部取消勾选时，`data` 是空对象。总开关缺失、关闭或读取失败时，服务端在查询统计前返回 HTTP 403，`reason` 为 `PUBLIC_HOME_STATS_DISABLED`。响应使用 `Cache-Control: no-store`。历史 Token 从用量日聚合表汇总。关闭用量预聚合时，历史 Token 按用量日志保留天数查询。
 
 <a id="site_pages"></a>
 ### 站点页面

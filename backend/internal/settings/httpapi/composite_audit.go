@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"reflect"
+	"slices"
 
 	"github.com/gin-gonic/gin"
 
@@ -432,6 +433,9 @@ func DiffSettings(before *composite.Snapshot, after *composite.Snapshot, beforeA
 	}
 	if before.ShowPublicHomeStats != after.ShowPublicHomeStats {
 		changed = append(changed, "show_public_home_stats")
+	}
+	if !slices.Equal(before.PublicHomeStatsMetrics, after.PublicHomeStatsMetrics) {
+		changed = append(changed, site.SettingKeyPublicHomeStatsMetrics)
 	}
 	if before.HideCcsImportButton != after.HideCcsImportButton {
 		changed = append(changed, "hide_ccs_import_button")

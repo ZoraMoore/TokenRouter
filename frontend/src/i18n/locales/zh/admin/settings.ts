@@ -170,7 +170,8 @@ export default {
         homeStats: {
           title: '首页统计',
           enabled: '显示公开首页统计',
-          enabledHint: '在默认首页向访客展示今日 Token、历史总 Token、注册用户数和已接入模型数。'
+          enabledHint: '开启后，访客可以在默认首页看到勾选的统计项。',
+          metrics: '展示项目'
         },
         team: {
           title: '团队功能',

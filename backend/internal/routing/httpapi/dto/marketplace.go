@@ -10,10 +10,12 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/routing"
 )
 
+// ModelMarketplaceStats 包含允许在默认首页公开的统计项。
 type ModelMarketplaceStats struct {
-	TodayTokens int64 `json:"today_tokens"`
-	TotalTokens int64 `json:"total_tokens"`
-	TotalUsers  int64 `json:"total_users"`
+	TodayTokens         *int64 `json:"today_tokens,omitempty"`
+	TotalTokens         *int64 `json:"total_tokens,omitempty"`
+	TotalUsers          *int64 `json:"total_users,omitempty"`
+	ShowSupportedModels bool   `json:"show_supported_models,omitempty"`
 }
 
 type ModelMarketplacePricing struct {

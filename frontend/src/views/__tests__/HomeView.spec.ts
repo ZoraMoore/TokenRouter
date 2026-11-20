@@ -5,7 +5,7 @@ import HomeView from '../HomeView.vue'
 
 const { getMarketplaceModels, getMarketplaceStats, appStore } = vi.hoisted(() => ({
   getMarketplaceModels: vi.fn().mockResolvedValue([{ id: 1, name: 'OpenAI', models: [{ id: 'gpt-test' }] }]),
-  getMarketplaceStats: vi.fn().mockResolvedValue({ today_tokens: 1200, total_tokens: 23000, total_users: 42 }),
+  getMarketplaceStats: vi.fn().mockResolvedValue({ today_tokens: 1200, total_tokens: 23000, total_users: 42, show_supported_models: true }),
   appStore: {
     publicSettingsLoaded: true,
     cachedPublicSettings: {} as { show_public_home_stats?: boolean; home_content?: string },
@@ -58,6 +58,27 @@ describe('公开首页统计', () => {
       'home.stats.todayTokens', 'home.stats.totalTokens', 'home.stats.totalUsers', 'home.stats.supportedModels',
     ])
     expect(wrapper.findAll('dd').map(value => value.text())).toEqual(['1.2K', '23K', '42', '1'])
+  })
+
+  it('只展示接口返回的统计项，保留数值为零的卡片', async () => {
+    appStore.cachedPublicSettings = { show_public_home_stats: true }
+    getMarketplaceStats.mockResolvedValueOnce({ today_tokens: 0, total_users: 42 })
+    const wrapper = await mountHome()
+
+    expect(wrapper.findAll('dt').map(label => label.text())).toEqual([
+      'home.stats.todayTokens', 'home.stats.totalUsers',
+    ])
+    expect(wrapper.findAll('dd').map(value => value.text())).toEqual(['0', '42'])
+    expect(wrapper.text()).not.toContain('marketplace.modelsStat')
+    expect(wrapper.text()).not.toContain('home.providers.modelCount')
+  })
+
+  it('全部取消勾选时隐藏统计区', async () => {
+    appStore.cachedPublicSettings = { show_public_home_stats: true }
+    getMarketplaceStats.mockResolvedValueOnce({})
+    const wrapper = await mountHome()
+
+    expect(wrapper.find('dl').exists()).toBe(false)
   })
 
   it('自定义首页跳过统计请求', async () => {
