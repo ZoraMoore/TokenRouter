@@ -60,6 +60,7 @@ type CodexOAuthTransformOptions struct {
 	IsMessagesBridge                    func(map[string]any) bool
 	IsCodexCLI                          bool
 	IsCompact                           bool
+	IsNativeCompaction                  bool
 	SkipDefaultInstructions             bool
 	PreserveToolCallIDs                 bool
 	OmitPromotedSystemMessagesFromInput bool
@@ -226,16 +227,25 @@ func ApplyCodexOAuthTransformWithOptions(reqBody map[string]any, opts CodexOAuth
 		}
 	}
 
-	// ChatGPT internal Codex endpoint 不接受 system role，因此把文本同步到 instructions。
-	// Responses JSON object 等调用方仍需在 input 中保留 developer 指引；Chat Completions
-	// 兼容路径可在无损提升纯文本消息后将其省略。
-	if ExtractSystemMessagesFromInput(reqBody, opts.OmitPromotedSystemMessagesFromInput) {
-		result.Modified = true
-	}
-
-	// instructions 处理逻辑：根据是否是 Codex CLI 分别调用不同方法
-	if !opts.SkipDefaultInstructions && ApplyInstructions(reqBody, opts.IsCodexCLI) {
-		result.Modified = true
+	cacheableInstructions := !opts.IsCompact && !opts.IsNativeCompaction && UsesGPT62CodexCachePrefix(normalizedModel)
+	if cacheableInstructions {
+		// GPT-6.2 在 input 之后处理顶层 instructions。系统指导留在原位置参与前缀匹配。
+		input, _ := reqBody["input"].([]any)
+		for _, item := range input {
+			message, ok := item.(map[string]any)
+			if ok && message["role"] == "system" {
+				message["role"] = "developer"
+				result.Modified = true
+			}
+		}
+	} else {
+		// Codex 使用 developer 角色。JSON object 模式需要在 input 中读到生成 JSON 的指令。
+		if ExtractSystemMessagesFromInput(reqBody, opts.OmitPromotedSystemMessagesFromInput) {
+			result.Modified = true
+		}
+		if !opts.SkipDefaultInstructions && ApplyInstructions(reqBody, opts.IsCodexCLI) {
+			result.Modified = true
+		}
 	}
 	if IsCodexSparkModel(normalizedModel) && ApplyCodexSparkImageUnsupportedInstructions(reqBody) {
 		result.Modified = true
@@ -277,6 +287,18 @@ func ApplyCodexOAuthTransformWithOptions(reqBody map[string]any, opts CodexOAuth
 			reqBody["input"] = []any{}
 		}
 		result.Modified = true
+	}
+
+	if cacheableInstructions && !opts.SkipDefaultInstructions && IsInstructionsEmpty(reqBody) {
+		previousResponseID, _ := reqBody["previous_response_id"].(string)
+		if strings.TrimSpace(previousResponseID) == "" && PrependCodexDeveloperPrefix(reqBody, DefaultCodexSynthInstructions(normalizedModel)) {
+			result.Modified = true
+		}
+		// Codex 转发使用字符串形式的 instructions 字段，缺省时用空串占位。
+		if _, ok := reqBody["instructions"].(string); !ok {
+			protocolopenai.EnsureCodexInstructionsField(reqBody)
+			result.Modified = true
+		}
 	}
 
 	return result
@@ -1223,7 +1245,7 @@ func ExtractPromptLikeInstructionsFromInput(reqBody map[string]any) string {
 	return strings.Join(texts, "\n\n")
 }
 
-// DefaultCodexSynthInstructions 返回合成路径在 instructions 为空时应填入的默认提示词。
+// DefaultCodexSynthInstructions 返回 Codex 请求缺少逐轮指令时使用的基础提示。
 //
 // 按 model 选择真实 Codex CLI 的 base instructions（codex 系→GPT-5-Codex，
 // gpt-5.5 及未单独维护的 GPT-5 版本→GPT-5.5，gpt-5.2→GPT-5.2，gpt-5.1→GPT-5.1），
@@ -1302,7 +1324,50 @@ func ApplyCodexClientMetadata(reqBody map[string]any, deviceID string) bool {
 	}
 }
 
-// ApplyInstructions 处理 instructions 字段：仅在 instructions 为空时填充默认值。
+// UsesGPT62CodexCachePrefix 按实际出站型号选择指令的放置位置。
+func UsesGPT62CodexCachePrefix(model string) bool {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "gpt-6.2", "gpt-6.2-sol", "gpt-6.2-astra":
+		return true
+	default:
+		return false
+	}
+}
+
+// HasCodexDeveloperPrefix 检查首条 developer 消息是否已包含完整的前缀文本。
+func HasCodexDeveloperPrefix(reqBody map[string]any, text string) bool {
+	input, _ := reqBody["input"].([]any)
+	if len(input) == 0 {
+		return false
+	}
+	message, ok := input[0].(map[string]any)
+	if !ok || message["role"] != "developer" {
+		return false
+	}
+	existing, lossless := ExtractLosslessTextFromContent(message["content"])
+	return lossless && existing == text
+}
+
+// PrependCodexDeveloperPrefix 在规范化的 input 数组前放置固定指导，供后续全量请求复用。
+func PrependCodexDeveloperPrefix(reqBody map[string]any, text string) bool {
+	input, ok := reqBody["input"].([]any)
+	if !ok && reqBody["input"] != nil {
+		return false
+	}
+	if HasCodexDeveloperPrefix(reqBody, text) {
+		return false
+	}
+	prefix := make([]any, 1, len(input)+1)
+	prefix[0] = map[string]any{
+		"type":    "message",
+		"role":    "developer",
+		"content": []any{map[string]any{"type": "input_text", "text": text}},
+	}
+	reqBody["input"] = append(prefix, input...)
+	return true
+}
+
+// ApplyInstructions 在顶层 instructions 为空时填充默认值。
 func ApplyInstructions(reqBody map[string]any, isCodexCLI bool) bool {
 	if !IsInstructionsEmpty(reqBody) {
 		return false

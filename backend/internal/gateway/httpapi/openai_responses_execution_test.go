@@ -2081,6 +2081,102 @@ func TestOpenAIGatewayService_Forward_APIKeyMissingInstructionsKeepsLargeInputRa
 	require.Equal(t, "9007199254740993", gjson.GetBytes(upstream.lastBody, "input.0.content.0.nonce").Raw)
 }
 
+// TestOpenAIResponsesGPT62CodexInstructions 检查 Codex 上游收到的会话前缀和逐轮指令。
+func TestOpenAIResponsesGPT62CodexInstructions(t *testing.T) {
+	const firstUser = `{"role":"user","content":"question one"}`
+	const secondTurn = `{"role":"assistant","content":"answer one"},{"role":"user","content":"question two"}`
+	provider := newOpenAIOAuthNamespaceTestProvider()
+	provider.Record.Credentials["model_mapping"] = map[string]any{"gpt-5.2": "gpt-6.2-astra"}
+	upstream := &auxiliaryHTTPRecorder{}
+	service := newResponsesFixture(responsesFixtureInputs{transport: upstream})
+
+	forward := func(t *testing.T, body string) gjson.Result {
+		t.Helper()
+		c, _ := newOpenAIImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0")
+		upstream.resp = openAICompatSSECompletedResponse("resp_turn", "gpt-6.2-sol")
+		if IsOpenAIRemoteCompactionV2Request([]byte(body)) {
+			MarkOpenAINativeCompactionV2(c)
+			const completed = `data: {"type":"response.completed","response":{"id":"resp_compact","status":"completed","model":"gpt-6.2-sol","output":[{"id":"cmp_fixture","type":"compaction","encrypted_content":"summary"}],"usage":{"input_tokens":1,"output_tokens":1}}}`
+			upstream.resp.Body = io.NopCloser(strings.NewReader(completed + "\n\n"))
+		}
+		before := len(upstream.bodies)
+		result, err := service.Forward(context.Background(), c, provider, []byte(body))
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Len(t, upstream.bodies, before+1)
+		return gjson.ParseBytes(upstream.lastBody)
+	}
+	requireDefaultPrefix := func(t *testing.T, sent gjson.Result, model string) {
+		t.Helper()
+		require.Equal(t, "developer", sent.Get("input.0.role").String())
+		content := sent.Get("input.0.content")
+		if content.IsArray() {
+			require.Len(t, content.Array(), 1)
+			require.Equal(t, "input_text", content.Get("0.type").String())
+			content = content.Get("0.text")
+		}
+		require.True(t, content.String() == openaicore.DefaultCodexSynthInstructions(model), "首条 developer 应包含上游模型的完整缺省提示")
+	}
+
+	t.Run("mapped model keeps the same prefix on full replay", func(t *testing.T) {
+		first := forward(t, `{"model":"gpt-5.2","input":[`+firstUser+`]}`)
+		second := forward(t, `{"model":"gpt-5.2","input":[`+firstUser+`,`+secondTurn+`]}`)
+		for _, sent := range []gjson.Result{first, second} {
+			require.Equal(t, "gpt-6.2-astra", sent.Get("model").String())
+			require.Equal(t, gjson.String, sent.Get("instructions").Type)
+			require.True(t, sent.Get("instructions").String() == "", "顶层 instructions 应为空字符串")
+			requireDefaultPrefix(t, sent, "gpt-6.2-astra")
+		}
+		firstInput := first.Get("input").Array()
+		secondInput := second.Get("input").Array()
+		require.Len(t, firstInput, 2)
+		require.Len(t, secondInput, 4)
+		for i := range firstInput {
+			require.Equal(t, firstInput[i].Raw, secondInput[i].Raw)
+		}
+	})
+
+	t.Run("turn instructions and ordered guidance", func(t *testing.T) {
+		sent := forward(t, `{"model":"gpt-6.2-sol","instructions":"  this turn\n ","input":[`+firstUser+`,{"role":"system","content":[{"type":"input_text","text":"guidance"}]},{"role":"developer","content":"developer two"}]}`)
+		require.Equal(t, "  this turn\n ", sent.Get("instructions").String())
+		input := sent.Get("input").Array()
+		require.Len(t, input, 3)
+		require.JSONEq(t, firstUser, input[0].Raw)
+		require.JSONEq(t, `{"role":"developer","content":[{"type":"input_text","text":"guidance"}]}`, input[1].Raw)
+		require.JSONEq(t, `{"role":"developer","content":"developer two"}`, input[2].Raw)
+	})
+
+	t.Run("image bridge appends tool instructions", func(t *testing.T) {
+		service.ImageBridge.DefaultEnabled = true
+		t.Cleanup(func() { service.ImageBridge.DefaultEnabled = false })
+		sent := forward(t, `{"model":"gpt-6.2-sol","instructions":"  draw this turn  ","input":[`+firstUser+`]}`)
+		require.True(t, sent.Get(`tools.#(type=="image_generation")`).Exists())
+		require.Equal(t, "  draw this turn\n\n"+openaicore.CodexImageGenerationBridgeText, sent.Get("instructions").String())
+		require.Len(t, sent.Get("input").Array(), 1)
+		require.Equal(t, "user", sent.Get("input.0.role").String())
+
+		sent = forward(t, `{"model":"gpt-6.2-sol","input":[`+firstUser+`]}`)
+		require.True(t, sent.Get("instructions").String() == openaicore.CodexImageGenerationBridgeText, "缺省回合的顶层 instructions 应仅含生图说明")
+		requireDefaultPrefix(t, sent, "gpt-6.2-sol")
+	})
+
+	t.Run("native compact keeps its top-level default", func(t *testing.T) {
+		sent := forward(t, `{"model":"gpt-6.2-sol","stream":true,"input":[`+firstUser+`,{"type":"compaction_trigger"}]}`)
+		require.True(t, sent.Get("instructions").String() == openaicore.DefaultCodexSynthInstructions("gpt-6.2-sol"), "Compact V2 使用顶层缺省指令")
+		require.Len(t, sent.Get("input").Array(), 2)
+		require.Equal(t, "compaction_trigger", sent.Get("input.1.type").String())
+	})
+
+	t.Run("oauth passthrough preserves system role", func(t *testing.T) {
+		provider.Record.Extra = map[string]any{"openai_passthrough": true}
+		t.Cleanup(func() { provider.Record.Extra = nil })
+		const input = `[{"role":"system","content":"system one"},` + firstUser + `]`
+		sent := forward(t, `{"model":"gpt-6.2-sol","input":`+input+`}`)
+		require.False(t, sent.Get("instructions").Exists())
+		require.JSONEq(t, input, sent.Get("input").Raw)
+	})
+}
+
 func TestOpenAIGatewayService_Forward_AstraReasoningEffortUsesGroupMapping(t *testing.T) {
 	for _, effort := range []string{"minimal", "none"} {
 		t.Run(effort, func(t *testing.T) {

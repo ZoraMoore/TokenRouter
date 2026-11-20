@@ -9,6 +9,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/TokenFlux/TokenRouter/internal/gateway/requeststate"
+	protocolopenai "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
 	"github.com/TokenFlux/TokenRouter/internal/upstream/openai"
 )
 
@@ -116,12 +117,6 @@ func TransformRequest(ctx context.Context, prepared *Prelude, profile Profile, p
 		return nil, errors.New("image generation disabled for group")
 	}
 
-	instructions := gjson.GetBytes(body, "instructions")
-	instructionsEmpty := !instructions.Exists() || instructions.Type != gjson.String || strings.TrimSpace(instructions.String()) == ""
-	if instructionsEmpty && profile.UsesCodex && !compatMessagesBridge && !nativeCNResponses {
-		markPatchSet("instructions", openai.DefaultCodexSynthInstructions(reqModel))
-	}
-
 	isCompactRequest := compactPath
 	requestedModel := reqModel
 	billingModel, upstreamModel := p.Models(requestedModel, isCompactRequest)
@@ -129,6 +124,14 @@ func TransformRequest(ctx context.Context, prepared *Prelude, profile Profile, p
 		if compactModel := p.CompactModel(requestedModel); compactModel != "" {
 			upstreamModel = compactModel
 		}
+	}
+	gpt62Codex := profile.OAuth && profile.UsesCodex && openai.UsesGPT62CodexCachePrefix(upstreamModel)
+	isNativeCompaction := gpt62Codex && !isCompactRequest && protocolopenai.HasCompactionTriggerInInput(body)
+	cacheableInstructions := gpt62Codex && !isCompactRequest && !isNativeCompaction
+	instructions := gjson.GetBytes(body, "instructions")
+	instructionsEmpty := instructions.Type != gjson.String || strings.TrimSpace(instructions.String()) == ""
+	if instructionsEmpty && profile.UsesCodex && !compatMessagesBridge && !nativeCNResponses && !cacheableInstructions {
+		markPatchSet("instructions", openai.DefaultCodexSynthInstructions(requestedModel))
 	}
 	if billingModel != requestedModel {
 		p.Log("[OpenAI] Model mapping applied: %s -> %s (provider: %s, isCodexCLI: %v)", requestedModel, billingModel, profile.Name, isCodexCLI)
@@ -195,7 +198,7 @@ func TransformRequest(ctx context.Context, prepared *Prelude, profile Profile, p
 			imageIntent = true
 			p.Log("[OpenAI] /responses image_generation request inbound_model=%s mapped_model=%s provider_type=%s", requestView.Model, upstreamModel, profile.Type)
 		}
-		if codexImageGenerationBridgeEnabled && p.ApplyCodexImageGenerationBridgeInstructions(decoded) {
+		if codexImageGenerationBridgeEnabled && !cacheableInstructions && p.ApplyCodexImageGenerationBridgeInstructions(decoded) {
 			markDecodedModified()
 			p.Log("[OpenAI] Added Codex image_generation bridge instructions")
 		}
@@ -244,6 +247,7 @@ func TransformRequest(ctx context.Context, prepared *Prelude, profile Profile, p
 			codexResult = p.CodexTransform(decoded, openai.CodexOAuthTransformOptions{
 				IsCodexCLI:                          isCodexCLI,
 				IsCompact:                           isCompactRequest,
+				IsNativeCompaction:                  isNativeCompaction,
 				SkipDefaultInstructions:             true,
 				PreserveToolCallIDs:                 true,
 				OmitPromotedSystemMessagesFromInput: omitPromotedSystemMessages,
@@ -254,6 +258,7 @@ func TransformRequest(ctx context.Context, prepared *Prelude, profile Profile, p
 			codexResult = p.CodexTransform(decoded, openai.CodexOAuthTransformOptions{
 				IsCodexCLI:                          isCodexCLI,
 				IsCompact:                           isCompactRequest,
+				IsNativeCompaction:                  isNativeCompaction,
 				OmitPromotedSystemMessagesFromInput: omitPromotedSystemMessages,
 			})
 		}
@@ -264,6 +269,11 @@ func TransformRequest(ctx context.Context, prepared *Prelude, profile Profile, p
 		p.ToolNameReverse(codexResult.ToolNameReverse)
 		if codexResult.Modified {
 			markDecodedModified()
+		}
+		// 先根据客户端的 instructions 决定是否补基础提示，再追加生图工具说明。
+		if cacheableInstructions && codexImageGenerationBridgeEnabled && p.ApplyCodexImageGenerationBridgeInstructions(decoded) {
+			markDecodedModified()
+			p.Log("[OpenAI] Added Codex image_generation bridge instructions")
 		}
 		// 本次 Forward 使用独立的指纹 ID，failover 后按新提供商重新取得。
 		// 提供商带有 device_id 时补齐 client_metadata 的安装标识，compact 请求跳过此步骤。

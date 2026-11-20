@@ -258,6 +258,10 @@ Responses HTTP/SSE 同样区分结构进度和可见输出：`response.created`�
 
 ### Codex 基础指令和 Responses Lite
 
+普通 Codex 转发按最终上游模型选择指令的位置。GPT-6.2、Sol 和 Astra 把 `input` 里的 `system` 原位转成 `developer`。请求缺少逐轮指令、允许补默认且未携带 `previous_response_id` 时，网关把内置基础指令放在第一条 `developer`，供全量历史重放时匹配相同的前缀。顶层 `instructions` 用于本轮指令，也可携带图片工具的桥接说明。
+
+Messages 转发到 GPT-6.2 Codex 时，纯文本或直接引用模型字段的强制模板可以生成第一条 `developer`。请求带客户端指导或续聊 ID，或者模板通过条件、子模板或其他动作取值时，渲染结果写入顶层 `instructions`。
+
 OAuth passthrough 的 Codex 请求可以省略 `instructions`，网关按请求的模型补上内置的 Codex 基础指令；明确提供的非空字符串保持不变，空白或非字符串的值在本地拒绝。这条规则同时适用于 Responses SSE 和旧版 Compact 请求。
 
 Responses Lite 由 HTTP 的 `X-OpenAI-Internal-Codex-Responses-Lite: true`，或者 WebSocket `client_metadata` 里对应的标记识别，模型名不参与判断。所有向 OpenAI 上游转发这个标记的 HTTP、passthrough、旧版 Compact 和 WebSocket 请求，都强制设置顶层的 `parallel_tool_calls=false`。OAuth 提供商还统一设置 `reasoning.context=all_turns`，并把私有的 namespace 工具声明移到 `input.additional_tools`；API Key 提供商在这之外保持标准的 Responses 请求。不带 Lite 标记的普通 Responses、Grok 和专用的 Images 请求，不应用这些约束。Responses Lite 的报文重建和工具校验只在 `upstream/openai` 实现，执行适配按提供商资格，选择完整转换或只禁用并行工具。

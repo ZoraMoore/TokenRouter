@@ -417,3 +417,39 @@ func TestDefaultCodexSynthInstructionsModelAware(t *testing.T) {
 	require.True(t, strings.Contains(DefaultCodexSynthInstructions("gpt-5.2"), "You are GPT-5.2 running in the Codex CLI"))
 	require.True(t, strings.Contains(DefaultCodexSynthInstructions("gpt-5.1"), "You are GPT-5.1 running in the Codex CLI"))
 }
+
+// TestCodexGPT62DefaultDeveloperPrefix 覆盖缺省指令在完整历史与增量续聊中的放置。
+func TestCodexGPT62DefaultDeveloperPrefix(t *testing.T) {
+	t.Run("string input and repeated transform", func(t *testing.T) {
+		body := map[string]any{"model": "gpt-6.2-sol", "input": "  user text  "}
+		for range 2 {
+			require.NoError(t, ApplyCodexOAuthTransformWithOptions(body, CodexOAuthTransformOptions{}).Error)
+			require.Equal(t, "", body["instructions"])
+			items, ok := body["input"].([]any)
+			require.True(t, ok)
+			require.Len(t, items, 2)
+			prefix, ok := items[0].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "developer", prefix["role"])
+			require.True(t, DefaultCodexSynthInstructions("gpt-6.2-sol") == ExtractTextFromContent(prefix["content"]))
+			message, ok := items[1].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "  user text  ", ExtractTextFromContent(message["content"]))
+		}
+	})
+
+	t.Run("previous response", func(t *testing.T) {
+		body := map[string]any{"model": "gpt-6.2-astra", "input": "next turn", "previous_response_id": "resp_previous"}
+		require.NoError(t, ApplyCodexOAuthTransformWithOptions(body, CodexOAuthTransformOptions{}).Error)
+		require.Equal(t, "", body["instructions"])
+		require.Equal(t, "resp_previous", body["previous_response_id"])
+		require.Len(t, body["input"], 1)
+	})
+
+	t.Run("legacy compact", func(t *testing.T) {
+		body := map[string]any{"model": "gpt-6.2-astra", "input": "compact this"}
+		require.NoError(t, ApplyCodexOAuthTransformWithOptions(body, CodexOAuthTransformOptions{IsCompact: true}).Error)
+		require.True(t, DefaultCodexSynthInstructions("gpt-6.2-astra") == body["instructions"])
+		require.Len(t, body["input"], 1)
+	})
+}
