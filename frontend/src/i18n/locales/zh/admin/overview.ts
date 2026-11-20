@@ -523,6 +523,7 @@ affiliates: {
       noBalanceHistory: '暂无变动记录',
       allTypes: '全部类型',
       typeBalance: '余额（兑换码）',
+      typeCoupon: '优惠券（兑换码）',
       typeAffiliateBalance: '余额（邀请返利）',
       typeAdminBalance: '余额（管理员调整）',
       typeConcurrency: '并发（兑换码）',

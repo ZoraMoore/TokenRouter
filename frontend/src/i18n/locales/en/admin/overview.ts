@@ -522,6 +522,7 @@ affiliates: {
       noBalanceHistory: 'No records found for this user',
       allTypes: 'All Types',
       typeBalance: 'Balance (Redeem)',
+      typeCoupon: 'Recharge Coupon (Redeem)',
       typeAffiliateBalance: 'Balance (Affiliate Rebate)',
       typeAdminBalance: 'Balance (Admin)',
       typeConcurrency: 'Concurrency (Redeem)',

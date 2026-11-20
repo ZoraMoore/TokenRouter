@@ -5,6 +5,7 @@
 
 import { apiClient } from '../client'
 import type { AdminUser, UpdateUserRequest, PaginatedResponse, ApiKey } from '@/types'
+import type { RechargeCouponTerms } from '@/types/payment'
 
 export interface APIActivityStats {
   active_users: number
@@ -247,6 +248,7 @@ export interface BalanceHistoryItem {
   group_id: number | null
   validity_days: number
   notes: string
+  coupon_terms?: RechargeCouponTerms | null
   user?: { id: number; email: string } | null
   group?: { id: number; name: string } | null
 }
@@ -257,12 +259,8 @@ export interface BalanceHistoryResponse extends PaginatedResponse<BalanceHistory
 }
 
 /**
- * Get user's balance/concurrency change history
- * @param id - User ID
- * @param page - Page number
- * @param pageSize - Items per page
- * @param type - Optional type filter (balance, admin_balance, concurrency, admin_concurrency, subscription)
- * @returns Paginated balance history with total_recharged
+ * 分页查询用户充值、兑换和并发变动记录，同时返回总充值金额。
+ * @param type - 可选的记录类型，例如 balance 或 coupon。
  */
 export async function getUserBalanceHistory(
   id: number,

@@ -98,13 +98,13 @@
                 <BalanceIcon
                   v-if="isBalanceType(item.type)"
                   size="sm"
-                  :class="getIconColor(item)"
+                  :class="getItemColor(item)"
                 />
                 <Icon
                   v-else
                   :name="getIconName(item)"
                   size="sm"
-                  :class="getIconColor(item)"
+                  :class="getItemColor(item)"
                 />
               </div>
               <div>
@@ -126,7 +126,7 @@
             </div>
             <!-- Right: value -->
             <div class="text-right">
-              <p :class="['text-sm font-semibold', getValueColor(item)]">
+              <p :class="['text-sm font-semibold', getItemColor(item)]">
                 {{ formatValue(item) }}
               </p>
               <p
@@ -182,6 +182,7 @@ import UserAvatar from '@/components/common/UserAvatar.vue'
 import BalanceIcon from '@/components/common/BalanceIcon.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { rechargeCouponLabel } from '@/components/payment/rechargeCoupon'
 import { useBalanceDisplay } from '@/composables/useBalanceDisplay'
 
 const props = defineProps<{ show: boolean; user: AdminUser | null; hideActions?: boolean }>()
@@ -199,10 +200,11 @@ const typeFilter = ref('')
 
 const totalPages = computed(() => Math.ceil(total.value / pageSize) || 1)
 
-// Type filter options
+// 筛选值与接口返回的记录类型一致。
 const typeOptions = computed(() => [
   { value: '', label: t('admin.users.allTypes') },
   { value: 'balance', label: t('admin.users.typeBalance') },
+  { value: 'coupon', label: t('admin.users.typeCoupon') },
   { value: 'affiliate_balance', label: t('admin.users.typeAffiliateBalance') },
   { value: 'admin_balance', label: t('admin.users.typeAdminBalance') },
   { value: 'concurrency', label: t('admin.users.typeConcurrency') },
@@ -249,56 +251,48 @@ const isBalanceType = (type: string) =>
 // Helper: check if subscription type
 const isSubscriptionType = (type: string) => type === 'subscription'
 
-// Icon name based on type
+// 根据记录类型选择图标。
 const getIconName = (item: BalanceHistoryItem) => {
+  if (item.type === 'coupon') return 'ticket'
   if (isSubscriptionType(item.type)) return 'badge'
-  return 'bolt' // concurrency
+  return 'bolt'
 }
 
-// Icon background color
+// 根据记录类型和金额变化设置图标底色。
 const getIconBg = (item: BalanceHistoryItem) => {
   if (isBalanceType(item.type)) {
     return item.value >= 0
       ? 'bg-emerald-100 dark:bg-emerald-900/30'
       : 'bg-red-100 dark:bg-red-900/30'
   }
+  if (item.type === 'coupon') return 'bg-amber-100 dark:bg-amber-900/30'
   if (isSubscriptionType(item.type)) return 'bg-purple-100 dark:bg-purple-900/30'
   return item.value >= 0
     ? 'bg-blue-100 dark:bg-blue-900/30'
     : 'bg-orange-100 dark:bg-orange-900/30'
 }
 
-// Icon text color
-const getIconColor = (item: BalanceHistoryItem) => {
+// 图标和右侧数值共用记录类型的文字颜色。
+const getItemColor = (item: BalanceHistoryItem) => {
   if (isBalanceType(item.type)) {
     return item.value >= 0
       ? 'text-emerald-600 dark:text-emerald-400'
       : 'text-red-600 dark:text-red-400'
   }
+  if (item.type === 'coupon') return 'text-amber-600 dark:text-amber-400'
   if (isSubscriptionType(item.type)) return 'text-purple-600 dark:text-purple-400'
   return item.value >= 0
     ? 'text-blue-600 dark:text-blue-400'
     : 'text-orange-600 dark:text-orange-400'
 }
 
-// Value text color
-const getValueColor = (item: BalanceHistoryItem) => {
-  if (isBalanceType(item.type)) {
-    return item.value >= 0
-      ? 'text-emerald-600 dark:text-emerald-400'
-      : 'text-red-600 dark:text-red-400'
-  }
-  if (isSubscriptionType(item.type)) return 'text-purple-600 dark:text-purple-400'
-  return item.value >= 0
-    ? 'text-blue-600 dark:text-blue-400'
-    : 'text-orange-600 dark:text-orange-400'
-}
-
-// Item title
+// 根据记录类型和增减方向显示变动名称。
 const getItemTitle = (item: BalanceHistoryItem) => {
   switch (item.type) {
     case 'balance':
       return t('redeem.balanceAddedRedeem')
+    case 'coupon':
+      return t('redeem.couponReceived')
     case 'admin_balance':
       return item.value >= 0 ? t('redeem.balanceAddedAdmin') : t('redeem.balanceDeductedAdmin')
     case 'affiliate_balance':
@@ -314,7 +308,7 @@ const getItemTitle = (item: BalanceHistoryItem) => {
   }
 }
 
-// Format display value
+// 格式化记录右侧的金额或额度。
 const formatValue = (item: BalanceHistoryItem) => {
   if (isBalanceType(item.type)) {
     const sign = item.value >= 0 ? '+' : ''
@@ -324,6 +318,12 @@ const formatValue = (item: BalanceHistoryItem) => {
     const days = item.validity_days || Math.round(item.value)
     const groupName = item.group?.name || ''
     return groupName ? `${days}d - ${groupName}` : `${days}d`
+  }
+  if (item.type === 'coupon') {
+    // 优惠券的满减条件记录在 coupon_terms，value 仅用于直接增减额度。
+    return item.coupon_terms
+      ? t('payment.coupons.terms', rechargeCouponLabel(item.coupon_terms))
+      : '—'
   }
   // concurrency types
   const sign = item.value >= 0 ? '+' : ''
