@@ -2236,6 +2236,29 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
+  it("publishes the public home stats switch from the features tab", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.get("#settings-tab-features").trigger("click");
+
+    const toggle = wrapper.get<HTMLInputElement>("#show-public-home-stats");
+    expect(toggle.isVisible()).toBe(true);
+    expect(toggle.element.checked).toBe(false);
+
+    await toggle.setValue(true);
+    await saveFromSaveBar(wrapper);
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ show_public_home_stats: true }),
+    );
+    expect(fetchPublicSettings).toHaveBeenCalledWith(true);
+
+    await toggle.setValue(false);
+    await saveFromSaveBar(wrapper);
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ show_public_home_stats: false }),
+    );
+  });
+
   it("removes stale Gemini inpaint when saving creative model settings", async () => {
     getSettings.mockResolvedValue({
       ...baseSettingsResponse,

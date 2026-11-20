@@ -127,10 +127,10 @@ batchImageGuide: {
       discountOff: '最高优惠{percent}%'
     },
     stats: {
-      todayTokens: '今日总 Token 量',
-      totalTokens: '历史总 Token 量',
-      totalUsers: '总注册用户量',
-      supportedModels: '已接入模型',
+      todayTokens: '今日 Token',
+      totalTokens: '历史总 Token',
+      totalUsers: '注册用户数',
+      supportedModels: '已接入模型数',
       providerTypes: '类模型',
       unavailable: '统计数据暂不可用'
     },

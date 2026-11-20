@@ -45,6 +45,7 @@ const (
 	SettingKeyHideCcsImportButton                 = "hide_ccs_import_button"
 	SettingKeyHomeContent                         = "home_content"
 	SettingKeyHomeFeaturedModels                  = "home_featured_models"
+	SettingKeyShowPublicHomeStats                 = "show_public_home_stats"
 	SettingKeyInvitationCodeEnabled               = "invitation_code_enabled"
 	SettingKeyLoginAgreementDocuments             = "login_agreement_documents"
 	SettingKeyLoginAgreementEnabled               = "login_agreement_enabled"
@@ -227,6 +228,7 @@ func (s *PublicService) GetPublicSettings(ctx context.Context) (*PublicSettings,
 		FooterLinks:                         settings[SettingKeyFooterLinks],
 		FooterText:                          settings[SettingKeyFooterText],
 		HomeFeaturedModels:                  settings[SettingKeyHomeFeaturedModels],
+		ShowPublicHomeStats:                 settings[SettingKeyShowPublicHomeStats] == "true",
 		LinuxDoOAuthEnabled:                 input.Auth.LinuxDo,
 		DingTalkOAuthEnabled:                input.Auth.DingTalk,
 		WeChatOAuthEnabled:                  input.Auth.WeChat,
@@ -477,6 +479,7 @@ func (s *PublicService) GetPublicSettingsForInjection(ctx context.Context) (any,
 		FooterLinks                         json.RawMessage              `json:"footer_links"`
 		FooterText                          string                       `json:"footer_text,omitempty"`
 		HomeFeaturedModels                  json.RawMessage              `json:"home_featured_models"`
+		ShowPublicHomeStats                 bool                         `json:"show_public_home_stats"`
 		LinuxDoOAuthEnabled                 bool                         `json:"linuxdo_oauth_enabled"`
 		DingTalkOAuthEnabled                bool                         `json:"dingtalk_oauth_enabled"`
 		WeChatOAuthEnabled                  bool                         `json:"wechat_oauth_enabled"`
@@ -562,6 +565,7 @@ func (s *PublicService) GetPublicSettingsForInjection(ctx context.Context) (any,
 		FooterLinks:                         SafeRawJSONArray(settings.FooterLinks),
 		FooterText:                          settings.FooterText,
 		HomeFeaturedModels:                  SafeRawJSONArray(settings.HomeFeaturedModels),
+		ShowPublicHomeStats:                 settings.ShowPublicHomeStats,
 		LinuxDoOAuthEnabled:                 settings.LinuxDoOAuthEnabled,
 		DingTalkOAuthEnabled:                settings.DingTalkOAuthEnabled,
 		WeChatOAuthEnabled:                  settings.WeChatOAuthEnabled,
@@ -761,5 +765,5 @@ func ParseTablePreferences(defaultPageSizeRaw, optionsRaw string) (int, []int) {
 }
 
 func PublicValueKeys() []string {
-	return []string{"balance_unit_name_localized", "oidc_connect_provider_name_localized", "balance_low_notify_recharge_url_localized", SettingKeySiteTexts, SettingKeyDefaultLocale, SettingKeyAPIBaseURL, SettingKeyProviderQuotaNotifyEnabled, SettingKeyAffiliateEnabled, SettingKeyAliyunCaptchaEnabled, SettingKeyAliyunCaptchaPrefix, SettingKeyAliyunCaptchaSceneID, SettingKeyAllowUserViewErrorRequests, SettingKeyBackendModeEnabled, SettingKeyBalanceIconSVG, SettingKeyBalanceLowNotifyEnabled, SettingKeyBalanceLowNotifyRechargeURL, SettingKeyBalanceLowNotifyThreshold, SettingKeyBalanceUnitName, SettingKeyBalanceUnitSymbol, SettingKeyContactInfo, SettingKeyCreativeEnabled, SettingKeyCustomEndpoints, SettingKeyCustomMenuItems, SettingKeyDocURL, SettingKeyEmailVerifyEnabled, SettingKeyFooterLinks, SettingKeyFooterText, SettingKeyForceEmailOnThirdPartySignup, SettingKeyHideCcsImportButton, SettingKeyHomeContent, SettingKeyHomeFeaturedModels, SettingKeyInvitationCodeEnabled, SettingKeyLoginAgreementDocuments, SettingKeyLoginAgreementEnabled, SettingKeyLoginAgreementMode, SettingKeyLoginAgreementUpdatedAt, SettingKeyPasswordResetEnabled, SettingKeyPromoCodeEnabled, SettingKeyPurchaseSubscriptionEnabled, SettingKeyPurchaseSubscriptionURL, SettingKeyRegistrationEmailDomainQuotaEnabled, SettingKeyRegistrationEnabled, SettingKeyRiskControlEnabled, SettingKeySiteLogo, SettingKeySiteName, SettingKeySiteSubtitle, SettingKeyTableDefaultPageSize, SettingKeyTablePageSizeOptions, SettingKeyTencentCaptchaAppID, SettingKeyTencentCaptchaEnabled, SettingKeyTotpEnabled, SettingKeyTurnstileEnabled, SettingKeyTurnstileSiteKey, SettingKeyUserEmailChangeEnabled, SettingPaymentEnabled}
+	return []string{"balance_unit_name_localized", "oidc_connect_provider_name_localized", "balance_low_notify_recharge_url_localized", SettingKeySiteTexts, SettingKeyDefaultLocale, SettingKeyAPIBaseURL, SettingKeyProviderQuotaNotifyEnabled, SettingKeyAffiliateEnabled, SettingKeyAliyunCaptchaEnabled, SettingKeyAliyunCaptchaPrefix, SettingKeyAliyunCaptchaSceneID, SettingKeyAllowUserViewErrorRequests, SettingKeyBackendModeEnabled, SettingKeyBalanceIconSVG, SettingKeyBalanceLowNotifyEnabled, SettingKeyBalanceLowNotifyRechargeURL, SettingKeyBalanceLowNotifyThreshold, SettingKeyBalanceUnitName, SettingKeyBalanceUnitSymbol, SettingKeyContactInfo, SettingKeyCreativeEnabled, SettingKeyCustomEndpoints, SettingKeyCustomMenuItems, SettingKeyDocURL, SettingKeyEmailVerifyEnabled, SettingKeyFooterLinks, SettingKeyFooterText, SettingKeyForceEmailOnThirdPartySignup, SettingKeyHideCcsImportButton, SettingKeyHomeContent, SettingKeyHomeFeaturedModels, SettingKeyShowPublicHomeStats, SettingKeyInvitationCodeEnabled, SettingKeyLoginAgreementDocuments, SettingKeyLoginAgreementEnabled, SettingKeyLoginAgreementMode, SettingKeyLoginAgreementUpdatedAt, SettingKeyPasswordResetEnabled, SettingKeyPromoCodeEnabled, SettingKeyPurchaseSubscriptionEnabled, SettingKeyPurchaseSubscriptionURL, SettingKeyRegistrationEmailDomainQuotaEnabled, SettingKeyRegistrationEnabled, SettingKeyRiskControlEnabled, SettingKeySiteLogo, SettingKeySiteName, SettingKeySiteSubtitle, SettingKeyTableDefaultPageSize, SettingKeyTablePageSizeOptions, SettingKeyTencentCaptchaAppID, SettingKeyTencentCaptchaEnabled, SettingKeyTotpEnabled, SettingKeyTurnstileEnabled, SettingKeyTurnstileSiteKey, SettingKeyUserEmailChangeEnabled, SettingPaymentEnabled}
 }

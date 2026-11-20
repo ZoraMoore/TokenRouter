@@ -267,6 +267,7 @@ export interface PublicSettings {
   contact_info: string
   doc_url: string
   home_content: string
+  show_public_home_stats?: boolean
   hide_ccs_import_button: boolean
   payment_enabled: boolean
   team_enabled?: boolean

@@ -4324,6 +4324,17 @@
 
         <!-- 分页：功能特性 -->
         <div v-show="activeTab === 'features'" v-content-reveal="activeTab === 'features'" class="space-y-4">
+          <SettingsCard :title="t('admin.settings.features.homeStats.title')">
+            <SettingsSection>
+              <SettingToggleRow
+                id="show-public-home-stats"
+                v-model="form.show_public_home_stats"
+                :label="t('admin.settings.features.homeStats.enabled')"
+                :hint="t('admin.settings.features.homeStats.enabledHint')"
+              />
+            </SettingsSection>
+          </SettingsCard>
+
           <!-- 团队 -->
           <SettingsCard
             :title="t('admin.settings.features.team.title')"
@@ -6105,6 +6116,7 @@ const form = reactive<SettingsForm>({
   contact_info: "",
   doc_url: "",
   home_content: "",
+  show_public_home_stats: false,
   backend_mode_enabled: false,
   hide_ccs_import_button: false,
   payment_enabled: false,
@@ -8368,6 +8380,7 @@ async function saveSettings(): Promise<boolean> {
       custom_endpoints: form.custom_endpoints,
       footer_links: normalizeFooterLinksForSave(),
       home_featured_models: normalizeHomeFeaturedModelsForSave(),
+      show_public_home_stats: form.show_public_home_stats,
       frontend_url: form.frontend_url,
       smtp_host: form.smtp_host,
       smtp_port: form.smtp_port,

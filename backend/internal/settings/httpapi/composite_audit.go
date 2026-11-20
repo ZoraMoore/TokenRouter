@@ -430,6 +430,9 @@ func DiffSettings(before *composite.Snapshot, after *composite.Snapshot, beforeA
 	if before.HomeContent != after.HomeContent {
 		changed = append(changed, "home_content")
 	}
+	if before.ShowPublicHomeStats != after.ShowPublicHomeStats {
+		changed = append(changed, "show_public_home_stats")
+	}
 	if before.HideCcsImportButton != after.HideCcsImportButton {
 		changed = append(changed, "hide_ccs_import_button")
 	}

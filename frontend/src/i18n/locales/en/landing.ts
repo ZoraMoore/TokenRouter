@@ -127,10 +127,10 @@ batchImageGuide: {
       discountOff: 'Up to {percent}% off'
     },
     stats: {
-      todayTokens: 'Today Total Tokens',
-      totalTokens: 'Historical Total Tokens',
+      todayTokens: 'Tokens Today',
+      totalTokens: 'All-Time Tokens',
       totalUsers: 'Registered Users',
-      supportedModels: 'Supported Models',
+      supportedModels: 'Connected Models',
       providerTypes: 'model types',
       unavailable: 'Stats are temporarily unavailable'
     },

@@ -43,6 +43,8 @@ func (h *MarketplaceHandler) ListPublic(c *gin.Context) {
 
 // StatsPublic 返回公开的 Token 和用户计数。
 func (h *MarketplaceHandler) StatsPublic(c *gin.Context) {
+	// 浏览器和代理每次请求都要经过公开开关检查。
+	c.Header("Cache-Control", "no-store")
 	stats, err := h.stats.PublicStats(c.Request.Context())
 	if err != nil {
 		httpx.ErrorFrom(c, err)

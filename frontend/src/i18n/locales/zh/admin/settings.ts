@@ -167,6 +167,11 @@ export default {
         bucketLimitHint: '如果窗口和粒度会产生超过 720 根柱子，后端会自动放大单柱时间窗口。'
       },
       features: {
+        homeStats: {
+          title: '首页统计',
+          enabled: '显示公开首页统计',
+          enabledHint: '在默认首页向访客展示今日 Token、历史总 Token、注册用户数和已接入模型数。'
+        },
         team: {
           title: '团队功能',
           description: '控制用户团队页和管理员团队管理页是否开放。',

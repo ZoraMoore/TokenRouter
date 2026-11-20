@@ -143,7 +143,7 @@ func TestSettingsFieldOwnership(t *testing.T) {
 		delete(owners, name)
 		count++
 	}
-	require.Equal(t, 283, count, "HTTP 字段变化需要同步字段登记")
+	require.Equal(t, 284, count, "HTTP 字段变化需要同步字段登记")
 	require.Empty(t, owners, "参与者不应声明不存在的输入字段")
 }
 
@@ -1053,6 +1053,35 @@ func TestUpdateSettingsFullPayloadStillClearsSentEmptyFields(t *testing.T) {
 
 	require.Equal(t, "", repo.values[site.SettingKeySiteName],
 		"明确发送的空值表示主动清空，而不是省略字段")
+}
+
+// TestUpdateSettingsPublicHomeStats 验证公开首页开关的默认值和部分更新。
+func TestUpdateSettingsPublicHomeStats(t *testing.T) {
+	const key = "show_public_home_stats"
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
+
+	rec := doUpdateSettings(t, h, map[string]any{"registration_enabled": true}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), `"show_public_home_stats":false`)
+	require.NotContains(t, repo.values, key)
+
+	rec = doUpdateSettings(t, h, map[string]any{key: true}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "true", repo.values[key])
+	require.Contains(t, rec.Body.String(), `"show_public_home_stats":true`)
+
+	rec = doUpdateSettings(t, h, map[string]any{"registration_enabled": false}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "true", repo.values[key])
+
+	rec = doUpdateSettings(t, h, map[string]any{key: nil}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "true", repo.values[key])
+
+	rec = doUpdateSettings(t, h, map[string]any{key: false}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "false", repo.values[key])
+	require.Contains(t, rec.Body.String(), `"show_public_home_stats":false`)
 }
 
 // TestUpdateSettingsSMTPFromAliasIsWritable 验证 smtp_from_email 是唯一一个 JSON 名称与持久化设置键不同的请求字段，

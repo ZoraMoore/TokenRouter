@@ -16,6 +16,7 @@ func (s *Snapshot) SiteAdminSettings() site.AdminSettings {
 		HideCcsImportButton:         s.HideCcsImportButton,
 		HomeContent:                 s.HomeContent,
 		HomeFeaturedModels:          s.HomeFeaturedModels,
+		ShowPublicHomeStats:         s.ShowPublicHomeStats,
 		LoginAgreementDocuments:     s.LoginAgreementDocuments,
 		LoginAgreementEnabled:       s.LoginAgreementEnabled,
 		LoginAgreementMode:          s.LoginAgreementMode,
@@ -45,6 +46,7 @@ func (s *Snapshot) ApplySiteAdminSettings(value site.AdminSettings) {
 	s.HideCcsImportButton = value.HideCcsImportButton
 	s.HomeContent = value.HomeContent
 	s.HomeFeaturedModels = value.HomeFeaturedModels
+	s.ShowPublicHomeStats = value.ShowPublicHomeStats
 	s.LoginAgreementDocuments = value.LoginAgreementDocuments
 	s.LoginAgreementEnabled = value.LoginAgreementEnabled
 	s.LoginAgreementMode = value.LoginAgreementMode
@@ -73,6 +75,7 @@ func (s *Snapshot) ApplySiteAdminReadSettings(value *site.AdminReadSettings) {
 	s.HideCcsImportButton = value.HideCcsImportButton
 	s.HomeContent = value.HomeContent
 	s.HomeFeaturedModels = value.HomeFeaturedModels
+	s.ShowPublicHomeStats = value.ShowPublicHomeStats
 	s.LoginAgreementDocuments = value.LoginAgreementDocuments
 	s.LoginAgreementEnabled = value.LoginAgreementEnabled
 	s.LoginAgreementMode = value.LoginAgreementMode

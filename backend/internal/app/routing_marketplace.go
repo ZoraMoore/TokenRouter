@@ -8,11 +8,13 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/billing"
 	"github.com/TokenFlux/TokenRouter/internal/billing/pricing"
 	"github.com/TokenFlux/TokenRouter/internal/config"
+	"github.com/TokenFlux/TokenRouter/internal/pkg/apperror"
 	"github.com/TokenFlux/TokenRouter/internal/routing"
 	routinghttp "github.com/TokenFlux/TokenRouter/internal/routing/httpapi"
 	routingdto "github.com/TokenFlux/TokenRouter/internal/routing/httpapi/dto"
 	routingpostgres "github.com/TokenFlux/TokenRouter/internal/routing/postgres"
 	"github.com/TokenFlux/TokenRouter/internal/settings"
+	"github.com/TokenFlux/TokenRouter/internal/site"
 	"github.com/TokenFlux/TokenRouter/internal/usage"
 )
 
@@ -22,7 +24,10 @@ type marketplacePrices struct {
 }
 
 // marketplaceStats 返回公开首页需要的 Dashboard 计数。
-type marketplaceStats struct{ source *usage.DashboardService }
+type marketplaceStats struct {
+	source  *usage.DashboardService
+	display *site.DisplaySettings
+}
 
 // provideMarketplace 绑定分组、设置和报价查询，平台模型信息在查询时读取。
 func provideMarketplace(groups *routingpostgres.GroupStore, store *settings.Store, catalogue *routing.RequestableCatalogue, prices *billing.PriceResolver, calculator *billing.Calculator, capacity *routing.CapacityService, availability routing.GroupAvailabilityProbeRepository, cfg *config.Config, attributes *routing.ModelAttributeService) *routing.Marketplace {
@@ -30,7 +35,11 @@ func provideMarketplace(groups *routingpostgres.GroupStore, store *settings.Stor
 	return routing.NewMarketplace(groups, store, catalogue, catalogue.Resolver, marketplacePrices{prices, calculator}, capacity, availability, options)
 }
 
+// PublicStats 在查询计数前检查管理员保存的公开开关。
 func (s marketplaceStats) PublicStats(ctx context.Context) (routingdto.ModelMarketplaceStats, error) {
+	if !s.display.ShowPublicHomeStats(ctx) {
+		return routingdto.ModelMarketplaceStats{}, apperror.Forbidden("PUBLIC_HOME_STATS_DISABLED", "Public home page stats are disabled")
+	}
 	value, err := s.source.GetPublicDashboardStats(ctx)
 	if err != nil {
 		return routingdto.ModelMarketplaceStats{}, err
@@ -49,6 +58,6 @@ func (p marketplacePrices) GetModelModalities(model string) ([]string, []string)
 }
 
 // provideMarketplaceHTTP 为市场 Handler 绑定公开统计查询。
-func provideMarketplaceHTTP(core *routing.Marketplace, dashboard *usage.DashboardService) *routinghttp.MarketplaceHandler {
-	return routinghttp.NewMarketplaceHandler(core, marketplaceStats{source: dashboard})
+func provideMarketplaceHTTP(core *routing.Marketplace, dashboard *usage.DashboardService, display *site.DisplaySettings) *routinghttp.MarketplaceHandler {
+	return routinghttp.NewMarketplaceHandler(core, marketplaceStats{source: dashboard, display: display})
 }
