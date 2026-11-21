@@ -198,6 +198,10 @@ Responses 历史 Chat 格式的转换、工具 ID 清理、平台 schema 选择�
 
 ## Responses 请求细节
 
+HTTP 工具结果按 `call_id` 与原调用配对。通过 `item_reference` 续接时，客户端工具结果仍需匹配对应的引用。历史中的 `tool_search_output` 若同时带有 `execution: "server"` 和显式的 `call_id: null`，表示由服务端完成的搜索。网关保留该条历史，在配对时跳过它，继续校验同一请求里的其他输出。
+
+缺少必需编号时，HTTP 400 会指出 `input` 数组中从零开始的位置及条目类型，网关日志记为 `input_index` 和 `item_type`。HTTP 使用 `previous_response_id` 续接时还需要通过响应归属检查，并选到支持该方式的 OpenAI API Key 提供商。
+
 <a id="responses_ws_runtime"></a>
 ### Responses 长连接与在线参数
 

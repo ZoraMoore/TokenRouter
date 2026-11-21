@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -29,8 +30,11 @@ func ValidateOpenAIFunctionCallOutput(c *gin.Context, body []byte, reqLog *zap.L
 	if validation.HasFunctionCallOutputMissingCallID {
 		reqLog.Warn("openai.request_validation_failed",
 			zap.String("reason", "function_call_output_missing_call_id"),
+			zap.Int64("input_index", validation.MissingCallIDInputIndex),
+			zap.String("item_type", validation.MissingCallIDItemType),
 		)
-		DefaultOpenAIErrorOutput().WriteError(c, http.StatusBadRequest, "invalid_request_error", "function_call_output requires call_id on HTTP requests; continuation via previous_response_id is only supported on Responses WebSocket v2")
+		message := fmt.Sprintf("input[%d] (%s) requires call_id", validation.MissingCallIDInputIndex, validation.MissingCallIDItemType)
+		DefaultOpenAIErrorOutput().WriteError(c, http.StatusBadRequest, "invalid_request_error", message)
 		return false
 	}
 	if validation.HasItemReferenceForAllCallIDs {
@@ -40,6 +44,6 @@ func ValidateOpenAIFunctionCallOutput(c *gin.Context, body []byte, reqLog *zap.L
 	reqLog.Warn("openai.request_validation_failed",
 		zap.String("reason", "function_call_output_missing_item_reference"),
 	)
-	DefaultOpenAIErrorOutput().WriteError(c, http.StatusBadRequest, "invalid_request_error", "function_call_output requires item_reference ids matching each call_id on HTTP requests; continuation via previous_response_id is only supported on Responses WebSocket v2")
+	DefaultOpenAIErrorOutput().WriteError(c, http.StatusBadRequest, "invalid_request_error", "tool output requires matching tool call context or item references")
 	return false
 }
