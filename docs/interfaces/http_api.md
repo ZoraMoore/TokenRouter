@@ -200,6 +200,21 @@ POST /api/v1/creative/runs/{id}/outputs/{index}/ack
 
 推流任务读取到目标账号的并发上限后，`result.target_concurrency` 返回该上限，`result.unconfirmed_sessions` 返回已迁入却尚未观察到首次成功请求的会话数。同一会话完成多次请求时，待确认会话数减少一次。排队等待执行的任务和早期历史记录可以省略这两个字段。
 
+### 智能运维定时任务
+
+以下管理员接口使用前缀 `/api/v1/admin/scheduled-tasks`。创建、更新和预览传入 `name`、`kind`、`scope`、`group_ids`、`provider_ids`、`model`、`cron_expression` 和 `enabled`。任务类型是 `relogin` 或 `iq`。范围是 `groups` 或 `providers`，重登也接受 `all`。测智需要指定文字模型。
+
+| 方法和路径 | 返回 |
+| --- | --- |
+| `GET /plans` | `items`、服务器 `timezone`，以及每个计划的上次状态和下次运行时间 |
+| `POST /plans`、`PUT /plans/:id` | 保存后的计划 |
+| `POST /preview` | 账号及其选择的分组、模型、跳过原因和账号总数 |
+| `POST /plans/:id/run` | HTTP 202 与 `run_id`。同一计划在运行时返回在途的轮次 ID |
+| `GET /plans/:id/runs` | 计划最近 30 轮结果 |
+| `GET /runs/:id` | 账号总数、已完成数、运行中数、未结束数及每个账号的明细 |
+
+未结束数包括等待和运行中的账号。管理员明细包含状态、阶段、上游 HTTP 状态、可用的探针结果和糖果答案。`probe` 记录首发和续接的 HTTP 状态。处于 `candy` 阶段时，`http_status` 记录糖果题的 HTTP 状态。重登明细还包含操作编号及已核对的新账号 ID。[执行规则](../operations/provider_maintenance.md#maintenance_schedules)
+
 ### 连接测试
 
 管理员测试提供商连接使用 `POST /api/v1/admin/providers/:id/test`，响应是 SSE。请求体可以包含：

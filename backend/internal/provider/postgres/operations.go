@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	jobFields = "id, provider_id, provider_name, group_id, group_ids, kind, state, stage, message, checkpoint, result"
+	jobFields = "id, provider_id, provider_name, group_id, group_ids, kind, state, stage, message, checkpoint, result, expected_credential_version"
 )
 
 // OperationStore 持久化提供商操作、处理进度和恢复数据。
@@ -33,22 +33,31 @@ func NewOperationStore(db *sql.DB) *OperationStore {
 
 // Enqueue 复用同账号的在途任务，返回记录供调用方核对操作类型和分组。
 func (s *OperationStore) Enqueue(ctx context.Context, job operation.Job) (operation.Job, error) {
+	return enqueueOperation(ctx, s.db, job)
+}
+
+// enqueueOperation 也允许定时任务在保存账号进度的事务中登记重登。
+func enqueueOperation(ctx context.Context, exec providerRowQueryer, job operation.Job) (operation.Job, error) {
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return operation.Job{}, err
 	}
-	row := s.db.QueryRowContext(ctx, `
-		INSERT INTO provider_operations (id, provider_id, provider_name, group_id, group_ids, kind, state)
-		VALUES ($1, $2, $3, $4, COALESCE($5::bigint[], ARRAY[]::bigint[]), $6, 'queued')
+	row := exec.QueryRowContext(ctx, `
+		INSERT INTO provider_operations (id, provider_id, provider_name, group_id, group_ids, kind, state, expected_credential_version)
+		VALUES ($1, $2, $3, $4, COALESCE($5::bigint[], ARRAY[]::bigint[]), $6, 'queued', $7)
 		ON CONFLICT (provider_id) WHERE state IN ('queued', 'running')
 		DO UPDATE SET provider_id = EXCLUDED.provider_id
-		RETURNING `+jobFields, id, job.ProviderID, job.ProviderName, job.GroupID, pq.Array(job.GroupIDs), job.Kind)
+		RETURNING `+jobFields, id, job.ProviderID, job.ProviderName, job.GroupID, pq.Array(job.GroupIDs), job.Kind, job.ExpectedCredentialVersion)
 	return scanJob(row)
 }
 
 // Active 查询同一账号当前的任务，在外部资料核验前可复用该任务。
 func (s *OperationStore) Active(ctx context.Context, providerID int64) (operation.Job, error) {
-	return scanJob(s.db.QueryRowContext(ctx, `SELECT `+jobFields+`
+	return activeOperation(ctx, s.db, providerID)
+}
+
+func activeOperation(ctx context.Context, exec providerRowQueryer, providerID int64) (operation.Job, error) {
+	return scanJob(exec.QueryRowContext(ctx, `SELECT `+jobFields+`
 		FROM provider_operations WHERE provider_id = $1 AND state IN ('queued', 'running')`, providerID))
 }
 
@@ -122,7 +131,7 @@ func scanJob(row jobScanner) (operation.Job, error) {
 	var job operation.Job
 	var result []byte
 	err := row.Scan(&job.ID, &job.ProviderID, &job.ProviderName, &job.GroupID, pq.Array(&job.GroupIDs), &job.Kind, &job.State,
-		&job.Stage, &job.Message, &job.Data, &result)
+		&job.Stage, &job.Message, &job.Data, &result, &job.ExpectedCredentialVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return operation.Job{}, operation.ErrNotFound
 	}

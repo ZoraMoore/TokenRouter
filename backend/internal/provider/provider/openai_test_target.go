@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/TokenFlux/TokenRouter/internal/provider"
+	"github.com/TokenFlux/TokenRouter/internal/upstream"
 )
 
 type openaiTestTarget struct {
@@ -27,6 +28,14 @@ func (t openaiTestTarget) IQMappedModel(model string) string {
 }
 
 func (t openaiTestTarget) Execute(ctx context.Context, request provider.PreparedTestRequest, sink provider.TestEventSink) error {
+	if request.AuthObservation {
+		ctx = upstream.WithHTTPUpstreamRedirectsDisabled(ctx)
+		model, err := t.scheduledAuthModel(ctx, request.Model)
+		if err != nil {
+			return err
+		}
+		request.Model = model
+	}
 	headers := make(http.Header)
 	headers.Set("User-Agent", request.UserAgent)
 	headers.Set("originator", request.Originator)
@@ -44,4 +53,28 @@ func (t openaiTestTarget) Execute(ctx context.Context, request provider.Prepared
 		}
 	}
 	return run.Result(t.executor.Execute(run, t.record, request.Model, request.Prompt, request.Mode, request.TestType))
+}
+
+// scheduledAuthModel 在发出请求前确定本次复检使用的文字模型。
+func (t openaiTestTarget) scheduledAuthModel(ctx context.Context, requested string) (string, error) {
+	defaults := ModelDefaults()
+	rules := ModelRules(t.record)
+	allowed := func(model string) bool {
+		return provider.SupportsStateProbeModel(t.IQMappedModel(model)) && t.record.SupportsModel(ctx, model, defaults, rules)
+	}
+	if requested != "" {
+		if allowed(requested) {
+			return requested, nil
+		}
+		return "", provider.ErrIQUnsupported
+	}
+	if preferred := provider.DefaultOpenAITestModel(t.record, defaults, rules); allowed(preferred) {
+		return preferred, nil
+	}
+	for _, model := range t.record.GetConfiguredRequestModels(defaults) {
+		if allowed(model) {
+			return model, nil
+		}
+	}
+	return "", provider.ErrIQUnsupported
 }

@@ -43,6 +43,8 @@ type Job struct {
 	Message      string          `json:"message,omitempty"`
 	Data         json.RawMessage `json:"-"`
 	Result       Result          `json:"result"`
+	// ExpectedCredentialVersion 让自动任务在开始前核对复检时使用的凭据。
+	ExpectedCredentialVersion string `json:"-"`
 }
 
 // Result 分开记录替换后的提供商和推流的实测数据。

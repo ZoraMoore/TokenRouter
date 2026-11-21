@@ -149,6 +149,10 @@ func (s *ReloginService) Run(ctx context.Context, job operation.Job, checkpoint 
 		if err != nil {
 			return operation.Result{}, err
 		}
+		if job.ExpectedCredentialVersion != "" && (job.ExpectedCredentialVersion != RefreshCredentialIdentity(record) ||
+			record.ExpiresAt != nil && !record.now().Before(*record.ExpiresAt)) {
+			return operation.Result{}, operation.NeedsAction("自动复检后账号凭据已改变或账号已过期")
+		}
 		state = reloginState{
 			Email:             reloginEmail(record),
 			AccountID:         accountID,
@@ -218,7 +222,7 @@ func (s *ReloginService) Run(ctx context.Context, job operation.Job, checkpoint 
 			}
 			stage = reloginRestore
 		case reloginRestore:
-			err := s.restoreRelogin(ctx, state)
+			err := s.restoreRelogin(ctx, state, job.ExpectedCredentialVersion != "")
 			return operation.Result{ProviderID: state.ReplacementID}, err
 		default:
 			return operation.Result{}, operation.NeedsAction("无法识别重登任务的检查点")
@@ -455,7 +459,7 @@ func (s *ReloginService) loadReloginReplacement(ctx context.Context, state relog
 	return r, nil
 }
 
-func (s *ReloginService) restoreRelogin(ctx context.Context, state reloginState) error {
+func (s *ReloginService) restoreRelogin(ctx context.Context, state reloginState, scheduled bool) error {
 	account, err := s.verifiedAccount(ctx, state)
 	if err != nil {
 		return err
@@ -468,7 +472,11 @@ func (s *ReloginService) restoreRelogin(ctx context.Context, state reloginState)
 		return err
 	}
 	desired := state.Settings
-	desired.Schedulable = desired.Schedulable && (desired.ExpiresAt == nil || time.Now().Before(*desired.ExpiresAt))
+	desired.Schedulable = desired.Schedulable && (desired.ExpiresAt == nil || current.now().Before(*desired.ExpiresAt))
+	if scheduled {
+		// 账号导入后可能已被管理员停调，自动恢复以新账号的调度开关为准。
+		desired.Schedulable = desired.Schedulable && current.Schedulable
+	}
 	if desired.Matches(current) {
 		return nil
 	}

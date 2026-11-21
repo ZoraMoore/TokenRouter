@@ -19,6 +19,7 @@
 //   - threshold_settings.go、scheduling_threshold*.go、quota*.go：额度阈值和自动暂停规则。
 //   - snapshot.go、clone.go、capacity_snapshot.go：记录副本和调度容量数据。
 //   - testing.go、scheduled*.go、probe_runtime.go、import_probes.go：连接测试、定时计划和探测任务。
+//   - maintenance*.go：401 周期复检、重登和逐账号测智。
 //   - pelican_questions.go 准备内置题和自定义题，pelican.go 执行作答和判分，pelican_artwork.go 提取 SVG 供复核。
 //   - iq.go 执行管理员选择的题目和质量检测，iq_modeltrace.go 收集三题输出并通过 modeltrace 子包归因。
 //   - state_probe.go 检查 Codex 账号的会话续接结果。

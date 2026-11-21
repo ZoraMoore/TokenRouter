@@ -131,6 +131,8 @@ func TestPelicanUsesOneCompletedProviderAnswer(t *testing.T) {
 		{"OpenAI 完成", provider.PlatformOpenAI, "responses", responseAnswer + responseStop, ""},
 		{"OpenAI 在最终文字事件中给出答案", provider.PlatformOpenAI, "responses", "data: {\"type\":\"response.output_text.done\",\"text\":\"21\"}\n" + responseStop, ""},
 		{"OpenAI 流提前结束", provider.PlatformOpenAI, "responses", responseAnswer, "incomplete"},
+		{"OpenAI 无完成状态的 done", provider.PlatformOpenAI, "responses", responseAnswer + "data: {\"type\":\"response.done\"}\n", "incomplete"},
+		{"OpenAI 完成事件含截断", provider.PlatformOpenAI, "responses", responseAnswer + "data: {\"type\":\"response.completed\",\"response\":{\"incomplete_details\":{\"reason\":\"max_output_tokens\"}}}\n", "incomplete"},
 		{"OpenAI 不完整事件", provider.PlatformOpenAI, "responses", responseAnswer + "data: {\"type\":\"response.incomplete\"}\n", "incomplete"},
 		{"OpenAI 错误事件", provider.PlatformOpenAI, "responses", responseAnswer + "data: {\"type\":\"error\",\"error\":{\"message\":\"upstream-private-fixture\"}}\n", "upstream_error"},
 		{"OpenAI 超大单行", provider.PlatformOpenAI, "responses", "data: " + strings.Repeat(" ", (1<<20)+20), "output_limit"},
@@ -181,6 +183,7 @@ func TestPelicanGradesCompletedJSONResponse(t *testing.T) {
 		{"Responses 正常", "responses", `{"status":"completed","error":null,"output":[{"type":"message","content":[{"type":"output_text","text":"21"}]}]}`, ""},
 		{"Responses 文本兼容单段对象", "responses", `{"status":"completed","output":{"type":"message","content":{"type":"output_text","text":"21"}}}`, ""},
 		{"Responses 缺少完成标记", "responses", `{"output":[{"type":"message","content":[{"type":"output_text","text":"21"}]}]}`, "incomplete"},
+		{"Responses JSON 包含截断标记", "responses", `{"status":"completed","incomplete_details":{"reason":"max_output_tokens"},"output":[]}`, "incomplete"},
 		{"Chat 正常", "chat_completions", `{"choices":[{"message":{"role":"assistant","content":"21"},"finish_reason":"stop"}]}`, ""},
 		{"Chat 错误报文", "chat_completions", `{"error":{"message":"upstream-private-fixture"}}`, "upstream_error"},
 	} {
@@ -194,6 +197,40 @@ func TestPelicanGradesCompletedJSONResponse(t *testing.T) {
 			} else {
 				require.Empty(t, evidence.Answer)
 			}
+		})
+	}
+}
+
+// TestScheduledCandyUsesFixedQuestionWithoutRound 覆盖定时加测的空轮次和独立 HTTP 状态。
+func TestScheduledCandyUsesFixedQuestionWithoutRound(t *testing.T) {
+	const answer = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"18\"}\n"
+	const completed = "data: {\"type\":\"response.completed\"}\n"
+	for _, tt := range []struct {
+		name        string
+		httpStatus  int
+		stream      string
+		status      string
+		detail      string
+		finalAnswer string
+	}{
+		{"完整答错", http.StatusOK, answer + completed, "suspected", "answer_mismatch", "18"},
+		{"回答未完成", http.StatusOK, answer, "inconclusive", "incomplete", ""},
+		{"认证失败", http.StatusUnauthorized, "private upstream body", "inconclusive", "upstream_error", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			record := &provider.Record{
+				ID: 45, Platform: provider.PlatformOpenAI, Type: provider.ProviderTypeOAuth,
+				Credentials: map[string]any{"access_token": "fixture"},
+			}
+			transport := &pelicanHTTPFixture{status: tt.httpStatus, stream: tt.stream}
+			result := pelicanServiceForHTTP(record, transport).RunPelican(t.Context(), record.ID, "gpt-6-astra", "candy", "", provider.APIProtocolResponses)
+			require.Len(t, transport.requests, 1)
+			require.Contains(t, transport.requests[0], "五角星形 7 6 4")
+			require.Equal(t, "gpt-6-astra", gjson.Get(transport.requests[0], "model").String())
+			require.Equal(t, tt.httpStatus, result.HTTPStatus)
+			require.Equal(t, tt.status, result.Status)
+			require.Equal(t, tt.detail, result.DetailCode)
+			require.Equal(t, tt.finalAnswer, result.Answer)
 		})
 	}
 }

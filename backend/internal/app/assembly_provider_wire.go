@@ -58,6 +58,7 @@ var providerAssemblyProviders = wire.NewSet(
 	provideProviderRecovery,
 	provideProviderManagement,
 	provideProviderOperations,
+	provideProviderMaintenance,
 	provideManagedRefresh,
 	wire.Bind(new(providerauth.RefreshFailureObserver), new(*providerauth.RuntimeBlockState)),
 	wire.Bind(new(providerauth.RuntimeUnblocker), new(*providerauth.RuntimeBlockState)),

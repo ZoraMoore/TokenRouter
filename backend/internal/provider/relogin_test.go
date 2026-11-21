@@ -142,6 +142,76 @@ func TestReloginRefusesDeletionAfterBindingChanges(t *testing.T) {
 	require.ErrorContains(t, err, "绑定")
 }
 
+func TestScheduledReloginKeepsReplacementPaused(t *testing.T) {
+	replacement := &Record{
+		ID: 82, Platform: PlatformOpenAI, Type: ProviderTypeOAuth, Status: StatusActive, Concurrency: 2,
+		Credentials: map[string]any{"email": "acct@example.org"},
+	}
+	store := &reloginStoreStub{records: map[int64]*Record{82: replacement}}
+	remote := &reloginRemoteStub{account: ReviveAccount{
+		ID: reloginTestAccountID, Email: "acct@example.org", CredentialSaved: true, PoolState: "present", ProviderID: &replacement.ID,
+	}}
+	state, err := json.Marshal(reloginState{
+		Email: "acct@example.org", AccountID: reloginTestAccountID, ReplacementID: 82,
+		Settings:            ReloginSettings{Schedulable: true, Concurrency: 8},
+		ReplacementSettings: reloginSettingsOf(replacement),
+	})
+	require.NoError(t, err)
+	job := operation.Job{ProviderID: 7, ExpectedCredentialVersion: "observed", Stage: reloginRestore, Data: state}
+	service := &ReloginService{providers: store, remote: remote}
+	_, err = service.Run(t.Context(), job, func(string, any) error { return nil })
+	require.NoError(t, err)
+	require.False(t, replacement.Schedulable)
+	require.Equal(t, 8, replacement.Concurrency)
+}
+
+// TestScheduledReloginStartsWith401SchedulingOff 检查确认 401 的停调账号可以提交重登。
+func TestScheduledReloginStartsWith401SchedulingOff(t *testing.T) {
+	old := &Record{
+		ID: 7, Platform: PlatformOpenAI, Type: ProviderTypeOAuth, Status: StatusError,
+		ErrorMessage: "Token revoked (401)", Credentials: map[string]any{"email": "acct@example.org"},
+	}
+	remote := &reloginRemoteStub{
+		account: ReviveAccount{
+			ID: reloginTestAccountID, Email: "acct@example.org", CredentialSaved: true, PoolState: "present", ProviderID: &old.ID,
+		},
+		delete: func(key string) (string, error) {
+			require.NotEmpty(t, key)
+			return "d123456789abcdef0123456789abcdef", nil
+		},
+	}
+	service := &ReloginService{providers: &reloginStoreStub{records: map[int64]*Record{7: old}}, remote: remote}
+	job := operation.Job{ID: reloginTestAccountID, ProviderID: old.ID, ExpectedCredentialVersion: RefreshCredentialIdentity(old)}
+	var stage string
+	_, err := service.Run(t.Context(), job, func(name string, data any) error {
+		stage = name
+		state, ok := data.(reloginState)
+		require.True(t, ok)
+		require.False(t, state.Settings.Schedulable)
+		return nil
+	})
+	require.ErrorContains(t, err, "等待 ReviveToken 完成号池绑定移除")
+	require.Equal(t, reloginWaitDelete, stage)
+}
+
+func TestScheduledReloginDeclinesWhenObservedCredentialsChanged(t *testing.T) {
+	old := &Record{
+		ID: 7, Platform: PlatformOpenAI, Type: ProviderTypeOAuth, Status: StatusError,
+		ErrorMessage: "Token revoked (401)", Schedulable: true,
+		Credentials: map[string]any{"email": "acct@example.org"},
+	}
+	remote := &reloginRemoteStub{account: ReviveAccount{
+		ID: reloginTestAccountID, Email: "acct@example.org", CredentialSaved: true, PoolState: "present", ProviderID: &old.ID,
+	}}
+	service := &ReloginService{providers: &reloginStoreStub{records: map[int64]*Record{7: old}}, remote: remote}
+	_, err := service.Run(t.Context(), operation.Job{ProviderID: 7, ExpectedCredentialVersion: "old-credentials"},
+		func(string, any) error {
+			t.Fatal("凭据变化后开始了重登")
+			return nil
+		})
+	require.ErrorContains(t, err, "凭据已改变")
+}
+
 func (s *reloginStoreStub) GetByID(_ context.Context, id int64) (*Record, error) {
 	if record := s.records[id]; record != nil {
 		return CloneRecord(record), nil

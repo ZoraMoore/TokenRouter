@@ -30,7 +30,11 @@ const (
 	ProviderTestModeDefault       = "default"
 	ProviderTestModeCompact       = "compact"
 	ProviderTestModeLegacyCompact = "legacy_compact"
+
+	scheduledAuthTimeout = 45 * time.Second
 )
+
+var errScheduledAuthFailed = errors.New("提供商认证复检失败")
 
 // TestEvent represents a SSE event for provider testing.
 type TestEvent struct {
@@ -47,6 +51,8 @@ type TestEvent struct {
 	Data            any    `json:"data,omitempty"`
 	Success         bool   `json:"success,omitempty"`
 	Error           string `json:"error,omitempty"`
+	// HTTPStatus 记录后台用例读取到的上游状态码。
+	HTTPStatus int `json:"-"`
 }
 
 // TestRequest 表达测试意图；Type 为 nil 时保留历史模型名推断，客户端元数据不包含凭据。
@@ -64,6 +70,8 @@ type TestRequest struct {
 	SVGAnswer bool
 	// IQMode 区分管理员发起的题目和数字指纹采样。
 	IQMode string
+	// AuthObservation 为定向认证复检选择文字模型，读取上游端点的首个 HTTP 响应。
+	AuthObservation bool
 }
 type TestRoute uint8
 
@@ -118,6 +126,12 @@ type testResultSink struct {
 	mu    sync.Mutex
 	texts []string
 	err   string
+}
+
+// authObservationSink 保存上游状态和完成信号。
+type authObservationSink struct {
+	status   int
+	complete bool
 }
 
 // NormalizeProviderTestType 统一管理端传入的测试类型，空值由调用方按兼容方式处理。
@@ -183,6 +197,57 @@ func NewTestService(loader TestLoader, options TestOptions) *TestService {
 
 func (s *TestService) Test(ctx context.Context, request TestRequest, sink TestEventSink) error {
 	return s.testTarget(ctx, nil, request, sink)
+}
+
+// ObserveScheduledAuth 使用指定账号的当前凭据，读取上游 HTTP 状态和完整响应信号。
+// @project-doc docs/operations/provider_maintenance.md#maintenance_schedules
+func (s *TestService) ObserveScheduledAuth(ctx context.Context, id int64, model string) (status int, complete bool, err error) {
+	model = strings.TrimSpace(model)
+	if id <= 0 || (model != "" && !ValidStateProbeModelName(model)) {
+		return 0, false, ErrIQInvalid
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, scheduledAuthTimeout)
+	defer cancel()
+	target, err := s.iqTarget(ctx, id, IQTestRequest{ModelID: model})
+	if err != nil {
+		return 0, false, err
+	}
+	info := target.Information()
+	if info.ID != id {
+		return 0, false, ErrIQUnavailable
+	}
+	if !supportsStateProbeSnapshot(info.ProviderSnapshot) ||
+		(info.Status != StatusActive && info.Status != StatusError) ||
+		(info.ExpiresAt != nil && !s.iqNow().Before(*info.ExpiresAt)) {
+		return 0, false, ErrIQUnsupported
+	}
+
+	testType := ProviderTestTypeText
+	request := TestRequest{
+		ProviderID: id, Model: model, Prompt: "只回复 OK。", Type: &testType, Protocol: APIProtocolResponses,
+		Automatic: true, FullAnswer: true, AuthObservation: true,
+	}
+	var sink authObservationSink
+	err = s.testTarget(ctx, target, request, &sink)
+	switch {
+	case ctx.Err() != nil:
+		return sink.status, false, ctx.Err()
+	case sink.status != 0 && sink.status != 200:
+		return sink.status, false, nil
+	case errors.Is(err, ErrTestAnswerIncomplete):
+		return sink.status, false, ErrTestAnswerIncomplete
+	case errors.Is(err, ErrTestAnswerLimit):
+		return sink.status, false, ErrTestAnswerLimit
+	case errors.Is(err, ErrIQUnsupported):
+		return sink.status, false, ErrIQUnsupported
+	case err != nil:
+		return sink.status, false, errScheduledAuthFailed
+	case sink.status != 200 || !sink.complete:
+		return sink.status, false, ErrTestAnswerIncomplete
+	default:
+		return sink.status, true, nil
+	}
 }
 
 // testTarget 让手动检测在刚校验过的账号快照上执行一次。
@@ -376,4 +441,16 @@ func (s *testResultSink) result() (string, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return strings.Join(s.texts, ""), s.err
+}
+
+func (*authObservationSink) Begin(context.Context, bool) error { return nil }
+
+func (s *authObservationSink) Emit(_ context.Context, event TestEvent) error {
+	switch event.Type {
+	case "test_request":
+		s.status = event.HTTPStatus
+	case "test_complete":
+		s.complete = event.Success
+	}
+	return nil
 }

@@ -199,6 +199,45 @@ func TestTestingRejectsProtocolOutsideProviderCapability(t *testing.T) {
 	require.NoError(t, NewTestService(loader, TestOptions{}).Test(context.Background(), TestRequest{ProviderID: 1, Type: &kind, Protocol: APIProtocolResponses}, &testSinkStub{}))
 }
 
+// TestScheduledAuthRejectsUnsuitableTarget 拒绝影子、停用和过期账号，并核对读取到的目标 ID。
+func TestScheduledAuthRejectsUnsuitableTarget(t *testing.T) {
+	fixed := time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC)
+	parent := int64(3)
+	for _, tc := range []struct {
+		name   string
+		alter  func(*ProviderSnapshot)
+		expect error
+	}{
+		{"另一个账号", func(info *ProviderSnapshot) { info.ID++ }, ErrIQUnavailable},
+		{"影子账号", func(info *ProviderSnapshot) { info.ParentProviderID = &parent }, ErrIQUnsupported},
+		{"停用", func(info *ProviderSnapshot) { info.Status = StatusDisabled }, ErrIQUnsupported},
+		{"到期", func(info *ProviderSnapshot) { info.ExpiresAt = &fixed }, ErrIQUnsupported},
+		{"禁用 Responses", func(info *ProviderSnapshot) { info.EnabledProtocols = nil }, ErrIQUnsupported},
+		{"API Key", func(info *ProviderSnapshot) { info.Type = ProviderTypeAPIKey }, ErrIQUnsupported},
+		{"Agent Identity", func(info *ProviderSnapshot) { info.AuthMode = OpenAIAuthModeAgentIdentity }, ErrIQUnsupported},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot := ProviderSnapshot{
+				ID: 1, Platform: PlatformOpenAI, Type: ProviderTypeOAuth, Status: StatusError,
+				EnabledProtocols: []capability.ProtocolID{capability.ProtocolOpenAIResponses},
+			}
+			tc.alter(&snapshot)
+			target := testTargetStub{
+				info: TestTargetInfo{ProviderSnapshot: snapshot},
+				run: func(context.Context, PreparedTestRequest, TestEventSink) error {
+					t.Fatal("该账号不能发起认证复检")
+					return nil
+				},
+			}
+			service := NewTestService(&testLoaderStub{target: target}, TestOptions{Now: func() time.Time { return fixed }})
+			status, complete, err := service.ObserveScheduledAuth(t.Context(), 1, "gpt-6-astra")
+			require.ErrorIs(t, err, tc.expect)
+			require.Zero(t, status)
+			require.False(t, complete)
+		})
+	}
+}
+
 func TestTestingDefaultTextPrompt(t *testing.T) {
 	for _, tc := range []struct{ name, model, prompt, kind, mode, want string }{
 		{name: "default text", model: "gpt-6.1-sol", kind: "text", want: "don’t search the internet, who is Thibault Sottiaux on X。"},

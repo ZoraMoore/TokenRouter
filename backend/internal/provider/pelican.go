@@ -36,6 +36,7 @@ type PelicanEvidence struct {
 	RawAnswer                          string
 	Criteria                           []string
 	ReasoningEffort                    string
+	HTTPStatus                         int
 }
 
 type pelicanAnswerSink struct {
@@ -45,6 +46,7 @@ type pelicanAnswerSink struct {
 	systemPrompt string
 	limit        int
 	effort       string
+	httpStatus   int
 	completed    bool
 	failed       bool
 }
@@ -108,6 +110,7 @@ func (s *TestService) RunConfiguredPelican(ctx context.Context, providerID int64
 	sink := pelicanAnswerSink{limit: pelicanAnswerLimit(kind)}
 	err := s.Test(ctx, request, &sink)
 	result.ReasoningEffort = sink.effort
+	result.HTTPStatus = sink.httpStatus
 	switch {
 	case errors.Is(err, ErrTestAnswerEffort):
 		result.DetailCode = "unsupported_effort"
@@ -177,6 +180,7 @@ func (s *pelicanAnswerSink) Emit(_ context.Context, event TestEvent) error {
 	case "test_request":
 		s.model, s.effort = event.Model, event.ReasoningEffort
 		s.protocol, s.systemPrompt = event.Protocol, event.SystemPrompt
+		s.httpStatus = event.HTTPStatus
 	case "content":
 		if len(event.Text) > s.limit-s.text.Len() {
 			return ErrTestAnswerLimit

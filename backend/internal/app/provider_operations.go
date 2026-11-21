@@ -24,7 +24,7 @@ import (
 // @project-doc docs/operations/provider_maintenance.md#provider_operations
 func provideProviderOperations(db *sql.DB, redisClient *redis.Client, store *providerpostgres.ProviderStore, groups *routingpostgres.GroupStore, admin *provider.Admin, concurrency scheduler.ConcurrencyCache, quota *provider.QuotaSettingsCache, manager *lifecycle.Manager) *providerhttp.OperationHandler {
 	taskStore := providerpostgres.NewOperationStore(db)
-	key := strings.TrimSpace(os.Getenv("REVIVE_API_KEY"))
+	key := reviveAPIKey()
 	relogin := provider.NewReloginService(admin, provideradapter.NewReviveClient(key))
 	var reloginRunner operation.Runner
 	if key != "" {
@@ -43,4 +43,9 @@ func provideProviderOperations(db *sql.DB, redisClient *redis.Client, store *pro
 		return record.Name, nil
 	})
 	return providerhttp.NewOperationHandler(service)
+}
+
+// reviveAPIKey 读取手动与定时重登共用的服务端密钥。
+func reviveAPIKey() string {
+	return strings.TrimSpace(os.Getenv("REVIVE_API_KEY"))
 }
