@@ -113,6 +113,16 @@ func (s *MaintenanceStore) applyMaintenanceUpdate(ctx context.Context, tx *sql.T
 		changed, err = s.recordMaintenance401(ctx, tx, &current.record)
 	case "replacement_401":
 		changed, err = setMaintenance401(ctx, tx, id, update)
+	case "enable_replacement":
+		// 验证通过后再打开新账号的开关。上方的版本检查保证验证期间的配置修改优先。
+		if current.record.Status != provider.StatusActive {
+			markChanged()
+			return 0, nil
+		}
+		if !current.record.Schedulable {
+			_, err = tx.ExecContext(ctx, `UPDATE providers SET schedulable=true, updated_at=now() WHERE id=$1`, id)
+			changed = err == nil
+		}
 	case "suspend":
 		changed, err = s.suspendMaintenanceAccount(ctx, tx, id, group, current.guard)
 		if !changed && err == nil {

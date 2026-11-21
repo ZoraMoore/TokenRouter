@@ -66,6 +66,26 @@ func TestMaintenanceStoreDeduplicatesDueRunsAndResumesLeasedWork(t *testing.T) {
 }
 
 func TestMaintenanceStoreTracksReloginAcrossPauseAndReplacement(t *testing.T) {
+	for _, tc := range []struct {
+		name, outcome, detail string
+		status                int
+		complete, disable     bool
+		expectedScheduling    bool
+	}{
+		{name: "验证成功", outcome: "relogin_succeeded", status: 200, complete: true, expectedScheduling: true},
+		{name: "响应中断", outcome: "needs_action", detail: "incomplete", status: 200},
+		{name: "再次报401", outcome: "needs_action", detail: "replacement_401", status: 401},
+		{name: "验证期间被停用", outcome: "skipped", detail: "changed", status: 200, complete: true, disable: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkMaintenanceReloginReplacement(t, tc.status, tc.complete, tc.disable, tc.outcome, tc.detail, tc.expectedScheduling)
+		})
+	}
+}
+
+// checkMaintenanceReloginReplacement 让执行器验证重新导入的账号，连同调度结果读取运行明细。
+func checkMaintenanceReloginReplacement(t *testing.T, status int, complete, disable bool, outcome, reason string, expectedScheduling bool) {
+	t.Helper()
 	db := postgrescontainer.New(t)
 	ctx := t.Context()
 	_, err := db.ExecContext(ctx, `
@@ -121,20 +141,49 @@ func TestMaintenanceStoreTracksReloginAcrossPauseAndReplacement(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []int64{62, 63}, updated.ProviderIDs)
 
-	verify, err := restarted.Claim(ctx)
-	require.NoError(t, err)
-	require.Equal(t, "verify", verify.Item.Stage)
-	fresh, err := restarted.Guard(ctx, 62, 0)
-	require.NoError(t, err)
-	require.NoError(t, restarted.Finish(ctx, verify, provider.MaintenanceUpdate{
-		Guard: fresh, MaintenanceResult: provider.MaintenanceResult{Outcome: "relogin_succeeded", HTTPStatus: 200},
-	}))
-	detail, err := restarted.Run(ctx, runID)
-	require.NoError(t, err)
-	require.Equal(t, "relogin_succeeded", detail.Items[0].Outcome)
-	require.EqualValues(t, 62, detail.Items[0].ReplacementID)
+	var before bool
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT schedulable FROM providers WHERE id=62").Scan(&before))
+	require.False(t, before)
+	service := provider.NewMaintenanceService(restarted, provider.MaintenancePlanOptions{})
+	runner := provider.NewMaintenanceRunner(service, restarted, provider.MaintenanceRunnerOptions{
+		Load: func(_ context.Context, id int64) (*provider.Record, error) {
+			assert.EqualValues(t, 62, id)
+			return &provider.Record{ID: id, Type: provider.ProviderTypeOAuth, Platform: provider.PlatformOpenAI, Status: provider.StatusActive}, nil
+		},
+		Acquire: func(context.Context, *provider.Record) (func(), error) { return func() {}, nil },
+		Observe: func(ctx context.Context, id int64, _ string) (int, bool, error) {
+			assert.EqualValues(t, 62, id)
+			if disable {
+				_, err := db.ExecContext(ctx, "UPDATE providers SET status='disabled' WHERE id=$1", id)
+				if err != nil {
+					return 0, false, err
+				}
+			}
+			if status == 200 && !complete {
+				return status, false, provider.ErrTestAnswerIncomplete
+			}
+			return status, complete, nil
+		},
+	})
+	require.NoError(t, runner.Start(ctx))
+	t.Cleanup(func() {
+		stop, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		require.NoError(t, runner.Stop(stop))
+	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		detail, err := restarted.Run(ctx, runID)
+		require.NoError(c, err)
+		require.Equal(c, "finished", detail.Items[0].State)
+		require.Equal(c, outcome, detail.Items[0].Outcome)
+		require.Equal(c, reason, detail.Items[0].Detail)
+		require.EqualValues(c, 62, detail.Items[0].ReplacementID)
+	}, 6*time.Second, 50*time.Millisecond)
+
 	var schedulable bool
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT schedulable FROM providers WHERE id=62").Scan(&schedulable))
+	require.Equal(t, expectedScheduling, schedulable)
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT schedulable FROM providers WHERE id=61").Scan(&schedulable))
 	require.False(t, schedulable)
 }
 

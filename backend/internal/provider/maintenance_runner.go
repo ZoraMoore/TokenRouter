@@ -395,7 +395,7 @@ func maintenanceAuthResult(stage string, status int, complete, available bool) M
 	case stage == "verify" && status == 401:
 		update.Outcome, update.Detail, update.Action = "needs_action", "replacement_401", "replacement_401"
 	case stage == "verify" && complete && status == 200:
-		update.Outcome, update.Detail = "relogin_succeeded", ""
+		update.Outcome, update.Detail, update.Action = "relogin_succeeded", "", "enable_replacement"
 	case stage == "verify":
 		update.Outcome, update.Detail = "needs_action", "replacement_unconfirmed"
 	case complete && status == 200:
