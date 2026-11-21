@@ -1,0 +1,94 @@
+name: Build 9324d84a production payload
+
+on:
+  push:
+    branches: [build/provider-operations-9324d84a]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 9324d84aef48031aa577f51925b7234ecca2543a
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Test gateway and provider maintenance
+        run: go -C backend test ./internal/provider/... ./internal/protocol/openai ./internal/gateway/httpapi ./internal/routing/... ./internal/app
+      - name: Test maintenance and candy recheck with PostgreSQL
+        run: |
+          go -C backend test -tags integration ./internal/provider/postgres -run 'TestMaintenance|TestPelicanRecheck' -count=1
+          go -C backend test -tags integration ./internal/app -run '^TestCandyDispositionTransaction$' -count=1
+
+  payload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SOURCE_SHA: 9324d84aef48031aa577f51925b7234ecca2543a
+      IMAGE: ghcr.io/zoramoore/tokenrouter:deploy-payload-9324d84a
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 9324d84aef48031aa577f51925b7234ecca2543a
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm --dir frontend install --frozen-lockfile
+      - run: pnpm --dir frontend exec vitest run src/__tests__/integration/pelicanTests.spec.ts src/__tests__/integration/scheduledTasks.spec.ts src/components/layout/__tests__/AppSidebar.spec.ts
+      - run: pnpm --dir frontend run build
+      - name: Build embedded server
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          mkdir -p "$RUNNER_TEMP/provider-payload"
+          build_date=$(date -u +%FT%TZ)
+          go -C backend build -tags embed -trimpath -buildvcs=false -ldflags "-s -w -X main.Version=0.2.10 -X main.Commit=$SOURCE_SHA -X main.Date=$build_date -X main.BuildType=release" -o "$RUNNER_TEMP/provider-payload/tokenrouter" ./cmd/server
+          "$RUNNER_TEMP/provider-payload/tokenrouter" --version
+          cp -R backend/internal/web/dist "$RUNNER_TEMP/provider-payload/"
+          printf '%s\n' "$SOURCE_SHA" > "$RUNNER_TEMP/provider-payload/source-sha"
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish immutable deployment payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/provider-payload"
+          sha256sum tokenrouter > binary.sha256
+          cat > Dockerfile <<'DOCKER'
+          FROM scratch
+          ARG SOURCE_SHA
+          LABEL org.opencontainers.image.source="https://github.com/ZoraMoore/TokenRouter"
+          LABEL org.opencontainers.image.revision="$SOURCE_SHA"
+          COPY tokenrouter binary.sha256 source-sha /payload/
+          COPY dist /payload/dist
+          CMD ["/payload/tokenrouter", "--version"]
+          DOCKER
+          docker build --build-arg SOURCE_SHA="$SOURCE_SHA" -t "$IMAGE" .
+          docker push "$IMAGE"
