@@ -50,11 +50,13 @@ func TestMaintenanceCandyRequiresAnExplicitWrongAnswer(t *testing.T) {
 	}{
 		{"pass", PelicanEvidence{Status: "passed", Answer: "21"}, "candy_passed", ""},
 		{"wrong", PelicanEvidence{Status: "suspected", DetailCode: "answer_mismatch", Answer: "18"}, "suspended", "suspend"},
+		{"rate_limited", PelicanEvidence{Status: "suspected", DetailCode: "answer_mismatch", Answer: "18", HTTPStatus: 429}, "inconclusive", ""},
+		{"server_error", PelicanEvidence{Status: "suspected", DetailCode: "answer_mismatch", Answer: "18", HTTPStatus: 500}, "inconclusive", ""},
 		{"partial", PelicanEvidence{Status: "inconclusive", DetailCode: "incomplete", Answer: "18"}, "inconclusive", ""},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result := maintenanceCandyResult(test.evidence, 0)
+			result := maintenanceCandyResult(test.evidence, test.evidence.HTTPStatus)
 			require.Equal(t, test.outcome, result.Outcome)
 			require.Equal(t, test.action, result.Action)
 		})

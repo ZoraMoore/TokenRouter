@@ -507,6 +507,7 @@
   "POST /api/v1/admin/redeem-codes/generate",
   "POST /api/v1/admin/risk-control/api-keys/test",
   "POST /api/v1/admin/risk-control/users/:user_id/unban",
+  "POST /api/v1/admin/scheduled-tasks/iq-rechecks",
   "POST /api/v1/admin/scheduled-tasks/plans",
   "POST /api/v1/admin/scheduled-tasks/plans/:id/run",
   "POST /api/v1/admin/scheduled-tasks/preview",

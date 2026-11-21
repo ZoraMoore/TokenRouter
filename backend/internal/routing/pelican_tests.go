@@ -79,6 +79,7 @@ type PelicanResult struct {
 	Answer       string   `json:"answer,omitempty"`
 	RawAnswer    string   `json:"raw_answer,omitempty"`
 	RoundID      string   `json:"round_id,omitempty"`
+	RecheckRunID *int64   `json:"recheck_run_id,omitempty"`
 }
 
 // PelicanArtwork 是用户打开一次测试时可查看的题目和作答。
@@ -129,6 +130,7 @@ type PelicanProvider struct {
 type PelicanTarget struct {
 	ProviderID     int64
 	ModelID        string
+	ActualModel    string
 	Protocol       string
 	GroupUpdatedAt time.Time
 }
@@ -162,7 +164,6 @@ type PelicanOptions struct {
 	UserGroups      func(context.Context, int64) ([]Group, error)
 	Candy           PelicanCandyRepository
 	CandyCandidates func(context.Context, PelicanPlan) ([]int64, error)
-	CandyChanged    func(context.Context, int64)
 }
 
 // PelicanService 管理测试计划、手动运行和分组展示。

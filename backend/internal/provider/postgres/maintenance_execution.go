@@ -68,7 +68,7 @@ func (s *MaintenanceStore) Claim(ctx context.Context) (provider.MaintenanceWork,
 	err = tx.QueryRowContext(ctx, `UPDATE provider_maintenance_runs r
 		SET status='running', started_at=COALESCE(r.started_at,now())
 		FROM provider_maintenance_items i WHERE r.id=i.run_id AND i.id=$1
-		RETURNING r.plan_id, r.plan_revision, r.draft, r.trigger, i.observed`, work.ID).
+		RETURNING COALESCE(r.plan_id,0), r.plan_revision, r.draft, r.trigger, i.observed`, work.ID).
 		Scan(&work.Plan.ID, &work.Plan.Revision, &draft, &work.Trigger, &observed)
 	if err != nil {
 		return work, err
@@ -92,9 +92,13 @@ func (s *MaintenanceStore) Finish(ctx context.Context, work provider.Maintenance
 			return err
 		}
 	}
-	plan, err := readMaintenancePlan(ctx, tx, work.Plan.ID, true)
-	if err != nil {
-		return err
+	// 单次复检的配置冻结在轮次中，普通计划仍需核对当前版本。
+	plan := work.Plan
+	if work.Trigger != provider.MaintenancePelican {
+		plan, err = readMaintenancePlan(ctx, tx, work.Plan.ID, true)
+		if err != nil {
+			return err
+		}
 	}
 	item, err := scanMaintenanceItem(tx.QueryRowContext(ctx, "SELECT "+maintenanceItemColumns+`
 		FROM provider_maintenance_items i WHERE i.id=$1 AND i.run_id=$2 AND i.state='running'

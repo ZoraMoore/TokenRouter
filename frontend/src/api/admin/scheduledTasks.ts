@@ -41,9 +41,10 @@ export interface ScheduledTaskPreview {
 
 export interface ScheduledTaskRun {
   id: number
-  plan_id: number
+  plan_id?: number | null
+  pelican_result_id?: number
   status: ScheduledTaskRunStatus
-  trigger: 'schedule' | 'manual'
+  trigger: 'schedule' | 'manual' | 'pelican'
   scheduled_at: string
   started_at?: string | null
   finished_at?: string | null
@@ -63,8 +64,12 @@ export interface ScheduledTaskItem extends ScheduledTaskTarget {
     verdict: string
     mint_status: number
     continue_status: number
+    mint_completed?: boolean
+    continue_completed?: boolean
     reason?: string
   }
+  initial_answer?: string
+  candy_prompt?: string
   answer?: string
   operation_id?: string
   replacement_id?: number

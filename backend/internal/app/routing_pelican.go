@@ -94,7 +94,7 @@ func providePelicanService(
 	manager *lifecycle.Manager,
 ) *routing.PelicanService {
 	targets := pelicanTargets{groups: groups, providers: providers, selector: selector}
-	repo.BindCandyDisabler(providers.DisableAfterCandyAnswer)
+	repo.BindCandyRecheck(providerpostgres.QueuePelicanRecheck)
 	location := time.Local
 	if configured, err := time.LoadLocation(cfg.Timezone); cfg.Timezone != "" && err == nil {
 		location = configured
@@ -109,7 +109,6 @@ func providePelicanService(
 		UserGroups:      keys.GetAvailableGroups,
 		Candy:           repo,
 		CandyCandidates: targets.candyCandidates,
-		CandyChanged:    providers.PublishCandyScheduling,
 	})
 	runner := routing.NewPelicanRunner(service)
 	manager.Register(lifecycle.Hook{
@@ -253,7 +252,7 @@ func (t pelicanTargets) acquire(ctx context.Context, plan routing.PelicanPlan) (
 			continue
 		}
 		return routing.PelicanTarget{
-			ProviderID: record.ID, ModelID: mapped,
+			ProviderID: record.ID, ModelID: mapped, ActualModel: (gatewayprovider.ModelPolicy{Record: record}).Mapped(mapped),
 			Protocol: pelicanTestProtocol(record, chosen.UpstreamProtocol), GroupUpdatedAt: group.UpdatedAt,
 		}, selected.ReleaseFunc, nil
 	}

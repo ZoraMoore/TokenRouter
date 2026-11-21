@@ -79,6 +79,10 @@
 
     <template #footer>
       <div class="flex flex-wrap justify-end gap-2">
+        <button
+          v-if="review && sample?.recheck_run_id" type="button" class="btn btn-primary" data-testid="open-recheck"
+          @click="emit('recheck', sample.recheck_run_id)"
+        >{{ t('pelicanTests.candySuspension.openRecheck') }}</button>
         <button type="button" class="btn btn-secondary" :disabled="!!reviewing" @click="close">{{ t('common.close') }}</button>
         <template v-if="review && sample && artwork && isPelicanArtwork(sample.question_kind) && sample.status === 'pending_review'">
           <button
@@ -118,7 +122,7 @@ const props = defineProps<{
   loadResult: (id: number, signal: AbortSignal) => Promise<AdminPelicanResultDetail>
   review?: (id: number, status: PelicanReviewStatus) => Promise<void>
 }>()
-const emit = defineEmits<{ close: []; reviewed: [id: number, status: PelicanReviewStatus] }>()
+const emit = defineEmits<{ close: []; recheck: [runId: number]; reviewed: [id: number, status: PelicanReviewStatus] }>()
 const { t } = useI18n()
 // 用户打开的作品可能已移入历史记录，按样本编号读取管理员给出的结论。
 const { data: sample, loading, failed, refresh } = usePelicanResource(
@@ -140,7 +144,7 @@ const probeReasons = new Set([
 ])
 const knownReasons = new Set([
   'no_provider', 'upstream_error', 'incomplete', 'empty_output', 'output_limit', 'invalid_artwork', 'answer_mismatch', 'unsupported_effort',
-  'candy_exhausted', 'candy_busy',
+  'candy_exhausted', 'candy_busy', 'model_changed', 'rate_limited',
 ])
 const reason = computed(() => {
   if (missingArtwork.value) return t('pelicanTests.reason.incomplete')

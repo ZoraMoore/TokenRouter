@@ -19,7 +19,7 @@ const (
 			SELECT id, scheduled_at, status FROM provider_maintenance_runs
 			WHERE plan_id=p.id ORDER BY id DESC LIMIT 1
 		) last ON TRUE`
-	maintenanceRunColumns = `r.id, r.plan_id, r.status, r.trigger, r.scheduled_at, r.started_at, r.finished_at,
+	maintenanceRunColumns = `r.id, COALESCE(r.plan_id,0), COALESCE(r.pelican_result_id,0), r.status, r.trigger, r.scheduled_at, r.started_at, r.finished_at,
 		i.total, i.completed, i.running, i.total - i.completed
 		FROM provider_maintenance_runs r
 		CROSS JOIN LATERAL (
@@ -289,7 +289,7 @@ func scanMaintenancePlan(row maintenanceScanner) (provider.MaintenancePlan, erro
 
 func scanMaintenanceRun(row maintenanceScanner) (provider.MaintenanceRun, error) {
 	var run provider.MaintenanceRun
-	err := row.Scan(&run.ID, &run.PlanID, &run.Status, &run.Trigger, &run.ScheduledAt, &run.StartedAt,
+	err := row.Scan(&run.ID, &run.PlanID, &run.PelicanResultID, &run.Status, &run.Trigger, &run.ScheduledAt, &run.StartedAt,
 		&run.FinishedAt, &run.Total, &run.Completed, &run.Running, &run.Remaining)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = provider.ErrMaintenanceNotFound
@@ -315,7 +315,7 @@ func finalizeMaintenanceRuns(ctx context.Context, tx *sql.Tx, planID, runID int6
 		UPDATE provider_maintenance_runs r SET finished_at=now(),
 			status=CASE WHEN EXISTS (SELECT 1 FROM provider_maintenance_items WHERE run_id=r.id AND state='cancelled')
 				THEN 'cancelled' ELSE 'finished' END
-		WHERE r.plan_id=$1 AND ($2::bigint=0 OR r.id=$2) AND r.status IN ('queued','running')
+		WHERE (($2::bigint>0 AND r.id=$2) OR ($2=0 AND r.plan_id=$1)) AND r.status IN ('queued','running')
 			AND NOT EXISTS (SELECT 1 FROM provider_maintenance_items WHERE run_id=r.id AND state IN ('queued','running'))`, planID, runID)
 	return err
 }

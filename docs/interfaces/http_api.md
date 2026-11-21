@@ -209,6 +209,7 @@ POST /api/v1/creative/runs/{id}/outputs/{index}/ack
 | `GET /plans` | `items`、服务器 `timezone`，以及每个计划的上次状态和下次运行时间 |
 | `POST /plans`、`PUT /plans/:id` | 保存后的计划 |
 | `POST /preview` | 账号及其选择的分组、模型、跳过原因和账号总数 |
+| `POST /iq-rechecks` | 提交正整数 `pelican_result_id`，返回 HTTP 202 和该分组初测对应的 `run_id`。重复提交同一样本返回同一运行 |
 | `POST /plans/:id/run` | HTTP 202 与 `run_id`。同一计划在运行时返回在途的轮次 ID |
 | `GET /plans/:id/runs` | 计划最近 30 轮结果 |
 | `GET /runs/:id` | 账号总数、已完成数、运行中数、未结束数及每个账号的明细 |
@@ -263,7 +264,7 @@ POST /api/v1/creative/runs/{id}/outputs/{index}/ack
 
 答题计划的 `question_kind` 可以使用内置题型 `pelican`、`candy`，也可以使用自定义题型 `custom_svg`、`custom_text`。内置题型可按计划覆盖题名与题面，糖果题还可覆盖参考答案。旧计划中留空的字段使用内置值。自定义题型需要 `question_name`（最多 96 字节）和 `question_prompt`（最多 8192 字节）。文本题另需 `expected_answer`（最多 1024 字节）。同一分组和模型可按题名、题型与推理强度分别建立计划。计划的 `reasoning_effort` 接受空字符串、`low`、`medium`、`high` 和 `xhigh`。
 
-`suspend_on_wrong_answer=true` 适用于自动选号的标准糖果题计划。此时 `provider_id` 为空，题面使用内置糖果题，参考答案使用默认值或 `21`。管理员历史包含当次账号和 `round_id`。作答结果按实际处置返回 `schedule_action`，取值为 `disabled`、`already_disabled` 或 `account_changed`。用户接口返回处置字段供展示。
+`suspend_on_wrong_answer=true` 适用于自动选号的标准糖果题计划。此时 `provider_id` 为空，题面使用内置糖果题，参考答案使用默认值或 `21`。管理员历史包含当次账号和 `round_id`。初测明确答错并创建复检后，`schedule_action` 为 `recheck_queued`，管理员从 `recheck_run_id` 读取运行详情。历史样本中的 `disabled`、`already_disabled` 和 `account_changed` 记录当时的处置。用户接口展示样本处置，运行编号仅对管理员可见。
 
 管理员通过 `GET` 和 `PUT /api/v1/admin/pelican-showcase/settings` 读取和保存展示设置。保存时须提交全部五项：`enabled`、`api_enabled`、`max_items`（1–100）、`auto_cleanup`、`retention_days`（1–90）。
 

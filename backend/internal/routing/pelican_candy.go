@@ -13,9 +13,7 @@ const (
 	pelicanCandyBusyWait = 5 * time.Minute
 	pelicanCandyRetry    = 30 * time.Second
 
-	PelicanScheduleDisabled        = "disabled"
-	PelicanScheduleAlreadyDisabled = "already_disabled"
-	PelicanScheduleAccountChanged  = "account_changed"
+	PelicanScheduleRecheckQueued = "recheck_queued"
 )
 
 // PelicanCandyRound 保存在服务重启和 worker 交接后仍要遵循的候选和进度。
@@ -92,8 +90,14 @@ func (s *PelicanService) runCandyAttempt(ctx context.Context, plan PelicanPlan) 
 			evidence := s.options.Run(runCtx, target.ProviderID, target.ModelID, plan.QuestionKind, plan.RoundAt.UTC().Format(time.RFC3339Nano), target.Protocol, provider.PelicanQuestionConfig{
 				Prompt: plan.QuestionPrompt, ExpectedAnswer: plan.ExpectedAnswer, ReasoningEffort: plan.ReasoningEffort,
 			})
-			if runCtx.Err() != nil {
-				evidence = provider.PelicanEvidence{Status: "inconclusive", DetailCode: "incomplete"}
+			switch {
+			case runCtx.Err() != nil:
+				evidence.Status, evidence.DetailCode = "inconclusive", "incomplete"
+			case evidence.HTTPStatus == 429:
+				evidence.Status, evidence.DetailCode = "inconclusive", "rate_limited"
+			case evidence.Status == "suspected" && evidence.DetailCode == "answer_mismatch" && (target.ActualModel == "" || evidence.ActualModel != target.ActualModel):
+				// 保存模型归属无法核实的回答，供管理员查看原文。
+				evidence.Status, evidence.DetailCode = "inconclusive", "model_changed"
 			}
 			release()
 			release = nil
@@ -118,9 +122,6 @@ func (s *PelicanService) finishCandyEvidence(ctx context.Context, plan PelicanPl
 	result := pelicanResult(plan, evidence, id, started, finished)
 	saveCtx, done := context.WithTimeout(ctx, 15*time.Second)
 	defer done()
-	action, err := s.options.Candy.FinishCandyAttempt(saveCtx, plan, roundID, result, next)
-	if err == nil && id != nil && action == PelicanScheduleDisabled && s.options.CandyChanged != nil {
-		s.options.CandyChanged(ctx, *id)
-	}
+	_, err = s.options.Candy.FinishCandyAttempt(saveCtx, plan, roundID, result, next)
 	return err
 }

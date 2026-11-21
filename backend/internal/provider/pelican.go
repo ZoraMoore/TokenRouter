@@ -33,6 +33,7 @@ type PelicanQuestionConfig struct {
 // PelicanEvidence 保存本次实际发送的题目、评判要求和可供管理员查看的回答。
 type PelicanEvidence struct {
 	Status, DetailCode, Prompt, Answer string
+	ActualModel                        string
 	RawAnswer                          string
 	Criteria                           []string
 	ReasoningEffort                    string
@@ -109,6 +110,7 @@ func (s *TestService) RunConfiguredPelican(ctx context.Context, providerID int64
 	defer cancel()
 	sink := pelicanAnswerSink{limit: pelicanAnswerLimit(kind)}
 	err := s.Test(ctx, request, &sink)
+	result.ActualModel = sink.model
 	result.ReasoningEffort = sink.effort
 	result.HTTPStatus = sink.httpStatus
 	switch {

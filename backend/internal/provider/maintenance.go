@@ -18,6 +18,7 @@ const (
 
 	MaintenanceSchedule = "schedule"
 	MaintenanceManual   = "manual"
+	MaintenancePelican  = "pelican"
 )
 
 var (
@@ -54,12 +55,13 @@ type MaintenancePlan struct {
 
 // MaintenanceTarget 保存本轮每个账号选定的分组和模型。
 type MaintenanceTarget struct {
-	ProviderID   int64  `json:"provider_id"`
-	ProviderName string `json:"provider_name"`
-	GroupID      int64  `json:"group_id,omitempty"`
-	Model        string `json:"model,omitempty"`
-	ActualModel  string `json:"actual_model,omitempty"`
-	Reason       string `json:"reason,omitempty"`
+	ProviderID    int64  `json:"provider_id"`
+	ProviderName  string `json:"provider_name"`
+	GroupID       int64  `json:"group_id,omitempty"`
+	Model         string `json:"model,omitempty"`
+	ActualModel   string `json:"actual_model,omitempty"`
+	InitialAnswer string `json:"initial_answer,omitempty"`
+	Reason        string `json:"reason,omitempty"`
 }
 
 // MaintenancePreview 随计划预览返回选中和具备资格的账号数。
@@ -71,17 +73,18 @@ type MaintenancePreview struct {
 
 // MaintenanceRun 保存一轮的时间和账号进度。
 type MaintenanceRun struct {
-	ID          int64      `json:"id"`
-	PlanID      int64      `json:"plan_id"`
-	Status      string     `json:"status"`
-	Trigger     string     `json:"trigger"`
-	ScheduledAt time.Time  `json:"scheduled_at"`
-	StartedAt   *time.Time `json:"started_at,omitempty"`
-	FinishedAt  *time.Time `json:"finished_at,omitempty"`
-	Total       int        `json:"total"`
-	Completed   int        `json:"completed"`
-	Running     int        `json:"running"`
-	Remaining   int        `json:"remaining"`
+	ID              int64      `json:"id"`
+	PlanID          int64      `json:"plan_id,omitempty"`
+	PelicanResultID int64      `json:"pelican_result_id,omitempty"`
+	Status          string     `json:"status"`
+	Trigger         string     `json:"trigger"`
+	ScheduledAt     time.Time  `json:"scheduled_at"`
+	StartedAt       *time.Time `json:"started_at,omitempty"`
+	FinishedAt      *time.Time `json:"finished_at,omitempty"`
+	Total           int        `json:"total"`
+	Completed       int        `json:"completed"`
+	Running         int        `json:"running"`
+	Remaining       int        `json:"remaining"`
 }
 
 // MaintenanceRunDetail 包含运行页按账号展示的证据。
@@ -107,6 +110,7 @@ type MaintenanceResult struct {
 	Detail         string            `json:"detail,omitempty"`
 	Probe          *StateProbeResult `json:"probe,omitempty"`
 	Answer         string            `json:"answer,omitempty"`
+	CandyPrompt    string            `json:"candy_prompt,omitempty"`
 	HTTPStatus     int               `json:"http_status,omitempty"`
 	AuthHTTPStatus int               `json:"auth_http_status,omitempty"`
 }
@@ -118,6 +122,7 @@ type MaintenancePlanStore interface {
 	SavePlan(context.Context, MaintenancePlan) (MaintenancePlan, error)
 	DuePlans(context.Context, time.Time) ([]MaintenancePlan, error)
 	QueueRun(context.Context, MaintenancePlan, string, time.Time, *time.Time, []MaintenanceTarget) (int64, error)
+	Recheck(context.Context, int64) (int64, error)
 	Runs(context.Context, int64) ([]MaintenanceRun, error)
 	Run(context.Context, int64) (MaintenanceRunDetail, error)
 }
@@ -197,6 +202,14 @@ func (s *MaintenanceService) RunNow(ctx context.Context, id int64) (int64, error
 		return plan.LastRunID, nil
 	}
 	return s.queue(ctx, plan, MaintenanceManual, s.options.Now().In(s.options.Location))
+}
+
+// Recheck 返回分组初测对应的单账号运行编号。
+func (s *MaintenanceService) Recheck(ctx context.Context, resultID int64) (int64, error) {
+	if resultID <= 0 {
+		return 0, ErrMaintenanceInvalid
+	}
+	return s.store.Recheck(ctx, resultID)
 }
 
 func (s *MaintenanceService) Runs(ctx context.Context, id int64) ([]MaintenanceRun, error) {

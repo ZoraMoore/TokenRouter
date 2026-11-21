@@ -46,6 +46,7 @@ export interface PelicanQuestionDefault {
 export interface AdminPelicanResult extends PelicanResult {
   provider_id?: number | null
   provider_name?: string
+  recheck_run_id?: number
   round_id?: string
 }
 

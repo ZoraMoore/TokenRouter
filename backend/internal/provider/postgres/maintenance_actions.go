@@ -49,6 +49,7 @@ func readMaintenanceAccount(ctx context.Context, exec providerRowQueryer, id, gr
 	if err != nil {
 		return account, err
 	}
+	account.guard.SchedulingClosed = !record.Schedulable
 	raw, err := json.Marshal([]any{record.ErrorMessage, record.TempUnschedulableReason, record.TempUnschedulableUntil, record.ExpiresAt, rate, overload})
 	if err != nil {
 		return account, err
@@ -82,15 +83,24 @@ func (s *MaintenanceStore) applyMaintenanceUpdate(ctx context.Context, tx *sql.T
 		id, group = item.ReplacementID, 0
 	}
 	current, err := readMaintenanceAccount(ctx, tx, id, group, true)
+	markChanged := func() {
+		update.Stage, update.Outcome, update.Detail, update.Action = item.Stage, "skipped", "changed", ""
+		if work.Trigger == provider.MaintenancePelican {
+			update.Outcome = "inconclusive"
+			if current.guard.SchedulingClosed {
+				update.Detail = "already_disabled"
+			}
+		}
+	}
 	if errors.Is(err, provider.ErrMaintenanceNotFound) || err == nil && !update.Guard.Matches(current.guard) {
-		markMaintenanceChanged(update)
+		markChanged()
 		return 0, nil
 	}
 	if err != nil {
 		return 0, err
 	}
 	if current.record.ExpiresAt != nil && !s.providers.options.Now().Before(*current.record.ExpiresAt) {
-		markMaintenanceChanged(update)
+		markChanged()
 		return 0, nil
 	}
 	var changed bool
@@ -106,7 +116,7 @@ func (s *MaintenanceStore) applyMaintenanceUpdate(ctx context.Context, tx *sql.T
 	case "suspend":
 		changed, err = s.suspendMaintenanceAccount(ctx, tx, id, group, current.guard)
 		if !changed && err == nil {
-			markMaintenanceChanged(update)
+			markChanged()
 		}
 		// 分组停调已经写入 outbox。
 		if changed && group > 0 {

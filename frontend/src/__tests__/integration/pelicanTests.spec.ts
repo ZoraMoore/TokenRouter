@@ -26,6 +26,7 @@ vi.mock('vue-i18n', async original => ({
   ...await original<typeof import('vue-i18n')>(),
   useI18n: () => ({
     locale: language,
+    te: () => true,
     t: (key: string, params?: Record<string, unknown>) => [key, ...Object.values(params || {})].join(' '),
   }),
 }))
@@ -164,6 +165,76 @@ describe('作品展示设置', () => {
 })
 
 describe('管理员测试计划', () => {
+  it('从分组初测详情直接查看同账号复检，区分初测与加测的回答', async () => {
+    const initial = {
+      ...result, question_kind: 'candy', status: 'suspected', detail_code: 'answer_mismatch',
+      schedule_action: 'recheck_queued', recheck_run_id: 34,
+    }
+    mockReads(path => {
+      if (path === '/admin/pelican-tests/plans') return [plan]
+      if (path.endsWith('/plans/8/results')) return [initial]
+      if (path.endsWith('/results/26')) return { ...detail, ...initial, answer: '29' }
+      if (path === '/admin/scheduled-tasks/runs/34') return {
+        id: 34, pelican_result_id: 26, status: 'finished', trigger: 'pelican', scheduled_at: result.tested_at,
+        total: 1, completed: 1, running: 0, remaining: 0,
+        items: [{
+          provider_id: 8, state: 'finished', stage: 'candy', outcome: 'candy_passed', http_status: 200,
+          initial_answer: '29', candy_prompt: '标准糖果原题', answer: '21',
+          probe: { verdict: 'degraded', mint_status: 200, continue_status: 200, mint_completed: true, continue_completed: true },
+        }],
+      }
+      throw Error(path)
+    })
+    const view = mount(AdminPelicanTestsView, { global })
+    await flushPromises()
+    await view.findAll('button').find(button => button.text() === 'pelicanTests.history')!.trigger('click')
+    await flushPromises()
+    await view.get('[data-testid="open-sample-26"]').trigger('click')
+    await flushPromises()
+    const sample = view.findAll('[role="dialog"]').at(-1)!
+    await sample.get('button[data-testid="open-recheck"]').trigger('click')
+    await flushPromises()
+    const dialog = view.get('[role="dialog"]')
+    expect(dialog.text()).toContain('scheduledTasks.trigger.pelican')
+    expect(dialog.text()).toContain('scheduledTasks.outcome.candy_passed')
+    expect(dialog.get('details').element.open).toBe(true)
+    expect(dialog.findAll('pre').map(el => el.text())).toEqual(['29', '标准糖果原题', '21'])
+    expect(http.get.mock.calls.map(([path]) => path)).not.toContain('/admin/scheduled-tasks/plans/0/runs')
+    expect(http.post).not.toHaveBeenCalled()
+    await dialog.findAll('button').find(button => button.text() === 'common.close')!.trigger('click')
+    await flushPromises()
+    expect(view.findAll('[role="dialog"]').at(-1)!.text()).toContain('pelicanTests.sample')
+  })
+
+  it('从历史直接查看稳定的复检，详情只显示初测和探针', async () => {
+    const initial = { ...result, question_kind: 'candy', status: 'suspected', schedule_action: 'recheck_queued', recheck_run_id: 34 }
+    mockReads(path => {
+      if (path === '/admin/pelican-tests/plans') return [plan]
+      if (path.endsWith('/plans/8/results')) return [initial]
+      if (path === '/admin/scheduled-tasks/runs/34') return {
+        id: 34, trigger: 'pelican', status: 'finished', scheduled_at: result.tested_at,
+        completed: 1, total: 1, running: 0, remaining: 0, items: [{
+          provider_id: 8, initial_answer: '29', state: 'finished', stage: 'probe', outcome: 'stable',
+          probe: { verdict: 'healthy', mint_status: 200, continue_status: 200, mint_completed: true, continue_completed: true },
+        }],
+      }
+      throw Error(path)
+    })
+    const view = mount(AdminPelicanTestsView, { global })
+    await flushPromises()
+    await view.findAll('button').find(button => button.text() === 'pelicanTests.history')!.trigger('click')
+    await flushPromises()
+    await view.findAll('button').find(button => button.text() === 'pelicanTests.candySuspension.openRecheck')!.trigger('click')
+    await flushPromises()
+    const dialog = view.get('[role="dialog"]')
+    expect(dialog.text()).toContain('scheduledTasks.outcome.stable')
+    expect(dialog.text()).toContain('scheduledTasks.initialComplete')
+    expect(dialog.text()).toContain('scheduledTasks.continuationComplete')
+    expect(dialog.findAll('pre').map(el => el.text())).toEqual(['29'])
+    expect(dialog.text()).not.toContain('scheduledTasks.candyCheck')
+    expect(http.post).not.toHaveBeenCalled()
+  })
+
   it('标准糖果计划可选择全站停调，改答案后隐藏开关', async () => {
     const candy = { ...plan, question_kind: 'candy', provider_id: null }
     mockReads(path => path.endsWith('/plans') ? [candy] : [])
@@ -1292,6 +1363,20 @@ describe('用户样本', () => {
     expect(view.text()).not.toContain('Private provider')
     expect(view.find('[data-testid="review-suspected"]').exists()).toBe(false)
     expect(http.get.mock.calls.map(call => call[0])).toEqual(['/pelican-tests', '/pelican-tests/results/26'])
+  })
+
+  it('用户查看初测样本时只显示已提交复检，运行详情属于管理员', async () => {
+    const sample = { ...result, question_kind: 'candy', status: 'suspected', schedule_action: 'recheck_queued' }
+    mockReads(path => path === '/pelican-tests'
+      ? [{ group_id: 2, group_name: 'A', models: [{ ...plan, question_kind: 'candy', latest: sample }] }]
+      : { ...sample, prompt: '初测', criteria: [], answer: '29', recheck_run_id: 34 })
+    const view = mount(UserPelicanTestsView, { global })
+    await flushPromises()
+    await view.get('[data-testid="open-sample-26"]').trigger('click')
+    await flushPromises()
+    expect(view.get('[role="dialog"]').text()).toContain('pelicanTests.candySuspension.recheck_queued')
+    expect(view.find('[data-testid="open-recheck"]').exists()).toBe(false)
+    expect(http.get.mock.calls.map(([path]) => path)).toEqual(['/pelican-tests', '/pelican-tests/results/26'])
   })
 
   it('重新加载失败的用户列表时显示空状态，不显示服务器原始错误', async () => {

@@ -437,11 +437,6 @@ func (r *ProviderStore) DisableAfterCandyAnswer(ctx context.Context, tx postgres
 	return true, nil
 }
 
-// PublishCandyScheduling 刷新提交后的提供商和调度快照。
-func (r *ProviderStore) PublishCandyScheduling(ctx context.Context, id int64) {
-	r.afterChangeDetached(ctx, id)
-}
-
 func (r *ProviderStore) AutoPauseExpiredProviders(ctx context.Context, now time.Time) (int64, error) {
 	rows, err := r.sql.QueryContext(ctx, `
 		UPDATE providers

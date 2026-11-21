@@ -30,6 +30,7 @@ func RegisterMaintenanceRoutes(admin *gin.RouterGroup, h *MaintenanceHandler) {
 	tasks.POST("/plans", h.save)
 	tasks.PUT("/plans/:id", h.save)
 	tasks.POST("/preview", h.preview)
+	tasks.POST("/iq-rechecks", h.recheck)
 	tasks.POST("/plans/:id/run", h.runNow)
 	tasks.GET("/plans/:id/runs", h.runs)
 	tasks.GET("/runs/:id", h.run)
@@ -83,6 +84,22 @@ func (h *MaintenanceHandler) runNow(c *gin.Context) {
 		return
 	}
 	runID, err := h.service.RunNow(c.Request.Context(), id)
+	if !httpx.ErrorFrom(c, err) {
+		httpx.Accepted(c, gin.H{"run_id": runID})
+	}
+}
+
+// recheck 按已落库的分组样本返回定向复检的运行编号。
+func (h *MaintenanceHandler) recheck(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1024)
+	var request struct {
+		ResultID int64 `json:"pelican_result_id" binding:"gt=0"`
+	}
+	if err := httpx.BindJSONStrict(c, &request); err != nil {
+		httpx.ErrorFrom(c, provider.ErrMaintenanceInvalid)
+		return
+	}
+	runID, err := h.service.Recheck(c.Request.Context(), request.ResultID)
 	if !httpx.ErrorFrom(c, err) {
 		httpx.Accepted(c, gin.H{"run_id": runID})
 	}

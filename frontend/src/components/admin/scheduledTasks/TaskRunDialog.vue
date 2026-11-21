@@ -1,5 +1,8 @@
 <template>
-  <BaseDialog :show="!!plan" width="wide" :title="t('scheduledTasks.history')" :subtitle="plan?.name" @close="emit('close')">
+  <BaseDialog
+    :show="!!plan || initialRunId !== null" width="wide" :title="t(plan ? 'scheduledTasks.history' : 'scheduledTasks.trigger.pelican')"
+    :subtitle="plan?.name ?? t('scheduledTasks.runLabel', { id: initialRunId })" @close="emit('close')"
+  >
     <div class="space-y-4">
       <SettingsNotice v-if="historyFailed" tone="error">
         {{ t('scheduledTasks.historyFailed') }}
@@ -9,7 +12,7 @@
       <p v-else-if="history && !history.length && !selectedRun" class="text-sm text-gray-600 dark:text-dark-300">
         {{ t('scheduledTasks.noHistory') }}
       </p>
-      <div v-if="runOptions.length" class="sm:max-w-md">
+      <div v-if="plan && runOptions.length" class="sm:max-w-md">
         <Select
           id="scheduled-current-run" :model-value="selectedRun" :options="runOptions"
           :aria-label="t('scheduledTasks.history')" @update:model-value="selectRun"
@@ -65,9 +68,16 @@
               <p v-if="item.detail || item.reason" class="whitespace-pre-wrap break-words text-xs text-gray-600 dark:text-dark-300">
                 {{ detailLabel(item.detail || item.reason || '') }}
               </p>
-              <details v-if="item.probe || item.answer || item.http_status || item.operation_id || item.replacement_id || item.finished_at" class="text-xs text-gray-600 dark:text-dark-300">
+              <details
+                v-if="item.initial_answer || item.probe || item.answer || item.http_status || item.operation_id || item.replacement_id || item.finished_at"
+                :open="run.trigger === 'pelican'" class="text-xs text-gray-600 dark:text-dark-300"
+              >
                 <summary class="w-fit cursor-pointer font-medium text-primary-700 dark:text-primary-300">{{ t('scheduledTasks.evidence') }}</summary>
                 <div class="space-y-1 pt-2">
+                  <div v-if="item.initial_answer">
+                    <p class="font-medium">{{ t('scheduledTasks.initialAnswer') }}</p>
+                    <pre class="whitespace-pre-wrap break-words font-mono">{{ item.initial_answer }}</pre>
+                  </div>
                   <p v-if="item.auth_http_status && item.auth_http_status !== item.http_status">
                     {{ t('scheduledTasks.authHttpStatus', { status: item.auth_http_status }) }}
                   </p>
@@ -75,6 +85,12 @@
                     {{ probeLabel(item.probe.verdict) }}
                     <template v-if="item.probe.mint_status"> · {{ t('scheduledTasks.probeMintStatus', { status: item.probe.mint_status }) }}</template>
                     <template v-if="item.probe.continue_status"> · {{ t('scheduledTasks.probeContinueStatus', { status: item.probe.continue_status }) }}</template>
+                  </p>
+                  <p v-if="item.probe?.mint_completed !== undefined">
+                    {{ t(item.probe.mint_completed ? 'scheduledTasks.initialComplete' : 'scheduledTasks.initialIncomplete') }}
+                    <template v-if="item.probe.continue_status || item.probe.continue_completed">
+                      · {{ t(item.probe.continue_completed ? 'scheduledTasks.continuationComplete' : 'scheduledTasks.continuationIncomplete') }}
+                    </template>
                   </p>
                   <p v-if="item.probe?.reason" class="break-words">{{ detailLabel(item.probe.reason) }}</p>
                   <p v-if="item.stage === 'candy'">
@@ -89,6 +105,10 @@
                     {{ t('scheduledTasks.finishedAt') }}
                     <time class="tabular-nums" :datetime="item.finished_at">{{ formatRunTime(item.finished_at, timezone) }}</time>
                   </p>
+                  <div v-if="item.candy_prompt">
+                    <p class="font-medium">{{ t('scheduledTasks.candyPrompt') }}</p>
+                    <pre class="whitespace-pre-wrap break-words font-mono">{{ item.candy_prompt }}</pre>
+                  </div>
                   <div v-if="item.answer" class="pt-1">
                     <p class="font-medium">{{ t('scheduledTasks.answer') }}</p>
                     <pre class="mt-1 whitespace-pre-wrap break-words rounded-control bg-gray-50 p-2 font-mono dark:bg-dark-800">{{ item.answer }}</pre>
@@ -137,7 +157,7 @@ const selectedRun = ref<number | null>(null)
 const { data: history, loading: historyLoading, failed: historyFailed, refresh: refreshHistory } =
   useKeyedResource(() => props.plan?.id ?? null, listRuns)
 const { data: run, loading: runLoading, failed: runFailed, refresh: refreshRun } =
-  useKeyedResource(() => props.plan ? selectedRun.value : null, readRun, result => isActiveRun(result.status) ? ACTIVE_RUN_POLL_MS : undefined)
+  useKeyedResource(() => selectedRun.value, readRun, result => isActiveRun(result.status) ? ACTIVE_RUN_POLL_MS : undefined)
 
 const runOptions = computed(() => {
   const options = (history.value ?? []).map(candidate => ({
@@ -159,8 +179,8 @@ const visibleItems = computed(() => {
   return run.value?.items?.slice(offset, offset + PAGE_SIZE) ?? []
 })
 
-watch([() => props.plan?.id, () => props.initialRunId], ([id, initial]) => {
-  selectedRun.value = id ? initial : null
+watch([() => props.plan?.id, () => props.initialRunId], ([, initial]) => {
+  selectedRun.value = initial
 }, { immediate: true })
 
 watch(history, items => {

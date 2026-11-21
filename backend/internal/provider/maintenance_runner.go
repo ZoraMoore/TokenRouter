@@ -22,10 +22,11 @@ const (
 
 // MaintenanceGuard 确认测试开始时的账号与分组仍然有效。AuthVersion 是认证状态摘要。
 type MaintenanceGuard struct {
-	Revision     int64
-	GroupVersion time.Time
-	MembershipAt time.Time
-	AuthVersion  string
+	Revision         int64
+	GroupVersion     time.Time
+	MembershipAt     time.Time
+	AuthVersion      string
+	SchedulingClosed bool `json:"scheduling_closed,omitempty"`
 }
 
 // MaintenanceWork 包含一项处理所需的冻结计划、领取凭证和上一步证据。
@@ -82,7 +83,12 @@ type MaintenanceRunner struct {
 }
 
 func (g MaintenanceGuard) Matches(other MaintenanceGuard) bool {
-	return g.Revision > 0 && g.Revision == other.Revision && g.AuthVersion == other.AuthVersion &&
+	return g.AuthVersion == other.AuthVersion && g.matchesTarget(other)
+}
+
+// matchesTarget 核对两个请求之间的账号配置、分组和成员关系。
+func (g MaintenanceGuard) matchesTarget(other MaintenanceGuard) bool {
+	return g.Revision > 0 && g.Revision == other.Revision &&
 		g.GroupVersion.Equal(other.GroupVersion) && g.MembershipAt.Equal(other.MembershipAt)
 }
 
@@ -204,13 +210,19 @@ func (r *MaintenanceRunner) process(ctx context.Context, work MaintenanceWork) (
 	}
 	guard, err := r.store.Guard(ctx, item.ProviderID, item.GroupID)
 	if errors.Is(err, ErrMaintenanceNotFound) {
-		return maintenanceOutcome("skipped", "changed"), nil
+		return work.unavailable("changed"), nil
 	}
 	if err != nil {
 		return MaintenanceUpdate{}, err
 	}
+	if work.Trigger == MaintenancePelican && guard.SchedulingClosed {
+		return work.unavailable("already_disabled"), nil
+	}
+	if work.Trigger == MaintenancePelican && item.Stage == "probe" && !work.Guard.matchesTarget(guard) {
+		return work.unavailable("changed"), nil
+	}
 	if item.Stage == "candy" && !work.Guard.Matches(guard) {
-		return maintenanceOutcome("skipped", "changed"), nil
+		return work.unavailable("changed"), nil
 	}
 	refreshCleared401 := false
 	if !replacement {
@@ -220,18 +232,18 @@ func (r *MaintenanceRunner) process(ctx context.Context, work MaintenanceWork) (
 		}
 		refreshCleared401 = item.Stage == "auth" && fresh.Reason == "no_401"
 		if fresh.Reason != "" && !refreshCleared401 {
-			return maintenanceOutcome("skipped", fresh.Reason), nil
+			return work.unavailable(fresh.Reason), nil
 		}
 	}
 	record, err := r.options.Load(ctx, item.ProviderID)
 	if apperror.IsNotFound(err) || err == nil && record == nil {
-		return maintenanceOutcome("skipped", "changed"), nil
+		return work.unavailable("changed"), nil
 	}
 	if err != nil {
 		return MaintenanceUpdate{}, err
 	}
 	if !SupportsStateProbe(record) {
-		return maintenanceOutcome("skipped", "unsupported"), nil
+		return work.unavailable("unsupported"), nil
 	}
 	if !replacement {
 		job, err := r.options.ActiveOperation(ctx, item.ProviderID)
@@ -283,13 +295,21 @@ func (r *MaintenanceRunner) process(ctx context.Context, work MaintenanceWork) (
 			return r.retryBusy(work, "busy"), nil
 		case err != nil:
 			return maintenanceOutcome("inconclusive", "probe_failed"), nil
-		case sample.AccountID != item.ProviderID || sample.Model != "" && sample.Model != item.ActualModel:
-			return maintenanceOutcome("skipped", "changed"), nil
+		case sample.AccountID != item.ProviderID:
+			return work.unavailable("changed"), nil
 		}
 		update = maintenanceProbeResult(sample)
+		if update.Outcome != "inconclusive" && work.modelChanged(sample.Model) {
+			update.Stage = ""
+			update.Outcome, update.Detail = "inconclusive", "changed"
+		}
 	case "candy":
 		evidence := r.options.Candy(ctx, item.ProviderID, item.Model)
 		update = maintenanceCandyResult(evidence, evidence.HTTPStatus)
+		if update.Outcome != "inconclusive" && work.modelChanged(evidence.ActualModel) {
+			update.Action = ""
+			update.Outcome, update.Detail = "inconclusive", "changed"
+		}
 		if update.Action == "suspend" {
 			// 白名单可以在作答期间变更，停调前用当前模型规则再核对一次。
 			fresh, err := r.options.Resolve(ctx, work.Plan.MaintenanceDraft, item.MaintenanceTarget)
@@ -297,7 +317,8 @@ func (r *MaintenanceRunner) process(ctx context.Context, work MaintenanceWork) (
 				return MaintenanceUpdate{}, err
 			}
 			if fresh.Reason != "" {
-				return maintenanceOutcome("skipped", "changed"), nil
+				update.Action = ""
+				update.Outcome, update.Detail = work.unavailable("changed").Outcome, "changed"
 			}
 		}
 	default:
@@ -306,6 +327,22 @@ func (r *MaintenanceRunner) process(ctx context.Context, work MaintenanceWork) (
 	update.Guard = guard
 	update.CredentialVersion = RefreshCredentialIdentity(record)
 	return update, nil
+}
+
+// modelChanged 确认定向复检的两次作答落在初测的实际模型上。
+func (work MaintenanceWork) modelChanged(actual string) bool {
+	if actual == "" {
+		return work.Trigger == MaintenancePelican
+	}
+	return actual != work.Item.ActualModel
+}
+
+// unavailable 区分计划资格筛选与初测后目标已变化的复检。
+func (work MaintenanceWork) unavailable(detail string) MaintenanceUpdate {
+	if work.Trigger == MaintenancePelican {
+		return maintenanceOutcome("inconclusive", detail)
+	}
+	return maintenanceOutcome("skipped", detail)
 }
 
 func (r *MaintenanceRunner) waitRelogin(ctx context.Context, item MaintenanceItem) (MaintenanceUpdate, error) {
@@ -414,9 +451,14 @@ func maintenanceProbeResult(sample StateProbeResult) MaintenanceUpdate {
 func maintenanceCandyResult(evidence PelicanEvidence, status int) MaintenanceUpdate {
 	update := maintenanceOutcome("inconclusive", evidence.DetailCode)
 	update.HTTPStatus = status
+	update.CandyPrompt = evidence.Prompt
 	switch {
 	case status == 401:
 		update.Detail, update.Action = "upstream_401", "record_401"
+	case status == 429:
+		update.Detail = "rate_limited"
+	case status != 0 && (status < 200 || status >= 300):
+		update.Detail = "upstream_error"
 	case evidence.Status == "passed":
 		update.Outcome, update.Detail = "candy_passed", ""
 	case evidence.Status == "suspected" && evidence.DetailCode == "answer_mismatch":
