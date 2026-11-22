@@ -143,7 +143,7 @@ func TestSettingsFieldOwnership(t *testing.T) {
 		delete(owners, name)
 		count++
 	}
-	require.Equal(t, 283, count, "HTTP 字段变化需要同步字段登记")
+	require.Equal(t, 285, count, "HTTP 字段变化需要同步字段登记")
 	require.Empty(t, owners, "参与者不应声明不存在的输入字段")
 }
 
@@ -1053,6 +1053,61 @@ func TestUpdateSettingsFullPayloadStillClearsSentEmptyFields(t *testing.T) {
 
 	require.Equal(t, "", repo.values[site.SettingKeySiteName],
 		"明确发送的空值表示主动清空，而不是省略字段")
+}
+
+// TestUpdateSettingsPublicHomeStats 验证公开首页开关的默认值和部分更新。
+func TestUpdateSettingsPublicHomeStats(t *testing.T) {
+	const key = "show_public_home_stats"
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
+
+	rec := doUpdateSettings(t, h, map[string]any{"registration_enabled": true}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), `"show_public_home_stats":false`)
+	require.NotContains(t, repo.values, key)
+
+	rec = doUpdateSettings(t, h, map[string]any{key: true}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "true", repo.values[key])
+	require.Contains(t, rec.Body.String(), `"show_public_home_stats":true`)
+
+	rec = doUpdateSettings(t, h, map[string]any{"registration_enabled": false}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "true", repo.values[key])
+
+	rec = doUpdateSettings(t, h, map[string]any{key: nil}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "true", repo.values[key])
+
+	rec = doUpdateSettings(t, h, map[string]any{key: false}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "false", repo.values[key])
+	require.Contains(t, rec.Body.String(), `"show_public_home_stats":false`)
+}
+
+// TestUpdateSettingsPublicHomeStatsMetrics 验证子项可单独保存、清空和省略。
+func TestUpdateSettingsPublicHomeStatsMetrics(t *testing.T) {
+	const key = "public_home_stats_metrics"
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
+
+	rec := doUpdateSettings(t, h, map[string]any{"show_public_home_stats": true}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), `"public_home_stats_metrics":["today_tokens","total_tokens","total_users","supported_models"]`)
+	require.NotContains(t, repo.values, key)
+
+	rec = doUpdateSettings(t, h, map[string]any{key: []string{"today_tokens", "total_users"}}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, `["today_tokens","total_users"]`, repo.values[key])
+
+	rec = doUpdateSettings(t, h, map[string]any{key: []string{"unknown"}}, nil)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	require.Equal(t, `["today_tokens","total_users"]`, repo.values[key])
+
+	rec = doUpdateSettings(t, h, map[string]any{key: []string{}}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, `[]`, repo.values[key])
+	rec = doUpdateSettings(t, h, map[string]any{"show_public_home_stats": false}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, `[]`, repo.values[key])
 }
 
 // TestUpdateSettingsSMTPFromAliasIsWritable 验证 smtp_from_email 是唯一一个 JSON 名称与持久化设置键不同的请求字段，

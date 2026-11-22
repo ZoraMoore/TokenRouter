@@ -14,6 +14,7 @@ type pelicanCandyRepoFixture struct {
 	PelicanRepository
 	PelicanCandyRepository
 	tried    []int64
+	queued   []int64
 	finished bool
 	results  []PelicanResult
 }
@@ -69,7 +70,8 @@ func (f *pelicanCandyRepoFixture) FinishCandyAttempt(_ context.Context, _ Pelica
 		f.finished = true
 	}
 	if result.Status == "suspected" && result.DetailCode == "answer_mismatch" {
-		return PelicanScheduleDisabled, nil
+		f.queued = append(f.queued, *result.ProviderID)
+		return PelicanScheduleRecheckQueued, nil
 	}
 	return "", nil
 }
@@ -77,34 +79,35 @@ func (f *pelicanCandyRepoFixture) FinishCandyAttempt(_ context.Context, _ Pelica
 // TestPelicanCandyRotatesUntilPassed 覆盖换号、无法判断和收尾，领取时从库里取得已尝试账号。
 func TestPelicanCandyRotatesUntilPassed(t *testing.T) {
 	repo := &pelicanCandyRepoFixture{}
-	var changes []int64
 	released := 0
 	service := NewPelicanService(repo, PelicanOptions{
 		Now: time.Now, Candy: repo,
-		CandyCandidates: func(context.Context, PelicanPlan) ([]int64, error) { return []int64{10, 11, 12, 13}, nil },
+		CandyCandidates: func(context.Context, PelicanPlan) ([]int64, error) { return []int64{10, 11, 12, 13, 14}, nil },
 		Acquire: func(_ context.Context, plan PelicanPlan) (PelicanTarget, func(), error) {
 			require.NotEmpty(t, plan.CandidateIDs)
-			return PelicanTarget{ProviderID: plan.CandidateIDs[0]}, func() { released++ }, nil
+			return PelicanTarget{ProviderID: plan.CandidateIDs[0], ModelID: "group-model", ActualModel: "mapped"}, func() { released++ }, nil
 		},
 		Run: func(_ context.Context, id int64, _, _, _, _ string, _ provider.PelicanQuestionConfig) provider.PelicanEvidence {
 			switch id {
 			case 10:
-				return provider.PelicanEvidence{Status: "suspected", DetailCode: "answer_mismatch", Answer: "20"}
+				return provider.PelicanEvidence{Status: "suspected", DetailCode: "answer_mismatch", Answer: "20", ActualModel: "mapped"}
 			case 11:
+				return provider.PelicanEvidence{Status: "suspected", DetailCode: "answer_mismatch", Answer: "20", ActualModel: "changed"}
+			case 12:
 				return provider.PelicanEvidence{Status: "inconclusive", DetailCode: "incomplete"}
 			default:
 				return provider.PelicanEvidence{Status: "passed", Answer: "21"}
 			}
 		},
-		CandyChanged: func(_ context.Context, id int64) { changes = append(changes, id) },
 	})
 	plan := PelicanPlan{ID: 1, GroupID: 2, ModelID: "model", QuestionKind: "candy", SuspendOnWrongAnswer: true}
-	for range 3 {
+	for range 4 {
 		require.NoError(t, service.finishRound(t.Context(), plan))
 	}
 	require.True(t, repo.finished)
-	require.Equal(t, []int64{10, 11, 12}, repo.tried)
-	require.Equal(t, []int64{10}, changes)
-	require.Equal(t, 3, released)
-	require.Equal(t, "21", repo.results[2].Answer)
+	require.Equal(t, []int64{10, 11, 12, 13}, repo.tried)
+	require.Equal(t, []int64{10}, repo.queued)
+	require.Equal(t, 4, released)
+	require.Equal(t, "model_changed", repo.results[1].DetailCode)
+	require.Equal(t, "21", repo.results[3].Answer)
 }

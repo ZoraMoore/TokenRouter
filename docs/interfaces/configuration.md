@@ -86,6 +86,10 @@
 
 兼容键的优先级：新环境变量 > 旧环境变量 > 新 YAML 键 > 旧 YAML 键 > 默认值。空的环境变量按 Viper 的"未设置"处理，`0` 和 `false` 会作为有效值保留。使用过期名称不影响启动；映射之后仍按新字段校验类型、范围和组合。
 
+### 提供商一键重登
+
+`REVIVE_API_KEY` 从服务端进程环境读取。密钥需要 ReviveToken 的 `accounts:read`、`accounts:sync`、`pool:delete` 权限，并获准访问要恢复的档案。Docker 部署把密钥注入应用容器，再重启应用以读取新值。缺少密钥时，“一键重登”的预览会显示配置缺失。运维步骤见[一键重登和保存后推流](../operations/provider_maintenance.md#provider_operations)。
+
 ### 国产供应商用量监控
 
 国产供应商的周期用量监控属于启动时的进程配置 `gateway.cn_providers`。`monitor_enabled` 默认关闭；开启后，默认每 10 分钟运行一次，并发 4，单个提供商的探测超时 20 秒，每轮预算 300 秒，余额临时停调阈值 `balance_threshold` 默认 `0.5`。对应的键是 `interval_minutes`、`concurrency`、`probe_timeout_seconds` 和 `round_timeout_seconds`，修改后需要重启。管理员手动查询不受监控开关影响；对自定义中继的自动监控，还要求开启并命中 `security.url_allowlist.upstream_hosts`。
@@ -203,6 +207,10 @@ SMTP 的测试连接和实际发送共用同一条建连路径和超时：
 缺键时、错误缓存的 TTL、空 API Key 保留原值、管理字段和专门的脱敏处理，都按既有规则执行；管理测试不占额度。代理无法解析时，跳过这个供应商，请求不会改走直连；提供商代理优先于供应商代理。搜索配置的变化只影响 Brave 和 Tavily，Grok 和 AlphaSearch 的原生搜索策略不受影响。
 
 ### 首页、创作台和用量排行
+
+`show_public_home_stats` 由管理员在“系统设置 → 功能开关”中保存，缺省为关闭。公开设置接口和 HTML 首屏注入返回这个布尔值。默认首页在开启时请求统计。
+
+`public_home_stats_metrics` 保存选中的统计项。可选标识为 `today_tokens`、`total_tokens`、`total_users` 和 `supported_models`。缺键时四项全选，空数组表示全部隐藏。两个设置都无需迁移，管理请求省略任一字段时保留该字段的存储值。
 
 `home_featured_models` 保存首页「已支持的 AI 模型」板块的精选模型 ID 列表（JSON 数组，最多 12 个，按数组顺序展示），在管理端"系统设置 - 通用设置"的「首页模型展示」卡片里维护，候选来自公开模型广场的分组。它通过公开设置接口和 SSR 注入同时下发，首页按 ID 在市场分组里解析模型；列表为空或全部解析不到时，首页显示按服务商类别聚合的默认卡片。这个设置可以热更新，不需要迁移（读取时缺键按空列表处理）。管理端的更新请求省略这个字段时保留当前值；写入前去掉空白项、去重，并拒绝超长的列表。
 

@@ -25,6 +25,35 @@ import type {
   OllamaCloudUsageState
 } from '@/types'
 
+// 重登预览按提供商返回资格和需要管理员处理的原因。
+export interface ProviderReloginPreviewItem {
+  provider_id: number
+  name: string
+  eligible: boolean
+  reason?: string
+}
+
+// 持久化任务可按任务 ID 或提供商 ID 重新查询。
+export interface ProviderOperation {
+  id: string
+  provider_id: number
+  provider_name: string
+  group_id?: number
+  group_ids?: number[]
+  kind: 'relogin' | 'traffic_push'
+  state: 'queued' | 'running' | 'succeeded' | 'failed' | 'needs_action'
+  stage?: string
+  message?: string
+  result?: {
+    provider_id?: number
+    migrated_sessions?: number
+    successful_requests?: number
+    peak_concurrency?: number
+    target_concurrency?: number
+    unconfirmed_sessions?: number
+  }
+}
+
 export interface CodexInviteResetCredit {
   id: string
   status?: string
@@ -945,6 +974,50 @@ export async function batchRefresh(providerIds: number[]): Promise<BatchOperatio
   return data
 }
 
+// 查询所选提供商的重登资格，供管理员提交前核对。
+export async function previewRelogin(providerIds: number[], signal?: AbortSignal): Promise<{ items: ProviderReloginPreviewItem[] }> {
+  const { data } = await apiClient.post<{ items: ProviderReloginPreviewItem[] }>(
+    '/admin/providers/relogin/preview',
+    { provider_ids: providerIds },
+    { signal, timeout: 120000 }
+  )
+  return data
+}
+
+// 确认创建重登任务时，服务端会再次检查资格。
+export async function startRelogin(providerIds: number[]): Promise<{ operations: ProviderOperation[]; skipped?: ProviderReloginPreviewItem[] }> {
+  const { data } = await apiClient.post<{ operations: ProviderOperation[]; skipped?: ProviderReloginPreviewItem[] }>(
+    '/admin/providers/relogin',
+    { provider_ids: providerIds },
+    { timeout: 120000 }
+  )
+  return data
+}
+
+// 推流请求引用已保存的提供商及其来源分组。
+export async function startTrafficPush(id: number, groupIDs: number[]): Promise<ProviderOperation> {
+  const { data } = await apiClient.post<ProviderOperation>(
+    `/admin/providers/${id}/traffic-push`,
+    { group_ids: groupIDs }
+  )
+  return data
+}
+
+// 按任务 ID 查询进度，供等待中的页面刷新。
+export async function getOperation(id: string, signal?: AbortSignal): Promise<ProviderOperation> {
+  const { data } = await apiClient.get<ProviderOperation>(`/admin/providers/operations/${encodeURIComponent(id)}`, { signal })
+  return data
+}
+
+// 操作记录按开始时间倒序展示。传入提供商 ID 时，查询该账号的记录。
+export async function listOperations(providerID?: number, signal?: AbortSignal): Promise<{ operations: ProviderOperation[] }> {
+  const { data } = await apiClient.get<{ operations: ProviderOperation[] }>('/admin/providers/operations', {
+    params: providerID === undefined ? undefined : { provider_id: providerID },
+    signal
+  })
+  return data
+}
+
 /**
  * 为支持的 OAuth 提供商设置隐私选项。
  * @param id - 提供商 ID
@@ -1119,6 +1192,11 @@ export const providersAPI = {
   batchDelete,
   batchClearError,
   batchRefresh,
+  previewRelogin,
+  startRelogin,
+  startTrafficPush,
+  getOperation,
+  listOperations,
   setPrivacy,
   getCodexInviteResetStatus,
   sendCodexInviteResetInvite,

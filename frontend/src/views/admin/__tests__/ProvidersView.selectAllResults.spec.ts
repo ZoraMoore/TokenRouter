@@ -12,6 +12,10 @@ const {
   exportData,
   getAllProxies,
   getAllGroups,
+  previewRelogin,
+  startRelogin,
+  getOperation,
+  listOperations,
   showWarning,
   showError,
   runIQStateProbe
@@ -22,6 +26,10 @@ const {
   exportData: vi.fn(),
   getAllProxies: vi.fn(),
   getAllGroups: vi.fn(),
+  previewRelogin: vi.fn(),
+  startRelogin: vi.fn(),
+  getOperation: vi.fn(),
+  listOperations: vi.fn(),
   showWarning: vi.fn(),
   showError: vi.fn(),
   runIQStateProbe: vi.fn()
@@ -42,6 +50,10 @@ vi.mock('@/api/admin', () => ({
       batchDelete: vi.fn(),
       batchClearError: vi.fn(),
       batchRefresh: vi.fn(),
+      previewRelogin,
+      startRelogin,
+      getOperation,
+      listOperations,
       bulkUpdate: vi.fn()
     },
     proxies: {
@@ -91,7 +103,7 @@ const makeProviders = (count: number) => Array.from({ length: count }, (_, index
 
 const ProviderBulkActionsBarStub = {
   props: ['selectedIds', 'totalResults', 'selectingAll', 'allResultsSelected'],
-  emits: ['select-all-results', 'select-page', 'clear', 'run-bulk-probe'],
+  emits: ['select-all-results', 'select-page', 'clear', 'run-bulk-probe', 'relogin'],
   template: `
     <div>
       <span data-test="selected-count">{{ selectedIds.length }}</span>
@@ -101,6 +113,7 @@ const ProviderBulkActionsBarStub = {
       <button data-test="select-all-results" @click="$emit('select-all-results')">select all</button>
       <button data-test="clear" @click="$emit('clear')">clear</button>
       <button data-test="run-bulk-probe" @click="$emit('run-bulk-probe')">run probe</button>
+      <button data-test="relogin" @click="$emit('relogin')">relogin</button>
     </div>
   `
 }
@@ -120,7 +133,7 @@ const mountView = () => mount(ProvidersView, {
       DataTable: { props: ['data'], template: '<div data-test="data-table"></div>' },
       Pagination: true,
       ConfirmDialog: true,
-      BaseDialog: { template: '<section><slot /><slot name="footer" /></section>' },
+      BaseDialog: { props: ['show'], template: '<section v-if="show !== false"><slot /><slot name="footer" /></section>' },
       TotpStepUpDialog: true,
       ProviderTableActions: { template: '<div><slot name="beforeCreate" /><slot name="after" /></div>' },
       ProviderTableFilters: ProviderTableFiltersStub,
@@ -184,6 +197,10 @@ describe('admin ProvidersView select all filtered results', () => {
     exportData.mockReset()
     getAllProxies.mockReset()
     getAllGroups.mockReset()
+    previewRelogin.mockReset()
+    startRelogin.mockReset()
+    getOperation.mockReset()
+    listOperations.mockReset()
     showError.mockReset()
     showWarning.mockReset()
     runIQStateProbe.mockReset()
@@ -437,6 +454,53 @@ describe('admin ProvidersView select all filtered results', () => {
     pending.resolve(probeResult(1))
     await flushPromises()
     expect(runIQStateProbe).toHaveBeenCalledTimes(3)
+  })
+
+  it('previews relogin for the full selection and tracks eligible accounts after confirmation', async () => {
+    const rows = makeProviders(45)
+    listProviders.mockImplementation(async (_page: number, pageSize: number) => ({
+      items: rows.slice(0, pageSize), total: rows.length, page: 1, page_size: pageSize, pages: 3
+    }))
+    previewRelogin.mockResolvedValue({ items: rows.map(row => ({
+      provider_id: row.id,
+      name: row.name,
+      eligible: row.id === 45,
+      reason: row.id === 45 ? undefined : 'Account requires manual authorization'
+    })) })
+    const operation = { id: 'relogin-45', provider_id: 45, provider_name: 'provider-45', kind: 'relogin', state: 'queued' }
+    startRelogin.mockResolvedValue({ operations: [operation] })
+    getOperation.mockResolvedValue({ ...operation, state: 'needs_action', message: 'Open the authorization dialog' })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="select-all-results"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('[data-test="relogin"]').trigger('click')
+    await flushPromises()
+    expect(previewRelogin.mock.calls[0][0]).toEqual(rows.map(row => row.id))
+    expect(wrapper.text()).toContain('provider-45')
+    expect(wrapper.text()).toContain('Account requires manual authorization')
+    expect(startRelogin).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-testid="confirm-provider-relogin"]').trigger('click')
+    await flushPromises()
+    expect(startRelogin).toHaveBeenCalledExactlyOnceWith([45])
+    expect(getOperation.mock.calls[0][0]).toBe('relogin-45')
+    expect(wrapper.text()).toContain('admin.providers.operations.states.needs_action')
+    expect(wrapper.text()).toContain('Open the authorization dialog')
+
+    const close = wrapper.findAll('button').find(button => button.text() === 'common.close')
+    await close!.trigger('click')
+    listOperations.mockResolvedValue({ operations: [{ ...operation, state: 'succeeded', result: { provider_id: 451 } }] })
+    await wrapper.get('[title="admin.providers.moreActions"]').trigger('click')
+    const history = Array.from(document.body.querySelectorAll('button')).find(button => button.textContent?.trim() === 'admin.providers.operations.history')
+    expect(history).toBeDefined()
+    history!.click()
+    await flushPromises()
+    expect(wrapper.text()).toContain('admin.providers.operations.states.succeeded')
+    expect(wrapper.text()).toContain('#451')
+    expect(startRelogin).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 })
 

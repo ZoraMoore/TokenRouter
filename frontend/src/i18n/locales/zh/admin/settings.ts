@@ -167,6 +167,12 @@ export default {
         bucketLimitHint: '如果窗口和粒度会产生超过 720 根柱子，后端会自动放大单柱时间窗口。'
       },
       features: {
+        homeStats: {
+          title: '首页统计',
+          enabled: '显示公开首页统计',
+          enabledHint: '开启后，访客可以在默认首页看到勾选的统计项。',
+          metrics: '展示项目'
+        },
         team: {
           title: '团队功能',
           description: '控制用户团队页和管理员团队管理页是否开放。',

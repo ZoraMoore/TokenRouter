@@ -93,6 +93,7 @@ func (h *PublicHandler) GetPublicSettings(c *gin.Context) {
 		FooterLinks:                         dto.ParseFooterLinks(settings.FooterLinks),
 		FooterText:                          settings.FooterText,
 		HomeFeaturedModels:                  dto.ParseHomeFeaturedModels(settings.HomeFeaturedModels),
+		ShowPublicHomeStats:                 settings.ShowPublicHomeStats,
 		DingTalkOAuthEnabled:                settings.DingTalkOAuthEnabled,
 		LinuxDoOAuthEnabled:                 settings.LinuxDoOAuthEnabled,
 		WeChatOAuthEnabled:                  settings.WeChatOAuthEnabled,

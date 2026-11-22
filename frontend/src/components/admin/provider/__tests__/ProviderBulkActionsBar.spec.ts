@@ -45,6 +45,20 @@ describe('ProviderBulkActionsBar', () => {
     expect(wrapper.emitted('select-all-results')).toHaveLength(1)
   })
 
+  it('opens relogin immediately before the enable scheduling action', async () => {
+    const wrapper = mount(ProviderBulkActionsBar, {
+      props: { selectedIds: [44], totalResults: 45, selectingAll: false, allResultsSelected: false }
+    })
+
+    const buttons = wrapper.findAll('button')
+    const enableScheduling = buttons.findIndex(button => button.text() === 'admin.providers.bulkActions.enableScheduling')
+    const relogin = buttons[enableScheduling - 1]
+    expect(relogin.text()).toBe('admin.providers.operations.relogin')
+    await relogin.trigger('click')
+    expect(wrapper.emitted('relogin')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   it('emits refresh-token for selected providers', async () => {
     const wrapper = mount(ProviderBulkActionsBar, {
       attachTo: document.body,

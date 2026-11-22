@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	dbent "github.com/TokenFlux/TokenRouter/ent"
@@ -27,7 +28,8 @@ func NewRedeemMutations(client *dbent.Client, users RedeemUserWriter) *RedeemMut
 }
 
 func (m *RedeemMutations) Within(ctx context.Context, fn func(context.Context) error) error {
-	tx, err := m.client.Tx(ctx)
+	// 等待用户锁的兑换在下一条语句读取已提交的领取记录。
+	tx, err := m.client.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}

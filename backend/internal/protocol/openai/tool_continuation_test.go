@@ -588,3 +588,39 @@ func buildLargeOpenAIResponsesToolContinuationBody(targetBytes int) []byte {
 	_, _ = builder.WriteString(`]}`)
 	return []byte(builder.String())
 }
+
+func TestValidateFunctionCallOutputHostedSearch(t *testing.T) {
+	// HTTP 引用续接时，仅托管搜索的显式 null 表示服务端生成的历史项。
+	const ref = `{"type":"item_reference","id":"call_A"}`
+	const output = `{"type":"function_call_output","call_id":"call_A","output":"ok"}`
+	const hosted = `{"type":"tool_search_output","execution":"server","call_id":null,"status":"completed","tools":[]}`
+	const second = `{"type":"function_call_output","call_id":"call_B","output":"ok"}`
+	for _, tc := range []struct {
+		name          string
+		items         []string
+		missingID     bool
+		allReferenced bool
+	}{
+		{"search before result", []string{ref, hosted, output}, false, true},
+		{"search after result", []string{ref, output, hosted}, false, true},
+		{"unmatched second result", []string{ref, output, hosted, second}, false, false},
+		{"both results referenced", []string{ref, output, hosted, second, `{"type":"item_reference","id":"call_B"}`}, false, true},
+		{"missing function ID", []string{hosted, `{"type":"function_call_output","execution":"server","call_id":null}`}, true, false},
+		{"client search", []string{ref, output, `{"type":"tool_search_output","execution":"client","call_id":null}`}, true, true},
+		{"unspecified execution", []string{ref, output, `{"type":"tool_search_output","call_id":null}`}, true, true},
+		{"absent ID", []string{ref, output, `{"type":"tool_search_output","execution":"server"}`}, true, true},
+		{"blank ID", []string{ref, output, `{"type":"tool_search_output","execution":"server","call_id":" "}`}, true, true},
+		{"nonempty unreferenced ID", []string{ref, output, `{"type":"tool_search_output","execution":"server","call_id":"call_B"}`}, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := []byte(`{"input":[` + strings.Join(tc.items, ",") + `]}`)
+			var obj map[string]any
+			require.NoError(t, json.Unmarshal(body, &obj))
+			for _, result := range []FunctionCallOutputValidation{ValidateFunctionCallOutputContextBytes(body), ValidateFunctionCallOutputContext(obj)} {
+				require.True(t, result.HasFunctionCallOutput)
+				require.Equal(t, tc.missingID, result.HasFunctionCallOutputMissingCallID)
+				require.Equal(t, tc.allReferenced, result.HasItemReferenceForAllCallIDs)
+			}
+		})
+	}
+}

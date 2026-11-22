@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { setSwitch } from '@/__tests__/helpers/switches'
 
 import RedeemView from '../RedeemView.vue'
 
@@ -7,6 +8,8 @@ const {
   listRedeemCodes,
   generateRedeemCodes,
   batchUpdateRedeemCodes,
+  getClaimLimit,
+  setClaimLimit,
   getPlans,
   showSuccess,
   showError,
@@ -16,6 +19,8 @@ const {
     listRedeemCodes: vi.fn(),
     generateRedeemCodes: vi.fn(),
     batchUpdateRedeemCodes: vi.fn(),
+    getClaimLimit: vi.fn(),
+    setClaimLimit: vi.fn(),
     getPlans: vi.fn(),
     showSuccess: vi.fn(),
     showError: vi.fn(),
@@ -31,6 +36,8 @@ vi.mock('@/api/admin', () => ({
       delete: vi.fn(),
       batchDelete: vi.fn(),
       batchUpdate: batchUpdateRedeemCodes,
+      getClaimLimit,
+      setClaimLimit,
       exportCodes: vi.fn()
     },
     payment: {
@@ -126,6 +133,8 @@ describe('admin RedeemView batch update', () => {
     listRedeemCodes.mockReset()
     generateRedeemCodes.mockReset()
     batchUpdateRedeemCodes.mockReset()
+    getClaimLimit.mockReset()
+    setClaimLimit.mockReset()
     getPlans.mockReset()
     showSuccess.mockReset()
     showError.mockReset()
@@ -182,6 +191,49 @@ describe('admin RedeemView batch update', () => {
     ])
     batchUpdateRedeemCodes.mockResolvedValue({ updated: 1, message: 'ok' })
     getPlans.mockResolvedValue({ data: [] })
+  })
+
+  it('保存余额和优惠券共用的限领时段并拒绝颠倒的时间', async () => {
+    const settings = { enabled: false, starts_at: null, ends_at: null, tracking_since: 1 }
+    getClaimLimit.mockResolvedValue(settings)
+    setClaimLimit.mockImplementation(async (limit) => ({ ...settings, ...limit }))
+    const wrapper = mount(RedeemView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: { template: '<div><slot name="filters" /></div>' },
+          BaseDialog: { props: ['show'], template: '<div v-if="show"><slot /><slot name="footer" /></div>' },
+          Icon: true,
+          Teleport: true
+        }
+      }
+    })
+    try {
+      await flushPromises()
+      await wrapper.get('[data-testid="claim-limit-open"]').trigger('click')
+      await flushPromises()
+      await setSwitch(wrapper.get('[data-testid="claim-limit-enabled"]'), true)
+      const startsAt = wrapper.get('#redeem-claim-limit-starts-at')
+      const endsAt = wrapper.get('#redeem-claim-limit-ends-at')
+      await startsAt.setValue('2026-11-20T18:00')
+      await endsAt.setValue('2026-11-20T17:00')
+      await wrapper.get('#redeem-claim-limit-form').trigger('submit')
+      expect(setClaimLimit).not.toHaveBeenCalled()
+      expect(wrapper.text()).toContain('admin.redeem.claimLimit.invalid')
+
+      await endsAt.setValue('2026-11-20T20:00')
+      await wrapper.get('#redeem-claim-limit-form').trigger('submit')
+      await flushPromises()
+      expect(setClaimLimit).toHaveBeenCalledExactlyOnceWith({
+        enabled: true,
+        starts_at: new Date(2026, 10, 20, 18).getTime() / 1000,
+        ends_at: new Date(2026, 10, 20, 20).getTime() / 1000
+      })
+      expect(showSuccess).toHaveBeenCalledWith('admin.redeem.claimLimit.saved')
+      expect(wrapper.find('#redeem-claim-limit-form').exists()).toBe(false)
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('submits only checked fields for selected redeem codes', async () => {

@@ -61,6 +61,28 @@
         </div>
       </section>
 
+      <!-- 默认首页的统计数值由公开统计接口和模型广场提供。 -->
+      <dl
+        v-if="showHomeStats && homeStatsCards.length"
+        class="mx-auto mt-16 grid max-w-4xl gap-4 text-center"
+        :class="{
+          'grid-cols-1': homeStatsCards.length === 1,
+          'grid-cols-2': homeStatsCards.length > 1,
+          'md:grid-cols-3': homeStatsCards.length === 3,
+          'md:grid-cols-4': homeStatsCards.length === 4,
+        }"
+      >
+        <div v-for="card in homeStatsCards" :key="card.key" class="flex flex-col gap-2 p-4">
+          <dt class="text-sm text-gray-500 dark:text-dark-400">{{ card.label }}</dt>
+          <dd class="order-first text-2xl font-bold tabular-nums tracking-tight text-gray-950 dark:text-white sm:text-3xl">
+            {{ card.value }}
+          </dd>
+        </div>
+      </dl>
+      <p v-else-if="showHomeStats && homeStatsError" class="mt-4 text-center text-sm text-gray-500 dark:text-dark-400">
+        {{ t('home.stats.unavailable') }}
+      </p>
+
       <!-- Provider icon marquee -->
       <section class="mx-auto mt-14 max-w-5xl" aria-hidden="true">
         <div class="home-marquee relative overflow-hidden">
@@ -229,8 +251,9 @@
               <Icon name="chevronRight" size="md" :animate-on-hover="false" />
             </router-link>
             <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
-              {{ formatMarketplaceStat(totalModelCount) }} {{ t('marketplace.modelsStat') }}
-              ·
+              <template v-if="showHomeModelCount && !homeMarketplaceError">
+                {{ formatMarketplaceStat(totalModelCount) }} {{ t('marketplace.modelsStat') }} ·
+              </template>
               {{ formatMarketplaceStat(supportedProviders.length) }} {{ t('home.stats.providerTypes') }}
             </p>
           </div>
@@ -309,7 +332,7 @@
               </div>
               <div class="mt-5 border-t border-gray-200 pt-5 dark:border-dark-800">
                 <div class="flex items-end justify-between gap-4">
-                  <div>
+                  <div v-if="showHomeModelCount">
                     <p class="text-sm text-gray-500 dark:text-dark-400">{{ t('home.providers.modelCount') }}</p>
                     <p class="mt-1 text-lg font-semibold text-gray-950 dark:text-white">
                       {{ provider.modelCount }}
@@ -317,11 +340,11 @@
                   </div>
                   <p
                     v-if="provider.officialPriceRatio"
-                    class="max-w-[180px] text-right text-sm font-semibold text-emerald-600 dark:text-emerald-300"
+                    class="ml-auto max-w-[180px] text-right text-sm font-semibold text-emerald-600 dark:text-emerald-300"
                   >
                     {{ formatOfficialPriceRatio(provider.officialPriceRatio) }}
                   </p>
-                  <p v-else class="text-sm font-medium text-primary-600 dark:text-primary-300">
+                  <p v-else class="ml-auto text-sm font-medium text-primary-600 dark:text-primary-300">
                     {{ t('home.providers.supported') }}
                   </p>
                 </div>
@@ -495,8 +518,9 @@ import AppHeader from '@/components/layout/AppHeader.vue'
 import ProviderIcon from '@/components/common/ProviderIcon.vue'
 import ModelIcon from '@/components/common/ModelIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
-import { getMarketplaceModels } from '@/api/marketplace'
-import type { MarketplaceGroup, MarketplaceModel } from '@/types'
+import { getMarketplaceModels, getMarketplaceStats } from '@/api/marketplace'
+import type { MarketplaceGroup, MarketplaceModel, MarketplaceStats } from '@/types'
+import { extractApiErrorCode } from '@/utils/apiError'
 import { sanitizeUrl } from '@/utils/url'
 import { hasAcceptedLoginAgreement } from '@/utils/loginAgreement'
 import { isGoogleOneTapEligible, isGoogleOneTapOriginSupported } from '@/utils/googleIdentity'
@@ -557,6 +581,7 @@ const siteName = computed(() => appStore.siteName || 'TokenRouter')
 const siteLogo = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
 const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
+const showHomeStats = computed(() => !homeContent.value && appStore.cachedPublicSettings?.show_public_home_stats === true)
 const numberLocale = computed(() => locale.value)
 const homeHeroTitle = computed(() => appStore.cachedPublicSettings?.site_text_overrides?.includes('site_title') ? appStore.cachedPublicSettings.site_title || '' : t('home.heroTitle'))
 const homeHeroSubtitle = computed(() => appStore.cachedPublicSettings?.site_text_overrides?.includes('site_subtitle') ? appStore.cachedPublicSettings.site_subtitle || '' : t('home.heroDescription'))
@@ -632,6 +657,9 @@ const homeMarqueeBrands = computed(() => {
 })
 
 const marketplaceGroups = ref<MarketplaceGroup[]>([])
+const homeStats = ref<MarketplaceStats | null>(null)
+const homeStatsError = ref(false)
+const showHomeModelCount = computed(() => showHomeStats.value && homeStats.value?.show_supported_models === true)
 const homeMarketplaceLoading = ref(true)
 const homeMarketplaceError = ref(false)
 const homeMarketplaceButtonIconIndex = ref(0)
@@ -691,6 +719,30 @@ const providerCloudLayout = [
 const totalModelCount = computed(() =>
   marketplaceGroups.value.reduce((total, group) => total + group.models.length, 0)
 )
+
+// Token 用紧凑格式，用户数和模型数按当前语言显示完整数字。
+const homeStatsCards = computed(() => {
+  const stats = homeStats.value
+  if (!stats) return []
+
+  const tokens = new Intl.NumberFormat(numberLocale.value, { notation: 'compact', maximumFractionDigits: 1 })
+  const count = new Intl.NumberFormat(numberLocale.value)
+  const cards: { key: string; label: string; value: string }[] = []
+  if (stats.today_tokens !== undefined) {
+    cards.push({ key: 'today-tokens', label: t('home.stats.todayTokens'), value: tokens.format(stats.today_tokens) })
+  }
+  if (stats.total_tokens !== undefined) {
+    cards.push({ key: 'total-tokens', label: t('home.stats.totalTokens'), value: tokens.format(stats.total_tokens) })
+  }
+  if (stats.total_users !== undefined) {
+    cards.push({ key: 'total-users', label: t('home.stats.totalUsers'), value: count.format(stats.total_users) })
+  }
+  if (showHomeModelCount.value) {
+    const value = homeMarketplaceError.value ? '-' : formatMarketplaceStat(totalModelCount.value)
+    cards.push({ key: 'supported-models', label: t('home.stats.supportedModels'), value })
+  }
+  return cards
+})
 
 // 管理员在「系统设置 - 通用设置 - 首页模型展示」配置的模型 ID 列表（公开设置注入或接口返回）
 const homeFeaturedModelIds = computed<string[]>(() => {
@@ -941,6 +993,24 @@ async function fetchHomeMarketplace() {
     homeMarketplaceLoading.value = false
   }
 }
+
+// 开关或首页类型变化时撤销当前请求，防止迟到的响应再次显示统计。
+watch(showHomeStats, async (enabled, _, onCleanup) => {
+  homeStats.value = null
+  homeStatsError.value = false
+  if (!enabled) return
+
+  const controller = new AbortController()
+  onCleanup(() => controller.abort())
+  try {
+    const stats = await getMarketplaceStats(controller.signal)
+    if (!controller.signal.aborted) homeStats.value = stats
+  } catch (error) {
+    if (!controller.signal.aborted && extractApiErrorCode(error) !== 'PUBLIC_HOME_STATS_DISABLED') {
+      homeStatsError.value = true
+    }
+  }
+}, { immediate: true })
 
 onMounted(async () => {
   authStore.checkAuth()

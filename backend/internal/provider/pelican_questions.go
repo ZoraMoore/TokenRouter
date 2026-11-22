@@ -95,7 +95,8 @@ func IsStandardPelicanCandy(prompt, answer string) bool {
 
 func pelicanQuestion(kind, round string, config PelicanQuestionConfig) PelicanEvidence {
 	result := PelicanEvidence{Status: "inconclusive", DetailCode: "upstream_error"}
-	if round == "" || len(round) > 512 {
+	// 糖果题的题面固定，定时任务可以省略轮次。
+	if len(round) > 512 || (round == "" && kind != "candy") {
 		return result
 	}
 	prompt := strings.TrimSpace(config.Prompt)

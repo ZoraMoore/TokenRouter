@@ -137,3 +137,32 @@ func TestOpenAITextHTTPWaitAndSnapshot(t *testing.T) {
 		require.NotNil(t, p.call.SelectionContext)
 	})
 }
+
+func TestOpenAITextResponsesHostedSearchHistory(t *testing.T) {
+	// 在实际入口验证托管搜索原样进入执行器，缺失引用仍在转发前拒绝。
+	const history = `{"type":"tool_search_output","execution":"server","call_id":null,"tools":[],"status":"completed"},{"type":"function_call_output","call_id":"call_A","output":"ok"}`
+	for _, tc := range []struct {
+		name        string
+		prefix      string
+		wantForward bool
+	}{
+		{"referenced function", `{"type":"item_reference","id":"call_A"},`, true},
+		{"full function", `{"type":"function_call","call_id":"call_A","name":"lookup","arguments":"{}"},`, true},
+		{"missing reference", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `{"model":"gpt-5","input":[` + tc.prefix + history + `]}`
+			p, h, c, w, _ := newOpenAITextEntryProbe(t, body)
+			h.Responses(c)
+			if tc.wantForward {
+				require.NotNil(t, p.call)
+				require.JSONEq(t, body, string(p.call.Body))
+				return
+			}
+			require.Nil(t, p.call)
+			require.Equal(t, 400, w.Code)
+			require.Contains(t, w.Body.String(), "matching")
+			require.NotContains(t, w.Body.String(), "WebSocket")
+		})
+	}
+}

@@ -18,8 +18,7 @@ import (
 )
 
 const (
-	openAIResponsesSessionWindowPrefix = "openai_responses_session_window:"
-	liveCallPrefix                     = "live:call:"
+	liveCallPrefix = "live:call:"
 
 	grokVideoPendingBillingPrefix = "grok_video_pending:"
 	grokVideoBilledPrefix         = "grok_video_billed:"
@@ -134,10 +133,6 @@ func NewGatewayCache(rdb *redis.Client) session.GatewayCache {
 // buildSessionOwnerKey 按用户和来源生成指定会话的归属键。
 // 格式为 sticky_session_owner:{userID}:{source}:{sessionHash}。
 
-func buildOpenAIResponsesSessionWindowKey(groupID int64, sessionHash string) string {
-	return fmt.Sprintf("%s%d:%s", openAIResponsesSessionWindowPrefix, groupID, sessionHash)
-}
-
 func (c *gatewayCache) ClaimOpenAIResponsesSessionWindow(ctx context.Context, groupID int64, sessionHash string, owner []byte, ttl time.Duration) ([]byte, error) {
 	if c == nil || c.rdb == nil {
 		return nil, errors.New("gateway cache unavailable")
@@ -148,7 +143,7 @@ func (c *gatewayCache) ClaimOpenAIResponsesSessionWindow(ctx context.Context, gr
 	result, err := claimOpenAIResponsesSessionWindowScript.Run(
 		ctx,
 		c.rdb,
-		[]string{buildOpenAIResponsesSessionWindowKey(groupID, sessionHash)},
+		[]string{schedulerredis.OpenAIResponsesSessionWindowKey(groupID, sessionHash)},
 		owner,
 		ttl.Milliseconds(),
 	).Result()
@@ -180,7 +175,7 @@ func (c *gatewayCache) CompareAndRefreshOpenAIResponsesSessionWindow(ctx context
 	n, err := compareAndRefreshOpenAIResponsesSessionWindowScript.Run(
 		ctx,
 		c.rdb,
-		[]string{buildOpenAIResponsesSessionWindowKey(groupID, sessionHash)},
+		[]string{schedulerredis.OpenAIResponsesSessionWindowKey(groupID, sessionHash)},
 		expected,
 		ttl.Milliseconds(),
 	).Int()
@@ -197,7 +192,7 @@ func (c *gatewayCache) CompareAndDeleteOpenAIResponsesSessionWindow(ctx context.
 	n, err := compareAndDeleteOpenAIResponsesSessionWindowScript.Run(
 		ctx,
 		c.rdb,
-		[]string{buildOpenAIResponsesSessionWindowKey(groupID, sessionHash)},
+		[]string{schedulerredis.OpenAIResponsesSessionWindowKey(groupID, sessionHash)},
 		expected,
 	).Int()
 	return n == 1, err

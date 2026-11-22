@@ -12,4 +12,5 @@
 //   - events.go、ops_projection.go：变更事件、快照传播和 Ops 负载读取。
 //   - group_links.go、proxy_changes.go：分组绑定与代理变更。
 //   - scheduled_plans.go：定时测试计划和结果存储。
+//   - maintenance*.go：智能运维计划、账号处置和租约。
 package postgres

@@ -9,10 +9,12 @@ import team from './team'
 import requests from './requests'
 import pelicanTests from './pelicanTests'
 import providerIQ from './providerIQ'
+import scheduledTasks from './scheduledTasks'
 
 export default {
   providerIQ,
   pelicanTests,
+  scheduledTasks,
   requests,
   legal: {
     "login": "Log in",

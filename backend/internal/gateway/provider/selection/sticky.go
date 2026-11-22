@@ -44,7 +44,7 @@ func (s *Compatible) schedulerSticky() *schedulercore.StickySession {
 	if s != nil {
 		cache = s.cache
 	}
-	return schedulercore.NewStickySession(cache, schedulercore.StickyOptions{Prefix: "openai:", ReadLegacy: s.openAISessionHashReadOldFallbackEnabled(), DualWriteLegacy: s.openAISessionHashDualWriteOldEnabled(), DefaultTTL: openaiStickySessionTTL}, s.stickyStats())
+	return schedulercore.NewStickySession(cache, schedulercore.StickyOptions{Prefix: schedulercore.OpenAIStickySessionPrefix, ReadLegacy: s.openAISessionHashReadOldFallbackEnabled(), DualWriteLegacy: s.openAISessionHashDualWriteOldEnabled(), DefaultTTL: openaiStickySessionTTL}, s.stickyStats())
 }
 
 func (s *Compatible) getStickySessionProviderID(ctx context.Context, groupID *int64, sessionHash string) (int64, error) {

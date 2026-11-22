@@ -24,6 +24,9 @@ type FunctionCallOutputValidation struct {
 	HasToolCallContext                 bool
 	HasFunctionCallOutputMissingCallID bool
 	HasItemReferenceForAllCallIDs      bool
+	// 缺编号时记录第一个需要客户端配对的输出，InputIndex 从零开始。
+	MissingCallIDItemType   string
+	MissingCallIDInputIndex int64
 }
 
 // ToolCallOutputContextCoverage 描述 input 中工具输出与可重建上下文的覆盖关系，
@@ -183,7 +186,7 @@ func ValidateFunctionCallOutputContextBytes(body []byte) FunctionCallOutputValid
 
 	var callIDs map[string]struct{}
 	var referenceIDs map[string]struct{}
-	input.ForEach(func(_, item gjson.Result) bool {
+	input.ForEach(func(index, item gjson.Result) bool {
 		if !item.IsObject() {
 			return true
 		}
@@ -191,9 +194,10 @@ func ValidateFunctionCallOutputContextBytes(body []byte) FunctionCallOutputValid
 		switch {
 		case IsCodexToolCallOutputItemType(itemType):
 			result.HasFunctionCallOutput = true
-			callID := strings.TrimSpace(item.Get("call_id").String())
+			id := item.Get("call_id")
+			callID := strings.TrimSpace(id.String())
 			if callID == "" {
-				result.HasFunctionCallOutputMissingCallID = true
+				result.noteMissingHTTPCallID(index.Int(), itemType, item.Get("execution").String(), id.Exists() && id.Type == gjson.Null)
 				return true
 			}
 			if callIDs == nil {
@@ -345,7 +349,7 @@ func ValidateFunctionCallOutputContext(reqBody map[string]any) FunctionCallOutpu
 
 	callIDs := make(map[string]struct{})
 	referenceIDs := make(map[string]struct{})
-	for _, item := range input {
+	for index, item := range input {
 		itemMap, ok := item.(map[string]any)
 		if !ok {
 			continue
@@ -353,10 +357,12 @@ func ValidateFunctionCallOutputContext(reqBody map[string]any) FunctionCallOutpu
 		itemType, _ := itemMap["type"].(string)
 		switch {
 		case IsCodexToolCallOutputItemType(itemType):
-			callID, _ := itemMap["call_id"].(string)
+			id, present := itemMap["call_id"]
+			callID, _ := id.(string)
 			callID = strings.TrimSpace(callID)
 			if callID == "" {
-				result.HasFunctionCallOutputMissingCallID = true
+				execution, _ := itemMap["execution"].(string)
+				result.noteMissingHTTPCallID(int64(index), itemType, execution, present && id == nil)
 				continue
 			}
 			callIDs[callID] = struct{}{}
@@ -382,6 +388,18 @@ func ValidateFunctionCallOutputContext(reqBody map[string]any) FunctionCallOutpu
 	}
 	result.HasItemReferenceForAllCallIDs = allReferenced
 	return result
+}
+
+// noteMissingHTTPCallID 记录需要客户端配对的输出。服务端工具搜索用显式 null 表示托管历史。
+func (v *FunctionCallOutputValidation) noteMissingHTTPCallID(index int64, itemType, execution string, explicitNull bool) {
+	if itemType == "tool_search_output" && execution == "server" && explicitNull {
+		return
+	}
+	if !v.HasFunctionCallOutputMissingCallID {
+		v.HasFunctionCallOutputMissingCallID = true
+		v.MissingCallIDItemType = strings.TrimSpace(itemType)
+		v.MissingCallIDInputIndex = index
+	}
 }
 
 // HasFunctionCallOutput 判断 input 是否包含任意 Codex 工具输出，用于触发续链校验。

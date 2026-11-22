@@ -196,7 +196,7 @@
                       :options="couponOptions"
                       :disabled="submitting"
                     />
-                    <button v-if="coupons.length < couponsTotal && !couponListLoading" type="button" class="btn btn-secondary btn-sm mt-2" @click="loadCouponPage">
+                    <button v-if="coupons.length < couponsTotal && !couponListLoading" type="button" class="btn btn-secondary btn-sm mt-2" @click="loadCouponPage()">
                       {{ t('payment.coupons.loadMore') }}
                     </button>
                     <p v-if="couponQuoteLoading" class="input-hint">{{ t('payment.coupons.quoting') }}</p>
@@ -448,6 +448,7 @@ const couponQuoteError = ref('')
 const couponListController = new AbortController()
 const couponPageSize = 50
 let couponPage = 0
+let couponListRequest = 0
 let couponOrderAttempt: { input: string; key: string } | null = null
 const amount = ref<number | null>(null)
 const selectedMethod = ref('')
@@ -636,8 +637,11 @@ async function onPaymentSuccess() {
   await redirectToPaymentResult(completedPayment)
 }
 
-function onPaymentSettled() {
+function onPaymentSettled(outcome: 'success' | 'cancelled' | 'expired' | 'review') {
   removeRecoverySnapshot()
+  if (paymentState.value.orderType === 'balance' && (outcome === 'cancelled' || outcome === 'expired')) {
+    void loadCouponPage(true)
+  }
 }
 
 // All checkout data from single API call
@@ -782,20 +786,25 @@ const couponDiscount = computed(() => {
   return snapshot ? rechargeCouponAmount(snapshot.discount_minor, snapshot.currency) : 0
 })
 
-async function loadCouponPage() {
-  if (couponListLoading.value) return
+async function loadCouponPage(reset = false) {
+  if (couponListLoading.value && !reset) return
+  // 取消订单后的刷新优先于正在返回的分页查询。
+  const request = ++couponListRequest
+  const page = reset ? 1 : couponPage + 1
   couponListLoading.value = true
   try {
-    const { data } = await paymentAPI.listRechargeCoupons({ page: couponPage + 1, page_size: couponPageSize, available: true }, couponListController.signal)
-    if (couponListController.signal.aborted) return
-    const added = data.items.filter(coupon => !coupons.value.some(saved => saved.id === coupon.id))
-    coupons.value.push(...added)
+    const { data } = await paymentAPI.listRechargeCoupons({ page, page_size: couponPageSize, available: true }, couponListController.signal)
+    if (couponListController.signal.aborted || request !== couponListRequest) return
+    const previous = reset ? [] : coupons.value
+    coupons.value = [...previous, ...data.items.filter(coupon => !previous.some(saved => saved.id === coupon.id))]
     couponsTotal.value = data.total
-    couponPage++
+    couponPage = page
   } catch (error) {
-    if (!couponListController.signal.aborted) couponQuoteError.value = extractApiErrorMessage(error, t('payment.coupons.loadFailed'))
+    if (!couponListController.signal.aborted && request === couponListRequest) {
+      couponQuoteError.value = extractApiErrorMessage(error, t('payment.coupons.loadFailed'))
+    }
   } finally {
-    couponListLoading.value = false
+    if (request === couponListRequest) couponListLoading.value = false
   }
 }
 

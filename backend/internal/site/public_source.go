@@ -95,6 +95,7 @@ func PublicInputKeys() []string {
 		"footer_links",
 		"footer_text",
 		"home_featured_models",
+		SettingKeyShowPublicHomeStats,
 		"linuxdo_connect_enabled",
 		"dingtalk_connect_enabled",
 		"wechat_connect_enabled",

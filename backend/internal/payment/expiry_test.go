@@ -42,6 +42,11 @@ func (p *expiryProbe) ExpireTimedOutOrders(context.Context) (int, error) {
 	return 0, nil
 }
 
+func (p *expiryProbe) ReconcileClosedCouponOrders(context.Context) (int, error) {
+	p.calls.Add(1)
+	return 0, nil
+}
+
 func TestOrderExpiryConstructionAndCancellation(t *testing.T) {
 	p := &expiryProbe{entered: make(chan struct{})}
 	runner := NewOrderExpiry(p, time.Hour, ExpiryRuntime{})

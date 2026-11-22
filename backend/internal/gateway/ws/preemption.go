@@ -3,7 +3,6 @@ package ws
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/TokenFlux/TokenRouter/internal/gateway/session"
+	"github.com/TokenFlux/TokenRouter/internal/scheduler"
 )
 
 const (
@@ -53,7 +53,7 @@ type PreemptRegistry struct {
 }
 
 func CacheHash(apiKeyID int64, hash string) string {
-	return fmt.Sprintf("wspreempt:%d:%s", apiKeyID, strings.TrimSpace(hash))
+	return scheduler.OpenAIWSSessionWindowHash(apiKeyID, hash)
 }
 
 func (r *PreemptRegistry) Begin(key PreemptKey, cancel func()) (cleanup func(), preemptedPrevious bool) {

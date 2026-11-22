@@ -10,6 +10,7 @@ type ProviderRouteEndpoints struct {
 	ProviderCRS         *CRSHandler
 	ProviderCodexImport *CodexImportHandler
 	ProviderManagement  *ManagementHandler
+	ProviderOperations  *OperationHandler
 	ProviderOAuthUsage  *OAuthUsageHandler
 	ProviderOllama      *OllamaUsageHandler
 	ProviderTests       *TestHandler
@@ -112,6 +113,11 @@ func RegisterProviderRoutes(admin *gin.RouterGroup, endpoints ProviderRouteEndpo
 		providers.POST("/sync/crs", endpoints.ProviderCRS.SyncFromCRS)
 		providers.POST("/sync/crs/preview", endpoints.ProviderCRS.PreviewFromCRS)
 		providers.PUT("/:id", endpoints.ProviderManagement.Update)
+		providers.POST("/relogin/preview", endpoints.ProviderOperations.PreviewRelogin)
+		providers.POST("/relogin", endpoints.ProviderOperations.StartRelogin)
+		providers.POST("/:id/traffic-push", endpoints.ProviderOperations.StartTrafficPush)
+		providers.GET("/operations", endpoints.ProviderOperations.List)
+		providers.GET("/operations/:id", endpoints.ProviderOperations.Get)
 		registerDiagnostics(providers)
 		providers.GET("/:id/ollama-cloud-usage", endpoints.ProviderOllama.GetOllamaCloudUsage)
 		providers.PUT("/:id/ollama-cloud-usage/session", endpoints.ProviderOllama.SaveOllamaCloudUsageSession)

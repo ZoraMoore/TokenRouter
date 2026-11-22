@@ -40,7 +40,7 @@ func (h *RedeemHandler) Redeem(c *gin.Context) {
 		return
 	}
 
-	result, err := h.redeemService.Redeem(c.Request.Context(), subject.UserID, req.Code)
+	result, err := h.redeemService.RedeemForUser(c.Request.Context(), subject.UserID, req.Code)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

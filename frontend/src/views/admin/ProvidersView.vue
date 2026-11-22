@@ -146,6 +146,12 @@
                           {{ t('admin.providers.toolActions') }}
                         </div>
                       </div>
+                      <button class="dropdown-item-sm gap-3 rounded-control" type="button" @click="openProviderOperationHistory">
+                        <span class="provider-tools-menu-icon bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
+                          <Icon name="history" size="sm" />
+                        </span>
+                        <span class="flex-1 text-left">{{ t('admin.providers.operations.history') }}</span>
+                      </button>
                       <button class="dropdown-item-sm gap-3 rounded-control" @click="openErrorPassthrough">
                         <span class="provider-tools-menu-icon bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300">
                           <Icon name="shield" size="sm" />
@@ -223,6 +229,7 @@
           @delete="handleBulkDelete"
           @reset-status="handleBulkResetStatus"
           @refresh-token="handleBulkRefreshToken"
+          @relogin="openBulkRelogin"
           @query-usage="handleBulkQueryUsage"
           @query-upstream-usage="handleBulkQueryUpstreamUsage"
           @run-bulk-probe="handleBulkProbe"
@@ -507,6 +514,12 @@
       @updated="handleBulkUpdated"
     />
     <TempUnschedStatusModal :show="showTempUnsched" :provider="tempUnschedAcc" @close="showTempUnsched = false" @reset="handleTempUnschedReset" />
+    <ProviderOperationsDialog
+      :show="showProviderOperations"
+      :provider-ids="reloginProviderIds"
+      @close="showProviderOperations = false"
+      @relogin-finished="reload"
+    />
     <ConfirmDialog :show="showDeleteDialog" :title="t('admin.providers.deleteProvider')" :message="t('admin.providers.deleteConfirm', { name: deletingAcc?.name })" :confirm-text="t('common.delete')" :cancel-text="t('common.cancel')" :danger="true" @confirm="confirmDelete" @cancel="showDeleteDialog = false" />
     <ConfirmDialog :show="showCreateShadowDialog" :title="t('admin.providers.createSparkShadow')" :message="t('admin.providers.createSparkShadowConfirm', { name: creatingShadowAcc?.name })" @confirm="confirmCreateSparkShadow" @cancel="showCreateShadowDialog = false" />
     <ConfirmDialog :show="showExportDataDialog" :title="t('admin.providers.dataExport')" :message="t('admin.providers.dataExportConfirmMessage')" :confirm-text="t('admin.providers.dataExportConfirm')" :cancel-text="t('common.cancel')" @confirm="handleExportData" @cancel="showExportDataDialog = false">
@@ -547,6 +560,7 @@ import { CreateProviderModal, EditProviderModal, BulkEditProviderModal, SyncFrom
 import ProviderTableActions from '@/components/admin/provider/ProviderTableActions.vue'
 import ProviderTableFilters from '@/components/admin/provider/ProviderTableFilters.vue'
 import ProviderBulkActionsBar from '@/components/admin/provider/ProviderBulkActionsBar.vue'
+import ProviderOperationsDialog from '@/components/admin/provider/ProviderOperationsDialog.vue'
 import ProviderActionMenu from '@/components/admin/provider/ProviderActionMenu.vue'
 import ImportDataModal from '@/components/admin/provider/ImportDataModal.vue'
 import ReAuthProviderModal from '@/components/admin/provider/ReAuthProviderModal.vue'
@@ -648,6 +662,8 @@ const showImportData = ref(false)
 const showExportDataDialog = ref(false)
 const includeProxyOnExport = ref(true)
 const showBulkEdit = ref(false)
+const showProviderOperations = ref(false)
+const reloginProviderIds = ref<number[] | null>(null)
 const bulkEditTarget = ref<ProviderBulkEditTarget | null>(null)
 const showTempUnsched = ref(false)
 const showDeleteDialog = ref(false)
@@ -1942,6 +1958,20 @@ const handleManualRefresh = async () => {
 
 const closeProviderToolsDropdown = () => {
   showProviderToolsDropdown.value = false
+}
+
+// 记录入口与当前的勾选无关，可以从任意页打开。
+const openProviderOperationHistory = () => {
+  closeProviderToolsDropdown()
+  reloginProviderIds.value = null
+  showProviderOperations.value = true
+}
+
+// 固定本次预览的账号，包括其他页上的勾选项。
+const openBulkRelogin = () => {
+  if (!selIds.value.length) return
+  reloginProviderIds.value = [...selIds.value]
+  showProviderOperations.value = true
 }
 
 // 按当前筛选条件批量编辑全部结果，入口在工具菜单里，不依赖勾选。

@@ -68,7 +68,9 @@ func (r *TestRun) readAnswer(resp *http.Response, protocol answerProtocol, sent 
 // readAnswerForModel 记录已收到回复的请求。部分协议把模型写在 URL 或请求头。
 func (r *TestRun) readAnswerForModel(resp *http.Response, protocol answerProtocol, sent []byte, model string) error {
 	if resp != nil {
-		request := provider.TestEvent{Type: "test_request", Model: model, Protocol: string(protocol), ReasoningEffort: sentAnswerEffort(protocol, sent)}
+		request := provider.TestEvent{
+			Type: "test_request", Model: model, Protocol: string(protocol), ReasoningEffort: sentAnswerEffort(protocol, sent), HTTPStatus: resp.StatusCode,
+		}
 		if r.IQMode == "modeltrace" {
 			request.SystemPrompt = "none"
 			switch {
@@ -208,8 +210,8 @@ func completedJSONAnswer(ctx context.Context, reader *io.LimitedReader, protocol
 			return !text.overflow
 		})
 	case answerResponses:
-		if message.Get("status").String() != "completed" {
-			return "", provider.ErrTestAnswerIncomplete
+		if err := validateCompletedResponse(message, false); err != nil {
+			return "", err
 		}
 		if limits.drawing {
 			if err := (&drawingResponse{}).complete(&text, message); err != nil {
@@ -306,8 +308,8 @@ func parseAnswerFrame(protocol answerProtocol, data gjson.Result, text *answerTe
 			}
 		case "response.completed", "response.done":
 			response := data.Get("response")
-			if status := response.Get("status").String(); status != "" && status != "completed" {
-				return false, provider.ErrTestAnswerIncomplete
+			if err := validateCompletedResponse(response, eventType == "response.completed"); err != nil {
+				return false, err
 			}
 			if text.drawing != nil {
 				return true, text.drawing.complete(text, response)
@@ -367,6 +369,21 @@ func parseAnswerFrame(protocol answerProtocol, data gjson.Result, text *answerTe
 		return finished && (!text.awaitChatTail || !choice.Exists()), nil
 	}
 	return false, nil
+}
+
+// validateCompletedResponse 接受明确的完成状态，兼容省略状态的 response.completed 事件。
+func validateCompletedResponse(response gjson.Result, allowImplicitStatus bool) error {
+	if failure := response.Get("error"); failure.Type != gjson.Null {
+		return answerRequestError(failure)
+	}
+	if response.Get("incomplete_details").Type != gjson.Null {
+		return provider.ErrTestAnswerIncomplete
+	}
+	status := response.Get("status").String()
+	if status != "completed" && (status != "" || !allowImplicitStatus) {
+		return provider.ErrTestAnswerIncomplete
+	}
+	return nil
 }
 
 // readChatAnswer 收集 Chat 增量，绘图终态带有整条消息时取出该消息。

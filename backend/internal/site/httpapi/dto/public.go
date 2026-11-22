@@ -64,6 +64,7 @@ type (
 		FooterLinks                         []FooterLinkGroup            `json:"footer_links"`
 		FooterText                          string                       `json:"footer_text"`
 		HomeFeaturedModels                  []string                     `json:"home_featured_models"`
+		ShowPublicHomeStats                 bool                         `json:"show_public_home_stats"`
 		DingTalkOAuthEnabled                bool                         `json:"dingtalk_oauth_enabled"`
 		LinuxDoOAuthEnabled                 bool                         `json:"linuxdo_oauth_enabled"`
 		WeChatOAuthEnabled                  bool                         `json:"wechat_oauth_enabled"`

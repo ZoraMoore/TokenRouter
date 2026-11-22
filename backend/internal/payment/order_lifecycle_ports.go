@@ -21,6 +21,7 @@ type LifeStore interface {
 	TouchPending(context.Context, int64, time.Time) error
 	SaveUpstreamTradeNumber(context.Context, int64, string) error
 	PendingReconciliation(context.Context, time.Time, int) ([]*Order, error)
+	ClosedOrdersHoldingCoupons(context.Context, time.Time, int) ([]*Order, error)
 	ExpiredPending(context.Context, time.Time) ([]*Order, error)
 	ProcessingIDs(context.Context) ([]int64, error)
 	ProcessingOrders(context.Context, []int64) ([]*Order, error)

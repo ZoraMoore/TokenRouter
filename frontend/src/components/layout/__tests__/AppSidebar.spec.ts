@@ -125,6 +125,11 @@ describe('AppSidebar admin personal menu', () => {
     expect(componentSource.match(/path: '\/pelican-tests'.*featureFlag: flagPelicanShowcase/g)).toHaveLength(2)
   })
 
+  it('在智能运维分区显示管理员的定时任务入口', () => {
+    const section = componentSource.split("t('pelicanTests.smartOps')")[1]?.split('<!-- 管理员的个人功能区 -->')[0]
+    expect(section).toContain('to="/admin/scheduled-tasks"')
+  })
+
   it('shows the regular dashboard under My Provider for admins', () => {
     const personalNavItemsBlockMatch = componentSource.match(
       /const personalNavItems = computed\(\(\): NavItem\[\] => \{[\s\S]*?const adminNavItems = computed/

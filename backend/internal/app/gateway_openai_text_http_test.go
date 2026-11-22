@@ -1378,7 +1378,7 @@ func TestOpenAIResponses_RejectsUnownedHTTPContinuation(t *testing.T) {
 	require.Contains(t, w.Body.String(), "previous_response_id is not available for this user")
 }
 
-func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceDoesNotSuggestPreviousResponseReuse(t *testing.T) {
+func TestOpenAIResponses_ReportsMissingFunctionCallOutputCallID(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", strings.NewReader(
@@ -1401,8 +1401,7 @@ func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceDoesNotSuggestPreviousRes
 	h.Responses(c)
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.Contains(t, w.Body.String(), "Responses WebSocket v2")
-	require.NotContains(t, w.Body.String(), "reuse previous_response_id")
+	require.JSONEq(t, `{"error":{"message":"input[0] (function_call_output) requires call_id","type":"invalid_request_error"}}`, w.Body.String())
 }
 
 func (s *cyberSessionBlockHandlerCacheStub) GetSessionProviderID(context.Context, int64, string) (int64, error) {

@@ -9,8 +9,8 @@ export async function getMarketplaceModels(): Promise<MarketplaceGroup[]> {
   return data
 }
 
-export async function getMarketplaceStats(): Promise<MarketplaceStats> {
-  const { data } = await apiClient.get<MarketplaceStats>('/marketplace/stats')
+export async function getMarketplaceStats(signal?: AbortSignal): Promise<MarketplaceStats> {
+  const { data } = await apiClient.get<MarketplaceStats>('/marketplace/stats', { signal })
   return data
 }
 

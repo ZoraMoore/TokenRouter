@@ -36,6 +36,14 @@
               {{ t('admin.redeem.exportCsv') }}
             </button>
             <button
+              type="button"
+              data-testid="claim-limit-open"
+              class="btn btn-secondary shrink-0 whitespace-nowrap"
+              @click="showClaimLimitDialog = true"
+            >
+              {{ t('admin.redeem.claimLimit.title') }}
+            </button>
+            <button
               data-testid="batch-update-open"
               @click="openBatchUpdateDialog"
               :disabled="selectedCount === 0 || batchUpdating"
@@ -235,6 +243,8 @@
         </div>
       </template>
     </TablePageLayout>
+
+    <RedeemClaimLimitDialog v-if="showClaimLimitDialog" @close="showClaimLimitDialog = false" />
 
     <!-- 删除确认弹窗 -->
     <ConfirmDialog
@@ -639,6 +649,7 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { adminAPI } from '@/api/admin'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import type { BatchUpdateRedeemCodeFields, RedeemCode, RedeemCodeType, UpdateRedeemCodeRequest } from '@/types'
+import RedeemClaimLimitDialog from '@/components/admin/redeem/RedeemClaimLimitDialog.vue'
 import RechargeCouponFields from '@/components/payment/RechargeCouponFields.vue'
 import { emptyRechargeCouponInput, parseRechargeCouponTerms, rechargeCouponAmount, rechargeCouponLabel } from '@/components/payment/rechargeCoupon'
 import type { SubscriptionPlan } from '@/types/payment'
@@ -668,6 +679,7 @@ interface PlanOption {
 }
 
 const showGenerateDialog = ref(false)
+const showClaimLimitDialog = ref(false)
 const showResultDialog = ref(false)
 const generatedCodes = ref<RedeemCode[]>([])
 const subscriptionPlans = ref<SubscriptionPlan[]>([])

@@ -99,12 +99,6 @@ func drawingIndex(field gjson.Result, fallback int64) (int64, bool) {
 
 // complete 优先读取终态中的作答。上游只发用量或推理摘要时，使用流中已经收齐的文字。
 func (s *drawingResponse) complete(text *answerText, response gjson.Result) error {
-	if failure := response.Get("error"); failure.Type != gjson.Null {
-		return answerRequestError(failure)
-	}
-	if response.Get("incomplete_details").Type != gjson.Null {
-		return provider.ErrTestAnswerIncomplete
-	}
 	output := response.Get("output")
 	if output.Type != gjson.Null && !output.IsArray() && !output.IsObject() {
 		return provider.ErrTestAnswerIncomplete

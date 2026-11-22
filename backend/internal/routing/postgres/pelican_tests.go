@@ -27,13 +27,14 @@ const (
 	// 历史记录的提供商名称取自实际作答账号，指定账号由计划单独存入结果。
 	pelicanSummaryFields = `r.id, r.model_id, r.question_kind, r.question_name, r.reasoning_effort,
 		r.status, r.detail_code, r.tested_at, r.latency_ms, r.schedule_action`
-	pelicanResultFields     = `r.plan_id, p.group_id, r.provider_id, COALESCE(v.name,''), r.round_id, ` + pelicanSummaryFields
-	pelicanUserResultFields = `r.plan_id, p.group_id, NULL::bigint, ''::text, ''::text, ` + pelicanSummaryFields
+	pelicanResultFields     = `r.plan_id, p.group_id, r.provider_id, COALESCE(v.name,''), r.round_id, mr.id, ` + pelicanSummaryFields
+	pelicanUserResultFields = `r.plan_id, p.group_id, NULL::bigint, ''::text, ''::text, NULL::bigint, ` + pelicanSummaryFields
 	pelicanResultFrom       = ` FROM pelican_test_results r
 		JOIN pelican_test_plans p ON p.id=r.plan_id
 		JOIN groups g ON g.id=p.group_id `
-	pelicanAdminResultFrom = pelicanResultFrom + ` LEFT JOIN providers v ON v.id=r.provider_id `
-	pelicanCurrentTarget   = `r.plan_revision=p.plan_revision AND r.model_id=p.model_id
+	pelicanAdminResultFrom = pelicanResultFrom + ` LEFT JOIN providers v ON v.id=r.provider_id
+		LEFT JOIN provider_maintenance_runs mr ON mr.pelican_result_id=r.id `
+	pelicanCurrentTarget = `r.plan_revision=p.plan_revision AND r.model_id=p.model_id
 		AND r.question_kind=p.question_kind AND r.question_name=p.question_name
 		AND r.target_provider_id IS NOT DISTINCT FROM p.provider_id`
 	pelicanDrawingKinds    = `('pelican', 'custom_svg')`
@@ -56,7 +57,7 @@ const (
 // PelicanTestStore 保存分组测智计划、领取凭证和每次作答。
 type PelicanTestStore struct {
 	db           *sql.DB
-	disableCandy pelicanCandyDisabler
+	queueRecheck pelicanRecheckQueuer
 }
 
 // NewPelicanTestStore 使用应用的 PostgreSQL 连接池保存测智任务。
@@ -213,7 +214,7 @@ func (s *PelicanTestStore) Finish(ctx context.Context, plan routing.PelicanPlan,
 	if err != nil {
 		return err
 	}
-	if err := insertPelicanResult(ctx, tx, plan, result); err != nil {
+	if _, err := insertPelicanResult(ctx, tx, plan, result); err != nil {
 		return err
 	}
 	if err := advancePelicanPlan(ctx, tx, plan, result.TestedAt, next); err != nil {
@@ -225,16 +226,17 @@ func (s *PelicanTestStore) Finish(ctx context.Context, plan routing.PelicanPlan,
 	return tx.Commit()
 }
 
-func insertPelicanResult(ctx context.Context, tx *sql.Tx, plan routing.PelicanPlan, result routing.PelicanResult) error {
+func insertPelicanResult(ctx context.Context, tx *sql.Tx, plan routing.PelicanPlan, result routing.PelicanResult) (int64, error) {
 	if result.Criteria == nil {
 		result.Criteria = []string{}
 	}
 	criteria, err := json.Marshal(result.Criteria)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	// 结果使用被锁定的计划配置，自动选号时也要保存当次实际作答账号。
-	insert, err := tx.ExecContext(ctx, `
+	var id int64
+	err = tx.QueryRowContext(ctx, `
 		INSERT INTO pelican_test_results
 			(plan_id, target_provider_id, provider_id, model_id, question_kind, question_name, plan_revision,
 			 status, detail_code, prompt, criteria, answer, tested_at, latency_ms, reasoning_effort, published, raw_answer,
@@ -246,10 +248,13 @@ func insertPelicanResult(ctx context.Context, tx *sql.Tx, plan routing.PelicanPl
 				WHEN question_kind='candy' THEN $4::text IN ('passed','suspected') AND $8::text ~ '[^[:space:]]'
 				ELSE false
 			END, $12, $13, $14
-		FROM pelican_test_plans WHERE id=$1 AND lease_token=$2`, plan.ID, plan.LeaseToken, result.ProviderID, result.Status,
+		FROM pelican_test_plans WHERE id=$1 AND lease_token=$2 RETURNING id`, plan.ID, plan.LeaseToken, result.ProviderID, result.Status,
 		result.DetailCode, result.Prompt, string(criteria), result.Answer, result.TestedAt, result.LatencyMs,
-		result.ReasoningEffort, result.RawAnswer, result.RoundID, result.ScheduleAction)
-	return checkPelicanAffected(insert, err, routing.ErrPelicanConflict)
+		result.ReasoningEffort, result.RawAnswer, result.RoundID, result.ScheduleAction).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, routing.ErrPelicanConflict
+	}
+	return id, pelicanWriteError(err)
 }
 
 func advancePelicanPlan(ctx context.Context, tx *sql.Tx, plan routing.PelicanPlan, tested time.Time, next *time.Time) error {
@@ -412,7 +417,7 @@ func scanPelicanPlan(row interface{ Scan(...any) error }) (*routing.PelicanPlan,
 
 func pelicanResultDest(r *routing.PelicanResult) []any {
 	return []any{
-		&r.PlanID, &r.GroupID, &r.ProviderID, &r.ProviderName, &r.RoundID, &r.ID, &r.ModelID, &r.QuestionKind,
+		&r.PlanID, &r.GroupID, &r.ProviderID, &r.ProviderName, &r.RoundID, &r.RecheckRunID, &r.ID, &r.ModelID, &r.QuestionKind,
 		&r.QuestionName, &r.ReasoningEffort, &r.Status, &r.DetailCode, &r.TestedAt, &r.LatencyMs, &r.ScheduleAction,
 	}
 }

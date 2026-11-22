@@ -500,6 +500,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/scheduled-tasks',
+    name: 'AdminScheduledTasks',
+    component: () => import('@/views/admin/ScheduledTasksView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Scheduled Tasks',
+      titleKey: 'scheduledTasks.title',
+      descriptionKey: 'scheduledTasks.description'
+    }
+  },
+  {
     path: '/admin/audit-logs',
     name: 'AdminAuditLogs',
     component: () => import('@/views/admin/AuditLogView.vue'),

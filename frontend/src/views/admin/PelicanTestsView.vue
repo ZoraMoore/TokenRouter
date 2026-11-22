@@ -102,7 +102,7 @@
     </ConfirmDialog>
 
     <BaseDialog
-      :show="historyPlanId !== null" width="wide" :title="t('pelicanTests.history')"
+      :show="historyPlanId !== null && recheckRunId === null" width="wide" :title="t('pelicanTests.history')"
       :subtitle="historyPlan && `${historyPlan.group_name} · ${historyPlan.model_id}`" @close="closeHistory"
     >
       <div class="space-y-4">
@@ -132,9 +132,14 @@
                 {{ t(`pelicanTests.reason.${result.detail_code}`) }}
               </p>
             </div>
-            <button type="button" class="btn btn-secondary btn-sm" :data-testid="`open-sample-${result.id}`" @click="sampleId = result.id">
-              <Icon name="eye" size="sm" />{{ t('pelicanTests.openSample') }}
-            </button>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-if="result.recheck_run_id" type="button" class="btn btn-secondary btn-sm" @click="recheckRunId = result.recheck_run_id"
+              >{{ t('pelicanTests.candySuspension.openRecheck') }}</button>
+              <button type="button" class="btn btn-secondary btn-sm" :data-testid="`open-sample-${result.id}`" @click="sampleId = result.id">
+                <Icon name="eye" size="sm" />{{ t('pelicanTests.openSample') }}
+              </button>
+            </div>
           </li>
         </ul>
       </div>
@@ -147,7 +152,11 @@
         </div>
       </template>
     </BaseDialog>
-    <PelicanResultDialog :result-id="sampleId" :load-result="getResult" :review="reviewResult" @reviewed="reviewed" @close="sampleId = null" />
+    <PelicanResultDialog
+      :result-id="recheckRunId === null ? sampleId : null" :load-result="getResult" :review="reviewResult"
+      @reviewed="reviewed" @recheck="recheckRunId = $event" @close="sampleId = null"
+    />
+    <TaskRunDialog :plan="null" :initial-run-id="recheckRunId" timezone="" @close="recheckRunId = null" />
   </AppLayout>
 </template>
 
@@ -157,6 +166,7 @@ import { useI18n } from 'vue-i18n'
 import type { LocationQuery } from 'vue-router'
 import { deletePlan, getResult, listPlans, listResults, reviewResult, runPlan, updatePlan, type PelicanPlan, type PelicanPlanTarget } from '@/api/admin/pelicanTests'
 import { pelicanEfforts, pelicanPlanKinds, type PelicanReviewStatus } from '@/api/pelicanTests'
+import TaskRunDialog from '@/components/admin/scheduledTasks/TaskRunDialog.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ContentSkeleton from '@/components/common/ContentSkeleton.vue'
@@ -198,6 +208,7 @@ const editorOpen = ref(false)
 const planTarget = ref<PelicanPlanTarget | null>(null)
 const deleting = ref<PelicanPlan | null>(null)
 const historyPlanId = ref<number | null>(null)
+const recheckRunId = ref<number | null>(null)
 const sampleId = ref<number | null>(null)
 const historyPlan = computed(() => plans.value?.find(plan => plan.id === historyPlanId.value))
 const { data: history, loading: historyLoading, failed: historyFailed, refresh: refreshHistory } =
@@ -247,6 +258,7 @@ function closeDelete() {
 }
 
 function closeHistory() {
+  recheckRunId.value = null
   sampleId.value = null
   historyPlanId.value = null
 }

@@ -294,6 +294,7 @@ let historyRequestId = 0
 const activeSubscriptions = computed(() => subscriptionStore.activeSubscriptions)
 const redeemErrorMap = computed<Record<string, string>>(() => ({
   REDEEM_PAYMENT_REQUIRED: t('redeem.paymentRequired'),
+  REDEEM_CLAIM_LIMIT_REACHED: t('redeem.claimLimitReached'),
   REDEEM_CODE_EXPIRED: t('redeem.codeExpired'),
   REDEEM_CODE_MAX_USED: t('redeem.codeMaxUsed'),
   REDEEM_CODE_ALREADY_USED: t('redeem.codeAlreadyUsed'),

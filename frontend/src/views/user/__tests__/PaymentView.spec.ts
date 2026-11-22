@@ -512,6 +512,10 @@ describe('PaymentView recharge rate preview', () => {
 })
 
 describe('PaymentView 充值满减券', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
   it('按服务端报价显示实付并携带充值面额和券号下单', async () => {
     routeState.query = {}
     getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({ balance_recharge_multiplier: 2 }))
@@ -536,6 +540,42 @@ describe('PaymentView 充值满减券', () => {
     expect(wrapper.get('[data-testid="checkout-summary"]').text()).toContain(formatPaymentAmount(80, 'CNY'))
     await wrapper.get('[data-testid="checkout-summary"] button').trigger('click')
     expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({ amount: 100, coupon_id: 3 }), expect.any(String))
+    wrapper.unmount()
+  })
+
+  it('取消用券订单后在充值页重新显示已退回的券', async () => {
+    routeState.query = {}
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture())
+    const terms = { currency: 'CNY', minimum_minor: 10000, discount_minor: 2000 }
+    const coupon = { ...terms, id: 3 }
+    const snapshot = { ...terms, coupon_id: 3, recharge_minor: 10000, charge_minor: 8000 }
+    listRechargeCoupons.mockClear().mockResolvedValueOnce({ data: { items: [coupon], total: 1 } })
+      .mockResolvedValueOnce({ data: { items: [coupon], total: 1 } })
+    quoteRechargeCoupon.mockResolvedValueOnce({ data: { pay_amount: 80, amount: 100, coupon_snapshot: snapshot } })
+    createOrder.mockReset().mockResolvedValueOnce({
+      order_id: 81, payment_type: 'wxpay', amount: 100, pay_amount: 80, qr_code: 'sample-code',
+      out_trade_no: 'order-81', coupon_snapshot: snapshot,
+    })
+    const wrapper = shallowMount(PaymentView, {
+      global: { stubs: { MotionTransition: motionTransitionStub, AppLayout: { template: '<div><slot /></div>' } } },
+    })
+    await flushPromises()
+    wrapper.getComponent(AmountInput).vm.$emit('update:modelValue', 100)
+    wrapper.getComponent({ name: 'Select' }).vm.$emit('update:modelValue', 3)
+    await flushPromises()
+    await wrapper.get('[data-testid="checkout-summary"] button').trigger('click')
+    await flushPromises()
+
+    const panel = wrapper.getComponent({ name: 'PaymentStatusPanel' })
+    panel.vm.$emit('settled', 'cancelled')
+    panel.vm.$emit('done')
+    await flushPromises()
+
+    expect(listRechargeCoupons).toHaveBeenCalledTimes(2)
+    expect(listRechargeCoupons).toHaveBeenLastCalledWith({ page: 1, page_size: 50, available: true }, expect.any(AbortSignal))
+    expect(wrapper.getComponent({ name: 'Select' }).props('options')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ value: 3 }),
+    ]))
     wrapper.unmount()
   })
 })

@@ -19,6 +19,8 @@ type AdminReadSettings struct {
 	HideCcsImportButton         bool
 	HomeContent                 string
 	HomeFeaturedModels          string
+	ShowPublicHomeStats         bool
+	PublicHomeStatsMetrics      []string
 	LoginAgreementDocuments     []LoginAgreementDocument
 	LoginAgreementEnabled       bool
 	LoginAgreementMode          string
@@ -67,6 +69,8 @@ func ReadAdminSettings(settings map[string]string) *AdminReadSettings {
 	result.FooterLinks = settings[SettingKeyFooterLinks]
 	result.FooterText = settings[SettingKeyFooterText]
 	result.HomeFeaturedModels = settings[SettingKeyHomeFeaturedModels]
+	result.ShowPublicHomeStats = settings[SettingKeyShowPublicHomeStats] == "true"
+	result.PublicHomeStatsMetrics = readHomeStatsMetrics(settings)
 	result.TableDefaultPageSize, result.TablePageSizeOptions = ParseTablePreferences(
 		settings[SettingKeyTableDefaultPageSize],
 		settings[SettingKeyTablePageSizeOptions],

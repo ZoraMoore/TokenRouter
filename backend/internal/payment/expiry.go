@@ -17,6 +17,7 @@ type OrderReconciler interface {
 	ReconcilePendingPaymentOrders(context.Context) (int, error)
 	ReconcileProcessingOrders(context.Context) (int, error)
 	ReconcilePaidFulfillmentOrders(context.Context) (int, error)
+	ReconcileClosedCouponOrders(context.Context) (int, error)
 	ExpireTimedOutOrders(context.Context) (int, error)
 }
 
@@ -121,6 +122,7 @@ func (s *OrderExpiry) runOnce(ctx context.Context) {
 		{"processing", s.service.ReconcileProcessingOrders},
 		{"fulfillment", s.service.ReconcilePaidFulfillmentOrders},
 		{"expire", s.service.ExpireTimedOutOrders},
+		{"coupons", s.service.ReconcileClosedCouponOrders},
 	}
 	for _, step := range steps {
 		if ctx.Err() != nil {

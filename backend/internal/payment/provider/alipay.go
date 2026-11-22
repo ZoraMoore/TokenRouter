@@ -237,8 +237,9 @@ func (a *Alipay) QueryOrder(ctx context.Context, tradeNo string) (*payment.Query
 	if err != nil {
 		if isTradeNotExist(err) {
 			return &payment.QueryOrderResponse{
-				TradeNo: tradeNo,
-				Status:  payment.ProviderStatusPending,
+				TradeNo:         tradeNo,
+				Status:          payment.ProviderStatusPending,
+				ConfirmedUnpaid: true,
 			}, nil
 		}
 		return nil, fmt.Errorf("alipay TradeQuery: %w", err)

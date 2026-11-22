@@ -2236,6 +2236,49 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
+  it("publishes the public home stats switch from the features tab", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.get("#settings-tab-features").trigger("click");
+
+    const toggle = wrapper.get<HTMLInputElement>("#show-public-home-stats");
+    expect(toggle.isVisible()).toBe(true);
+    expect(toggle.element.checked).toBe(false);
+
+    await toggle.setValue(true);
+    await saveFromSaveBar(wrapper);
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ show_public_home_stats: true }),
+    );
+    expect(fetchPublicSettings).toHaveBeenCalledWith(true);
+
+    await toggle.setValue(false);
+    await saveFromSaveBar(wrapper);
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ show_public_home_stats: false }),
+    );
+  });
+
+  it("saves the selected home stats metrics and accepts an empty selection", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.get("#settings-tab-features").trigger("click");
+
+    const metrics = wrapper.findAll<HTMLInputElement>("#public-home-stats-metrics input");
+    expect(metrics.map(input => input.element.checked)).toEqual([true, true, true, true]);
+    await metrics[1].setValue(false);
+    await metrics[3].setValue(false);
+    await saveFromSaveBar(wrapper);
+    expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({
+      public_home_stats_metrics: ["today_tokens", "total_users"],
+    }));
+
+    await metrics[0].setValue(false);
+    await metrics[2].setValue(false);
+    await saveFromSaveBar(wrapper);
+    expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ public_home_stats_metrics: [] }));
+  });
+
   it("removes stale Gemini inpaint when saving creative model settings", async () => {
     getSettings.mockResolvedValue({
       ...baseSettingsResponse,

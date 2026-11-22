@@ -25,6 +25,8 @@ type AdminSettings struct {
 	HideCcsImportButton         bool                     `json:"hide_ccs_import_button"`
 	HomeContent                 string                   `json:"home_content"`
 	HomeFeaturedModels          string                   `json:"home_featured_models"`
+	ShowPublicHomeStats         bool                     `json:"show_public_home_stats"`
+	PublicHomeStatsMetrics      []string                 `json:"public_home_stats_metrics"`
 	LoginAgreementDocuments     []LoginAgreementDocument `json:"login_agreement_documents"`
 	LoginAgreementEnabled       bool                     `json:"login_agreement_enabled"`
 	LoginAgreementMode          string                   `json:"login_agreement_mode"`
@@ -92,5 +94,16 @@ func PrepareAdminSettings(settings *AdminSettings) (map[string]string, error) {
 	updates[SettingKeyFooterLinks] = settings.FooterLinks
 	updates[SettingKeyFooterText] = strings.TrimSpace(settings.FooterText)
 	updates[SettingKeyHomeFeaturedModels] = settings.HomeFeaturedModels
+	updates[SettingKeyShowPublicHomeStats] = strconv.FormatBool(settings.ShowPublicHomeStats)
+	metrics, err := normalizeHomeStatsMetrics(settings.PublicHomeStatsMetrics)
+	if err != nil {
+		return nil, err
+	}
+	settings.PublicHomeStatsMetrics = metrics
+	metricsJSON, err := json.Marshal(metrics)
+	if err != nil {
+		return nil, fmt.Errorf("marshal public home stats metrics: %w", err)
+	}
+	updates[SettingKeyPublicHomeStatsMetrics] = string(metricsJSON)
 	return updates, nil
 }

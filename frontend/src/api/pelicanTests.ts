@@ -22,7 +22,7 @@ export interface PelicanResult {
   tested_at: string
   latency_ms: number
   detail_code?: string
-  schedule_action?: 'disabled' | 'already_disabled' | 'account_changed'
+  schedule_action?: 'disabled' | 'already_disabled' | 'account_changed' | 'recheck_queued'
 }
 
 export interface PelicanResultDetail extends PelicanResult {

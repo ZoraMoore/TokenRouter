@@ -86,6 +86,8 @@ RequestLogger
 
 网站展示请求使用 `Accept-Language`，语言和回退规则见[用户侧国际化](user_localization.md)。`GET /api/v1/settings/legal/:id` 按语言返回协议，账户资料的 `preferred_locale` 用于保存用户选择。
 
+`GET /api/v1/marketplace/stats` 在 `show_public_home_stats` 开启时返回管理员选中的计数，可选字段为 `today_tokens`、`total_tokens` 和 `total_users`。勾选已接入模型数时，响应包含 `show_supported_models: true`，首页按公开模型广场各分组的模型条目求和。全部取消勾选时，`data` 是空对象。总开关缺失、关闭或读取失败时，服务端在查询统计前返回 HTTP 403，`reason` 为 `PUBLIC_HOME_STATS_DISABLED`。响应使用 `Cache-Control: no-store`。历史 Token 从用量日聚合表汇总。关闭用量预聚合时，历史 Token 按用量日志保留天数查询。
+
 <a id="site_pages"></a>
 ### 站点页面
 
@@ -107,7 +109,15 @@ Markdown 正文需要 JWT，并且菜单可见；管理员页面只对管理员�
 
 创建余额订单时可在 `POST /api/v1/payment/orders` 传入 `coupon_id` 和请求头 `Idempotency-Key`。服务端重验券的归属、币种、使用状态和金额。用券订单返回 `coupon_snapshot`。`minimum_minor`、`discount_minor`、`recharge_minor` 和 `charge_minor` 使用币种最小单位。
 
+取消余额订单时，支付渠道确认关单或易支付确认未付款后，订单和优惠券一起更新。取消成功后，可通过 `GET /api/v1/payment/coupons?available=true` 读取退回的券。支付状态无法确认时，取消接口返回 `PAYMENT_STATUS_UNAVAILABLE`。
+
 管理员生成类型为 `coupon` 的兑换码时，提供 `coupon_terms`，其中包含 `currency`、`minimum_minor` 和 `discount_minor`。用户在兑换码入口领取该券，使用状态通过充值券接口查询。
+
+### 兑换码时段限领
+
+管理员通过 `GET /api/v1/admin/redeem-codes/claim-limit` 读取限领设置，使用同路径的 `PUT` 保存。请求必须包含布尔值 `enabled`。`starts_at` 和 `ends_at` 使用 Unix 秒，开始时间需早于结束时间。关闭限领可保留两个时间，也可同时清空。响应还包含 `tracking_since`，表示成功兑换开始计入限领统计的时间。
+
+在启用的时段内，用户再次通过 `POST /api/v1/redeem` 主动领取余额券或优惠券时返回 HTTP 409，错误原因为 `REDEEM_CLAIM_LIMIT_REACHED`。
 
 ## 支付管理恢复
 
@@ -176,6 +186,36 @@ POST /api/v1/creative/runs/{id}/outputs/{index}/ack
 
 批量删除提供商使用 `POST /api/v1/admin/providers/batch-delete`，请求体是 `provider_ids`。服务端先去掉非正数和重复的 ID，再以最多 5 路并发执行删除。同一批里同时选了父提供商和它的影子时，只删除根提供商一次，级联的影响映射回每个提供商的结果里。响应按固定顺序返回 `success_ids`、`failed_ids` 和错误明细，某一项失败不会取消其他项。管理端"全选筛选结果"先按同一个筛选快照分页读取轻量的 ID；任何一页缺失或重复时，保留原来的选择；集合完整时才提交。
 
+### 提供商操作任务
+
+| 接口 | 输入和返回 |
+| --- | --- |
+| `POST /api/v1/admin/providers/relogin/preview` | 接受 `provider_ids`，返回 `items`。每项包含 `provider_id`、`name`、`eligible` 和可选的 `reason`。 |
+| `POST /api/v1/admin/providers/relogin` | 接受 `provider_ids`，逐项复核后返回 HTTP 202、`operations` 和 `skipped`。 |
+| `POST /api/v1/admin/providers/:id/traffic-push` | 接受 `group_ids`（1 至 100 个分组 ID），也接受单组客户端的 `group_id`。校验提供商与分组后返回 HTTP 202 及任务。任务在所选分组内从另一类账号迁入会话，EDU 和 Gmail 互为来源。账号和来源分组 ID 集合相同的在途推流复用原任务，其他在途操作返回 409。 |
+| `GET /api/v1/admin/providers/operations/:id` | 返回指定任务。 |
+| `GET /api/v1/admin/providers/operations` | 返回最近 100 项任务。可通过 `provider_id` 查看单个账号的记录。 |
+
+任务状态有 `queued`、`running`、`succeeded`、`failed`、`needs_action`。重登成功的 `result.provider_id` 是恢复后的账号 ID。推流结果中的 `migrated_sessions`、`successful_requests` 和 `peak_concurrency` 分别为迁移会话数、成功请求数和观察到的峰值并发。执行步骤见[提供商维护](../operations/provider_maintenance.md#provider_operations)。
+
+推流任务读取到目标账号的并发上限后，`result.target_concurrency` 返回该上限，`result.unconfirmed_sessions` 返回已迁入却尚未观察到首次成功请求的会话数。同一会话完成多次请求时，待确认会话数减少一次。排队等待执行的任务和早期历史记录可以省略这两个字段。
+
+### 智能运维定时任务
+
+以下管理员接口使用前缀 `/api/v1/admin/scheduled-tasks`。创建、更新和预览传入 `name`、`kind`、`scope`、`group_ids`、`provider_ids`、`model`、`cron_expression` 和 `enabled`。任务类型是 `relogin` 或 `iq`。范围是 `groups` 或 `providers`，重登也接受 `all`。测智需要指定文字模型。
+
+| 方法和路径 | 返回 |
+| --- | --- |
+| `GET /plans` | `items`、服务器 `timezone`，以及每个计划的上次状态和下次运行时间 |
+| `POST /plans`、`PUT /plans/:id` | 保存后的计划 |
+| `POST /preview` | 账号及其选择的分组、模型、跳过原因和账号总数 |
+| `POST /iq-rechecks` | 提交正整数 `pelican_result_id`，返回 HTTP 202 和该分组初测对应的 `run_id`。重复提交同一样本返回同一运行 |
+| `POST /plans/:id/run` | HTTP 202 与 `run_id`。同一计划在运行时返回在途的轮次 ID |
+| `GET /plans/:id/runs` | 计划最近 30 轮结果 |
+| `GET /runs/:id` | 账号总数、已完成数、运行中数、未结束数及每个账号的明细 |
+
+未结束数包括等待和运行中的账号。管理员明细包含状态、阶段、上游 HTTP 状态、可用的探针结果和糖果答案。`probe` 记录首发和续接的 HTTP 状态。处于 `candy` 阶段时，`http_status` 记录糖果题的 HTTP 状态。重登明细还包含操作编号及已核对的新账号 ID。[执行规则](../operations/provider_maintenance.md#maintenance_schedules)
+
 ### 连接测试
 
 管理员测试提供商连接使用 `POST /api/v1/admin/providers/:id/test`，响应是 SSE。请求体可以包含：
@@ -224,7 +264,7 @@ POST /api/v1/creative/runs/{id}/outputs/{index}/ack
 
 答题计划的 `question_kind` 可以使用内置题型 `pelican`、`candy`，也可以使用自定义题型 `custom_svg`、`custom_text`。内置题型可按计划覆盖题名与题面，糖果题还可覆盖参考答案。旧计划中留空的字段使用内置值。自定义题型需要 `question_name`（最多 96 字节）和 `question_prompt`（最多 8192 字节）。文本题另需 `expected_answer`（最多 1024 字节）。同一分组和模型可按题名、题型与推理强度分别建立计划。计划的 `reasoning_effort` 接受空字符串、`low`、`medium`、`high` 和 `xhigh`。
 
-`suspend_on_wrong_answer=true` 适用于自动选号的标准糖果题计划。此时 `provider_id` 为空，题面使用内置糖果题，参考答案使用默认值或 `21`。管理员历史包含当次账号和 `round_id`。作答结果按实际处置返回 `schedule_action`，取值为 `disabled`、`already_disabled` 或 `account_changed`。用户接口返回处置字段供展示。
+`suspend_on_wrong_answer=true` 适用于自动选号的标准糖果题计划。此时 `provider_id` 为空，题面使用内置糖果题，参考答案使用默认值或 `21`。管理员历史包含当次账号和 `round_id`。初测明确答错并创建复检后，`schedule_action` 为 `recheck_queued`，管理员从 `recheck_run_id` 读取运行详情。历史样本中的 `disabled`、`already_disabled` 和 `account_changed` 记录当时的处置。用户接口展示样本处置，运行编号仅对管理员可见。
 
 管理员通过 `GET` 和 `PUT /api/v1/admin/pelican-showcase/settings` 读取和保存展示设置。保存时须提交全部五项：`enabled`、`api_enabled`、`max_items`（1–100）、`auto_cleanup`、`retention_days`（1–90）。
 

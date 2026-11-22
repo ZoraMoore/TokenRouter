@@ -36,6 +36,8 @@ func provideAdminRouteMount(eAdminTLSFingerprintProfile *routeegress.TLSFingerpr
 	eAdminProviderCodexImport *routeprovider.CodexImportHandler,
 	eAdminProviderOAuthUsage *routeprovider.OAuthUsageHandler,
 	eAdminProviderManagement *routeprovider.ManagementHandler,
+	eAdminProviderOperations *routeprovider.OperationHandler,
+	eAdminMaintenance *routeprovider.MaintenanceHandler,
 	eAdminContentModeration *routemoderation.ContentModerationHandler,
 	eAdminAntigravityOAuth *routeprovider.AntigravityOAuthHandler,
 	eAdminErrorPassthrough *routegateway.ErrorPassthroughHandler,
@@ -115,6 +117,7 @@ func provideAdminRouteMount(eAdminTLSFingerprintProfile *routeegress.TLSFingerpr
 					ProviderCRS:         eAdminProviderCRS,
 					ProviderCodexImport: eAdminProviderCodexImport,
 					ProviderManagement:  eAdminProviderManagement,
+					ProviderOperations:  eAdminProviderOperations,
 					ProviderOAuthUsage:  eAdminProviderOAuthUsage,
 					ProviderOllama:      eAdminProviderOllama,
 					ProviderTests:       eAdminProviderTests,
@@ -203,6 +206,7 @@ func provideAdminRouteMount(eAdminTLSFingerprintProfile *routeegress.TLSFingerpr
 			// 智能运维
 			{
 				routerouting.RegisterPelicanAdminRoutes(admin, ePelican)
+				routeprovider.RegisterMaintenanceRoutes(admin, eAdminMaintenance)
 			}
 
 			// 系统管理

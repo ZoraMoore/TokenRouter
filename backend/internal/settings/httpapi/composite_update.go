@@ -39,6 +39,7 @@ import (
 	runtimesettings "github.com/TokenFlux/TokenRouter/internal/settings"
 	"github.com/TokenFlux/TokenRouter/internal/settings/composite"
 	settingsdto "github.com/TokenFlux/TokenRouter/internal/settings/httpapi/dto"
+	"github.com/TokenFlux/TokenRouter/internal/site"
 	sitedto "github.com/TokenFlux/TokenRouter/internal/site/httpapi/dto"
 	"github.com/TokenFlux/TokenRouter/internal/usage"
 )
@@ -219,6 +220,12 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 	}
 	auditReq := SettingsAuditRequest(req)
 	omitted := omittedSettingKeys(sentFields)
+	if req.ShowPublicHomeStats == nil {
+		omitted[site.SettingKeyShowPublicHomeStats] = struct{}{}
+	}
+	if req.PublicHomeStatsMetrics == nil {
+		omitted[site.SettingKeyPublicHomeStatsMetrics] = struct{}{}
+	}
 
 	previousSettings, err := h.settingService.GetAllSettings(c.Request.Context())
 	if err != nil {
@@ -1242,6 +1249,11 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 		footerLinksJSON = string(groupBytes)
 	}
 
+	publicHomeStatsMetrics := previousSettings.PublicHomeStatsMetrics
+	if req.PublicHomeStatsMetrics != nil {
+		publicHomeStatsMetrics = *req.PublicHomeStatsMetrics
+	}
+
 	// 首页展示模型列表验证：限制数量、去空白、去重，保持管理员配置的顺序
 	const maxHomeFeaturedModels = 12
 	const maxHomeFeaturedModelIDLen = 200
@@ -1495,6 +1507,8 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 		FooterLinks:                            footerLinksJSON,
 		FooterText:                             footerText,
 		HomeFeaturedModels:                     homeFeaturedModelsJSON,
+		ShowPublicHomeStats:                    boolValueOrDefault(req.ShowPublicHomeStats, previousSettings.ShowPublicHomeStats),
+		PublicHomeStatsMetrics:                 publicHomeStatsMetrics,
 		DefaultConcurrency:                     req.DefaultConcurrency,
 		DefaultBalance:                         req.DefaultBalance,
 		AffiliateEnabled:                       req.AffiliateEnabled,
@@ -1981,10 +1995,8 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 		return
 	}
 	for name, value := range siteFields {
-		if _, nonPointer := settingKeyByJSONName[name]; nonPointer {
-			if _, sent := sentFields[name]; !sent {
-				continue
-			}
+		if _, skip := omitted[name]; skip {
+			continue
 		}
 		fields[name] = value
 	}
@@ -2213,6 +2225,8 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 		FooterLinks:                                      sitedto.ParseFooterLinks(updatedSettings.FooterLinks),
 		FooterText:                                       updatedSettings.FooterText,
 		HomeFeaturedModels:                               sitedto.ParseHomeFeaturedModels(updatedSettings.HomeFeaturedModels),
+		ShowPublicHomeStats:                              updatedSettings.ShowPublicHomeStats,
+		PublicHomeStatsMetrics:                           updatedSettings.PublicHomeStatsMetrics,
 		DefaultConcurrency:                               updatedSettings.DefaultConcurrency,
 		DefaultBalance:                                   updatedSettings.DefaultBalance,
 		TeamEnabled:                                      updatedSettings.TeamEnabled,

@@ -45,6 +45,10 @@
 
     <!-- 只露出高频操作，低频操作与删除收进「更多」菜单，按钮统一用中性样式。 -->
     <div class="flex flex-wrap justify-end gap-2">
+      <button type="button" class="btn btn-secondary btn-sm" @click="$emit('relogin')">
+        <Icon name="login" size="sm" />
+        {{ t('admin.providers.operations.relogin') }}
+      </button>
       <button type="button" class="btn btn-secondary btn-sm" @click="$emit('toggle-schedulable', true)">
         <Icon name="play" size="sm" />
         {{ t('admin.providers.bulkActions.enableScheduling') }}
@@ -158,6 +162,7 @@ const emit = defineEmits<{
   clear: []
   'select-page': []
   'select-all-results': []
+  relogin: []
   'toggle-schedulable': [schedulable: boolean]
   'reset-status': []
   'refresh-token': []

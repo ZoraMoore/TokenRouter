@@ -102,6 +102,17 @@
             <Icon name="brain" size="md" class="flex-shrink-0" />
             <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed">{{ t('pelicanTests.title') }}</span>
           </router-link>
+          <router-link
+            to="/admin/scheduled-tasks"
+            class="sidebar-link mb-1"
+            :class="{ 'sidebar-link-active': isActive('/admin/scheduled-tasks'), 'sidebar-link-collapsed': sidebarCollapsed }"
+            :aria-label="t('scheduledTasks.title')"
+            :title="sidebarCollapsed ? t('scheduledTasks.title') : undefined"
+            @click="handleMenuItemClick('/admin/scheduled-tasks')"
+          >
+            <Icon name="clock" size="md" class="flex-shrink-0" />
+            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed">{{ t('scheduledTasks.title') }}</span>
+          </router-link>
         </div>
 
         <!-- 管理员的个人功能区 -->

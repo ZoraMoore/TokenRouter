@@ -198,6 +198,10 @@ Responses 历史 Chat 格式的转换、工具 ID 清理、平台 schema 选择�
 
 ## Responses 请求细节
 
+HTTP 工具结果按 `call_id` 与原调用配对。通过 `item_reference` 续接时，客户端工具结果仍需匹配对应的引用。历史中的 `tool_search_output` 若同时带有 `execution: "server"` 和显式的 `call_id: null`，表示由服务端完成的搜索。网关保留该条历史，在配对时跳过它，继续校验同一请求里的其他输出。
+
+缺少必需编号时，HTTP 400 会指出 `input` 数组中从零开始的位置及条目类型，网关日志记为 `input_index` 和 `item_type`。HTTP 使用 `previous_response_id` 续接时还需要通过响应归属检查，并选到支持该方式的 OpenAI API Key 提供商。
+
 <a id="responses_ws_runtime"></a>
 ### Responses 长连接与在线参数
 
@@ -257,6 +261,10 @@ Responses WebSocket 的 TTFT 只按实际的 token delta 计算；上游没有 d
 Responses HTTP/SSE 同样区分结构进度和可见输出：`response.created`、空的 reasoning item 等进度，可以提交当前的 attempt、解除首输出超时，并关闭输出前的 failover 窗口，但不记录 TTFT；非空的文本或工具 delta、完整的文本或工具参数、图片结果，以及终态里实际的 output，才开始计算 TTFT。只带 usage 的终态保持 TTFT 未观测。
 
 ### Codex 基础指令和 Responses Lite
+
+普通 Codex 转发按最终上游模型选择指令的位置。GPT-6.2、Sol 和 Astra 把 `input` 里的 `system` 原位转成 `developer`。请求缺少逐轮指令、允许补默认且未携带 `previous_response_id` 时，网关把内置基础指令放在第一条 `developer`，供全量历史重放时匹配相同的前缀。顶层 `instructions` 用于本轮指令，也可携带图片工具的桥接说明。
+
+Messages 转发到 GPT-6.2 Codex 时，纯文本或直接引用模型字段的强制模板可以生成第一条 `developer`。请求带客户端指导或续聊 ID，或者模板通过条件、子模板或其他动作取值时，渲染结果写入顶层 `instructions`。
 
 OAuth passthrough 的 Codex 请求可以省略 `instructions`，网关按请求的模型补上内置的 Codex 基础指令；明确提供的非空字符串保持不变，空白或非字符串的值在本地拒绝。这条规则同时适用于 Responses SSE 和旧版 Compact 请求。
 

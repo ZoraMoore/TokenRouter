@@ -63,6 +63,7 @@ type (
 		FooterLinks                 string // JSON array of footer link groups
 		FooterText                  string // Extra footer text (ICP number etc.)
 		HomeFeaturedModels          string // JSON array of model IDs featured on the home page
+		ShowPublicHomeStats         bool
 
 		LinuxDoOAuthEnabled      bool
 		DingTalkOAuthEnabled     bool

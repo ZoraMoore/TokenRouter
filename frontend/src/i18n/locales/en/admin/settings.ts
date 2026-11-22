@@ -169,6 +169,12 @@ export default {
           'If the window and bucket size would produce more than 720 bars, the backend widens the bucket size automatically.'
       },
       features: {
+        homeStats: {
+          title: 'Home Page Statistics',
+          enabled: 'Show Public Home Page Statistics',
+          enabledHint: 'Show the selected statistics to visitors on the default home page.',
+          metrics: 'Statistics to show'
+        },
         team: {
           title: 'Team Features',
           description: 'Control whether team pages are available to users and administrators.',

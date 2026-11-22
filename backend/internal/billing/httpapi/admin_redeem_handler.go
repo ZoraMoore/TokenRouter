@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,12 @@ type RedeemAdministrator interface {
 	DeleteRedeemCode(ctx context.Context, id int64) error
 	BatchDeleteRedeemCodes(ctx context.Context, ids []int64) (int64, error)
 	ExpireRedeemCode(ctx context.Context, id int64) (*billing.RedeemCode, error)
+}
+
+type redeemClaimLimitRequest struct {
+	Enabled  *bool  `json:"enabled"`
+	StartsAt *int64 `json:"starts_at"`
+	EndsAt   *int64 `json:"ends_at"`
 }
 
 // AdminRedeemHandler handles admin redeem code management.
@@ -109,6 +116,34 @@ func ResolveRedeemCodeExpiresAt(expiresAt *int64, expiresInDays *int) (*time.Tim
 		return nil, apperror.BadRequest("REDEEM_CODE_EXPIRES_AT_INVALID", "expires_at must be in the future")
 	}
 	return &expires, nil
+}
+
+// GetClaimLimit 返回兑换码管理页的限领设置。
+func (h *AdminRedeemHandler) GetClaimLimit(c *gin.Context) {
+	settings, err := h.redeemService.GetClaimLimit(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, settings)
+}
+
+// SetClaimLimit 保存余额和优惠券共用的限领时段。
+func (h *AdminRedeemHandler) SetClaimLimit(c *gin.Context) {
+	var req redeemClaimLimitRequest
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+	if err := response.BindJSONStrict(c, &req); err != nil || req.Enabled == nil {
+		response.ErrorFrom(c, billing.ErrRedeemClaimWindowInvalid)
+		return
+	}
+	settings, err := h.redeemService.SetClaimLimit(c.Request.Context(), billing.RedeemClaimLimit{
+		Enabled: *req.Enabled, StartsAt: req.StartsAt, EndsAt: req.EndsAt,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, settings)
 }
 
 // List handles listing all redeem codes with pagination
