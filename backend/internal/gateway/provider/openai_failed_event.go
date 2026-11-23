@@ -3,6 +3,7 @@ package provider
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -35,11 +36,13 @@ func BuildOpenAIResponseFailedSSE(responseID, model string, source []byte, fallb
 		errorBody["type"] = errorType
 	}
 	response := map[string]any{
-		"id":     responseID,
-		"object": "response",
-		"model":  strings.TrimSpace(model),
-		"status": "failed",
-		"error":  errorBody,
+		"id":         responseID,
+		"object":     "response",
+		"output":     []any{},
+		"created_at": time.Now().Unix(),
+		"model":      strings.TrimSpace(model),
+		"status":     "failed",
+		"error":      errorBody,
 	}
 	body, _ := json.Marshal(map[string]any{"type": "response.failed", "response": response})
 	return "data: " + string(body) + "\n\n"

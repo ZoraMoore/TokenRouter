@@ -128,6 +128,8 @@ type mixedHTTPTransport struct {
 
 type mixedHTTPNoSearch struct{}
 
+type responsesWireTransport func(*http.Request, int64) (*http.Response, error)
+
 // newEmptyGenericSelectionFixture 使用默认预算构造执行入口，提供商和窗口来源留空。
 func newEmptyGenericSelectionFixture() *selection.Generic {
 	return selection.NewGeneric(selection.GenericDependencies{}, selection.DefaultOptions())
@@ -2719,5 +2721,53 @@ func TestMixedGroupTextHTTP(t *testing.T) {
 				require.Equal(t, map[int64]string{1: "anthropic", 2: "openai", 3: "gemini"}[expected], logs.LastLog.Platform)
 			})
 		}
+	}
+}
+
+func (f responsesWireTransport) Do(req *http.Request, _ string, id int64, _ int) (*http.Response, error) {
+	return f(req, id)
+}
+
+func (f responsesWireTransport) DoWithTLS(req *http.Request, _ string, id int64, _ int, _ *tlsfingerprint.Profile) (*http.Response, error) {
+	return f(req, id)
+}
+
+// TestResponsesDisconnectReplay 检查首段前可以换号，工具调用已经交付后只返回一个失败终态。
+func TestResponsesDisconnectReplay(t *testing.T) {
+	for _, tc := range []struct {
+		name, partial string
+		calls         int
+		terminal      string
+	}{
+		{"before_output", "", 2, "response.completed"},
+		{"after_tool", `data: {"type":"response.output_item.done","output_index":0,"item":{"id":"fc_job","type":"function_call","call_id":"call_job","name":"job","arguments":"{}"}}` + "\n\n", 1, "response.failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var ids []int64
+			upstream := responsesWireTransport(func(_ *http.Request, id int64) (*http.Response, error) {
+				ids = append(ids, id)
+				body := `data: {"type":"response.created","response":{"id":"resp_partial"}}` + "\n\n" + tc.partial + "data: [DONE]\n\n"
+				if len(ids) > 1 {
+					body = `data: {"type":"response.output_text.delta","delta":"ok"}` + "\n\n" + `data: {"type":"response.completed","response":{"id":"resp_ok","status":"completed","usage":{"input_tokens":1,"output_tokens":1},"output":[]}}` + "\n\n"
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+			})
+			h := newOpenAIResponsesFailoverTestHandler(t, upstream)
+			c, w := newOpenAIResponsesFailoverTestContext(t, context.Background())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"input":"test","model":"gpt-5.4","stream":true}`))
+			c.Request.Header.Set("Content-Type", "application/json")
+			h.Responses(c)
+			require.Len(t, ids, tc.calls, w.Body.String())
+			require.Equal(t, 1, strings.Count(w.Body.String(), `"type":"`+tc.terminal+`"`))
+			if tc.calls == 1 {
+				require.Equal(t, 1, strings.Count(w.Body.String(), `"call_id":"call_job"`))
+				require.NotContains(t, w.Body.String(), `"type":"response.completed"`)
+				require.Equal(t, "written", c.GetString("responses_failure_write"))
+			} else {
+				require.NotEqual(t, ids[0], ids[1])
+				require.NotContains(t, w.Body.String(), "resp_partial")
+				require.NotContains(t, w.Body.String(), `"type":"response.failed"`)
+			}
+		})
 	}
 }

@@ -61,11 +61,12 @@ func (p *OpenAIResponseOutput) PassthroughOptions(ctx context.Context, c *gin.Co
 		EmptyCompleted: func(id string) error {
 			return NewOpenAIResponsesEmptyCompletedFailoverError(c, ExecutionErrorProvider(provider), id)
 		},
-		BuildOpenAIResponseFailedSSE:        gatewayprovider.BuildOpenAIResponseFailedSSE,
-		WrapOpenAIUpstreamWarningIfCyber:    gatewayprovider.WrapOpenAIUpstreamWarningIfCyber,
-		TruncateString:                      logredact.TruncateUTF8,
-		OpenAIStreamDataStartsTTFT:          gatewayprovider.OpenAIStreamDataStartsTTFT,
-		OpenAIStreamEventIsTerminalWithType: openai.OpenAIStreamEventIsTerminalWithType,
+		BuildOpenAIResponseFailedSSE:     gatewayprovider.BuildOpenAIResponseFailedSSE,
+		WrapOpenAIUpstreamWarningIfCyber: gatewayprovider.WrapOpenAIUpstreamWarningIfCyber,
+		TruncateString:                   logredact.TruncateUTF8,
+		OpenAIStreamDataStartsTTFT:       gatewayprovider.OpenAIStreamDataStartsTTFT,
+		MarkStreamFailure:                func(code string, writeErr error) { markResponseStreamWrite(c, code, writeErr) },
+		ObserveTerminal:                  func(kind string) { c.Set(string(telemetry.ResponsesTerminal), kind) },
 	}
 	if provider != nil {
 		stream.ProviderID = provider.Record.ID
@@ -121,7 +122,7 @@ func (p *OpenAIResponseOutput) PassthroughOptions(ctx context.Context, c *gin.Co
 			gatewaytelemetry.SuccessMissingUsage(ctx, id, resp.StatusCode, usage, event, disconnected)
 		},
 		MissingTerminal: func(id string) {
-			logging.FromContext(ctx).With(zap.String("component", "service.openai_gateway"), zap.Int64("provider_id", provider.Record.ID), zap.String("upstream_request_id", id)).Info("OpenAI passthrough 上游流在未收到 [DONE] 时结束，疑似断流")
+			logging.FromContext(ctx).With(zap.String("component", "service.openai_gateway"), zap.Int64("provider_id", provider.Record.ID), zap.String("upstream_request_id", id)).Info("OpenAI passthrough 上游流缺少 Responses 终止事件")
 		},
 		PassthroughFailoverWithModel: func(id string, body []byte, message, model string) error {
 			return p.NewStreamFailureWithModel(c, provider, true, id, body, message, model)
