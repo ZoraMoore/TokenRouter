@@ -200,6 +200,10 @@ Responses 历史 Chat 格式的转换、工具 ID 清理、平台 schema 选择�
 
 HTTP 工具结果按 `call_id` 与原调用配对。通过 `item_reference` 续接时，客户端工具结果仍需匹配对应的引用。历史中的 `tool_search_output` 若同时带有 `execution: "server"` 和显式的 `call_id: null`，表示由服务端完成的搜索。网关保留该条历史，在配对时跳过它，继续校验同一请求里的其他输出。
 
+普通工具结果逐项查找调用或引用。同一批次中其他工具的编号无法匹配本项。已通过归属校验的 `previous_response_id` 可提供上轮调用，返回项本身仍需携带编号。
+
+Codex Desktop 可以发送 `namespace="agent"`、带名称和文本输出、缺省 `call_id` 的独立上下文。名称与请求里的工具冲突时按普通工具结果校验。使用 Codex 协议的 OpenAI OAuth 路线可接收该格式。管理员确认其他 OpenAI Responses 提供商也支持该格式后，可在提供商 `extra` 中设置布尔值 `openai_responses_agent_context`。关闭该能力、压缩请求或使用其他协议时，网关把已知的终端、浏览器、IDE 和页面上下文按原位置编码为带来源和外部数据标记的用户文本。遇到目标无法表达的扩展名称时，在组内继续选号，耗尽后返回条目索引。无编号的独立上下文不需要与工具配对。
+
 缺少必需编号时，HTTP 400 会指出 `input` 数组中从零开始的位置及条目类型，网关日志记为 `input_index` 和 `item_type`。HTTP 使用 `previous_response_id` 续接时还需要通过响应归属检查，并选到支持该方式的 OpenAI API Key 提供商。
 
 <a id="responses_ws_runtime"></a>

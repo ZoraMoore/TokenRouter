@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -52,6 +54,7 @@ import (
 	opscore "github.com/TokenFlux/TokenRouter/internal/ops"
 	opsprovider "github.com/TokenFlux/TokenRouter/internal/ops/provider"
 	"github.com/TokenFlux/TokenRouter/internal/protocol"
+	protocolopenai "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
 	providercore "github.com/TokenFlux/TokenRouter/internal/provider"
 	"github.com/TokenFlux/TokenRouter/internal/routing"
 	"github.com/TokenFlux/TokenRouter/internal/routing/capability"
@@ -2166,7 +2169,7 @@ func (u *openAIResponsesFailoverCancelUpstream) calls() []int64 {
 	return append([]int64(nil), u.providerIDs...)
 }
 
-func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream httpclient.UpstreamTransport) *gatewayHTTPEndpointsFixture {
+func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream httpclient.UpstreamTransport, testProviders ...gatewayprovider.ExecutionProvider) *gatewayHTTPEndpointsFixture {
 	t.Helper()
 	proxyID := int64(11)
 	providers := []gatewayprovider.ExecutionProvider{
@@ -2206,6 +2209,9 @@ func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream httpclient.Ups
 				Credentials: map[string]any{"access_token": "token-2"},
 			},
 		},
+	}
+	if len(testProviders) > 0 {
+		providers = testProviders
 	}
 	providerRepo := openAIResponsesFailoverProviderRepo{providers: providers}
 	cfg := &config.Config{}
@@ -2730,6 +2736,118 @@ func (f responsesWireTransport) Do(req *http.Request, _ string, id int64, _ int)
 
 func (f responsesWireTransport) DoWithTLS(req *http.Request, _ string, id int64, _ int, _ *tlsfingerprint.Profile) (*http.Response, error) {
 	return f(req, id)
+}
+
+// TestResponsesDesktopContextForwarding 核对经过真实入口和选路之后送到假上游的两轮报文。
+func TestResponsesDesktopContextForwarding(t *testing.T) {
+	for _, tc := range []struct {
+		name, contextName, encoding string
+		native, secondRoute         bool
+	}{
+		{"native", "browser_tabs", "identity", true, false},
+		{"codex_oauth", "terminal_info", "identity", true, false},
+		{"standard", "terminal_info", "gzip", false, false},
+		{"next_compatible", "another_context", "zstd", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := gatewayprovider.ExecutionProvider{Record: providercore.Record{
+				ID: 11, LoadLocation: time.LoadLocation,
+				Name: "test-relay", Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeAPIKey, Status: billing.StatusActive,
+				Schedulable: true, Credentials: map[string]any{"api_key": "test", "base_url": "https://provider.example.test"},
+				Extra: map[string]any{"openai_passthrough": true, providercore.ExtraKeyResponsesAgentContext: tc.native && !tc.secondRoute},
+			}}
+			if tc.name == "codex_oauth" {
+				provider.Record.Type = capability.ProviderTypeOAuth
+				provider.Record.Credentials = map[string]any{"access_token": "test"}
+				provider.Record.Extra = nil
+			}
+			providers := []gatewayprovider.ExecutionProvider{provider}
+			expectedID := int64(11)
+			if tc.secondRoute {
+				second := provider
+				second.Record.ID = 12
+				second.Record.Priority = 2
+				second.Record.Extra = map[string]any{"openai_passthrough": true, providercore.ExtraKeyResponsesAgentContext: true}
+				providers = append(providers, second)
+				expectedID = 12
+			}
+			var hits int
+			upstream := responsesWireTransport(func(req *http.Request, id int64) (*http.Response, error) {
+				hits++
+				require.Equal(t, expectedID, id)
+				wire, err := io.ReadAll(req.Body)
+				require.NoError(t, err)
+				input := gjson.GetBytes(wire, "input").Array()
+				require.Len(t, input, 16+2*(hits-1))
+				if tc.native {
+					require.Equal(t, "agent", input[15].Get("namespace").Str)
+					require.Equal(t, tc.contextName, input[15].Get("name").Str)
+					require.False(t, input[15].Get("call_id").Exists())
+				} else {
+					require.Equal(t, "user", input[15].Get("role").Str)
+					require.Contains(t, input[15].Get("content.0.text").Str, "&lt;note&gt;")
+				}
+				stream := `data: {"type":"response.output_item.added","output_index":0,"item":{"id":"fc_item42","type":"function_call","call_id":"call_read","name":"read","arguments":""}}` + "\n\n" +
+					`data: {"type":"response.output_item.done","output_index":0,"item":{"id":"fc_item42","type":"function_call","name":"read","call_id":"call_read","arguments":"{}"}}` + "\n\n" +
+					`data: {"type":"response.completed","response":{"id":"resp_tool","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}` + "\n\n"
+				if hits == 2 {
+					upstreamID := "call_read"
+					if tc.name == "codex_oauth" {
+						upstreamID = "fc_read"
+					}
+					require.Equal(t, upstreamID, input[16].Get("call_id").Str)
+					require.Equal(t, upstreamID, input[17].Get("call_id").Str)
+					stream = `data: {"type":"response.output_text.delta","delta":"ok"}` + "\n\n" + `data: {"type":"response.completed","response":{"id":"resp_answer","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}` + "\n\n"
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}, nil
+			})
+			h := newOpenAIResponsesFailoverTestHandler(t, upstream, providers...)
+			input := make([]any, 0, 18)
+			for range 15 {
+				input = append(input, map[string]string{"role": "user", "content": "hi"})
+			}
+			input = append(input, map[string]string{"type": "function_call_output", "id": "fco_ui", "namespace": "agent", "name": tc.contextName, "output": "<note>"})
+			for turn := range 2 {
+				body, err := json.Marshal(map[string]any{"input": input, "model": "gpt-5.4", "stream": true})
+				require.NoError(t, err)
+				encoding := tc.encoding
+				if encoding == "zstd" && turn > 0 {
+					encoding = "identity"
+				}
+				switch encoding {
+				case "gzip":
+					var buf bytes.Buffer
+					z := gzip.NewWriter(&buf)
+					_, err = z.Write(body)
+					require.NoError(t, err)
+					require.NoError(t, z.Close())
+					body = buf.Bytes()
+				case "zstd":
+					// 第一轮使用固定的 Zstandard 线格式，第二轮把实际收到的工具编号写入请求。
+					body, err = os.ReadFile("testdata/desktop-context-turn.zst")
+					require.NoError(t, err)
+				}
+				c, w := newOpenAIResponsesFailoverTestContext(t, context.Background())
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+				c.Request.Header.Set("Content-Type", "application/json")
+				c.Request.Header.Set("Content-Encoding", encoding)
+				h.Responses(c)
+				require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+				require.Equal(t, 1, strings.Count(w.Body.String(), `"type":"response.completed"`))
+				if turn == 0 {
+					var call json.RawMessage
+					protocolopenai.ForEachSSEDataPayload(w.Body.String(), func(event []byte) {
+						if gjson.GetBytes(event, "type").Str == "response.output_item.done" {
+							call = json.RawMessage(gjson.GetBytes(event, "item").Raw)
+						}
+					})
+					require.Equal(t, "call_read", gjson.GetBytes(call, "call_id").Str)
+					input = append(input, call, map[string]string{"type": "function_call_output", "call_id": gjson.GetBytes(call, "call_id").Str, "output": "ok"})
+				}
+			}
+			require.Equal(t, 2, hits)
+		})
+	}
 }
 
 // TestResponsesDisconnectReplay 检查首段前可以换号，工具调用已经交付后只返回一个失败终态。

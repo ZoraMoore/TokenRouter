@@ -453,3 +453,9 @@ func TestCodexGPT62DefaultDeveloperPrefix(t *testing.T) {
 		require.Len(t, body["input"], 1)
 	})
 }
+
+func TestDesktopContextNativeReplayKeepsIdentity(t *testing.T) {
+	item := map[string]any{"type": "function_call_output", "id": "fco_ui", "namespace": "agent", "name": "browser_tabs", "output": "data"}
+	got := FilterCodexInputWithOptions([]any{item}, CodexInputFilterOptions{})
+	require.Equal(t, []any{item}, got)
+}

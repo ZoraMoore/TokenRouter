@@ -8,7 +8,7 @@
 // 文件分组：
 //   - types.go、responses_stream_event_wire.go、compatibility_fields.go：协议字段与 JSON 编解码。
 //   - compaction_trigger.go、encrypted_replay.go、input_helpers.go、previous_response_id.go：输入项、压缩和历史重放。
-//   - tool_continuation.go、tool_schema.go：工具续接与参数结构清理。
+//   - agent_context.go、tool_continuation.go、tool_schema.go：工具续接与参数结构清理。
 //   - response_forward_wire.go、response_lifecycle.go、response_terminal.go：响应读取、生命周期事件和终态处理。
 //   - sse_data.go、sse_documents.go、chat_stream_compat.go：SSE 数据行、黏连报文和 Chat 流兼容处理。
 //   - ws_events.go、ws_payload.go、ws_warmup.go：WebSocket 事件、请求载荷和预热响应。
