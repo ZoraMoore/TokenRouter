@@ -417,12 +417,12 @@ func OpenAIWSRawPayloadHasToolCallOutput(payload []byte) bool {
 		return false
 	}
 	if input.IsArray() {
-		for _, item := range input.Array() {
-			if wire.RequiresToolPairing(item) {
-				return true
-			}
-		}
-		return false
+		found := false
+		input.ForEach(func(_, item gjson.Result) bool {
+			found = wire.RequiresToolPairing(item)
+			return !found
+		})
+		return found
 	}
 	if input.Type == gjson.JSON {
 		return wire.RequiresToolPairing(input)

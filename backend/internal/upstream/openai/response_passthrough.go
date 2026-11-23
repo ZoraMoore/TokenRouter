@@ -351,9 +351,9 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 			if repaired := streamDoneItems.Observe(dataBytes); repaired != nil {
 				dataBytes = repaired
 				data = string(repaired)
+				trimmedData = strings.TrimSpace(data)
 				line = "data: " + data
 			}
-			trimmedData = strings.TrimSpace(data)
 			if normalizedData, normalized := bridge.NormalizeResponsesStreamingTerminalOutput(dataBytes, responseAccumulator, streamDoneItems, streamImageOutputs); normalized {
 				dataBytes = normalizedData
 				data = string(normalizedData)
