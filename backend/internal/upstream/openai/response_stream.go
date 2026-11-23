@@ -353,6 +353,11 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 	needModelReplace := originalModel != mappedModel
 	responseAccumulator := bridge.NewBufferedResponseAccumulator()
 	streamDoneItems := bridge.NewResponsesStreamOutputItems()
+	defer func() {
+		if count := streamDoneItems.ConflictCount(); count > 0 {
+			options.Logf("Responses tool identity conflict: provider=%d count=%d", options.ProviderID, count)
+		}
+	}()
 	streamImageOutputs := make([]json.RawMessage, 0, 1)
 	streamSeenImages := make(map[string]struct{})
 	searchCounter := 0
@@ -703,7 +708,11 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 			if imageOutput, ok := wire.ExtractImageGenerationOutputFromSSEData(dataBytes, streamSeenImages); ok {
 				streamImageOutputs = append(streamImageOutputs, imageOutput)
 			}
-			streamDoneItems.Observe(dataBytes)
+			if repaired := streamDoneItems.Observe(dataBytes); repaired != nil {
+				dataBytes = repaired
+				data = string(repaired)
+				line = "data: " + data
+			}
 			if wire.ResponsesStreamEventMayContributeToOutput(eventType) {
 				var streamEvent wire.ResponsesStreamEvent
 				if err := json.Unmarshal(dataBytes, &streamEvent); err == nil {

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 
 	"github.com/TokenFlux/TokenRouter/internal/infra/httpclient"
 	"github.com/TokenFlux/TokenRouter/internal/protocol/bridge"
@@ -156,6 +155,11 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 	needModelReplace := strings.TrimSpace(originalModel) != "" && strings.TrimSpace(mappedModel) != "" && strings.TrimSpace(originalModel) != strings.TrimSpace(mappedModel)
 	responseAccumulator := bridge.NewBufferedResponseAccumulator()
 	streamDoneItems := bridge.NewResponsesStreamOutputItems()
+	defer func() {
+		if count := streamDoneItems.ConflictCount(); count > 0 {
+			options.Logf("Responses tool identity conflict: provider=%d count=%d", options.ProviderID, count)
+		}
+	}()
 	streamImageOutputs := make([]json.RawMessage, 0, 1)
 	streamSeenImages := make(map[string]struct{})
 	resultWithUsage := func() *StreamingResult {
@@ -344,7 +348,12 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 			if imageOutput, ok := wire.ExtractImageGenerationOutputFromSSEData(dataBytes, streamSeenImages); ok {
 				streamImageOutputs = append(streamImageOutputs, imageOutput)
 			}
-			streamDoneItems.Observe(dataBytes)
+			if repaired := streamDoneItems.Observe(dataBytes); repaired != nil {
+				dataBytes = repaired
+				data = string(repaired)
+				line = "data: " + data
+			}
+			trimmedData = strings.TrimSpace(data)
 			if normalizedData, normalized := bridge.NormalizeResponsesStreamingTerminalOutput(dataBytes, responseAccumulator, streamDoneItems, streamImageOutputs); normalized {
 				dataBytes = normalizedData
 				data = string(normalizedData)
@@ -598,13 +607,7 @@ func ReadPassthroughSSEAsJSON(resp *http.Response, sink upstream.OutputSink, opt
 			*usage = parsedUsage
 		}
 
-		if len(gjson.GetBytes(finalResponse, "output").Array()) == 0 {
-			if outputJSON, reconstructed := bridge.ReconstructResponseOutputFromSSE(bodyText); reconstructed {
-				if patched, err := sjson.SetRawBytes(finalResponse, "output", outputJSON); err == nil {
-					finalResponse = patched
-				}
-			}
-		}
+		finalResponse = bridge.RepairBufferedResponsesOutput(finalResponse, bodyText)
 		finalResponse = options.NonStream.SupplementCompaction(finalResponse, bodyText)
 		body = finalResponse
 		if originalModel != "" && mappedModel != "" && originalModel != mappedModel {

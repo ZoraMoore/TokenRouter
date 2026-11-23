@@ -3592,3 +3592,42 @@ func TestResponsesStreamRequiresProtocolTerminal(t *testing.T) {
 		}
 	}
 }
+
+func TestResponsesDoneAndCompletedRetainDistinctToolNumbers(t *testing.T) {
+	const callEvents = "data: " + `{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","name":"read","call_id":"call_1","arguments":""}}` + "\n\n" +
+		"data: " + `{"type":"response.output_item.done","output_index":0,"item":{"id":"fc_1","type":"function_call","name":"read","arguments":"{}"}}` + "\n\n" +
+		"data: " + `{"type":"response.output_item.done","output_index":1,"item":{"id":"fc_2","type":"function_call","name":"read","arguments":"{}"}}` + "\n\n" +
+		"data: " + `{"type":"response.completed","response":{"id":"resp_roundtrip","status":"completed","output":[{"id":"fc_2","type":"function_call","call_id":"call_2","name":"read","extra":42}]}}` + "\n\n"
+	for _, mode := range []string{"sync", "async", "passthrough"} {
+		t.Run(mode, func(t *testing.T) {
+			var body string
+			var err error
+			r := io.NopCloser(strings.NewReader(callEvents))
+			if mode == "passthrough" {
+				_, w, _, readErr := runPassthroughFlushTest(t, r, -1)
+				body, err = w.Body.String(), readErr
+			} else {
+				cfg := OpenAIResponseOptions{}
+				if mode == "async" {
+					cfg.StreamDataIntervalTimeout = 30
+				}
+				w := newOpenAIResponseFlushRecorder()
+				_, err = runOpenAIResponseFlushTest(w, r, cfg)
+				body, _ = w.snapshot()
+			}
+			require.NoError(t, err)
+			done := map[string]string{}
+			protocolopenai.ForEachSSEDataPayload(body, func(event []byte) {
+				if gjson.GetBytes(event, "type").Str == "response.output_item.done" {
+					done[gjson.GetBytes(event, "item.id").Str] = gjson.GetBytes(event, "item.call_id").Str
+				}
+			})
+			require.Equal(t, map[string]string{"fc_1": "call_1", "fc_2": ""}, done)
+			_, terminal, ok := protocolopenai.ExtractOpenAISSETerminalEvent(body)
+			require.True(t, ok)
+			require.Equal(t, "call_1", gjson.GetBytes(terminal, "response.output.0.call_id").Str)
+			require.Equal(t, "call_2", gjson.GetBytes(terminal, "response.output.1.call_id").Str)
+			require.Equal(t, "42", gjson.GetBytes(terminal, "response.output.1.extra").Raw)
+		})
+	}
+}

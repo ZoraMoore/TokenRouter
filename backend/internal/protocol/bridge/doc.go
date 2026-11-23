@@ -12,6 +12,6 @@
 //   - responses_client_tools.go、responses_namespace.go、responses_tool_adaptation.go：适配客户端工具和命名空间。
 //   - responses_input_namespace.go、responses_tool_search_discoveries.go、client_tools_json.go：解析工具输入与发现结果。
 //   - compat*.go：处理兼容请求的续接、回放和输出观察。
-//   - response_format.go、response_forward_wire.go：整理响应格式和流终态输出。
+//   - response_format.go、response_forward_wire.go、response_output_items.go：整理响应格式和流终态输出。
 //   - runtime.go、request_options.go、wire_types.go：定义调用方注入项、转换选项和协议类型。
 package bridge

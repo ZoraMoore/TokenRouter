@@ -104,6 +104,8 @@ HTTP Responses 的标准流和透传流兼容第三方的生命周期事件：
 - 同一个 Response ID 重复的成功终态只下发一次，后面的用量仍参与解析。
 - 未知字段、模型回填和工具内容保留；真正缺少终态的断流不会被补成成功。
 
+当已收到的工具 added 和 done 属于同一响应、条目 ID、类型和输出位置时，网关可以在发送 done 前补回已知调用编号。重建部分终态时按稳定身份补入缺项，保留终态自带的有效编号和扩展字段。遇到相互矛盾的编号或位置时记录冲突，客户端已经收到的帧无法事后修改。
+
 这些兼容处理只作用于 HTTP Responses，WebSocket 和其他客户端协议的事件处理不变。
 
 OpenAI 兼容非流式响应的 usage，按 `usage`、`response.usage`、`data.usage`、`data.response.usage` 的顺序解析；前两种原生路径，优先于 Cline 等兼容上游使用的 `data` envelope。同一层的 hosted image usage 从对应的路径读取，不同 envelope 的 token 和图片用量不会混在一起。

@@ -113,3 +113,71 @@ func TestNormalizeResponsesStreamingTerminalOutputLeavesCompleteOutputAlone(t *t
 	require.False(t, changed)
 	require.Equal(t, string(raw), string(normalized))
 }
+
+func TestResponsesTerminalMergeKeepsToolIdentity(t *testing.T) {
+	done := NewResponsesStreamOutputItems()
+	done.Observe([]byte(`{"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","id":"fc_a","name":"lookup","arguments":"{}"}}`))
+	done.Observe([]byte(`{"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_x","encrypted_content":"opaque"}}`))
+	got, changed := NormalizeResponsesStreamingTerminalOutput([]byte(`{"type":"response.completed","response":{"output":[{"type":"function_call","id":"fc_a","call_id":"call_a","vendor":42}]}}`), nil, done, nil)
+	require.True(t, changed)
+	require.Equal(t, "call_a", gjson.GetBytes(got, "response.output.1.call_id").String())
+	require.Equal(t, "42", gjson.GetBytes(got, "response.output.1.vendor").Raw)
+	require.Equal(t, "opaque", gjson.GetBytes(got, "response.output.0.encrypted_content").String())
+}
+
+func TestResponseOutputDoneInheritsOnlyMatchingAddedCallID(t *testing.T) {
+	for _, tt := range []struct{ name, added, done, want string }{
+		{"same", "fc_a", "fc_a", "call_a"},
+		{"different", "fc_a", "fc_b", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			items := NewResponsesStreamOutputItems()
+			items.Observe([]byte(`{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"` + tt.added + `","name":"read","call_id":"call_a"}}`))
+			items.Observe([]byte(`{"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"` + tt.done + `","name":"read"}}`))
+			body, ok := items.BuildOutput()
+			require.True(t, ok)
+			require.Equal(t, tt.want, gjson.GetBytes(body, "0.call_id").String())
+		})
+	}
+}
+
+func TestResponseOutputMergePreservesParallelAndConflictingIDs(t *testing.T) {
+	items := NewResponsesStreamOutputItems()
+	items.Observe([]byte(`{"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","id":"fc_b","call_id":"call_b","name":"read"}}`))
+	items.Observe([]byte(`{"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_a","call_id":"call_a","name":"read"}}`))
+	body, changed := NormalizeResponsesStreamingTerminalOutput([]byte(`{"type":"response.completed","response":{"output":[{"type":"function_call","id":"fc_a","call_id":"final_a","name":"read"},{"type":"function_call","id":"fc_b","name":"read"}]}}`), nil, items, nil)
+	require.True(t, changed)
+	require.Equal(t, "final_a", gjson.GetBytes(body, "response.output.0.call_id").String())
+	require.Equal(t, "call_b", gjson.GetBytes(body, "response.output.1.call_id").String())
+}
+
+func TestBufferedToolNumbersStayWithStableItems(t *testing.T) {
+	const frames = "data: " + `{"type":"response.output_item.added","output_index":1,"item":{"id":"fc_a","type":"function_call","call_id":"call_a"}}` + "\n\n" +
+		"data: " + `{"type":"response.output_item.done","output_index":1,"item":{"id":"fc_a","type":"function_call"}}` + "\n\n" +
+		"data: " + `{"type":"response.output_item.done","output_index":0,"item":{"id":"fc_b","type":"function_call","call_id":"call_b"}}` + "\n\n"
+	body := RepairBufferedResponsesOutput([]byte(`{"id":"resp_test","output":[{"type":"function_call","id":"fc_b","call_id":"final_b","vendor":1}]}`), frames)
+	require.Equal(t, "final_b", gjson.GetBytes(body, "output.0.call_id").Str)
+	require.Equal(t, "call_a", gjson.GetBytes(body, "output.1.call_id").Str)
+	empty := RepairBufferedResponsesOutput([]byte(`{"id":"resp_test","output":[]}`), frames)
+	require.Equal(t, "fc_b", gjson.GetBytes(empty, "output.0.id").Str)
+	require.Equal(t, "call_a", gjson.GetBytes(empty, "output.1.call_id").Str)
+}
+
+func TestResponsesConflictingOrUnknownIndexNeverSuppliesCallID(t *testing.T) {
+	items := NewResponsesStreamOutputItems()
+	items.Observe([]byte(`{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"a","call_id":"call_a","name":"same"}}`))
+	items.Observe([]byte(`{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"b","call_id":"call_b","name":"same"}}`))
+	require.Nil(t, items.Observe([]byte(`{"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"a","name":"same"}}`)))
+	require.Nil(t, items.Observe([]byte(`{"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"b","name":"same"}}`)))
+	require.Positive(t, items.ConflictCount())
+	items.Observe([]byte(`{"type":"response.output_item.added","item":{"type":"function_call","id":"c","call_id":"call_c"}}`))
+	require.Nil(t, items.Observe([]byte(`{"type":"response.output_item.done","item":{"type":"function_call","id":"c"}}`)))
+	items.Observe([]byte(`{"type":"response.output_item.done","item":{"type":"function_call","id":"c"}}`))
+	raw, ok := items.BuildOutput()
+	require.True(t, ok)
+	parsed := gjson.ParseBytes(raw).Array()
+	require.Len(t, parsed, 3)
+	for _, item := range parsed {
+		require.False(t, item.Get("call_id").Exists())
+	}
+}
