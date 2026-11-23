@@ -71,3 +71,31 @@ func TestDesktopContextRejectsAmbiguousIdentity(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, w.Code)
 	}
 }
+
+// TestRejectedDelegationLogsShape 核对拒绝原因里只有报文结构和信封校验结果。
+func TestRejectedDelegationLogsShape(t *testing.T) {
+	const envelope = "<codex_delegation><source_thread_id>thread-1</source_thread_id><input>private prompt</input></codex_delegation>"
+	for _, tc := range []struct {
+		name, output, shape string
+		valid               bool
+	}{
+		{"valid text", `"` + envelope + `"`, "string", true},
+		{"invalid text", `"private prompt"`, "string", false},
+		{"text list", `[{"type":"input_text","text":"` + envelope + `"}]`, "array", true},
+		{"mixed list", `[{"type":"input_image","image_url":"private prompt"}]`, "array", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			log, entries := newObservedLogger(t)
+			body := []byte(`{"input":[{"type":"function_call_output","namespace":"codex_app","name":"send_message_to_thread","output":` + tc.output + `},{"type":"computer_call"}]}`)
+			require.False(t, ValidateOpenAIFunctionCallOutput(c, body, log))
+			entry := entries.FilterMessage("openai.request_validation_failed").All()
+			require.Len(t, entry, 1)
+			require.Equal(t, tc.shape, entry[0].ContextMap()["bootstrap_output_shape"])
+			require.Equal(t, tc.valid, entry[0].ContextMap()["bootstrap_envelope_valid"])
+			require.NotContains(t, entry[0].ContextMap(), "output")
+		})
+	}
+}

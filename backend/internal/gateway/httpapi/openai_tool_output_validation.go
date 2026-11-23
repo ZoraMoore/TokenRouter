@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -52,6 +53,7 @@ func ValidateOpenAIFunctionCallOutput(c *gin.Context, body []byte, reqLog *zap.L
 				details = append(details, zap.String("item_"+key, v.Str))
 			}
 		}
+		details = append(details, codexBootstrapLogFields(item)...)
 		reqLog.With(details...).Warn("openai.request_validation_failed",
 			zap.String("reason", "function_call_output_missing_call_id"),
 			zap.Int64("input_index", validation.MissingCallIDInputIndex),
@@ -71,4 +73,33 @@ func ValidateOpenAIFunctionCallOutput(c *gin.Context, body []byte, reqLog *zap.L
 	)
 	DefaultOpenAIErrorOutput().WriteError(c, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("input[%d] tool output requires matching tool call context or item references", validation.UnmatchedInputIndex))
 	return false
+}
+
+// codexBootstrapLogFields 记录跨任务消息和自动化输入的结构，任务正文只参与信封校验。
+func codexBootstrapLogFields(item gjson.Result) []zap.Field {
+	namespace := item.Get("namespace").Str
+	name := item.Get("name").Str
+	if !requeststate.IsCodexDelegationTool(namespace, name) && !requeststate.IsCodexAutomationTool(namespace, name) {
+		return nil
+	}
+	output := item.Get("output")
+	shape := strings.ToLower(output.Type.String())
+	switch {
+	case !output.Exists():
+		shape = "missing"
+	case output.IsArray():
+		shape = "array"
+	case output.IsObject():
+		shape = "object"
+	case output.Type == gjson.True || output.Type == gjson.False:
+		shape = "boolean"
+	}
+	var candidate map[string]any
+	decoder := json.NewDecoder(strings.NewReader(item.Raw))
+	decoder.UseNumber()
+	valid := false
+	if decoder.Decode(&candidate) == nil {
+		_, valid = requeststate.CodexBootstrapEnvelope(candidate)
+	}
+	return []zap.Field{zap.String("bootstrap_output_shape", shape), zap.Bool("bootstrap_envelope_valid", valid)}
 }

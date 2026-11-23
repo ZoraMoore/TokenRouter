@@ -223,6 +223,71 @@ func TestNormalizeCodexDelegationBootstrapWithHistoricalContext(t *testing.T) {
 	require.Equal(t, "item-1", gjson.GetBytes(got, "input.3.id").String())
 }
 
+// TestNormalizeCodexDelegationDesktopHistory 核对同一轮历史里各类记录的身份和原始内容。
+func TestNormalizeCodexDelegationDesktopHistory(t *testing.T) {
+	const prefix = `{"type":"function_call_output","namespace":"codex_app","name":"send_message_to_thread",`
+	for name, history := range map[string]string{
+		"terminal":        `{"type":"function_call_output","namespace":"agent","name":"terminal_info","output":"cwd"}`,
+		"hosted search":   `{"type":"tool_search_call","call_id":null,"execution":"server","arguments":{}}`,
+		"hosted result":   `{"type":"tool_search_output","call_id":null,"execution":"server","tools":[]}`,
+		"web search":      `{"type":"web_search_call","id":"ws_1","status":"completed"}`,
+		"numbered result": prefix + `"call_id":"call_send","output":"` + delegationEnvelope + `"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			body := []byte(`{"input":[` + history + `,` + prefix + `"output":"` + delegationEnvelope + `"}]}`)
+			got, changed := NormalizeCodexDelegationBootstrap(body)
+			require.True(t, changed)
+			require.JSONEq(t, history, gjson.GetBytes(got, "input.0").Raw)
+			require.Equal(t, delegationEnvelope, gjson.GetBytes(got, "input.1.content.0.text").Str)
+		})
+	}
+}
+
+// TestNormalizeCodexBootstrapMixedInputs 核对自动化首轮里的桌面上下文和跨任务消息。
+func TestNormalizeCodexBootstrapMixedInputs(t *testing.T) {
+	const heartbeat = "<heartbeat><automation_id>wiki</automation_id></heartbeat>"
+	body := []byte(`{"input":[
+		{"type":"function_call_output","namespace":"agent","name":"browser_tabs","output":"tab"},
+		{"type":"function_call_output","namespace":"codex_tui","name":"create_thread","output":"` + delegationEnvelope + `"},
+		{"type":"function_call_output","namespace":"codex_app","name":"automation_update","output":[{"type":"input_text","text":"` + heartbeat + `"}]}]}`)
+	normalized, changed := NormalizeCodexAutomationBootstrap(body)
+	require.True(t, changed)
+	normalized, changed = NormalizeCodexDelegationBootstrap(normalized)
+	require.True(t, changed)
+	require.Equal(t, "agent", gjson.GetBytes(normalized, "input.0.namespace").Str)
+	require.Equal(t, delegationEnvelope, gjson.GetBytes(normalized, "input.1.content.0.text").Str)
+	require.Equal(t, heartbeat, gjson.GetBytes(normalized, "input.2.content.0.text").Str)
+}
+
+// TestNormalizeCodexDelegationContentItems 保留完整委派文本，含图片、未知字段或角色冲突的条目留给入站校验。
+func TestNormalizeCodexDelegationContentItems(t *testing.T) {
+	const text = `{"type":"input_text","text":"` + delegationEnvelope + `"}`
+	for _, tc := range []struct {
+		name, output, fields, want string
+	}{
+		{"single", `[` + text + `]`, "", delegationEnvelope},
+		{"multiple", `[{"type":"input_text","text":"<codex_delegation>"},{"type":"input_text","text":"<source_thread_id>t</source_thread_id><input>ok</input></codex_delegation>"}]`, "", "<codex_delegation>\n<source_thread_id>t</source_thread_id><input>ok</input></codex_delegation>"},
+		{"image", `[` + text + `,{"type":"input_image","image_url":"redacted"}]`, "", ""},
+		{"extra field", `[{"type":"input_text","text":"` + delegationEnvelope + `","other":true}]`, "", ""},
+		{"empty", `[]`, "", ""},
+		{"plain text", `[{"type":"input_text","text":"done"}]`, "", ""},
+		{"explicit null id", `[` + text + `]`, `,"call_id":null`, ""},
+		{"conflicting role", `"` + delegationEnvelope + `"`, `,"role":"system"`, ""},
+		{"conflicting content", `"` + delegationEnvelope + `"`, `,"content":[]`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := []byte(`{"input":[{"type":"function_call_output","namespace":"codex_app","name":"send_message_to_thread","output":` + tc.output + tc.fields + `}]}`)
+			got, changed := NormalizeCodexDelegationBootstrap(body)
+			require.Equal(t, tc.want != "", changed)
+			if !changed {
+				require.Equal(t, body, got)
+				return
+			}
+			require.Equal(t, tc.want, gjson.GetBytes(got, "input.0.content.0.text").Str)
+		})
+	}
+}
+
 func TestNormalizeCodexDelegationBootstrapPreviousResponseID(t *testing.T) {
 	tests := []struct {
 		name    string

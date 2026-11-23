@@ -2850,6 +2850,64 @@ func TestResponsesDesktopContextForwarding(t *testing.T) {
 	}
 }
 
+// TestResponsesDelegationReplay 核对第八项委派经过 HTTP 入口后的位置、正文和相邻工具调用的编号。
+func TestResponsesDelegationReplay(t *testing.T) {
+	const envelope = "<codex_delegation><source_thread_id>thread-A</source_thread_id><input>inspect &lt;main&gt;</input></codex_delegation>"
+	const history = `{"type":"message","role":"user","content":"hi"},
+		{"type":"function_call_output","namespace":"agent","name":"terminal_info","output":"cwd"},
+		{"type":"function_call","call_id":"call_read","name":"read","arguments":"{}"},
+		{"type":"function_call_output","call_id":"call_read","output":"ok"},
+		{"type":"tool_search_call","execution":"server","call_id":null,"arguments":{}},
+		{"type":"tool_search_output","execution":"server","call_id":null,"tools":[]},
+		{"type":"web_search_call","id":"ws_1","status":"completed"}`
+	for _, tc := range []struct {
+		name, output string
+		status       int
+	}{
+		{"text", `"` + envelope + `"`, http.StatusOK},
+		{"text items", `[{"type":"input_text","text":"` + envelope + `"}]`, http.StatusOK},
+		{"ordinary tool result", `"done"`, http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			upstream := responsesWireTransport(func(req *http.Request, _ int64) (*http.Response, error) {
+				calls++
+				wire, err := io.ReadAll(req.Body)
+				require.NoError(t, err)
+				items := gjson.GetBytes(wire, "input").Array()
+				require.Len(t, items, 8)
+				require.Equal(t, "call_read", items[2].Get("call_id").Str)
+				require.Equal(t, "call_read", items[3].Get("call_id").Str)
+				require.Equal(t, "user", items[7].Get("role").Str)
+				require.Equal(t, envelope, items[7].Get("content.0.text").Str)
+				stream := `data: {"type":"response.completed","response":{"id":"resp_delegation","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}` + "\n\n"
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}, nil
+			})
+			provider := gatewayprovider.ExecutionProvider{Record: providercore.Record{
+				ID: 11, Name: "relay", Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeAPIKey,
+				Status: billing.StatusActive, Schedulable: true, LoadLocation: time.LoadLocation,
+				Credentials: map[string]any{"api_key": "test", "base_url": "https://provider.example.test"},
+				Extra:       map[string]any{"openai_passthrough": true, providercore.ExtraKeyResponsesAgentContext: true},
+			}}
+			h := newOpenAIResponsesFailoverTestHandler(t, upstream, provider)
+			body := `{"model":"gpt-5.4","stream":true,"input":[` + history + `,
+				{"type":"function_call_output","id":"fco_dispatch","namespace":"codex_app","name":"send_message_to_thread","output":` + tc.output + `}]}`
+			c, w := newOpenAIResponsesFailoverTestContext(t, context.Background())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			h.Responses(c)
+			require.Equal(t, tc.status, w.Code, w.Body.String())
+			if tc.status == http.StatusBadRequest {
+				require.Zero(t, calls)
+				require.Contains(t, w.Body.String(), "input[7] (function_call_output) requires call_id")
+				return
+			}
+			require.Equal(t, 1, calls)
+			require.Contains(t, w.Body.String(), "response.completed")
+		})
+	}
+}
+
 // TestResponsesDisconnectReplay 检查首段前可以换号，工具调用已经交付后只返回一个失败终态。
 func TestResponsesDisconnectReplay(t *testing.T) {
 	for _, tc := range []struct {

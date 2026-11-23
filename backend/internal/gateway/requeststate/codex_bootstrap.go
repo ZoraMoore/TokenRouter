@@ -8,20 +8,22 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/TokenFlux/TokenRouter/internal/protocol/openai"
 )
 
+// NormalizeCodexDelegationBootstrap 把来自其他 Codex 任务的委派信封放回用户输入。
 func NormalizeCodexDelegationBootstrap(body []byte) ([]byte, bool) {
-	// 已有任务通过 send_message_to_thread 唤醒时会携带 previous_response_id；
-	// 完整历史回放还会带有已配对的调用项。delegation 仍是客户端注入的用户输入，
-	// 不属于这些历史调用的结果，因此允许它与可明确配对的历史上下文共存。
-	return NormalizeCodexCallOutputBootstrap(body, IsCodexDelegationCandidate, true)
+	return normalizeCodexCallOutputBootstrap(body, true)
 }
 
+// NormalizeCodexAutomationBootstrap 读取自动化首轮的启动提示或心跳。
 func NormalizeCodexAutomationBootstrap(body []byte) ([]byte, bool) {
-	return NormalizeCodexCallOutputBootstrap(body, IsCodexAutomationCandidate, false)
+	return normalizeCodexCallOutputBootstrap(body, false)
 }
 
-func NormalizeCodexCallOutputBootstrap(body []byte, isCandidate func(map[string]any) bool, allowHistoricalContext bool) ([]byte, bool) {
+// normalizeCodexCallOutputBootstrap 原位替换信封，历史有歧义时交回入口校验。
+func normalizeCodexCallOutputBootstrap(body []byte, delegation bool) ([]byte, bool) {
 	if !HasUniqueJSONMembers(body) {
 		return body, false
 	}
@@ -33,7 +35,7 @@ func NormalizeCodexCallOutputBootstrap(body []byte, isCandidate func(map[string]
 	}
 	if previousResponseID, exists := request["previous_response_id"]; exists {
 		value, ok := previousResponseID.(string)
-		if !ok || (!allowHistoricalContext && strings.TrimSpace(value) != "") {
+		if !ok || (!delegation && strings.TrimSpace(value) != "") {
 			return body, false
 		}
 	}
@@ -42,44 +44,35 @@ func NormalizeCodexCallOutputBootstrap(body []byte, isCandidate func(map[string]
 		return body, false
 	}
 
-	// 按 *_call 和 *_call_output 的报文形状识别内置调用。
-	// delegation 在 ID 配对后可与历史锚点共存，automation 使用首次引导位置。
-	for _, raw := range input {
+	changed := false
+	for i, raw := range input {
 		item, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
 		typ := StringField(item, "type")
-		if isCandidate(item) {
-			callIDValue, exists := item["call_id"]
-			callID, isString := callIDValue.(string)
-			if exists && (!isString || strings.TrimSpace(callID) != "") {
+		if typ == "item_reference" {
+			if !delegation || strings.TrimSpace(StringField(item, "id")) == "" {
 				return body, false
 			}
 			continue
 		}
-		if typ == "item_reference" {
-			if allowHistoricalContext && strings.TrimSpace(StringField(item, "id")) != "" {
-				continue
-			}
-			return body, false
-		}
-		if strings.HasSuffix(typ, "_call") || IsResponsesCallOutputType(typ) {
-			if allowHistoricalContext && strings.TrimSpace(StringField(item, "call_id")) != "" {
-				continue
-			}
-			return body, false
-		}
-	}
-
-	changed := false
-	for i, raw := range input {
-		item, ok := raw.(map[string]any)
-		if !ok || !isCandidate(item) {
+		if !strings.HasSuffix(typ, "_call") && !IsResponsesCallOutputType(typ) {
 			continue
 		}
-		output, ok := item["output"].(string)
-		if !ok {
+		// 带编号的结果归属历史调用，同名委派仍按自己的位置处理。
+		if delegation && strings.TrimSpace(StringField(item, "call_id")) != "" {
+			continue
+		}
+		if isCodexIndependentHistory(item, typ) {
+			continue
+		}
+		output, valid := CodexBootstrapEnvelope(item)
+		if !valid || !codexBootstrapHasEmptyID(item) {
+			return body, false
+		}
+		// 同轮收到两种信封时，各自的处理阶段读取对应的条目。
+		if delegation != IsCodexDelegationTool(StringField(item, "namespace"), StringField(item, "name")) {
 			continue
 		}
 		input[i] = map[string]any{
@@ -100,6 +93,31 @@ func NormalizeCodexCallOutputBootstrap(body []byte, isCandidate func(map[string]
 		return body, false
 	}
 	return normalized, true
+}
+
+// codexBootstrapHasEmptyID 区分可省略的编号与显式的 null 或错误类型。
+func codexBootstrapHasEmptyID(item map[string]any) bool {
+	id, exists := item["call_id"]
+	text, ok := id.(string)
+	return !exists || (ok && strings.TrimSpace(text) == "")
+}
+
+// isCodexIndependentHistory 识别由桌面端注入或由上游独立执行的历史记录。
+func isCodexIndependentHistory(item map[string]any, typ string) bool {
+	switch typ {
+	case "function_call_output":
+		return openai.IsDesktopContextMap(item)
+	case "tool_search_output":
+		return openai.IsHostedToolSearchOutputMap(item)
+	case "tool_search_call":
+		id, exists := item["call_id"]
+		return item["execution"] == "server" && exists && id == nil
+	case "web_search_call", "file_search_call", "code_interpreter_call", "image_generation_call":
+		_, hasCallID := item["call_id"]
+		return !hasCallID
+	default:
+		return false
+	}
 }
 
 func HasUniqueJSONMembers(body []byte) bool {
@@ -160,23 +178,51 @@ func IsResponsesCallOutputType(typ string) bool {
 	return strings.HasSuffix(typ, "_call_output") || typ == "tool_search_output"
 }
 
-func IsCodexDelegationCandidate(item map[string]any) bool {
-	if StringField(item, "type") != "function_call_output" ||
-		!IsCodexDelegationTool(StringField(item, "namespace"), StringField(item, "name")) {
-		return false
+// CodexBootstrapEnvelope 校验桌面端的工具名、输出字段和信封，返回可以转发的文本。
+func CodexBootstrapEnvelope(item map[string]any) (string, bool) {
+	namespace := StringField(item, "namespace")
+	name := StringField(item, "name")
+	_, hasRole := item["role"]
+	_, hasContent := item["content"]
+	if item["type"] != "function_call_output" || hasRole || hasContent {
+		return "", false
 	}
-	output, ok := item["output"].(string)
-	return ok && ValidCodexDelegationEnvelope(output)
+	delegation := IsCodexDelegationTool(namespace, name)
+	if !delegation && !IsCodexAutomationTool(namespace, name) {
+		return "", false
+	}
+	output, ok := codexBootstrapText(item["output"])
+	if !ok {
+		return "", false
+	}
+	if delegation {
+		return output, ValidCodexDelegationEnvelope(output)
+	}
+	return output, ValidCodexAutomationBootstrap(output) || ValidCodexAutomationHeartbeat(output)
 }
 
-func IsCodexAutomationCandidate(item map[string]any) bool {
-	if StringField(item, "type") != "function_call_output" ||
-		StringField(item, "namespace") != "codex_app" ||
-		StringField(item, "name") != "automation_update" {
-		return false
+// codexBootstrapText 按 Codex 的换行约定拼接文本块。其他内容留在原条目中。
+func codexBootstrapText(output any) (string, bool) {
+	switch value := output.(type) {
+	case string:
+		return value, true
+	case []any:
+		parts := make([]string, 0, len(value))
+		for _, raw := range value {
+			part, ok := raw.(map[string]any)
+			if !ok || len(part) != 2 || part["type"] != "input_text" {
+				return "", false
+			}
+			text, ok := part["text"].(string)
+			if !ok {
+				return "", false
+			}
+			parts = append(parts, text)
+		}
+		return strings.Join(parts, "\n"), len(parts) > 0
+	default:
+		return "", false
 	}
-	output, ok := item["output"].(string)
-	return ok && (ValidCodexAutomationBootstrap(output) || ValidCodexAutomationHeartbeat(output))
 }
 
 func StringField(item map[string]any, key string) string {
@@ -187,6 +233,11 @@ func StringField(item map[string]any, key string) string {
 func IsCodexDelegationTool(namespace, name string) bool {
 	return (namespace == "codex_app" || namespace == "codex_tui") &&
 		(name == "create_thread" || name == "send_message_to_thread")
+}
+
+// IsCodexAutomationTool 匹配桌面端投递自动化提示使用的工具名。
+func IsCodexAutomationTool(namespace, name string) bool {
+	return namespace == "codex_app" && name == "automation_update"
 }
 
 func ValidCodexAutomationBootstrap(value string) bool {
