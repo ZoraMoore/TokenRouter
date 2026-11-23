@@ -126,7 +126,7 @@ func IsHostedToolSearchOutputMap(item map[string]any) bool {
 // RequiresToolPairing 标记需要客户端提供配对编号的工具结果。
 func RequiresToolPairing(item gjson.Result) bool {
 	kind := item.Get("type").Str
-	if !IsCodexToolCallOutputItemType(kind) || IsDesktopContext(item) {
+	if !IsCodexToolCallOutputItemType(kind) || IsStandaloneClientItem(item) {
 		return false
 	}
 	id := item.Get("call_id")

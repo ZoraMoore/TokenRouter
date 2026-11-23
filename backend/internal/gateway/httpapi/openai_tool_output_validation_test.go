@@ -72,30 +72,30 @@ func TestDesktopContextRejectsAmbiguousIdentity(t *testing.T) {
 	}
 }
 
-// TestRejectedDelegationLogsShape 核对拒绝原因里只有报文结构和信封校验结果。
-func TestRejectedDelegationLogsShape(t *testing.T) {
-	const envelope = "<codex_delegation><source_thread_id>thread-1</source_thread_id><input>private prompt</input></codex_delegation>"
+// TestCodexClientItemsSkipPairing 核对未经改写的 Codex 客户端独立条目通过配对校验。
+// 同一请求里缺编号的普通工具结果返回 400，含重复 JSON 键的请求返回 400。
+func TestCodexClientItemsSkipPairing(t *testing.T) {
+	const delegation = `{"type":"function_call_output","namespace":"codex_app","name":"send_message_to_thread","output":"private prompt"}`
+	const automation = `{"type":"function_call_output","namespace":"codex_app","name":"automation_update","call_id":null,"output":[{"type":"input_text","text":"x"}]}`
 	for _, tc := range []struct {
-		name, output, shape string
-		valid               bool
+		name, body string
+		accept     bool
 	}{
-		{"valid text", `"` + envelope + `"`, "string", true},
-		{"invalid text", `"private prompt"`, "string", false},
-		{"text list", `[{"type":"input_text","text":"` + envelope + `"}]`, "array", true},
-		{"mixed list", `[{"type":"input_image","image_url":"private prompt"}]`, "array", false},
+		{"delegation alone", `{"input":[` + delegation + `]}`, true},
+		{"automation after history", `{"input":[{"type":"function_call","call_id":"a"},{"type":"function_call_output","call_id":"a","output":"ok"},` + automation + `]}`, true},
+		{"unknown codex tool", `{"input":[{"type":"custom_tool_call_output","namespace":"codex_future","name":"x","output":"y"}]}`, true},
+		{"with real missing call id", `{"input":[` + delegation + `,{"type":"function_call_output","output":"x"}]}`, false},
+		{"duplicate members", `{"input":[{"type":"function_call_output","namespace":"codex_app","name":"create_thread","output":"a","output":"b"}]}`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
 			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 			log, entries := newObservedLogger(t)
-			body := []byte(`{"input":[{"type":"function_call_output","namespace":"codex_app","name":"send_message_to_thread","output":` + tc.output + `},{"type":"computer_call"}]}`)
-			require.False(t, ValidateOpenAIFunctionCallOutput(c, body, log))
-			entry := entries.FilterMessage("openai.request_validation_failed").All()
-			require.Len(t, entry, 1)
-			require.Equal(t, tc.shape, entry[0].ContextMap()["bootstrap_output_shape"])
-			require.Equal(t, tc.valid, entry[0].ContextMap()["bootstrap_envelope_valid"])
-			require.NotContains(t, entry[0].ContextMap(), "output")
+			require.Equal(t, tc.accept, ValidateOpenAIFunctionCallOutput(c, []byte(tc.body), log), w.Body.String())
+			for _, entry := range entries.All() {
+				require.NotContains(t, entry.ContextMap(), "output")
+			}
 		})
 	}
 }

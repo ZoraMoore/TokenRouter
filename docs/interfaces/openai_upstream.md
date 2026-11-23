@@ -206,9 +206,11 @@ HTTP 工具结果按 `call_id` 与原调用配对。通过 `item_reference` 续�
 
 Codex Desktop 可以发送 `namespace="agent"`、带名称和文本输出、缺省 `call_id` 的独立上下文。名称与请求里的工具冲突时按普通工具结果校验。使用 Codex 协议的 OpenAI OAuth 路线可接收该格式。管理员确认其他 OpenAI Responses 提供商也支持该格式后，可在提供商 `extra` 中设置布尔值 `openai_responses_agent_context`。关闭该能力、压缩请求或使用其他协议时，网关把已知的终端、浏览器、IDE 和页面上下文按原位置编码为带来源和外部数据标记的用户文本。遇到目标无法表达的扩展名称时，在组内继续选号，耗尽后返回条目索引。无编号的独立上下文不需要与工具配对。
 
-Codex Desktop 通过 `create_thread` 或 `send_message_to_thread` 投递跨任务消息时，可以省略 `call_id`。HTTP 入口识别 `codex_app` 和 `codex_tui` 下的这两个名称，并校验 `<codex_delegation>` 中的来源任务和正文。输出可以是字符串或全由 `input_text` 组成的数组。网关按换行拼接文本块，将完整信封放在原位置作为用户消息转发。委派可以和桌面上下文、上游托管的搜索、带编号的工具调用及其结果一起回放。自动化启动提示和心跳也接受这两种文本格式，使用首轮请求的校验规则。
+Codex 客户端还会借用工具输出的格式注入独立条目，例如 `codex_app`、`codex_tui` 下的 `send_message_to_thread`、`create_thread` 跨任务消息和 `automation_update` 自动化提示。网关按结构识别这类条目：类型为 `function_call_output`、`custom_tool_call_output` 或 `mcp_tool_call_output`，带 `agent` 以外的 `namespace` 和 `name`，`call_id` 缺省、为空白字符串或 `null`，没有 `role` 和 `content`，带 `output`。工具结果靠 `call_id` 与调用配对，符合这些条件的条目跳过配对，新的工具名也按同一规则识别。
 
-上述桌面条目因缺少编号被拒绝时，日志里的 `bootstrap_output_shape` 记录输出的 JSON 类型，`bootstrap_envelope_valid` 表示该条目是否符合对应的信封格式。两项均可用于排查，日志省略任务正文。
+HTTP 入口在配对校验前把每个独立条目原位改写为用户消息。每个条目单独处理，同一请求里的带编号工具调用和结果、`item_reference`、`previous_response_id`、桌面上下文和托管搜索保持原样。符合 Codex 信封格式的跨任务消息（`<codex_delegation>`）、自动化启动提示和心跳原样转发。其余条目写进 `<codex_client_item namespace=".." name="..">` 来源标记，正文按外部数据转义，包括信封格式不符、工具名未知和含图片或文件的条目。`output` 为字符串时原样使用，为文本块数组时按换行拼接，含 `input_image` 或 `input_file` 时保留各内容块，其他 JSON 值按原始 JSON 当作文本。请求含重复 JSON 键时条目保持原样，入口按歧义请求返回 400。WebSocket 续链、孤儿结果清理和协议桥接用同一个判定识别这类条目，跳过配对。
+
+每改写一个条目，网关记录一条 `openai.codex_client_item_normalized` 日志，字段为 `input_index`、`item_namespace`、`item_name`、`item_known` 和 `envelope_valid`，正文不写入日志。
 
 缺少必需编号时，HTTP 400 会指出 `input` 数组中从零开始的位置及条目类型，网关日志记为 `input_index` 和 `item_type`。HTTP 使用 `previous_response_id` 续接时还需要通过响应归属检查，并选到支持该方式的 OpenAI API Key 提供商。
 

@@ -2850,9 +2850,12 @@ func TestResponsesDesktopContextForwarding(t *testing.T) {
 	}
 }
 
-// TestResponsesDelegationReplay 核对第八项委派经过 HTTP 入口后的位置、正文和相邻工具调用的编号。
+// TestResponsesDelegationReplay 核对第八项 Codex 客户端条目经过 HTTP 入口后的位置、正文和相邻工具调用的编号。
+// 用例包括跨任务消息、工具历史后的自动化心跳、正文含未转义特殊字符的消息和未知工具名。
 func TestResponsesDelegationReplay(t *testing.T) {
 	const envelope = "<codex_delegation><source_thread_id>thread-A</source_thread_id><input>inspect &lt;main&gt;</input></codex_delegation>"
+	const heartbeat = "<heartbeat><automation_id>daily-review</automation_id></heartbeat>"
+	const rawDelegation = "<codex_delegation><source_thread_id>thread-A</source_thread_id><input>run a && b</input></codex_delegation>"
 	const history = `{"type":"message","role":"user","content":"hi"},
 		{"type":"function_call_output","namespace":"agent","name":"terminal_info","output":"cwd"},
 		{"type":"function_call","call_id":"call_read","name":"read","arguments":"{}"},
@@ -2860,13 +2863,20 @@ func TestResponsesDelegationReplay(t *testing.T) {
 		{"type":"tool_search_call","execution":"server","call_id":null,"arguments":{}},
 		{"type":"tool_search_output","execution":"server","call_id":null,"tools":[]},
 		{"type":"web_search_call","id":"ws_1","status":"completed"}`
+	rawJSON, err := json.Marshal(rawDelegation)
+	require.NoError(t, err)
 	for _, tc := range []struct {
-		name, output string
-		status       int
+		name, tool, output string
+		status             int
+		// text 是期望原样转发的正文。text 为空时期望来源标记，wrapped 是标记内的正文。
+		text, wrapped string
 	}{
-		{"text", `"` + envelope + `"`, http.StatusOK},
-		{"text items", `[{"type":"input_text","text":"` + envelope + `"}]`, http.StatusOK},
-		{"ordinary tool result", `"done"`, http.StatusBadRequest},
+		{name: "text", tool: "send_message_to_thread", output: `"` + envelope + `"`, status: http.StatusOK, text: envelope},
+		{name: "text items", tool: "send_message_to_thread", output: `[{"type":"input_text","text":"` + envelope + `"}]`, status: http.StatusOK, text: envelope},
+		{name: "automation heartbeat after history", tool: "automation_update", output: `"` + heartbeat + `"`, status: http.StatusOK, text: heartbeat},
+		{name: "raw special characters", tool: "send_message_to_thread", output: string(rawJSON), status: http.StatusOK, wrapped: "run a &amp;&amp; b"},
+		{name: "ordinary text", tool: "send_message_to_thread", output: `"done"`, status: http.StatusOK, wrapped: "done"},
+		{name: "unknown tool", tool: "automation_create", output: `"payload"`, status: http.StatusOK, wrapped: "payload"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0
@@ -2878,8 +2888,16 @@ func TestResponsesDelegationReplay(t *testing.T) {
 				require.Len(t, items, 8)
 				require.Equal(t, "call_read", items[2].Get("call_id").Str)
 				require.Equal(t, "call_read", items[3].Get("call_id").Str)
+				require.Equal(t, "message", items[7].Get("type").Str)
 				require.Equal(t, "user", items[7].Get("role").Str)
-				require.Equal(t, envelope, items[7].Get("content.0.text").Str)
+				require.False(t, items[7].Get("call_id").Exists())
+				text := items[7].Get("content.0.text").Str
+				if tc.text != "" {
+					require.Equal(t, tc.text, text)
+				} else {
+					require.Contains(t, text, `<codex_client_item namespace="codex_app" name="`+tc.tool+`">`)
+					require.Contains(t, text, tc.wrapped)
+				}
 				stream := `data: {"type":"response.completed","response":{"id":"resp_delegation","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}` + "\n\n"
 				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}, nil
 			})
@@ -2891,21 +2909,42 @@ func TestResponsesDelegationReplay(t *testing.T) {
 			}}
 			h := newOpenAIResponsesFailoverTestHandler(t, upstream, provider)
 			body := `{"model":"gpt-5.4","stream":true,"input":[` + history + `,
-				{"type":"function_call_output","id":"fco_dispatch","namespace":"codex_app","name":"send_message_to_thread","output":` + tc.output + `}]}`
+				{"type":"function_call_output","id":"fco_dispatch","namespace":"codex_app","name":"` + tc.tool + `","output":` + tc.output + `}]}`
 			c, w := newOpenAIResponsesFailoverTestContext(t, context.Background())
 			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
 			c.Request.Header.Set("Content-Type", "application/json")
 			h.Responses(c)
 			require.Equal(t, tc.status, w.Code, w.Body.String())
-			if tc.status == http.StatusBadRequest {
-				require.Zero(t, calls)
-				require.Contains(t, w.Body.String(), "input[7] (function_call_output) requires call_id")
-				return
-			}
 			require.Equal(t, 1, calls)
 			require.Contains(t, w.Body.String(), "response.completed")
 		})
 	}
+}
+
+// TestResponsesMissingCallIDStillRejected 核对不带 namespace 的工具结果缺少编号时，入口返回 400，上游收不到请求。
+func TestResponsesMissingCallIDStillRejected(t *testing.T) {
+	calls := 0
+	upstream := responsesWireTransport(func(req *http.Request, _ int64) (*http.Response, error) {
+		calls++
+		return nil, io.EOF
+	})
+	provider := gatewayprovider.ExecutionProvider{Record: providercore.Record{
+		ID: 11, Name: "relay", Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeAPIKey,
+		Status: billing.StatusActive, Schedulable: true, LoadLocation: time.LoadLocation,
+		Credentials: map[string]any{"api_key": "test", "base_url": "https://provider.example.test"},
+		Extra:       map[string]any{"openai_passthrough": true},
+	}}
+	h := newOpenAIResponsesFailoverTestHandler(t, upstream, provider)
+	body := `{"model":"gpt-5.4","stream":true,"input":[{"type":"message","role":"user","content":"hi"},
+		{"type":"function_call_output","namespace":"codex_app","name":"send_message_to_thread","output":"ok"},
+		{"type":"function_call_output","output":"done"}]}`
+	c, w := newOpenAIResponsesFailoverTestContext(t, context.Background())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	h.Responses(c)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Zero(t, calls)
+	require.Contains(t, w.Body.String(), "input[2] (function_call_output) requires call_id")
 }
 
 // TestResponsesDisconnectReplay 检查首段前可以换号，工具调用已经交付后只返回一个失败终态。
