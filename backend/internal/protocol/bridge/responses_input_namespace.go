@@ -62,7 +62,7 @@ func StripOpenAIResponsesInputNamespaces(body []byte, keepToolCallNamespaces boo
 		}
 		first = false
 		itemBody := []byte(item.Raw)
-		if item.IsObject() && item.Get("namespace").Exists() && !openaiwire.IsDesktopContext(item) &&
+		if item.IsObject() && item.Get("namespace").Exists() && !openaiwire.IsStandaloneClientItem(item) &&
 			(!keepToolCallNamespaces || !IsOpenAIResponsesToolCallItemType(item.Get("type").String())) {
 			itemBody, stripErr = sjson.DeleteBytes(itemBody, "namespace")
 			if stripErr != nil {

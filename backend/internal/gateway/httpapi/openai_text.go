@@ -70,7 +70,7 @@ type OpenAITextBackend interface {
 	Reasoning(*gin.Context, *apikey.APIKey, []byte) ([]byte, bool, error)
 	MessageReasoning(*gin.Context, *apikey.APIKey, []byte)
 	PolicyDenied(*gin.Context)
-	NormalizeBootstrap([]byte, bool) ([]byte, bool)
+	NormalizeClientItems([]byte) ([]byte, []requeststate.CodexClientItem)
 	ValidateTier([]byte) error
 	PreviousKind(string) string
 	ValidateOwner(context.Context, int64, string, int64, int64) (bool, error)

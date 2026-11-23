@@ -97,7 +97,7 @@ func NeedsToolContinuation(reqBody map[string]any) bool {
 			continue
 		}
 		itemType, _ := itemMap["type"].(string)
-		if !IsDesktopContextMap(itemMap) && (IsCodexToolCallItemType(itemType) || itemType == "item_reference") {
+		if !IsStandaloneClientItemMap(itemMap) && (IsCodexToolCallItemType(itemType) || itemType == "item_reference") {
 			return true
 		}
 	}
@@ -133,7 +133,7 @@ func AnalyzeToolContinuationSignals(reqBody map[string]any) ToolContinuationSign
 				signals.HasToolCallContext = true
 			}
 		case IsCodexToolCallOutputItemType(itemType):
-			if IsDesktopContextMap(itemMap) || IsHostedToolSearchOutputMap(itemMap) {
+			if IsStandaloneClientItemMap(itemMap) || IsHostedToolSearchOutputMap(itemMap) {
 				continue
 			}
 			signals.HasFunctionCallOutput = true
@@ -199,6 +199,12 @@ func validateToolOutputItems(body []byte, input gjson.Result) FunctionCallOutput
 		case IsCodexToolCallOutputItemType(kind):
 			id := item.Get("call_id")
 			callID := strings.TrimSpace(id.Str)
+			// Codex 客户端独立条目跳过配对。HTTP 入口通常已把它们改写为用户消息，
+			// 请求含重复 JSON 键时条目保持原样到达这里，标记为桌面上下文后由入口的重复键检查拒绝。
+			if IsCodexClientItem(item) {
+				result.HasDesktopContext = true
+				return true
+			}
 			if IsDesktopContext(item) {
 				result.HasDesktopContext = true
 				if names == nil {

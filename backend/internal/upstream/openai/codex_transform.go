@@ -1494,7 +1494,7 @@ func FilterCodexInputWithOptions(input []any, opts CodexInputFilterOptions) []an
 		// neither reasoning nor tool calls, they flow through the generic path
 		// below (id stripped when !PreserveReferences, encrypted_content
 		// preserved either way), which is safe and needs no special-casing.
-		if protocolopenai.IsDesktopContextMap(m) || protocolopenai.IsHostedToolSearchOutputMap(m) {
+		if protocolopenai.IsStandaloneClientItemMap(m) || protocolopenai.IsHostedToolSearchOutputMap(m) {
 			filtered = append(filtered, m)
 			continue
 		}
