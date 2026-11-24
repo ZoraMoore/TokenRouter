@@ -232,6 +232,7 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
 		"openai_compact_mode",
 		"openai_native_compaction_v2_mode",
 		"openai_responses_continuation_supported",
+		"openai_responses_agent_context",
 		// 候选过滤 ListSchedulableProviders 读取此快照，IsModelSupported 使用这两个透传开关决定是否跳过 model_mapping。
 		// 丢失开关会使选号退回白名单检查，即使提供商可透传，也可能被判为 model_not_supported，
 		// 导致单独测试提供商成功、网关返回 no available providers。

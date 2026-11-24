@@ -17,6 +17,8 @@ const (
 
 	// ExtraKeyTextRouteMode 是管理员控制的文本协议路由配置。
 	ExtraKeyTextRouteMode = "openai_text_route_mode"
+	// ExtraKeyResponsesAgentContext 标记已验证能接收桌面独立上下文的 Responses 提供商。
+	ExtraKeyResponsesAgentContext = "openai_responses_agent_context"
 	// ExtraKeyResponsesContinuationSupported 是管理员控制的 HTTP continuation 能力开关。
 	ExtraKeyResponsesContinuationSupported = "openai_responses_continuation_supported"
 )

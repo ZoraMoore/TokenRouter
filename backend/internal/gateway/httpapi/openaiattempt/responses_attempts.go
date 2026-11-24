@@ -19,6 +19,8 @@ import (
 	textflow "github.com/TokenFlux/TokenRouter/internal/gateway/text"
 	"github.com/TokenFlux/TokenRouter/internal/identity/httpapi/authctx"
 	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry/logging"
+	"github.com/TokenFlux/TokenRouter/internal/protocol"
+	openaiwire "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
 	providercore "github.com/TokenFlux/TokenRouter/internal/provider"
 	"github.com/TokenFlux/TokenRouter/internal/routing"
 	"github.com/TokenFlux/TokenRouter/internal/routing/capability"
@@ -37,7 +39,7 @@ type responsesAttemptBridge struct {
 	subject                                                                  authctx.AuthSubject
 	subscription                                                             *billing.UserSubscription
 	reqLog                                                                   *zap.Logger
-	body, forwardBody, sessionHashBody                                       []byte
+	body, forwardBody, sessionHashBody, attemptBody                          []byte
 	reqModel, forwardModel, sessionHash, previousResponseID, requestPlatform string
 	reqStream, nativeCompactionV2, legacyCompact, requireCompact             bool
 	streamStarted                                                            *bool
@@ -96,30 +98,30 @@ func (b *responsesAttemptBridge) Select(excluded map[int64]struct{}) (textflow.R
 		zap.Float64("load_skew", scheduleDecision.LoadSkew),
 	)
 	b.provider = b.selection.Provider
+	b.attemptBody = b.forwardBody
 	if b.previousResponseID != "" && !b.provider.View().IsOpenAIApiKey() {
-		// The public Responses HTTP API supports previous_response_id on API-key
-		// providers. OAuth/SetupToken upstreams do not, so keep searching instead
-		// of silently deleting continuation state from a mixed provider pool.
-
-		if b.selection.ReleaseFunc != nil {
-			b.selection.ReleaseFunc()
-			b.selection.ReleaseFunc = nil
+		return b.skipIncompatible(forwardcore.OpenAIHTTPContinuationUnsupportedReason, "previous_response_id requires an OpenAI API-key provider for HTTP requests"), nil
+	}
+	if gatewayhttp.HasCodexDesktopContext(b.c) {
+		target, err := gatewaycapture.ProviderForProtocolAttempt(b.selectionCtx, b.provider)
+		if err != nil {
+			if b.selection.ReleaseFunc != nil {
+				b.selection.ReleaseFunc()
+				b.selection.ReleaseFunc = nil
+			}
+			return textflow.ResponseSelection{}, err
 		}
-		skipped := &forwardcore.UpstreamFailoverError{
-			StatusCode:       http.StatusBadRequest,
-			Stage:            forwardcore.GatewayFailureStageInference,
-			Scope:            forwardcore.GatewayFailureScopeRequest,
-			Reason:           forwardcore.OpenAIHTTPContinuationUnsupportedReason,
-			ClientStatusCode: http.StatusBadRequest,
-			ClientMessage:    "previous_response_id requires an OpenAI API-key provider for HTTP requests",
+		allowed := target.View().IsOpenAIOAuthLike()
+		if supported, set := target.Record.Extra[providercore.ExtraKeyResponsesAgentContext].(bool); set {
+			allowed = supported
 		}
-		b.reqLog.Debug("openai.provider_skipped_http_continuation_unsupported",
-			zap.Int64("provider_id", b.provider.Record.ID),
-			zap.String("provider_type", b.provider.Record.Type),
-		)
-		picked := b.selectedView()
-		picked.Skip = &textflow.AttemptFailure{Cause: skipped, Policy: skipped.RetryFailure()}
-		return picked, nil
+		route := target.Route.Protocol()
+		native := allowed && !b.legacyCompact && !b.nativeCompactionV2 && target.Record.Platform == capability.PlatformOpenAI &&
+			(route == "" || route == protocol.ProtocolOpenAIResponses) && !gatewaycapture.ExecutionModelPolicy(target).RawChat()
+		b.attemptBody, err = openaiwire.AdaptDesktopContext(b.forwardBody, native)
+		if err != nil {
+			return b.skipIncompatible(forwardcore.OpenAIDesktopContextUnsupportedReason, err.Error()), nil
+		}
 	}
 	b.sessionHash = EnsureOpenAIPoolModeSessionHash(b.sessionHash, b.provider)
 	b.reqLog.Debug("openai.provider_selected", zap.Int64("provider_id", b.provider.Record.ID), zap.String("provider_name", b.provider.Record.Name))
@@ -164,6 +166,26 @@ func (b *responsesAttemptBridge) SelectionFailure(err error, excludedCount int, 
 	}
 }
 
+// skipIncompatible 将本次请求交给下一个合格提供商，归还已取得的槽。
+func (b *responsesAttemptBridge) skipIncompatible(reason forwardcore.GatewayFailureReason, message string) textflow.ResponseSelection {
+	if b.selection.ReleaseFunc != nil {
+		b.selection.ReleaseFunc()
+		b.selection.ReleaseFunc = nil
+	}
+	skipped := &forwardcore.UpstreamFailoverError{
+		StatusCode:       http.StatusBadRequest,
+		Stage:            forwardcore.GatewayFailureStageInference,
+		Scope:            forwardcore.GatewayFailureScopeRequest,
+		Reason:           reason,
+		ClientStatusCode: http.StatusBadRequest,
+		ClientMessage:    message,
+	}
+	b.reqLog.Debug("openai.provider_skipped_incompatible_request", zap.Int64("provider_id", b.provider.Record.ID), zap.String("reason", string(reason)))
+	picked := b.selectedView()
+	picked.Skip = &textflow.AttemptFailure{Cause: skipped, Policy: skipped.RetryFailure()}
+	return picked
+}
+
 // Acquire 取得当前提供商的并发槽位。
 func (b *responsesAttemptBridge) Acquire() bool {
 	if b.sessionAttempts != nil && b.binding().sessions.Track != nil {
@@ -183,7 +205,7 @@ func (b *responsesAttemptBridge) Forward() textflow.ResponseOutcome {
 	// 快照扣除心跳注释字节，上游失败时仍可按协议输出状态决定换号（#3887）。
 	b.writerSizeBeforeForward = gatewayhttp.OpenAICompactKeepaliveAdjustedWrittenSize(b.c)
 	// 从透传切换到非透传提供商时，从 canonical 请求体派生本次正文并清除上游私有的加密 reasoning。
-	attemptBody := b.binding().deriveOpenAIForwardAttemptBody(b.reqLog, b.forwardBody, b.provider, &b.passthroughFailoverState)
+	attemptBody := b.binding().deriveOpenAIForwardAttemptBody(b.reqLog, b.attemptBody, b.provider, &b.passthroughFailoverState)
 	b.result, err = func() (*forwardcore.OpenAIResult, error) {
 		defer func() {
 			if b.providerReleaseFunc != nil {

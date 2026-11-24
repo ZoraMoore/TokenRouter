@@ -9,6 +9,8 @@ const (
 	RequestStartedAt       ContextKey = "ctx_request_started_at"
 	ProviderSlotAcquiredAt ContextKey = "ctx_provider_slot_acquired_at"
 	FirstSSEDataAt         ContextKey = "ctx_first_sse_data_at"
+	ResponsesTerminal      ContextKey = "responses_terminal"
+	ResponsesFailureWrite  ContextKey = "responses_failure_write"
 	FirstDownstreamFlushAt ContextKey = "ctx_first_downstream_flush_at"
 	FirstVisibleOutputAt   ContextKey = "ctx_first_visible_output_at"
 	Model                  ContextKey = "ctx_model"

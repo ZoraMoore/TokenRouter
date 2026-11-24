@@ -4021,7 +4021,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 	upstreamSSE := strings.Join([]string{
 		`data: {"type":"response.output_item.added","item":{"type":"tool_call","tool_calls":[{"function":{"name":"apply_patch"}}]}}`,
 		"",
-		"data: [DONE]",
+		flushTestCompletedLine,
 		"",
 	}, "\n")
 	resp := &http.Response{
@@ -4534,7 +4534,7 @@ func TestOpenAIGatewayService_OAuthLegacy_CompositeCodexUAUsesCodexOriginator(t 
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid"}},
-		Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
+		Body:       io.NopCloser(strings.NewReader(flushTestCompletedLine + "\n\n")),
 	}
 	upstream := &auxiliaryHTTPRecorder{resp: resp}
 
@@ -5214,7 +5214,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_NonCodexUAFallbackToCodexUA(t *te
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid"}},
-		Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
+		Body:       io.NopCloser(strings.NewReader(flushTestCompletedLine + "\n\n")),
 	}
 	upstream := &auxiliaryHTTPRecorder{resp: resp}
 
@@ -5252,7 +5252,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_BrowserUAUsesConfiguredCodexUA(t 
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid"}},
-		Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
+		Body:       io.NopCloser(strings.NewReader(flushTestCompletedLine + "\n\n")),
 	}
 	upstream := &auxiliaryHTTPRecorder{resp: resp}
 	settingSvc := newHTTPReadersFixture(&gatewaytestkit.FastPolicySettingsRepo{Values: map[string]string{
@@ -5296,7 +5296,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_CodexTuiIdentityPreservedAndPaire
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid"}},
-		Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
+		Body:       io.NopCloser(strings.NewReader(flushTestCompletedLine + "\n\n")),
 	}
 	upstream := &auxiliaryHTTPRecorder{resp: resp}
 	svc := newResponsesFixture(responsesFixtureInputs{options: &responsesFixtureOptions{Request: OpenAIRequestOptions{ForceCLI: false}}, transport: upstream})
@@ -5334,7 +5334,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_TLSRouterOfficialUAIsPreservedAnd
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid"}},
-		Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
+		Body:       io.NopCloser(strings.NewReader(flushTestCompletedLine + "\n\n")),
 	}
 	upstream := &auxiliaryHTTPRecorder{resp: resp}
 	routerSvc := newTLSFingerprintRouterTestService(&egress.TLSFingerprintRouter{
@@ -5432,7 +5432,7 @@ func TestOpenAIGatewayService_CodexCLIOnly_AllowOfficialClientFamilies(t *testin
 			resp := &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid"}},
-				Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
+				Body:       io.NopCloser(strings.NewReader(flushTestCompletedLine + "\n\n")),
 			}
 			upstream := &auxiliaryHTTPRecorder{resp: resp}
 
@@ -5471,7 +5471,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamingSetsFirstTokenMs(t *test
 	upstreamSSE := strings.Join([]string{
 		`data: {"type":"response.output_text.delta","delta":"h"}`,
 		"",
-		"data: [DONE]",
+		flushTestCompletedLine,
 		"",
 	}, "\n")
 	resp := &http.Response{
@@ -5623,7 +5623,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_WarnOnTimeoutHeadersForStream(t *
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "X-Request-Id": []string{"rid-timeout"}},
-		Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
+		Body:       io.NopCloser(strings.NewReader(flushTestCompletedLine + "\n\n")),
 	}
 	upstream := &auxiliaryHTTPRecorder{resp: resp}
 	svc := newResponsesFixture(responsesFixtureInputs{options: &responsesFixtureOptions{Request: OpenAIRequestOptions{ForceCLI: false}}, transport: upstream})
@@ -5683,8 +5683,8 @@ func TestOpenAIGatewayService_OAuthPassthrough_InfoWhenStreamEndsWithoutDone(t *
 
 	_, err := svc.Forward(context.Background(), c, provider, originalBody)
 	require.EqualError(t, err, "stream usage incomplete: missing terminal event")
-	require.True(t, logSink.ContainsMessage("上游流在未收到 [DONE] 时结束，疑似断流"))
-	require.True(t, logSink.ContainsMessageAtLevel("上游流在未收到 [DONE] 时结束，疑似断流", "info"))
+	require.True(t, logSink.ContainsMessage("上游流缺少 Responses 终止事件"))
+	require.True(t, logSink.ContainsMessageAtLevel("上游流缺少 Responses 终止事件", "info"))
 	require.True(t, logSink.ContainsFieldValue("upstream_request_id", "rid-truncate"))
 }
 

@@ -40,7 +40,7 @@ func SanitizeOpenAIResponsesOrphanToolOutputs(reqBody map[string]any, input []an
 	normalized := make([]any, 0, len(input))
 	for _, rawItem := range input {
 		item, ok := rawItem.(map[string]any)
-		if !ok || !openaicore.IsCodexToolCallOutputItemType(strings.TrimSpace(openai.FirstNonEmptyString(item["type"]))) {
+		if !ok || openaicore.IsStandaloneClientItemMap(item) || openaicore.IsHostedToolSearchOutputMap(item) || !openaicore.IsCodexToolCallOutputItemType(strings.TrimSpace(openai.FirstNonEmptyString(item["type"]))) {
 			normalized = append(normalized, rawItem)
 			continue
 		}

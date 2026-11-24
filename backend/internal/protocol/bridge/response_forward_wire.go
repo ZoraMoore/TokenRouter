@@ -2,7 +2,6 @@ package bridge
 
 import (
 	"encoding/json"
-	"sort"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -10,67 +9,6 @@ import (
 
 	protocolopenai "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
 )
-
-// ResponsesStreamOutputItems 按 output_index 保存 response.output_item.done 中的原始 item。
-// 缓冲重建和流式收集都优先使用 done item，保存 item 身份、status、phase、顺序和未知类型。
-// 增量累积器仅记录一个 reasoning、一个 message 和多个 function call，供缺少 done item 时使用。
-type ResponsesStreamOutputItems struct {
-	items map[int]json.RawMessage
-}
-
-func NewResponsesStreamOutputItems() *ResponsesStreamOutputItems {
-	return &ResponsesStreamOutputItems{items: make(map[int]json.RawMessage)}
-}
-
-// Observe 原样记录 response.output_item.done 事件中的 item。保留原始 JSON 字节，
-// 使厂商扩展字段和未来字段在重建时不丢失。
-func (r *ResponsesStreamOutputItems) Observe(data []byte) {
-	if r == nil || len(data) == 0 || !gjson.ValidBytes(data) {
-		return
-	}
-	if strings.TrimSpace(gjson.GetBytes(data, "type").String()) != "response.output_item.done" {
-		return
-	}
-	item := gjson.GetBytes(data, "item")
-	if !item.Exists() || !item.IsObject() {
-		return
-	}
-	index := int(gjson.GetBytes(data, "output_index").Int())
-	r.items[index] = json.RawMessage(append([]byte(nil), item.Raw...))
-}
-
-func (r *ResponsesStreamOutputItems) HasItems() bool {
-	return r != nil && len(r.items) > 0
-}
-
-// Count 返回流中报告为 done 的不同 output item 数量。
-func (r *ResponsesStreamOutputItems) Count() int {
-	if r == nil {
-		return 0
-	}
-	return len(r.items)
-}
-
-// BuildOutput 按 output_index 排序返回已记录的 item。
-func (r *ResponsesStreamOutputItems) BuildOutput() ([]byte, bool) {
-	if !r.HasItems() {
-		return nil, false
-	}
-	indexes := make([]int, 0, len(r.items))
-	for index := range r.items {
-		indexes = append(indexes, index)
-	}
-	sort.Ints(indexes)
-	ordered := make([]json.RawMessage, 0, len(indexes))
-	for _, index := range indexes {
-		ordered = append(ordered, r.items[index])
-	}
-	encoded, err := json.Marshal(ordered)
-	if err != nil {
-		return nil, false
-	}
-	return encoded, true
-}
 
 func NormalizeResponsesStreamingTerminalOutput(data []byte, acc *BufferedResponseAccumulator, doneItems *ResponsesStreamOutputItems, imageOutputs []json.RawMessage) ([]byte, bool) {
 	eventType := strings.TrimSpace(gjson.GetBytes(data, "type").String())
@@ -82,23 +20,11 @@ func NormalizeResponsesStreamingTerminalOutput(data []byte, acc *BufferedRespons
 
 	output := gjson.GetBytes(data, "response.output")
 	hasAccumulatedOutput := (acc != nil && acc.HasContent()) || len(imageOutputs) > 0 || doneItems.HasItems()
-	if output.Exists() && output.IsArray() {
-		terminalCount := len(output.Array())
-		// 终止 output 至少包含流中报告数量的 item 时保持不变；数量更少表示终止事件
-		// 丢弃了流中已经报告为 done 的 item，此时以已报告 item 作为本轮权威记录。
-		if terminalCount > 0 && terminalCount >= doneItems.Count() {
-			return data, false
-		}
-		if terminalCount == 0 && !hasAccumulatedOutput {
-			return data, false
-		}
-	}
-
 	outputJSON := []byte("[]")
-	// 与 ReconstructResponseOutputFromSSE 保持相同优先级：流实际报告的 item 优先于
-	// delta 重建结果。图片生成 item 也会以 done 事件到达，因此此处不能再拼接 imageOutputs。
-	if reconstructed, ok := doneItems.BuildOutput(); ok {
+	if reconstructed, ok := doneItems.mergeTerminalOutput(output); ok {
 		outputJSON = reconstructed
+	} else if output.IsArray() && (len(output.Array()) > 0 || !hasAccumulatedOutput) {
+		return data, false
 	} else if reconstructed, ok := BuildResponsesOutputJSON(acc, imageOutputs); ok {
 		outputJSON = reconstructed
 	}
@@ -114,48 +40,41 @@ func NormalizeResponsesStreamingTerminalOutput(data []byte, acc *BufferedRespons
 // summary、opaque 等压缩字段（#3777 问题 2）。done 缺少 compaction 时，再从 added 收集，
 // 部分上游的 compaction 完整结果仅出现在 added 中。
 func CollectRawResponsesOutputItemsFromSSE(bodyText string) ([]byte, bool) {
-	var items []json.RawMessage
-	seen := make(map[string]struct{})
-	hasCompactionItem := false
-	appendItem := func(item gjson.Result) {
-		if !item.Exists() || !item.IsObject() {
-			return
-		}
-		key := strings.TrimSpace(item.Get("id").String())
-		if key == "" {
-			key = item.Raw
-		}
-		if _, dup := seen[key]; dup {
-			return
-		}
-		seen[key] = struct{}{}
-		if protocolopenai.IsResponsesCompactionItemType(item.Get("type").String()) {
-			hasCompactionItem = true
-		}
-		items = append(items, json.RawMessage(item.Raw))
-	}
+	observed := NewResponsesStreamOutputItems()
+	var addedCompaction []json.RawMessage
 	protocolopenai.ForEachSSEDataPayload(bodyText, func(data []byte) {
 		if normalized, changed := protocolopenai.NormalizeCompletedImageGenerationStatus(data); changed {
 			data = normalized
 		}
-		if strings.TrimSpace(gjson.GetBytes(data, "type").String()) != "response.output_item.done" {
-			return
-		}
-		appendItem(gjson.GetBytes(data, "item"))
-	})
-	// done 缺少 compaction 时再检查 added，支持其他 item 有 done、compaction 仅有 added 的流。
-	// Codex 要求恰好一个 compaction item，done 已包含时跳过 added。
-	if !hasCompactionItem {
-		protocolopenai.ForEachSSEDataPayload(bodyText, func(data []byte) {
-			if strings.TrimSpace(gjson.GetBytes(data, "type").String()) != "response.output_item.added" {
-				return
-			}
+		observed.Observe(data)
+		if gjson.GetBytes(data, "type").Str == "response.output_item.added" {
 			item := gjson.GetBytes(data, "item")
-			if !protocolopenai.IsResponsesCompactionItemType(item.Get("type").String()) {
-				return
+			if protocolopenai.IsResponsesCompactionItemType(item.Get("type").Str) {
+				addedCompaction = append(addedCompaction, json.RawMessage(item.Raw))
 			}
+		}
+	})
+	var items []json.RawMessage
+	seen := map[string]struct{}{}
+	appendItem := func(raw json.RawMessage) {
+		key := gjson.GetBytes(raw, "id").Str
+		if key == "" {
+			key = string(raw)
+		}
+		if _, exists := seen[key]; !exists {
+			seen[key] = struct{}{}
+			items = append(items, raw)
+		}
+	}
+	hasCompaction := false
+	for _, item := range observed.orderedItems() {
+		appendItem(item.raw)
+		hasCompaction = hasCompaction || protocolopenai.IsResponsesCompactionItemType(item.slot.key.kind)
+	}
+	if !hasCompaction {
+		for _, item := range addedCompaction {
 			appendItem(item)
-		})
+		}
 	}
 	if len(items) == 0 {
 		return nil, false
@@ -217,4 +136,24 @@ func BuildResponsesOutputJSON(acc *BufferedResponseAccumulator, imageOutputs []j
 		return nil, false
 	}
 	return outputJSON, true
+}
+
+// RepairBufferedResponsesOutput 使用缓存的 SSE 帧补全返回给非流式客户端的终态输出。
+func RepairBufferedResponsesOutput(final []byte, body string) []byte {
+	output := gjson.GetBytes(final, "output")
+	var rebuilt []byte
+	var ok bool
+	if len(output.Array()) == 0 {
+		rebuilt, ok = ReconstructResponseOutputFromSSE(body)
+	} else {
+		items := NewResponsesStreamOutputItems()
+		protocolopenai.ForEachSSEDataPayload(body, func(data []byte) { items.Observe(data) })
+		rebuilt, ok = items.mergeTerminalOutput(output)
+	}
+	if ok {
+		if updated, err := sjson.SetRawBytes(final, "output", rebuilt); err == nil {
+			return updated
+		}
+	}
+	return final
 }

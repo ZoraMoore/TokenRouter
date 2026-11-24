@@ -16,7 +16,6 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry"
 	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry/logging"
 	"github.com/TokenFlux/TokenRouter/internal/pkg/logredact"
-	responseprotocol "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
 	"github.com/TokenFlux/TokenRouter/internal/routing/capability"
 	"github.com/TokenFlux/TokenRouter/internal/upstream/grok"
 	"github.com/TokenFlux/TokenRouter/internal/upstream/openai"
@@ -147,7 +146,8 @@ func (p *OpenAIResponseOutput) StreamOptions(ctx context.Context, c *gin.Context
 
 		OpenAIStreamDataStartsTTFT: gatewayprovider.OpenAIStreamDataStartsTTFT,
 
-		OpenAIStreamEventIsTerminalWithType: responseprotocol.OpenAIStreamEventIsTerminalWithType,
+		MarkStreamFailure: func(code string, writeErr error) { markResponseStreamWrite(c, code, writeErr) },
+		ObserveTerminal:   func(kind string) { c.Set(string(telemetry.ResponsesTerminal), kind) },
 	}
 	if provider != nil {
 		options.ProviderID = provider.Record.ID
@@ -225,4 +225,16 @@ func (p *OpenAIResponseOutput) nativeCompactionObserver(ctx context.Context, pro
 		}
 		logging.FromContext(ctx).Info("openai_native_compaction_completed", fields...)
 	}
+}
+
+// markResponseStreamWrite 记录当前尝试的失败帧写入结果，阻止外层重复发送。
+func markResponseStreamWrite(c *gin.Context, code string, writeErr error) {
+	MarkResponseCommitted(c)
+	MarkOpsStreamFailure(c, "upstream_error", code, code, http.StatusBadGateway)
+	status := "written"
+	if writeErr != nil {
+		status = "write_failed"
+		_ = c.Error(writeErr)
+	}
+	c.Set(string(telemetry.ResponsesFailureWrite), status)
 }

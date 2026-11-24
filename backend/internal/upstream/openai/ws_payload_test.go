@@ -120,3 +120,14 @@ func TestApplyOpenAIWSRetryPayloadStrategy_AttemptSixKeepsSemanticFields(t *test
 	require.Contains(t, payload, "parallel_tool_calls")
 	require.Contains(t, payload, "text")
 }
+
+func TestWSDesktopContextDoesNotPinToolContinuation(t *testing.T) {
+	for _, raw := range []string{
+		`{"type":"function_call_output","id":"fco_ui","namespace":"agent","name":"browser_tabs","output":"data"}`,
+		`{"type":"tool_search_output","execution":"server","call_id":null}`,
+	} {
+		items := []json.RawMessage{json.RawMessage(raw)}
+		require.False(t, OpenAIWSRawItemsHasFunctionCallOutput(items))
+		require.False(t, OpenAIWSRawPayloadHasToolCallOutput([]byte(`{"input":[`+raw+`]}`)))
+	}
+}

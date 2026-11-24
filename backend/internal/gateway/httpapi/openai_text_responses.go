@@ -117,17 +117,19 @@ func (h *OpenAITextHandler) Responses(c *gin.Context) {
 	} else if changed {
 		body = cappedBody
 	}
-	if normalizedBody, changed := h.backend.NormalizeBootstrap(body, false); changed {
+	// Codex 客户端注入的跨任务消息、自动化提示等独立条目没有 call_id，校验前逐条改写为用户消息。
+	if normalizedBody, items := h.backend.NormalizeClientItems(body); len(items) > 0 {
 		body = normalizedBody
-		reqLog.Info("openai.codex_automation_bootstrap_normalized",
-			zap.String("normalization", "call_output_to_user_message"),
-		)
-	}
-	if normalizedBody, changed := h.backend.NormalizeBootstrap(body, true); changed {
-		body = normalizedBody
-		reqLog.Info("openai.codex_delegation_bootstrap_normalized",
-			zap.String("normalization", "call_output_to_user_message"),
-		)
+		for _, item := range items {
+			reqLog.Info("openai.codex_client_item_normalized",
+				zap.String("normalization", "call_output_to_user_message"),
+				zap.Int("input_index", item.Index),
+				zap.String("item_namespace", item.Namespace),
+				zap.String("item_name", item.Name),
+				zap.Bool("item_known", item.Known),
+				zap.Bool("envelope_valid", item.EnvelopeValid),
+			)
+		}
 	}
 
 	reqStream, ok := ParseOpenAICompatibleStream(body)

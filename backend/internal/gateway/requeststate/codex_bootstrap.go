@@ -10,98 +10,6 @@ import (
 	"time"
 )
 
-func NormalizeCodexDelegationBootstrap(body []byte) ([]byte, bool) {
-	// 已有任务通过 send_message_to_thread 唤醒时会携带 previous_response_id；
-	// 完整历史回放还会带有已配对的调用项。delegation 仍是客户端注入的用户输入，
-	// 不属于这些历史调用的结果，因此允许它与可明确配对的历史上下文共存。
-	return NormalizeCodexCallOutputBootstrap(body, IsCodexDelegationCandidate, true)
-}
-
-func NormalizeCodexAutomationBootstrap(body []byte) ([]byte, bool) {
-	return NormalizeCodexCallOutputBootstrap(body, IsCodexAutomationCandidate, false)
-}
-
-func NormalizeCodexCallOutputBootstrap(body []byte, isCandidate func(map[string]any) bool, allowHistoricalContext bool) ([]byte, bool) {
-	if !HasUniqueJSONMembers(body) {
-		return body, false
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.UseNumber()
-	var request map[string]any
-	if err := decoder.Decode(&request); err != nil {
-		return body, false
-	}
-	if previousResponseID, exists := request["previous_response_id"]; exists {
-		value, ok := previousResponseID.(string)
-		if !ok || (!allowHistoricalContext && strings.TrimSpace(value) != "") {
-			return body, false
-		}
-	}
-	input, ok := request["input"].([]any)
-	if !ok {
-		return body, false
-	}
-
-	// 按 *_call 和 *_call_output 的报文形状识别内置调用。
-	// delegation 在 ID 配对后可与历史锚点共存，automation 使用首次引导位置。
-	for _, raw := range input {
-		item, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		typ := StringField(item, "type")
-		if isCandidate(item) {
-			callIDValue, exists := item["call_id"]
-			callID, isString := callIDValue.(string)
-			if exists && (!isString || strings.TrimSpace(callID) != "") {
-				return body, false
-			}
-			continue
-		}
-		if typ == "item_reference" {
-			if allowHistoricalContext && strings.TrimSpace(StringField(item, "id")) != "" {
-				continue
-			}
-			return body, false
-		}
-		if strings.HasSuffix(typ, "_call") || IsResponsesCallOutputType(typ) {
-			if allowHistoricalContext && strings.TrimSpace(StringField(item, "call_id")) != "" {
-				continue
-			}
-			return body, false
-		}
-	}
-
-	changed := false
-	for i, raw := range input {
-		item, ok := raw.(map[string]any)
-		if !ok || !isCandidate(item) {
-			continue
-		}
-		output, ok := item["output"].(string)
-		if !ok {
-			continue
-		}
-		input[i] = map[string]any{
-			"type": "message",
-			"role": "user",
-			"content": []any{map[string]any{
-				"type": "input_text",
-				"text": output,
-			}},
-		}
-		changed = true
-	}
-	if !changed {
-		return body, false
-	}
-	normalized, err := json.Marshal(request)
-	if err != nil {
-		return body, false
-	}
-	return normalized, true
-}
-
 func HasUniqueJSONMembers(body []byte) bool {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	if !ConsumeUniqueJSONValue(decoder) {
@@ -156,37 +64,14 @@ func ConsumeUniqueJSONValue(decoder *json.Decoder) bool {
 	}
 }
 
-func IsResponsesCallOutputType(typ string) bool {
-	return strings.HasSuffix(typ, "_call_output") || typ == "tool_search_output"
-}
-
-func IsCodexDelegationCandidate(item map[string]any) bool {
-	if StringField(item, "type") != "function_call_output" ||
-		!IsCodexDelegationTool(StringField(item, "namespace"), StringField(item, "name")) {
-		return false
-	}
-	output, ok := item["output"].(string)
-	return ok && ValidCodexDelegationEnvelope(output)
-}
-
-func IsCodexAutomationCandidate(item map[string]any) bool {
-	if StringField(item, "type") != "function_call_output" ||
-		StringField(item, "namespace") != "codex_app" ||
-		StringField(item, "name") != "automation_update" {
-		return false
-	}
-	output, ok := item["output"].(string)
-	return ok && (ValidCodexAutomationBootstrap(output) || ValidCodexAutomationHeartbeat(output))
-}
-
-func StringField(item map[string]any, key string) string {
-	value, _ := item[key].(string)
-	return value
-}
-
 func IsCodexDelegationTool(namespace, name string) bool {
 	return (namespace == "codex_app" || namespace == "codex_tui") &&
 		(name == "create_thread" || name == "send_message_to_thread")
+}
+
+// IsCodexAutomationTool 匹配桌面端投递自动化提示使用的工具名。
+func IsCodexAutomationTool(namespace, name string) bool {
+	return namespace == "codex_app" && name == "automation_update"
 }
 
 func ValidCodexAutomationBootstrap(value string) bool {

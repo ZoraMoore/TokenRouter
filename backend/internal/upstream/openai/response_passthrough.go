@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 
 	"github.com/TokenFlux/TokenRouter/internal/infra/httpclient"
 	"github.com/TokenFlux/TokenRouter/internal/protocol/bridge"
@@ -60,8 +59,8 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 	ttftMode := options.TTFTMode()
 	responseID := ""
 	clientDisconnected := false
-	sawDone := false
 	sawTerminalEvent := false
+	stopAtSentinel := false
 	sawFailedEvent := false
 	sawBareError := false
 	sawResponseFailed := false
@@ -126,7 +125,7 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 		return true
 	}
 	ensureResponseFailedTerminal := func() {
-		if !sawBareError || sawResponseFailed || failureDelivered {
+		if !sawBareError || sawResponseFailed || failureDelivered || ctx.Err() != nil {
 			return
 		}
 		if bareErrorProviderSideEffectsPending {
@@ -156,6 +155,11 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 	needModelReplace := strings.TrimSpace(originalModel) != "" && strings.TrimSpace(mappedModel) != "" && strings.TrimSpace(originalModel) != strings.TrimSpace(mappedModel)
 	responseAccumulator := bridge.NewBufferedResponseAccumulator()
 	streamDoneItems := bridge.NewResponsesStreamOutputItems()
+	defer func() {
+		if count := streamDoneItems.ConflictCount(); count > 0 {
+			options.Logf("Responses tool identity conflict: provider=%d count=%d", options.ProviderID, count)
+		}
+	}()
 	streamImageOutputs := make([]json.RawMessage, 0, 1)
 	streamSeenImages := make(map[string]struct{})
 	resultWithUsage := func() *StreamingResult {
@@ -188,6 +192,11 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 			options.MarkTime(StreamTimeData)
 			dataBytes := []byte(data)
 			trimmedData := strings.TrimSpace(data)
+			if trimmedData == "[DONE]" && !sawTerminalEvent {
+				stopAtSentinel = true
+				options.ObserveTerminal("done_without_terminal")
+				break
+			}
 			rawEventType := wire.EffectiveOpenAISSEEventType(dataBytes, pendingSSEEventType)
 			if options.ObserveModel != nil {
 				options.ObserveModel(dataBytes, rawEventType)
@@ -200,6 +209,13 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 				line = "data: " + data
 			}
 			rawEventType = normalizedType
+			if wire.IsUnresolvedResponsesEnd(dataBytes, rawEventType) || (sawTerminalEvent && trimmedData != "[DONE]") {
+				if duplicateTerminal || (!sawTerminalEvent && rawEventType == "response.done") {
+					wire.ParseSSEUsageBytesWithType(dataBytes, rawEventType, usage)
+				}
+				suppressCurrentEvent = true
+				continue
+			}
 			if needModelReplace && strings.Contains(data, mappedModel) {
 				line = wire.ReplaceModelInSSELine(line, mappedModel, originalModel)
 				if replacedData, replaced := wire.ExtractSSEDataLine(line); replaced {
@@ -317,15 +333,10 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 				forceFlushFailedEvent = true
 				sawFailedEvent = true
 			}
-			if trimmedData == "[DONE]" {
-				sawDone = true
-				terminalEventType = "[DONE]"
-			}
-			if options.OpenAIStreamEventIsTerminalWithType(trimmedData, eventType) {
+			if wire.IsResponsesTerminalType(eventType) {
+				options.ObserveTerminal(eventType)
 				sawTerminalEvent = true
-				if trimmedData != "[DONE]" {
-					terminalEventType = eventType
-				}
+				terminalEventType = eventType
 			}
 			if responseID == "" {
 				responseID = wire.ExtractOpenAIResponseIDFromJSONBytes(dataBytes)
@@ -337,7 +348,12 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 			if imageOutput, ok := wire.ExtractImageGenerationOutputFromSSEData(dataBytes, streamSeenImages); ok {
 				streamImageOutputs = append(streamImageOutputs, imageOutput)
 			}
-			streamDoneItems.Observe(dataBytes)
+			if repaired := streamDoneItems.Observe(dataBytes); repaired != nil {
+				dataBytes = repaired
+				data = string(repaired)
+				trimmedData = strings.TrimSpace(data)
+				line = "data: " + data
+			}
 			if normalizedData, normalized := bridge.NormalizeResponsesStreamingTerminalOutput(dataBytes, responseAccumulator, streamDoneItems, streamImageOutputs); normalized {
 				dataBytes = normalizedData
 				data = string(normalizedData)
@@ -425,9 +441,25 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 			failureDelivered = true
 		}
 	}
+	// 读取器负责已提交响应的失败终态，外层据此结束当前尝试。
+	writeReadFailure := func(code string) {
+		if clientDisconnected || failureDelivered || ctx.Err() != nil {
+			return
+		}
+		stopKeepalive()
+		_, err := fmt.Fprint(w, options.readFailureFrame(responseID, originalModel, code))
+		options.MarkStreamFailure(code, err)
+		if err != nil {
+			clientDisconnected = true
+			options.Logf("write response.failed: %v", err)
+			return
+		}
+		flushPending = true
+		flushPendingOutput()
+	}
 	ensureResponseFailedTerminal()
 	if err := documentScanner.Err(); err != nil {
-		if (sawDone || sawTerminalEvent) && !sawFailedEvent {
+		if sawTerminalEvent && !sawFailedEvent {
 			options.ClearDisconnect()
 			return resultWithUsage(), nil
 		}
@@ -435,12 +467,18 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 			err := fmt.Errorf("upstream response failed: %s", failedMessage)
 			return resultWithUsage(), options.WrapOpenAIUpstreamWarningIfCyber(resp.StatusCode, failedPayload, failedMessage, err)
 		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", ctxErr)
+		}
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", err)
 		}
 		if errors.Is(err, bufio.ErrTooLong) {
 			options.Logf("[OpenAI passthrough] SSE line too long: provider=%d max_size=%d error=%v", options.ProviderID, maxLineSize, err)
 			return resultWithUsage(), err
+		}
+		if clientDisconnected {
+			return resultWithUsage(), fmt.Errorf("stream usage incomplete after disconnect: %w", err)
 		}
 		if !options.ClientOutputStarted(clientOutputStarted) {
 			msg := "OpenAI stream disconnected before completion"
@@ -450,10 +488,8 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 			return resultWithUsage(),
 				options.Failover(upstreamRequestID, nil, msg)
 		}
-		if clientDisconnected {
-			return resultWithUsage(), fmt.Errorf("stream usage incomplete after disconnect: %w", err)
-		}
 		options.RecordDisconnect(err, upstreamRequestID)
+		writeReadFailure("stream_read_error")
 		options.Logf("[OpenAI passthrough] 流读取异常中断: provider=%d request_id=%s err=%v",
 			options.ProviderID,
 			upstreamRequestID,
@@ -465,16 +501,24 @@ func ReadPassthroughStreaming(ctx context.Context, resp *http.Response, c *upstr
 		err := fmt.Errorf("upstream response failed: %s", failedMessage)
 		return resultWithUsage(), options.WrapOpenAIUpstreamWarningIfCyber(resp.StatusCode, failedPayload, failedMessage, err)
 	}
-	if !clientDisconnected && !sawDone && !sawTerminalEvent && ctx.Err() == nil {
+	if !sawTerminalEvent && ctx.Err() != nil {
+		return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", ctx.Err())
+	}
+	if !clientDisconnected && !sawTerminalEvent {
 		options.MissingTerminal(upstreamRequestID)
+		message, code := "OpenAI stream ended before a terminal event", "upstream_stream_incomplete"
+		if stopAtSentinel {
+			message, code = "OpenAI stream sent [DONE] before a terminal event", "upstream_done_without_terminal"
+		}
 		if !options.ClientOutputStarted(clientOutputStarted) {
 			return resultWithUsage(),
-				options.Failover(upstreamRequestID, nil, "OpenAI stream ended before a terminal event")
+				options.Failover(upstreamRequestID, nil, message)
 		}
 		options.RecordDisconnect(errors.New("stream ended before terminal event"), upstreamRequestID)
+		writeReadFailure(code)
 		return resultWithUsage(), errors.New("stream usage incomplete: missing terminal event")
 	}
-	if (sawDone || sawTerminalEvent) && !sawFailedEvent {
+	if sawTerminalEvent && !sawFailedEvent {
 		options.ClearDisconnect()
 	}
 	options.MissingUsage(resp, usage, terminalEventType, clientDisconnected)
@@ -563,13 +607,7 @@ func ReadPassthroughSSEAsJSON(resp *http.Response, sink upstream.OutputSink, opt
 			*usage = parsedUsage
 		}
 
-		if len(gjson.GetBytes(finalResponse, "output").Array()) == 0 {
-			if outputJSON, reconstructed := bridge.ReconstructResponseOutputFromSSE(bodyText); reconstructed {
-				if patched, err := sjson.SetRawBytes(finalResponse, "output", outputJSON); err == nil {
-					finalResponse = patched
-				}
-			}
-		}
+		finalResponse = bridge.RepairBufferedResponsesOutput(finalResponse, bodyText)
 		finalResponse = options.NonStream.SupplementCompaction(finalResponse, bodyText)
 		body = finalResponse
 		if originalModel != "" && mappedModel != "" && originalModel != mappedModel {

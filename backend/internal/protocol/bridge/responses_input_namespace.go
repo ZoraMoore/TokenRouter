@@ -7,6 +7,8 @@ import (
 
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+
+	openaiwire "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
 )
 
 // openAIResponsesToolCallItemTypes 是携带 namespace 的调用项类型集合。与
@@ -60,7 +62,7 @@ func StripOpenAIResponsesInputNamespaces(body []byte, keepToolCallNamespaces boo
 		}
 		first = false
 		itemBody := []byte(item.Raw)
-		if item.IsObject() && item.Get("namespace").Exists() &&
+		if item.IsObject() && item.Get("namespace").Exists() && !openaiwire.IsStandaloneClientItem(item) &&
 			(!keepToolCallNamespaces || !IsOpenAIResponsesToolCallItemType(item.Get("type").String())) {
 			itemBody, stripErr = sjson.DeleteBytes(itemBody, "namespace")
 			if stripErr != nil {

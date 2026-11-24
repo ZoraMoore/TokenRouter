@@ -20,6 +20,9 @@ type ToolContinuationSignals struct {
 
 // FunctionCallOutputValidation 汇总 function_call_output 关联性校验结果。
 type FunctionCallOutputValidation struct {
+	HasDesktopContext   bool
+	UnmatchedInputIndex int64
+
 	HasFunctionCallOutput              bool
 	HasToolCallContext                 bool
 	HasFunctionCallOutputMissingCallID bool
@@ -94,7 +97,7 @@ func NeedsToolContinuation(reqBody map[string]any) bool {
 			continue
 		}
 		itemType, _ := itemMap["type"].(string)
-		if IsCodexToolCallItemType(itemType) || itemType == "item_reference" {
+		if !IsStandaloneClientItemMap(itemMap) && (IsCodexToolCallItemType(itemType) || itemType == "item_reference") {
 			return true
 		}
 	}
@@ -130,6 +133,9 @@ func AnalyzeToolContinuationSignals(reqBody map[string]any) ToolContinuationSign
 				signals.HasToolCallContext = true
 			}
 		case IsCodexToolCallOutputItemType(itemType):
+			if IsStandaloneClientItemMap(itemMap) || IsHostedToolSearchOutputMap(itemMap) {
+				continue
+			}
 			signals.HasFunctionCallOutput = true
 			callID, _ := itemMap["call_id"].(string)
 			callID = strings.TrimSpace(callID)
@@ -172,229 +178,108 @@ func AnalyzeToolContinuationSignals(reqBody map[string]any) ToolContinuationSign
 	return signals
 }
 
-// ValidateFunctionCallOutputContextBytes 扫描 raw JSON 校验工具输出续接，供 handler 预校验使用。
+// ValidateFunctionCallOutputContextBytes 检查每个客户端工具结果的编号和历史引用。
 func ValidateFunctionCallOutputContextBytes(body []byte) FunctionCallOutputValidation {
-	result := FunctionCallOutputValidation{}
-	if len(body) == 0 {
-		return result
-	}
-	// handler 同步扫描 input，直接使用请求字节。
 	input := wirejson.ParseView(body).Get("input")
 	if !input.IsArray() {
-		return result
+		return FunctionCallOutputValidation{}
 	}
-
-	var callIDs map[string]struct{}
-	var referenceIDs map[string]struct{}
-	input.ForEach(func(index, item gjson.Result) bool {
-		if !item.IsObject() {
-			return true
-		}
-		itemType := item.Get("type").String()
-		switch {
-		case IsCodexToolCallOutputItemType(itemType):
-			result.HasFunctionCallOutput = true
-			id := item.Get("call_id")
-			callID := strings.TrimSpace(id.String())
-			if callID == "" {
-				result.noteMissingHTTPCallID(index.Int(), itemType, item.Get("execution").String(), id.Exists() && id.Type == gjson.Null)
-				return true
-			}
-			if callIDs == nil {
-				callIDs = make(map[string]struct{})
-			}
-			callIDs[callID] = struct{}{}
-		case IsCodexToolCallContextItemType(itemType):
-			if strings.TrimSpace(item.Get("call_id").String()) != "" {
-				result.HasToolCallContext = true
-			}
-		case itemType == "item_reference":
-			idValue := strings.TrimSpace(item.Get("id").String())
-			if idValue == "" {
-				return true
-			}
-			if referenceIDs == nil {
-				referenceIDs = make(map[string]struct{})
-			}
-			referenceIDs[idValue] = struct{}{}
-		}
-		return !result.HasFunctionCallOutput || !result.HasToolCallContext
-	})
-	if !result.HasFunctionCallOutput || result.HasToolCallContext || len(callIDs) == 0 || len(referenceIDs) == 0 {
-		return result
-	}
-	allReferenced := true
-	for callID := range callIDs {
-		if _, ok := referenceIDs[callID]; !ok {
-			allReferenced = false
-			break
-		}
-	}
-	result.HasItemReferenceForAllCallIDs = allReferenced
-	return result
+	return validateToolOutputItems(body, input)
 }
 
-// AnalyzeToolCallOutputContextCoverageBytes 全量扫描 input，按 call_id 精确匹配工具输出
-// 与可重建上下文。不能复用 ValidateFunctionCallOutputContextBytes 的 HasToolCallContext：
-// 该标志只代表"存在某一个上下文项"，部分覆盖的续链仍会被上游拒绝。
-func AnalyzeToolCallOutputContextCoverageBytes(body []byte) ToolCallOutputContextCoverage {
-	coverage := ToolCallOutputContextCoverage{}
-	if len(body) == 0 {
-		return coverage
-	}
-	input := wirejson.ParseView(body).Get("input")
-	if !input.IsArray() && !input.IsObject() {
-		return coverage
-	}
-
-	missingCallID := false
-	var outputCallIDs map[string]struct{}
+func validateToolOutputItems(body []byte, input gjson.Result) FunctionCallOutputValidation {
+	result := FunctionCallOutputValidation{}
+	// 延迟分配以减少普通对话的开销。
+	var outputs map[string]int64
 	var contextIDs map[string]struct{}
-	analyzeItem := func(item gjson.Result) {
-		if !item.IsObject() {
-			return
-		}
-		itemType := item.Get("type").String()
+	var names map[string]bool
+	check := func(index, item gjson.Result) bool {
+		kind := item.Get("type").String()
 		switch {
-		case IsCodexToolCallOutputItemType(itemType):
-			coverage.HasFunctionCallOutput = true
-			callID := strings.TrimSpace(item.Get("call_id").String())
+		case IsCodexToolCallOutputItemType(kind):
+			id := item.Get("call_id")
+			callID := strings.TrimSpace(id.Str)
+			// Codex 客户端独立条目跳过配对。HTTP 入口通常已把它们改写为用户消息，
+			// 请求含重复 JSON 键时条目保持原样到达这里，标记为桌面上下文后由入口的重复键检查拒绝。
+			if IsCodexClientItem(item) {
+				result.HasDesktopContext = true
+				return true
+			}
+			if IsDesktopContext(item) {
+				result.HasDesktopContext = true
+				if names == nil {
+					names = desktopToolNames(body)
+				}
+				if !names[item.Get("name").Str] {
+					return true
+				}
+			}
+			if kind == "tool_search_output" && item.Get("execution").Str == "server" && id.Type == gjson.Null && id.Exists() {
+				return true
+			}
+			result.HasFunctionCallOutput = true
 			if callID == "" {
-				missingCallID = true
-				return
+				result.noteMissingHTTPCallID(index.Int(), kind)
+			} else {
+				if outputs == nil {
+					outputs = map[string]int64{}
+				}
+				if _, exists := outputs[callID]; !exists {
+					outputs[callID] = index.Int()
+				}
 			}
-			if outputCallIDs == nil {
-				outputCallIDs = make(map[string]struct{})
+		case IsCodexToolCallContextItemType(kind), kind == "item_reference":
+			callID := strings.TrimSpace(item.Get("call_id").Str)
+			if kind == "item_reference" {
+				callID = strings.TrimSpace(item.Get("id").Str)
+			} else if callID != "" {
+				result.HasToolCallContext = true
 			}
-			outputCallIDs[callID] = struct{}{}
-		case IsCodexToolCallContextItemType(itemType):
-			callID := strings.TrimSpace(item.Get("call_id").String())
-			if callID == "" {
-				return
+			if callID != "" {
+				if contextIDs == nil {
+					contextIDs = map[string]struct{}{}
+				}
+				contextIDs[callID] = struct{}{}
 			}
-			if contextIDs == nil {
-				contextIDs = make(map[string]struct{})
-			}
-			contextIDs[callID] = struct{}{}
-		case itemType == "item_reference":
-			idValue := strings.TrimSpace(item.Get("id").String())
-			if idValue == "" {
-				return
-			}
-			if contextIDs == nil {
-				contextIDs = make(map[string]struct{})
-			}
-			contextIDs[idValue] = struct{}{}
 		}
+		return true
 	}
 	if input.IsArray() {
-		input.ForEach(func(_, item gjson.Result) bool {
-			analyzeItem(item)
-			return true
-		})
-	} else {
-		analyzeItem(input)
+		input.ForEach(check)
+	} else if input.IsObject() {
+		check(gjson.Result{}, input)
 	}
-
-	if !coverage.HasFunctionCallOutput || missingCallID {
-		return coverage
-	}
-	for callID := range outputCallIDs {
-		if _, ok := contextIDs[callID]; !ok {
-			return coverage
-		}
-	}
-	coverage.ContextCoversAllCallIDs = true
-	return coverage
-}
-
-// ValidateFunctionCallOutputContext 为 handler 提供低开销校验结果：
-// 1) 无工具输出直接返回
-// 2) 若已存在工具调用上下文则提前返回
-// 3) 仅在无工具上下文时才构建 call_id / item_reference 集合
-// FunctionCallOutput 字段覆盖所有 Codex 工具输出。
-func ValidateFunctionCallOutputContext(reqBody map[string]any) FunctionCallOutputValidation {
-	result := FunctionCallOutputValidation{}
-	if reqBody == nil {
-		return result
-	}
-	input, ok := reqBody["input"].([]any)
-	if !ok {
-		return result
-	}
-
-	for _, item := range input {
-		itemMap, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		itemType, _ := itemMap["type"].(string)
-		switch {
-		case IsCodexToolCallOutputItemType(itemType):
-			result.HasFunctionCallOutput = true
-		case IsCodexToolCallContextItemType(itemType):
-			callID, _ := itemMap["call_id"].(string)
-			if strings.TrimSpace(callID) != "" {
-				result.HasToolCallContext = true
+	result.HasItemReferenceForAllCallIDs = len(outputs) > 0
+	var unmatched bool
+	for id, index := range outputs {
+		if _, ok := contextIDs[id]; !ok {
+			result.HasItemReferenceForAllCallIDs = false
+			if !unmatched || index < result.UnmatchedInputIndex {
+				result.UnmatchedInputIndex = index
 			}
-		}
-		if result.HasFunctionCallOutput && result.HasToolCallContext {
-			return result
+			unmatched = true
 		}
 	}
-
-	if !result.HasFunctionCallOutput || result.HasToolCallContext {
-		return result
-	}
-
-	callIDs := make(map[string]struct{})
-	referenceIDs := make(map[string]struct{})
-	for index, item := range input {
-		itemMap, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		itemType, _ := itemMap["type"].(string)
-		switch {
-		case IsCodexToolCallOutputItemType(itemType):
-			id, present := itemMap["call_id"]
-			callID, _ := id.(string)
-			callID = strings.TrimSpace(callID)
-			if callID == "" {
-				execution, _ := itemMap["execution"].(string)
-				result.noteMissingHTTPCallID(int64(index), itemType, execution, present && id == nil)
-				continue
-			}
-			callIDs[callID] = struct{}{}
-		case itemType == "item_reference":
-			idValue, _ := itemMap["id"].(string)
-			idValue = strings.TrimSpace(idValue)
-			if idValue == "" {
-				continue
-			}
-			referenceIDs[idValue] = struct{}{}
-		}
-	}
-
-	if len(callIDs) == 0 || len(referenceIDs) == 0 {
-		return result
-	}
-	allReferenced := true
-	for callID := range callIDs {
-		if _, ok := referenceIDs[callID]; !ok {
-			allReferenced = false
-			break
-		}
-	}
-	result.HasItemReferenceForAllCallIDs = allReferenced
 	return result
 }
 
-// noteMissingHTTPCallID 记录需要客户端配对的输出。服务端工具搜索用显式 null 表示托管历史。
-func (v *FunctionCallOutputValidation) noteMissingHTTPCallID(index int64, itemType, execution string, explicitNull bool) {
-	if itemType == "tool_search_output" && execution == "server" && explicitNull {
-		return
+// AnalyzeToolCallOutputContextCoverageBytes 检查移除 previous_response_id 后能否恢复全部工具配对。
+func AnalyzeToolCallOutputContextCoverageBytes(body []byte) ToolCallOutputContextCoverage {
+	v := validateToolOutputItems(body, wirejson.ParseView(body).Get("input"))
+	return ToolCallOutputContextCoverage{HasFunctionCallOutput: v.HasFunctionCallOutput, ContextCoversAllCallIDs: v.HasItemReferenceForAllCallIDs && !v.HasFunctionCallOutputMissingCallID}
+}
+
+// ValidateFunctionCallOutputContext 与 HTTP 入站使用相同的配对规则。
+func ValidateFunctionCallOutputContext(reqBody map[string]any) FunctionCallOutputValidation {
+	body, err := wirejson.Marshal(reqBody)
+	if err != nil {
+		return FunctionCallOutputValidation{}
 	}
+	return ValidateFunctionCallOutputContextBytes(body)
+}
+
+// noteMissingHTTPCallID 保存第一个无编号工具结果的原始位置。
+func (v *FunctionCallOutputValidation) noteMissingHTTPCallID(index int64, itemType string) {
 	if !v.HasFunctionCallOutputMissingCallID {
 		v.HasFunctionCallOutputMissingCallID = true
 		v.MissingCallIDItemType = strings.TrimSpace(itemType)

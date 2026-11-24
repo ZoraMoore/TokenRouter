@@ -116,11 +116,8 @@ func (p openAITextHTTPBackend) PolicyDenied(c *gin.Context) {
 	MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
 }
 
-func (p openAITextHTTPBackend) NormalizeBootstrap(body []byte, delegation bool) ([]byte, bool) {
-	if delegation {
-		return requeststate.NormalizeCodexDelegationBootstrap(body)
-	}
-	return requeststate.NormalizeCodexAutomationBootstrap(body)
+func (p openAITextHTTPBackend) NormalizeClientItems(body []byte) ([]byte, []requeststate.CodexClientItem) {
+	return requeststate.NormalizeCodexClientItems(body)
 }
 
 func (p openAITextHTTPBackend) ValidateTier(body []byte) error {

@@ -11,7 +11,7 @@ import (
 )
 
 func (h OpenAIErrorOutput) EnsureResponse(c *gin.Context, streamStarted bool, err error) bool {
-	if c == nil || c.Writer == nil {
+	if c == nil || c.Writer == nil || (c.Request != nil && c.Request.Context().Err() != nil) {
 		return false
 	}
 	// 两类心跳停止后读取 Writer 状态，此时心跳 goroutine 已结束写入。

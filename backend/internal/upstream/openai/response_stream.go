@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -78,7 +77,8 @@ type StreamOptions struct {
 	WrapOpenAIUpstreamWarningIfCyber                                     func(int, []byte, string, error) error
 	TruncateString                                                       func(string, int) string
 	OpenAIStreamDataStartsTTFT                                           func(string, string, bool, string) bool
-	OpenAIStreamEventIsTerminalWithType                                  func(string, string) bool
+	MarkStreamFailure                                                    func(code string, writeErr error)
+	ObserveTerminal                                                      func(kind string)
 }
 
 // StreamingResult streaming response result.
@@ -251,6 +251,7 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 	// 注意：OpenAI `/v1/responses` streaming 事件必须符合 OpenAI Responses schema；
 	// 否则下游 SDK（例如 OpenCode）会因为类型校验失败而报错。
 	errorEventSent := false
+	stopAtSentinel := false
 	clientDisconnected := false // 客户端断开后继续 drain 上游以收集 usage
 	sawTerminalEvent := false
 	sawFailedEvent := false
@@ -261,7 +262,7 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 	failedMessage := ""
 	var failedPayload []byte
 	clientOutputStarted := false
-	codexFailureTerminal := options.CodexFailureTerminal
+	codexFailureTerminal := options.CodexFailureTerminal || options.NativeOpenAI
 	upstreamRequestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
 	var streamEarlyErr error
 	terminalFailurePending := false
@@ -329,20 +330,19 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 		eventShouldFlush = false
 	}
 	sendErrorEvent := func(reason string) {
-		if errorEventSent || clientDisconnected {
+		if errorEventSent || failureDelivered || clientDisconnected || ctx.Err() != nil {
 			return
 		}
 		errorEventSent = true
-		payload := `{"type":"error","sequence_number":0,"error":{"type":"upstream_error","message":` + strconv.Quote(reason) + `,"code":` + strconv.Quote(reason) + `}}`
-		if err := flushBuffered(); err != nil {
-			clientDisconnected = true
-			return
+		err := flushBuffered()
+		if err == nil {
+			_, err = writePendingString(options.readFailureFrame(responseID, originalModel, reason))
 		}
-		if _, err := writePendingString("data: " + payload + "\n\n"); err != nil {
-			clientDisconnected = true
-			return
+		if err == nil {
+			err = flushBuffered()
 		}
-		if err := flushBuffered(); err != nil {
+		options.MarkStreamFailure(reason, err)
+		if err != nil {
 			clientDisconnected = true
 			return
 		}
@@ -353,6 +353,11 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 	needModelReplace := originalModel != mappedModel
 	responseAccumulator := bridge.NewBufferedResponseAccumulator()
 	streamDoneItems := bridge.NewResponsesStreamOutputItems()
+	defer func() {
+		if count := streamDoneItems.ConflictCount(); count > 0 {
+			options.Logf("Responses tool identity conflict: provider=%d count=%d", options.ProviderID, count)
+		}
+	}()
 	streamImageOutputs := make([]json.RawMessage, 0, 1)
 	streamSeenImages := make(map[string]struct{})
 	searchCounter := 0
@@ -401,7 +406,7 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 		lastDownstreamWriteAt = time.Now()
 	}
 	synthesizeBareErrorFailure := func() bool {
-		if !codexFailureTerminal || !sawBareError || sawResponseFailed || clientDisconnected {
+		if !codexFailureTerminal || !sawBareError || sawResponseFailed || clientDisconnected || ctx.Err() != nil {
 			return false
 		}
 		if bareErrorProviderSideEffectsPending {
@@ -429,17 +434,29 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 		if sawTerminalEvent && !sawFailedEvent {
 			options.ClearDisconnect()
 		}
-		if !sawTerminalEvent && !options.ClientOutputStarted(clientOutputStarted) && !eventShouldFlush {
+		if !sawTerminalEvent && ctx.Err() != nil {
+			return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", ctx.Err())
+		}
+		if !sawTerminalEvent && !clientDisconnected && !options.ClientOutputStarted(clientOutputStarted) && !eventShouldFlush {
+			message := "OpenAI stream ended before a terminal event"
+			if stopAtSentinel {
+				message = "OpenAI stream sent [DONE] before a terminal event"
+			}
 			return resultWithUsage(), options.Failover(
 				upstreamRequestID,
 				nil,
-				"OpenAI stream ended before a terminal event",
+				message,
 			)
 		}
 		flushPending("Client disconnected during final flush, returning collected usage")
 		if !sawTerminalEvent {
 			if options.ClientOutputStarted(clientOutputStarted) && !clientDisconnected {
 				options.RecordDisconnect(errors.New("stream ended before terminal event"), upstreamRequestID)
+				code := "upstream_stream_incomplete"
+				if stopAtSentinel {
+					code = "upstream_done_without_terminal"
+				}
+				sendErrorEvent(code)
 			}
 			return resultWithUsage(), fmt.Errorf("stream usage incomplete: missing terminal event")
 		}
@@ -479,6 +496,9 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 		}
 		// 客户端断开/取消请求时，上游读取往往会返回 context canceled。
 		// /v1/responses 的 SSE 事件必须符合 OpenAI 协议；这里不注入自定义 error event，避免下游 SDK 解析失败。
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", ctxErr), true
+		}
 		if errors.Is(scanErr, context.Canceled) || errors.Is(scanErr, context.DeadlineExceeded) {
 			if eventShouldFlush {
 				flushPending("Client disconnected during canceled stream flush, returning collected usage")
@@ -490,16 +510,16 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 			sendErrorEvent("response_too_large")
 			return resultWithUsage(), scanErr, true
 		}
+		// 客户端已断开时，上游出错仅影响体验，不影响计费；返回已收集 usage
+		if clientDisconnected {
+			return resultWithUsage(), fmt.Errorf("stream usage incomplete after disconnect: %w", scanErr), true
+		}
 		if !options.ClientOutputStarted(clientOutputStarted) && !eventShouldFlush {
 			msg := "OpenAI stream disconnected before completion"
 			if errText := strings.TrimSpace(scanErr.Error()); errText != "" {
 				msg += ": " + errText
 			}
 			return resultWithUsage(), options.Failover(upstreamRequestID, nil, msg), true
-		}
-		// 客户端已断开时，上游出错仅影响体验，不影响计费；返回已收集 usage
-		if clientDisconnected {
-			return resultWithUsage(), fmt.Errorf("stream usage incomplete after disconnect: %w", scanErr), true
 		}
 		options.RecordDisconnect(scanErr, upstreamRequestID)
 		sendErrorEvent("stream_read_error")
@@ -524,6 +544,11 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 		// Extract data from SSE line (supports both "data: " and "data:" formats)
 		if data, ok := wire.ExtractSSEDataLine(line); ok {
 			options.MarkTime(StreamTimeData)
+			if strings.TrimSpace(data) == "[DONE]" && !sawTerminalEvent {
+				options.ObserveTerminal("done_without_terminal")
+				stopAtSentinel = true
+				return
+			}
 			dataBytes := []byte(data)
 			eventType := wire.EffectiveOpenAISSEEventType(dataBytes, pendingSSEEventType)
 			options.Observe(dataBytes, eventType)
@@ -534,6 +559,19 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 				line = "data: " + data
 			}
 			eventType = normalizedType
+			if sawTerminalEvent && strings.TrimSpace(data) != "[DONE]" {
+				if duplicateTerminal {
+					hasObservedUsage = wire.ParseSSEUsageBytesWithType(dataBytes, eventType, usage) || hasObservedUsage
+				}
+				suppressCurrentEvent = true
+				return
+			}
+			if wire.IsUnresolvedResponsesEnd(dataBytes, eventType) {
+				hasObservedUsage = wire.ParseSSEUsageBytesWithType(dataBytes, eventType, usage) || hasObservedUsage
+				// 状态不明的旧 done 不提交首输出，也不形成终态。
+				suppressCurrentEvent = true
+				return
+			}
 			if codexFailureTerminal && sawBareError && !sawResponseFailed &&
 				eventType == "response.completed" {
 				// 只有规范化后确认成功的终态才能覆盖此前暂存的独立错误。
@@ -548,7 +586,8 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 			// 失败终态需要清除旧事件头的抑制状态，避免误丢收尾事件。
 			suppressCurrentEvent = codexFailureTerminal && (eventType == "error" || (sawBareError && !sawResponseFailed && eventType != "response.failed"))
 			// 使用规范化后的类型判定终态，兼容 data 中缺少 type 的生命周期事件。
-			if options.OpenAIStreamEventIsTerminalWithType(data, eventType) {
+			if wire.IsResponsesTerminalType(eventType) {
+				options.ObserveTerminal(eventType)
 				sawTerminalEvent = true
 			}
 			if responseID == "" {
@@ -669,7 +708,11 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 			if imageOutput, ok := wire.ExtractImageGenerationOutputFromSSEData(dataBytes, streamSeenImages); ok {
 				streamImageOutputs = append(streamImageOutputs, imageOutput)
 			}
-			streamDoneItems.Observe(dataBytes)
+			if repaired := streamDoneItems.Observe(dataBytes); repaired != nil {
+				dataBytes = repaired
+				data = string(repaired)
+				line = "data: " + data
+			}
 			if wire.ResponsesStreamEventMayContributeToOutput(eventType) {
 				var streamEvent wire.ResponsesStreamEvent
 				if err := json.Unmarshal(dataBytes, &streamEvent); err == nil {
@@ -866,6 +909,9 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 		defer httpclient.PutSSEScannerBuf64K(scanBuf)
 		for documentScanner.Scan() {
 			processSSELine(documentScanner.Text(), true)
+			if stopAtSentinel {
+				return finalizeStream()
+			}
 			if streamEarlyErr != nil {
 				return resultWithUsage(), streamEarlyErr
 			}
@@ -944,11 +990,17 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 			}
 			processSSELine(ev.line, len(events) == 0)
 			markEventProcessed(ev)
+			if stopAtSentinel {
+				return finalizeStream()
+			}
 			if streamEarlyErr != nil {
 				return resultWithUsage(), streamEarlyErr
 			}
 
 		case <-intervalCh:
+			if sawTerminalEvent && !sawFailedEvent {
+				return finalizeStream()
+			}
 			if failureDelivered {
 				return resultWithUsage(), fmt.Errorf("upstream response failed: %s", failedMessage)
 			}
@@ -978,6 +1030,9 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 			if synthesizeBareErrorFailure() {
 				flushPending("Client disconnected during bare error timeout flush, returning collected usage")
 				return resultWithUsage(), fmt.Errorf("upstream response failed: %s", failedMessage)
+			}
+			if !options.ClientOutputStarted(clientOutputStarted) && !eventShouldFlush {
+				return resultWithUsage(), options.Failover(upstreamRequestID, nil, "upstream stream timeout before output")
 			}
 			sendErrorEvent("stream_timeout")
 			return resultWithUsage(), fmt.Errorf("stream data interval timeout")
@@ -1040,4 +1095,10 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 			}
 		}
 	}
+}
+
+// readFailureFrame 为尚可写入的部分响应补充一次 Responses 失败事件。
+func (o StreamOptions) readFailureFrame(id, model, code string) string {
+	source, _ := json.Marshal(map[string]any{"error": map[string]string{"code": code}})
+	return "\n" + o.BuildOpenAIResponseFailedSSE(id, model, source, code)
 }

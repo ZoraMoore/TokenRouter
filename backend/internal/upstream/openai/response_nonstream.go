@@ -7,9 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
-
 	"github.com/TokenFlux/TokenRouter/internal/protocol/bridge"
 	wire "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
 	"github.com/TokenFlux/TokenRouter/internal/upstream"
@@ -159,13 +156,7 @@ func ReadSSEAsJSON(ctx context.Context, resp *http.Response, c *upstream.OutputC
 		// When the terminal event has an empty output array, reconstruct
 		// output from accumulated delta events so the client gets full content.
 		// gjson Array() returns empty slice for null, missing, or empty arrays.
-		if len(gjson.GetBytes(finalResponse, "output").Array()) == 0 {
-			if outputJSON, reconstructed := bridge.ReconstructResponseOutputFromSSE(bodyText); reconstructed {
-				if patched, err := sjson.SetRawBytes(finalResponse, "output", outputJSON); err == nil {
-					finalResponse = patched
-				}
-			}
-		}
+		finalResponse = bridge.RepairBufferedResponsesOutput(finalResponse, bodyText)
 		finalResponse = options.SupplementCompaction(finalResponse, bodyText)
 		body = finalResponse
 		if originalModel != mappedModel {

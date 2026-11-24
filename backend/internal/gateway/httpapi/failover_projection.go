@@ -40,7 +40,7 @@ func ProjectOpenAIFailoverError(err *forwardcore.UpstreamFailoverError) *OpenAIF
 		Body:                    err.ResponseBody,
 		TooLarge:                gatewayprovider.IsOpenAIRequestBodyTooLarge(err),
 		TooLargeMessage:         forwardcore.OpenAIRequestBodyTooLargeClientMessage,
-		ContinuationUnsupported: err.Reason == forwardcore.OpenAIHTTPContinuationUnsupportedReason,
+		ContinuationUnsupported: err.Reason == forwardcore.OpenAIHTTPContinuationUnsupportedReason || err.Reason == forwardcore.OpenAIDesktopContextUnsupportedReason,
 		Credential:              err.IsCredentialFailure(),
 		CapacityShed:            gatewayprovider.IsOpenAICapacityShed(err),
 		SilentRefusal:           forwardcore.IsOpenAISilentRefusalErrorBody(err.ResponseBody),

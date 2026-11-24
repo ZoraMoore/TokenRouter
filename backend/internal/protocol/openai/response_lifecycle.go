@@ -16,6 +16,22 @@ type ResponseLifecycleNormalizer struct {
 	completedID  string
 }
 
+// IsUnresolvedResponsesEnd 标记不能向客户端声明成功的结束帧。
+// 旧 done 的可识别状态已由 Normalize 转换，completed 还需要合法的 response 对象。
+func IsUnresolvedResponsesEnd(data []byte, kind string) bool {
+	return kind == "response.done" || (kind == "response.completed" && (!gjson.ValidBytes(data) || !gjson.GetBytes(data, "response").IsObject()))
+}
+
+// IsResponsesTerminalType 识别规范化后可交给 Responses 客户端的终止事件。
+func IsResponsesTerminalType(eventType string) bool {
+	switch eventType {
+	case "response.completed", "response.failed", "response.incomplete", "response.cancelled", "response.canceled":
+		return true
+	default:
+		return false
+	}
+}
+
 // IsResponseLifecycleEvent 识别携带完整 Response 对象的生命周期事件。
 func IsResponseLifecycleEvent(eventType string) bool {
 	switch strings.TrimSpace(eventType) {

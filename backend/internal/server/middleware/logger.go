@@ -83,6 +83,11 @@ func Logger() gin.HandlerFunc {
 		if c.Request.ContentLength >= 0 {
 			fields = append(fields, zap.Int64("request_content_length", c.Request.ContentLength))
 		}
+		for _, key := range []telemetry.ContextKey{telemetry.ResponsesTerminal, telemetry.ResponsesFailureWrite} {
+			if value := c.GetString(string(key)); value != "" {
+				fields = append(fields, zap.String(string(key), value))
+			}
+		}
 		fields = appendRequestStageFields(fields, c)
 		telemetry.UpdateRequest(c.Request.Context(), func(record *telemetry.RequestRecord) {
 			record.Timings = make(map[string]int64)

@@ -40,6 +40,8 @@ import (
 	responseupstream "github.com/TokenFlux/TokenRouter/internal/upstream/openai"
 )
 
+const flushTestCompletedLine = `data: {"type":"response.completed","response":{"id":"resp_flush","status":"completed","output":[{"id":"msg_test","type":"message","content":[]}]}}`
+
 // 读取器在输出内容和用量后报错，测试检查返回结果。
 type grokObservationErrorReader struct{ err error }
 
@@ -1384,7 +1386,7 @@ func TestOpenAIResponseFlush_SlowEventsFlushOnceAtBoundaries(t *testing.T) {
 		`data: {"type":"response.output_text.delta","delta":"a"}`,
 		`data: {"type":"response.output_text.delta","delta":"b"}`,
 		`data: {"type":"response.output_text.delta","delta":"c"}`,
-		`data: [DONE]`,
+		flushTestCompletedLine,
 	}
 	body := strings.Join(events, "\n\n") + "\n\n"
 	recorder := newOpenAIResponseFlushRecorder()
@@ -1404,7 +1406,7 @@ func TestOpenAIResponseFlush_SlowEventsFlushOnceAtBoundaries(t *testing.T) {
 func TestOpenAIResponseFlush_DataQueuedButBlankDrainsFlushesOnce(t *testing.T) {
 	first := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"first\"}\n\n"
 	second := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"second\"}\n\n"
-	terminal := "data: [DONE]\n\n"
+	terminal := flushTestCompletedLine + "\n\n"
 	allowSecond := make(chan struct{})
 	allowTerminal := make(chan struct{})
 	terminalWaiting := make(chan struct{})
@@ -1441,7 +1443,7 @@ func TestOpenAIResponseFlush_BurstDoesNotIncreaseFlushes(t *testing.T) {
 	burst := strings.Join([]string{
 		`data: {"type":"response.output_text.delta","delta":"second"}`,
 		`data: {"type":"response.output_text.delta","delta":"third"}`,
-		`data: [DONE]`,
+		flushTestCompletedLine,
 	}, "\n\n") + "\n\n"
 	allowBurst := make(chan struct{})
 	eofReached := make(chan struct{})
@@ -1474,7 +1476,7 @@ func TestOpenAIResponseFlush_BurstDoesNotIncreaseFlushes(t *testing.T) {
 func TestOpenAIResponseFlush_CommentAndEOFOnlyFlushCompleteResidual(t *testing.T) {
 	body := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"a\"}\n\n" +
 		": upstream-comment\n\n" +
-		"data: [DONE]\n"
+		flushTestCompletedLine + "\n"
 	recorder := newOpenAIResponseFlushRecorder()
 
 	result, err := runOpenAIResponseFlushTest(recorder, io.NopCloser(strings.NewReader(body)), OpenAIResponseOptions{})
@@ -1486,11 +1488,11 @@ func TestOpenAIResponseFlush_CommentAndEOFOnlyFlushCompleteResidual(t *testing.T
 	require.Len(t, flushes, 3)
 	require.True(t, strings.HasSuffix(flushes[0], "\n\n"))
 	require.True(t, strings.HasSuffix(flushes[1], "\n\n"))
-	require.True(t, strings.HasSuffix(flushes[2], "data: [DONE]\n"), "EOF must flush only the remaining bytes")
+	require.True(t, strings.HasSuffix(flushes[2], flushTestCompletedLine+"\n"), "EOF must flush only the remaining bytes")
 }
 
 func TestOpenAIResponseFlush_TerminalReadErrorFlushesResidual(t *testing.T) {
-	body := "data: [DONE]\n"
+	body := flushTestCompletedLine + "\n"
 	recorder := newOpenAIResponseFlushRecorder()
 
 	result, err := runOpenAIResponseFlushTest(recorder, &openAIResponseFlushReadError{payload: []byte(body)}, OpenAIResponseOptions{})
@@ -1513,8 +1515,9 @@ func TestOpenAIResponseFlush_OutputWithoutTerminalFlushesResidualWithoutFailover
 	require.False(t, errors.As(err, &failoverErr))
 	require.NotNil(t, result)
 	gotBody, flushes := recorder.snapshot()
-	require.Equal(t, body, gotBody)
-	require.Equal(t, []string{body}, flushes)
+	require.True(t, strings.HasPrefix(gotBody, body))
+	require.Equal(t, 1, strings.Count(gotBody, `"type":"response.failed"`))
+	require.Equal(t, gotBody, flushes[len(flushes)-1])
 }
 
 func TestOpenAIResponseFlush_PreambleWithoutTerminalRemainsBufferedForFailover(t *testing.T) {
@@ -1553,14 +1556,14 @@ func TestOpenAIResponseFlush_KeepaliveFlushesImmediately(t *testing.T) {
 	waitOpenAIResponseFlushCount(t, recorder, 1)
 	_, flushes := recorder.snapshot()
 	require.Equal(t, ":\n\n", flushes[0])
-	_, err := writer.Write([]byte("data: [DONE]\n\n"))
+	_, err := writer.Write([]byte(flushTestCompletedLine + "\n\n"))
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 
 	require.NoError(t, <-errCh)
 	require.NotNil(t, <-resultCh)
 	gotBody, flushes := recorder.snapshot()
-	require.Equal(t, ":\n\ndata: [DONE]\n\n", gotBody)
+	require.Equal(t, ":\n\n"+flushTestCompletedLine+"\n\n", gotBody)
 	require.Len(t, flushes, 2)
 }
 
@@ -1573,7 +1576,7 @@ func TestOpenAIResponseFlush_KeepaliveDoesNotSplitOpenEvent(t *testing.T) {
 	}
 	partialEvent := strings.Join(dataLines, "\n") + "\n"
 	completeEvent := partialEvent + "\n"
-	terminal := "data: [DONE]\n\n"
+	terminal := flushTestCompletedLine + "\n\n"
 	allowBlank := make(chan struct{})
 	allowTerminal := make(chan struct{})
 	blankWaiting := make(chan struct{})
@@ -1701,8 +1704,8 @@ func TestOpenAIResponseFlush_BareErrorFollowedByCompletedUsesCompletedTerminal(t
 	require.Contains(t, gotBody, `"type":"response.completed"`)
 }
 
-func TestOpenAIResponseFlush_CompatibleAPIKeyDoesNotUseCodexBareErrorSynthesis(t *testing.T) {
-	body := "data: {\"type\":\"error\",\"error\":{\"code\":\"provider_error\",\"message\":\"provider failed\"}}\n\n"
+func TestOpenAIResponseFlush_CompatibleAPIKeyEmitsFailedForBareError(t *testing.T) {
+	body := "data: {\"type\":\"error\",\"error\":{\"code\":\"invalid_request_error\",\"message\":\"provider failed\"}}\n\n"
 	recorder := newOpenAIResponseFlushRecorder()
 	provider := &gatewayprovider.ExecutionProvider{Record: providercore.Record{LoadLocation: time.LoadLocation, ID: 2, Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeAPIKey}}
 
@@ -1711,8 +1714,8 @@ func TestOpenAIResponseFlush_CompatibleAPIKeyDoesNotUseCodexBareErrorSynthesis(t
 	require.Error(t, err)
 	require.NotNil(t, result)
 	gotBody, _ := recorder.snapshot()
-	require.Contains(t, gotBody, `"type":"error"`)
-	require.NotContains(t, gotBody, `"type":"response.failed"`)
+	require.NotContains(t, gotBody, `"type":"error"`)
+	require.Equal(t, 1, strings.Count(gotBody, `"type":"response.failed"`))
 }
 
 func TestOpenAIResponseFlush_RecentBareErrorAllowsCompletedBeforeIdleTimeout(t *testing.T) {
@@ -1789,13 +1792,13 @@ func TestOpenAIResponseFlush_ReusedTypeKeepsSSEBytesAndTerminalSemantics(t *test
 	}{
 		{
 			name:       "whitespace around done",
-			body:       "data: \t[DONE]  \n\n",
-			flushCount: 1,
+			body:       flushTestCompletedLine + "\n\ndata: \t[DONE]  \n\n",
+			flushCount: 2,
 		},
 		{
 			name:       "invalid JSON before done",
-			body:       "data: {\"type\":\n\ndata: [DONE]\n\n",
-			flushCount: 2,
+			body:       "data: {\"type\":\n\n" + flushTestCompletedLine + "\n\ndata: [DONE]\n\n",
+			flushCount: 3,
 		},
 	}
 
@@ -1981,12 +1984,9 @@ func TestOpenAIStreamingTimeout(t *testing.T) {
 	_ = pw.Close()
 	_ = pr.Close()
 
-	if err == nil || !strings.Contains(err.Error(), "stream data interval timeout") {
-		t.Fatalf("expected stream timeout error, got %v", err)
-	}
-	if !strings.Contains(rec.Body.String(), "\"type\":\"error\"") || !strings.Contains(rec.Body.String(), "stream_timeout") {
-		t.Fatalf("expected OpenAI-compatible error SSE event, got %q", rec.Body.String())
-	}
+	var failure *forwardcore.UpstreamFailoverError
+	require.ErrorAs(t, err, &failure)
+	require.Empty(t, rec.Body.String())
 }
 
 func TestOpenAIStreamingContextCanceledReturnsIncompleteErrorWithoutInjectingErrorEvent(t *testing.T) {
@@ -2771,7 +2771,7 @@ func TestOpenAIStreamingTooLong(t *testing.T) {
 	if !errors.Is(err, bufio.ErrTooLong) {
 		t.Fatalf("expected ErrTooLong, got %v", err)
 	}
-	if !strings.Contains(rec.Body.String(), "\"type\":\"error\"") || !strings.Contains(rec.Body.String(), "response_too_large") {
+	if !strings.Contains(rec.Body.String(), "\"type\":\"response.failed\"") || !strings.Contains(rec.Body.String(), "response_too_large") {
 		t.Fatalf("expected OpenAI-compatible error SSE event, got %q", rec.Body.String())
 	}
 }
@@ -3261,7 +3261,7 @@ func TestResponsesLifecycleCompatibility(t *testing.T) {
 		},
 		{
 			name: "truncated stream stays failed",
-			body: delta, types: []string{"response.output_text.delta"}, wantError: true,
+			body: delta, types: []string{"response.output_text.delta", "response.failed"}, wantError: true,
 		},
 	}
 	for _, mode := range []string{"standard", "async", "passthrough"} {
@@ -3540,4 +3540,94 @@ func selectionDiagnosticForStreamTest(t *testing.T, source *OpenAIResponsesExecu
 	require.NoError(t, err)
 	require.NotNil(t, result.Detail)
 	return result.Detail.Eligible, strings.Join(result.Detail.HardFilterReasons, ",")
+}
+
+func TestResponsesStreamRequiresProtocolTerminal(t *testing.T) {
+	const delta = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"
+	const tool = "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"call_1\",\"name\":\"example\",\"arguments\":\"{}\"}}\n\n"
+	const complete = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_ok\",\"status\":\"completed\",\"usage\":{\"output_tokens\":1}}}\n\n"
+	for _, mode := range []string{"sync", "async", "passthrough"} {
+		for _, tc := range []struct {
+			name, body     string
+			retry, success bool
+		}{
+			{"only_sentinel", "data: [DONE]\n\n", true, false},
+			{"unknown_done", "data: {\"type\":\"response.done\",\"response\":{\"status\":\"in_progress\"}}\n\ndata: [DONE]\n\n", true, false},
+			{"text_then_sentinel", delta + "data: [DONE]\n\n", false, false},
+			{"malformed_completed_after_text", delta + "event: response.completed\ndata: {}\n\ndata: [DONE]\n\n", false, false},
+			{"tool_then_eof", tool, false, false},
+			{"text_then_completed", delta + complete + "data: [DONE]\n\n", false, true},
+		} {
+			t.Run(mode+"/"+tc.name, func(t *testing.T) {
+				body := io.NopCloser(strings.NewReader(tc.body))
+				var err error
+				var wire string
+				if mode == "passthrough" {
+					_, rec, _, readErr := runPassthroughFlushTest(t, body, -1)
+					err, wire = readErr, rec.Body.String()
+				} else {
+					rec := newOpenAIResponseFlushRecorder()
+					opts := OpenAIResponseOptions{}
+					if mode == "async" {
+						opts.StreamDataIntervalTimeout = 30
+					}
+					_, err = runOpenAIResponseFlushTest(rec, body, opts)
+					wire, _ = rec.snapshot()
+				}
+				if tc.success {
+					require.NoError(t, err)
+					require.Equal(t, 1, strings.Count(wire, `"type":"response.completed"`))
+					return
+				}
+				require.Error(t, err)
+				var failover *forwardcore.UpstreamFailoverError
+				require.Equal(t, tc.retry, errors.As(err, &failover))
+				require.NotContains(t, wire, "[DONE]")
+				if tc.retry {
+					require.Empty(t, wire)
+				} else {
+					require.Equal(t, 1, strings.Count(wire, `"type":"response.failed"`), wire)
+				}
+			})
+		}
+	}
+}
+
+func TestResponsesDoneAndCompletedRetainDistinctToolNumbers(t *testing.T) {
+	const callEvents = "data: " + `{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","name":"read","call_id":"call_1","arguments":""}}` + "\n\n" +
+		"data: " + `{"type":"response.output_item.done","output_index":0,"item":{"id":"fc_1","type":"function_call","name":"read","arguments":"{}"}}` + "\n\n" +
+		"data: " + `{"type":"response.output_item.done","output_index":1,"item":{"id":"fc_2","type":"function_call","name":"read","arguments":"{}"}}` + "\n\n" +
+		"data: " + `{"type":"response.completed","response":{"id":"resp_roundtrip","status":"completed","output":[{"id":"fc_2","type":"function_call","call_id":"call_2","name":"read","extra":42}]}}` + "\n\n"
+	for _, mode := range []string{"sync", "async", "passthrough"} {
+		t.Run(mode, func(t *testing.T) {
+			var body string
+			var err error
+			r := io.NopCloser(strings.NewReader(callEvents))
+			if mode == "passthrough" {
+				_, w, _, readErr := runPassthroughFlushTest(t, r, -1)
+				body, err = w.Body.String(), readErr
+			} else {
+				cfg := OpenAIResponseOptions{}
+				if mode == "async" {
+					cfg.StreamDataIntervalTimeout = 30
+				}
+				w := newOpenAIResponseFlushRecorder()
+				_, err = runOpenAIResponseFlushTest(w, r, cfg)
+				body, _ = w.snapshot()
+			}
+			require.NoError(t, err)
+			done := map[string]string{}
+			protocolopenai.ForEachSSEDataPayload(body, func(event []byte) {
+				if gjson.GetBytes(event, "type").Str == "response.output_item.done" {
+					done[gjson.GetBytes(event, "item.id").Str] = gjson.GetBytes(event, "item.call_id").Str
+				}
+			})
+			require.Equal(t, map[string]string{"fc_1": "call_1", "fc_2": ""}, done)
+			_, terminal, ok := protocolopenai.ExtractOpenAISSETerminalEvent(body)
+			require.True(t, ok)
+			require.Equal(t, "call_1", gjson.GetBytes(terminal, "response.output.0.call_id").Str)
+			require.Equal(t, "call_2", gjson.GetBytes(terminal, "response.output.1.call_id").Str)
+			require.Equal(t, "42", gjson.GetBytes(terminal, "response.output.1.extra").Raw)
+		})
+	}
 }

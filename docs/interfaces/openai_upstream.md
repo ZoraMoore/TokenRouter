@@ -104,6 +104,8 @@ HTTP Responses 的标准流和透传流兼容第三方的生命周期事件：
 - 同一个 Response ID 重复的成功终态只下发一次，后面的用量仍参与解析。
 - 未知字段、模型回填和工具内容保留；真正缺少终态的断流不会被补成成功。
 
+当已收到的工具 added 和 done 属于同一响应、条目 ID、类型和输出位置时，网关可以在发送 done 前补回已知调用编号。重建部分终态时按稳定身份补入缺项，保留终态自带的有效编号和扩展字段。遇到相互矛盾的编号或位置时记录冲突，客户端已经收到的帧无法事后修改。
+
 这些兼容处理只作用于 HTTP Responses，WebSocket 和其他客户端协议的事件处理不变。
 
 OpenAI 兼容非流式响应的 usage，按 `usage`、`response.usage`、`data.usage`、`data.response.usage` 的顺序解析；前两种原生路径，优先于 Cline 等兼容上游使用的 `data` envelope。同一层的 hosted image usage 从对应的路径读取，不同 envelope 的 token 和图片用量不会混在一起。
@@ -199,6 +201,16 @@ Responses 历史 Chat 格式的转换、工具 ID 清理、平台 schema 选择�
 ## Responses 请求细节
 
 HTTP 工具结果按 `call_id` 与原调用配对。通过 `item_reference` 续接时，客户端工具结果仍需匹配对应的引用。历史中的 `tool_search_output` 若同时带有 `execution: "server"` 和显式的 `call_id: null`，表示由服务端完成的搜索。网关保留该条历史，在配对时跳过它，继续校验同一请求里的其他输出。
+
+普通工具结果逐项查找调用或引用。同一批次中其他工具的编号无法匹配本项。已通过归属校验的 `previous_response_id` 可提供上轮调用，返回项本身仍需携带编号。
+
+Codex Desktop 可以发送 `namespace="agent"`、带名称和文本输出、缺省 `call_id` 的独立上下文。名称与请求里的工具冲突时按普通工具结果校验。使用 Codex 协议的 OpenAI OAuth 路线可接收该格式。管理员确认其他 OpenAI Responses 提供商也支持该格式后，可在提供商 `extra` 中设置布尔值 `openai_responses_agent_context`。关闭该能力、压缩请求或使用其他协议时，网关把已知的终端、浏览器、IDE 和页面上下文按原位置编码为带来源和外部数据标记的用户文本。遇到目标无法表达的扩展名称时，在组内继续选号，耗尽后返回条目索引。无编号的独立上下文不需要与工具配对。
+
+Codex 客户端还会借用工具输出的格式注入独立条目，例如 `codex_app`、`codex_tui` 下的 `send_message_to_thread`、`create_thread` 跨任务消息和 `automation_update` 自动化提示。网关按结构识别这类条目：类型为 `function_call_output`、`custom_tool_call_output` 或 `mcp_tool_call_output`，带 `agent` 以外的 `namespace` 和 `name`，`call_id` 缺省、为空白字符串或 `null`，没有 `role` 和 `content`，带 `output`。工具结果靠 `call_id` 与调用配对，符合这些条件的条目跳过配对，新的工具名也按同一规则识别。
+
+HTTP 入口在配对校验前把每个独立条目原位改写为用户消息。每个条目单独处理，同一请求里的带编号工具调用和结果、`item_reference`、`previous_response_id`、桌面上下文和托管搜索保持原样。符合 Codex 信封格式的跨任务消息（`<codex_delegation>`）、自动化启动提示和心跳原样转发。其余条目写进 `<codex_client_item namespace=".." name="..">` 来源标记，正文按外部数据转义，包括信封格式不符、工具名未知和含图片或文件的条目。`output` 为字符串时原样使用，为文本块数组时按换行拼接，含 `input_image` 或 `input_file` 时保留各内容块，其他 JSON 值按原始 JSON 当作文本。请求含重复 JSON 键时条目保持原样，入口按歧义请求返回 400。WebSocket 续链、孤儿结果清理和协议桥接用同一个判定识别这类条目，跳过配对。
+
+每改写一个条目，网关记录一条 `openai.codex_client_item_normalized` 日志，字段为 `input_index`、`item_namespace`、`item_name`、`item_known` 和 `envelope_valid`，正文不写入日志。
 
 缺少必需编号时，HTTP 400 会指出 `input` 数组中从零开始的位置及条目类型，网关日志记为 `input_index` 和 `item_type`。HTTP 使用 `previous_response_id` 续接时还需要通过响应归属检查，并选到支持该方式的 OpenAI API Key 提供商。
 

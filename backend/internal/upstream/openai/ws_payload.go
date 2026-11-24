@@ -330,7 +330,7 @@ func OpenAIWSRawItemsHasPrefix(items []json.RawMessage, prefix []json.RawMessage
 
 func OpenAIWSRawItemsHasFunctionCallOutput(items []json.RawMessage) bool {
 	for _, item := range items {
-		if wire.IsCodexToolCallOutputItemType(gjson.GetBytes(item, "type").String()) {
+		if wire.RequiresToolPairing(gjson.Parse(OpenAIWSPayloadStringView(item))) {
 			return true
 		}
 	}
@@ -352,7 +352,7 @@ func OpenAIWSRawItemsHaveToolCallContextForOutputs(items []json.RawMessage) bool
 			if callID != "" {
 				contextCallIDs[callID] = struct{}{}
 			}
-		case wire.IsCodexToolCallOutputItemType(itemType):
+		case wire.RequiresToolPairing(gjson.Parse(OpenAIWSPayloadStringView(item))):
 			if callID == "" {
 				return false
 			}
@@ -383,7 +383,7 @@ func SanitizeOpenAIWSHistoricalReplayToolCalls(
 	outputCallIDs := make(map[string]struct{})
 	collectOutputCallIDs := func(items []json.RawMessage) {
 		for _, item := range items {
-			if !wire.IsCodexToolCallOutputItemType(gjson.GetBytes(item, "type").String()) {
+			if !wire.RequiresToolPairing(gjson.Parse(OpenAIWSPayloadStringView(item))) {
 				continue
 			}
 			if callID := strings.TrimSpace(gjson.GetBytes(item, "call_id").String()); callID != "" {
@@ -417,15 +417,15 @@ func OpenAIWSRawPayloadHasToolCallOutput(payload []byte) bool {
 		return false
 	}
 	if input.IsArray() {
-		for _, item := range input.Array() {
-			if wire.IsCodexToolCallOutputItemType(item.Get("type").String()) {
-				return true
-			}
-		}
-		return false
+		found := false
+		input.ForEach(func(_, item gjson.Result) bool {
+			found = wire.RequiresToolPairing(item)
+			return !found
+		})
+		return found
 	}
 	if input.Type == gjson.JSON {
-		return wire.IsCodexToolCallOutputItemType(input.Get("type").String())
+		return wire.RequiresToolPairing(input)
 	}
 	return false
 }

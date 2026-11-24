@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -52,6 +54,7 @@ import (
 	opscore "github.com/TokenFlux/TokenRouter/internal/ops"
 	opsprovider "github.com/TokenFlux/TokenRouter/internal/ops/provider"
 	"github.com/TokenFlux/TokenRouter/internal/protocol"
+	protocolopenai "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
 	providercore "github.com/TokenFlux/TokenRouter/internal/provider"
 	"github.com/TokenFlux/TokenRouter/internal/routing"
 	"github.com/TokenFlux/TokenRouter/internal/routing/capability"
@@ -127,6 +130,8 @@ type mixedHTTPTransport struct {
 }
 
 type mixedHTTPNoSearch struct{}
+
+type responsesWireTransport func(*http.Request, int64) (*http.Response, error)
 
 // newEmptyGenericSelectionFixture 使用默认预算构造执行入口，提供商和窗口来源留空。
 func newEmptyGenericSelectionFixture() *selection.Generic {
@@ -2164,7 +2169,7 @@ func (u *openAIResponsesFailoverCancelUpstream) calls() []int64 {
 	return append([]int64(nil), u.providerIDs...)
 }
 
-func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream httpclient.UpstreamTransport) *gatewayHTTPEndpointsFixture {
+func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream httpclient.UpstreamTransport, testProviders ...gatewayprovider.ExecutionProvider) *gatewayHTTPEndpointsFixture {
 	t.Helper()
 	proxyID := int64(11)
 	providers := []gatewayprovider.ExecutionProvider{
@@ -2204,6 +2209,9 @@ func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream httpclient.Ups
 				Credentials: map[string]any{"access_token": "token-2"},
 			},
 		},
+	}
+	if len(testProviders) > 0 {
+		providers = testProviders
 	}
 	providerRepo := openAIResponsesFailoverProviderRepo{providers: providers}
 	cfg := &config.Config{}
@@ -2719,5 +2727,262 @@ func TestMixedGroupTextHTTP(t *testing.T) {
 				require.Equal(t, map[int64]string{1: "anthropic", 2: "openai", 3: "gemini"}[expected], logs.LastLog.Platform)
 			})
 		}
+	}
+}
+
+func (f responsesWireTransport) Do(req *http.Request, _ string, id int64, _ int) (*http.Response, error) {
+	return f(req, id)
+}
+
+func (f responsesWireTransport) DoWithTLS(req *http.Request, _ string, id int64, _ int, _ *tlsfingerprint.Profile) (*http.Response, error) {
+	return f(req, id)
+}
+
+// TestResponsesDesktopContextForwarding 核对经过真实入口和选路之后送到假上游的两轮报文。
+func TestResponsesDesktopContextForwarding(t *testing.T) {
+	for _, tc := range []struct {
+		name, contextName, encoding string
+		native, secondRoute         bool
+	}{
+		{"native", "browser_tabs", "identity", true, false},
+		{"codex_oauth", "terminal_info", "identity", true, false},
+		{"standard", "terminal_info", "gzip", false, false},
+		{"next_compatible", "another_context", "zstd", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := gatewayprovider.ExecutionProvider{Record: providercore.Record{
+				ID: 11, LoadLocation: time.LoadLocation,
+				Name: "test-relay", Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeAPIKey, Status: billing.StatusActive,
+				Schedulable: true, Credentials: map[string]any{"api_key": "test", "base_url": "https://provider.example.test"},
+				Extra: map[string]any{"openai_passthrough": true, providercore.ExtraKeyResponsesAgentContext: tc.native && !tc.secondRoute},
+			}}
+			if tc.name == "codex_oauth" {
+				provider.Record.Type = capability.ProviderTypeOAuth
+				provider.Record.Credentials = map[string]any{"access_token": "test"}
+				provider.Record.Extra = nil
+			}
+			providers := []gatewayprovider.ExecutionProvider{provider}
+			expectedID := int64(11)
+			if tc.secondRoute {
+				second := provider
+				second.Record.ID = 12
+				second.Record.Priority = 2
+				second.Record.Extra = map[string]any{"openai_passthrough": true, providercore.ExtraKeyResponsesAgentContext: true}
+				providers = append(providers, second)
+				expectedID = 12
+			}
+			var hits int
+			upstream := responsesWireTransport(func(req *http.Request, id int64) (*http.Response, error) {
+				hits++
+				require.Equal(t, expectedID, id)
+				wire, err := io.ReadAll(req.Body)
+				require.NoError(t, err)
+				input := gjson.GetBytes(wire, "input").Array()
+				require.Len(t, input, 16+2*(hits-1))
+				if tc.native {
+					require.Equal(t, "agent", input[15].Get("namespace").Str)
+					require.Equal(t, tc.contextName, input[15].Get("name").Str)
+					require.False(t, input[15].Get("call_id").Exists())
+				} else {
+					require.Equal(t, "user", input[15].Get("role").Str)
+					require.Contains(t, input[15].Get("content.0.text").Str, "&lt;note&gt;")
+				}
+				stream := `data: {"type":"response.output_item.added","output_index":0,"item":{"id":"fc_item42","type":"function_call","call_id":"call_read","name":"read","arguments":""}}` + "\n\n" +
+					`data: {"type":"response.output_item.done","output_index":0,"item":{"id":"fc_item42","type":"function_call","name":"read","call_id":"call_read","arguments":"{}"}}` + "\n\n" +
+					`data: {"type":"response.completed","response":{"id":"resp_tool","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}` + "\n\n"
+				if hits == 2 {
+					upstreamID := "call_read"
+					if tc.name == "codex_oauth" {
+						upstreamID = "fc_read"
+					}
+					require.Equal(t, upstreamID, input[16].Get("call_id").Str)
+					require.Equal(t, upstreamID, input[17].Get("call_id").Str)
+					stream = `data: {"type":"response.output_text.delta","delta":"ok"}` + "\n\n" + `data: {"type":"response.completed","response":{"id":"resp_answer","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}` + "\n\n"
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}, nil
+			})
+			h := newOpenAIResponsesFailoverTestHandler(t, upstream, providers...)
+			input := make([]any, 0, 18)
+			for range 15 {
+				input = append(input, map[string]string{"role": "user", "content": "hi"})
+			}
+			input = append(input, map[string]string{"type": "function_call_output", "id": "fco_ui", "namespace": "agent", "name": tc.contextName, "output": "<note>"})
+			for turn := range 2 {
+				body, err := json.Marshal(map[string]any{"input": input, "model": "gpt-5.4", "stream": true})
+				require.NoError(t, err)
+				encoding := tc.encoding
+				if encoding == "zstd" && turn > 0 {
+					encoding = "identity"
+				}
+				switch encoding {
+				case "gzip":
+					var buf bytes.Buffer
+					z := gzip.NewWriter(&buf)
+					_, err = z.Write(body)
+					require.NoError(t, err)
+					require.NoError(t, z.Close())
+					body = buf.Bytes()
+				case "zstd":
+					// 第一轮使用固定的 Zstandard 线格式，第二轮把实际收到的工具编号写入请求。
+					body, err = os.ReadFile("testdata/desktop-context-turn.zst")
+					require.NoError(t, err)
+				}
+				c, w := newOpenAIResponsesFailoverTestContext(t, context.Background())
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+				c.Request.Header.Set("Content-Type", "application/json")
+				c.Request.Header.Set("Content-Encoding", encoding)
+				h.Responses(c)
+				require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+				require.Equal(t, 1, strings.Count(w.Body.String(), `"type":"response.completed"`))
+				if turn == 0 {
+					var call json.RawMessage
+					protocolopenai.ForEachSSEDataPayload(w.Body.String(), func(event []byte) {
+						if gjson.GetBytes(event, "type").Str == "response.output_item.done" {
+							call = json.RawMessage(gjson.GetBytes(event, "item").Raw)
+						}
+					})
+					require.Equal(t, "call_read", gjson.GetBytes(call, "call_id").Str)
+					input = append(input, call, map[string]string{"type": "function_call_output", "call_id": gjson.GetBytes(call, "call_id").Str, "output": "ok"})
+				}
+			}
+			require.Equal(t, 2, hits)
+		})
+	}
+}
+
+// TestResponsesDelegationReplay 核对第八项 Codex 客户端条目经过 HTTP 入口后的位置、正文和相邻工具调用的编号。
+// 用例包括跨任务消息、工具历史后的自动化心跳、正文含未转义特殊字符的消息和未知工具名。
+func TestResponsesDelegationReplay(t *testing.T) {
+	const envelope = "<codex_delegation><source_thread_id>thread-A</source_thread_id><input>inspect &lt;main&gt;</input></codex_delegation>"
+	const heartbeat = "<heartbeat><automation_id>daily-review</automation_id></heartbeat>"
+	const rawDelegation = "<codex_delegation><source_thread_id>thread-A</source_thread_id><input>run a && b</input></codex_delegation>"
+	const history = `{"type":"message","role":"user","content":"hi"},
+		{"type":"function_call_output","namespace":"agent","name":"terminal_info","output":"cwd"},
+		{"type":"function_call","call_id":"call_read","name":"read","arguments":"{}"},
+		{"type":"function_call_output","call_id":"call_read","output":"ok"},
+		{"type":"tool_search_call","execution":"server","call_id":null,"arguments":{}},
+		{"type":"tool_search_output","execution":"server","call_id":null,"tools":[]},
+		{"type":"web_search_call","id":"ws_1","status":"completed"}`
+	rawJSON, err := json.Marshal(rawDelegation)
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, tool, output string
+		status             int
+		// text 是期望原样转发的正文。text 为空时期望来源标记，wrapped 是标记内的正文。
+		text, wrapped string
+	}{
+		{name: "text", tool: "send_message_to_thread", output: `"` + envelope + `"`, status: http.StatusOK, text: envelope},
+		{name: "text items", tool: "send_message_to_thread", output: `[{"type":"input_text","text":"` + envelope + `"}]`, status: http.StatusOK, text: envelope},
+		{name: "automation heartbeat after history", tool: "automation_update", output: `"` + heartbeat + `"`, status: http.StatusOK, text: heartbeat},
+		{name: "raw special characters", tool: "send_message_to_thread", output: string(rawJSON), status: http.StatusOK, wrapped: "run a &amp;&amp; b"},
+		{name: "ordinary text", tool: "send_message_to_thread", output: `"done"`, status: http.StatusOK, wrapped: "done"},
+		{name: "unknown tool", tool: "automation_create", output: `"payload"`, status: http.StatusOK, wrapped: "payload"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			upstream := responsesWireTransport(func(req *http.Request, _ int64) (*http.Response, error) {
+				calls++
+				wire, err := io.ReadAll(req.Body)
+				require.NoError(t, err)
+				items := gjson.GetBytes(wire, "input").Array()
+				require.Len(t, items, 8)
+				require.Equal(t, "call_read", items[2].Get("call_id").Str)
+				require.Equal(t, "call_read", items[3].Get("call_id").Str)
+				require.Equal(t, "message", items[7].Get("type").Str)
+				require.Equal(t, "user", items[7].Get("role").Str)
+				require.False(t, items[7].Get("call_id").Exists())
+				text := items[7].Get("content.0.text").Str
+				if tc.text != "" {
+					require.Equal(t, tc.text, text)
+				} else {
+					require.Contains(t, text, `<codex_client_item namespace="codex_app" name="`+tc.tool+`">`)
+					require.Contains(t, text, tc.wrapped)
+				}
+				stream := `data: {"type":"response.completed","response":{"id":"resp_delegation","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}` + "\n\n"
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}, nil
+			})
+			provider := gatewayprovider.ExecutionProvider{Record: providercore.Record{
+				ID: 11, Name: "relay", Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeAPIKey,
+				Status: billing.StatusActive, Schedulable: true, LoadLocation: time.LoadLocation,
+				Credentials: map[string]any{"api_key": "test", "base_url": "https://provider.example.test"},
+				Extra:       map[string]any{"openai_passthrough": true, providercore.ExtraKeyResponsesAgentContext: true},
+			}}
+			h := newOpenAIResponsesFailoverTestHandler(t, upstream, provider)
+			body := `{"model":"gpt-5.4","stream":true,"input":[` + history + `,
+				{"type":"function_call_output","id":"fco_dispatch","namespace":"codex_app","name":"` + tc.tool + `","output":` + tc.output + `}]}`
+			c, w := newOpenAIResponsesFailoverTestContext(t, context.Background())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			h.Responses(c)
+			require.Equal(t, tc.status, w.Code, w.Body.String())
+			require.Equal(t, 1, calls)
+			require.Contains(t, w.Body.String(), "response.completed")
+		})
+	}
+}
+
+// TestResponsesMissingCallIDStillRejected 核对不带 namespace 的工具结果缺少编号时，入口返回 400，上游收不到请求。
+func TestResponsesMissingCallIDStillRejected(t *testing.T) {
+	calls := 0
+	upstream := responsesWireTransport(func(req *http.Request, _ int64) (*http.Response, error) {
+		calls++
+		return nil, io.EOF
+	})
+	provider := gatewayprovider.ExecutionProvider{Record: providercore.Record{
+		ID: 11, Name: "relay", Platform: capability.PlatformOpenAI, Type: capability.ProviderTypeAPIKey,
+		Status: billing.StatusActive, Schedulable: true, LoadLocation: time.LoadLocation,
+		Credentials: map[string]any{"api_key": "test", "base_url": "https://provider.example.test"},
+		Extra:       map[string]any{"openai_passthrough": true},
+	}}
+	h := newOpenAIResponsesFailoverTestHandler(t, upstream, provider)
+	body := `{"model":"gpt-5.4","stream":true,"input":[{"type":"message","role":"user","content":"hi"},
+		{"type":"function_call_output","namespace":"codex_app","name":"send_message_to_thread","output":"ok"},
+		{"type":"function_call_output","output":"done"}]}`
+	c, w := newOpenAIResponsesFailoverTestContext(t, context.Background())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	h.Responses(c)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Zero(t, calls)
+	require.Contains(t, w.Body.String(), "input[2] (function_call_output) requires call_id")
+}
+
+// TestResponsesDisconnectReplay 检查首段前可以换号，工具调用已经交付后只返回一个失败终态。
+func TestResponsesDisconnectReplay(t *testing.T) {
+	for _, tc := range []struct {
+		name, partial string
+		calls         int
+		terminal      string
+	}{
+		{"before_output", "", 2, "response.completed"},
+		{"after_tool", `data: {"type":"response.output_item.done","output_index":0,"item":{"id":"fc_job","type":"function_call","call_id":"call_job","name":"job","arguments":"{}"}}` + "\n\n", 1, "response.failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var ids []int64
+			upstream := responsesWireTransport(func(_ *http.Request, id int64) (*http.Response, error) {
+				ids = append(ids, id)
+				body := `data: {"type":"response.created","response":{"id":"resp_partial"}}` + "\n\n" + tc.partial + "data: [DONE]\n\n"
+				if len(ids) > 1 {
+					body = `data: {"type":"response.output_text.delta","delta":"ok"}` + "\n\n" + `data: {"type":"response.completed","response":{"id":"resp_ok","status":"completed","usage":{"input_tokens":1,"output_tokens":1},"output":[]}}` + "\n\n"
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+			})
+			h := newOpenAIResponsesFailoverTestHandler(t, upstream)
+			c, w := newOpenAIResponsesFailoverTestContext(t, context.Background())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"input":"test","model":"gpt-5.4","stream":true}`))
+			c.Request.Header.Set("Content-Type", "application/json")
+			h.Responses(c)
+			require.Len(t, ids, tc.calls, w.Body.String())
+			require.Equal(t, 1, strings.Count(w.Body.String(), `"type":"`+tc.terminal+`"`))
+			if tc.calls == 1 {
+				require.Equal(t, 1, strings.Count(w.Body.String(), `"call_id":"call_job"`))
+				require.NotContains(t, w.Body.String(), `"type":"response.completed"`)
+				require.Equal(t, "written", c.GetString("responses_failure_write"))
+			} else {
+				require.NotEqual(t, ids[0], ids[1])
+				require.NotContains(t, w.Body.String(), "resp_partial")
+				require.NotContains(t, w.Body.String(), `"type":"response.failed"`)
+			}
+		})
 	}
 }
