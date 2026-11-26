@@ -1,7 +1,5 @@
 # CC-Switch
 
-需要配置或更新 GPT 模型时，可以安装[云桥词元配置 Skill](/clients/yunqiao-skill)，让 AI 助手查询当前 Key 的可用模型并指导你完成 CC Switch 配置。
-
 `CC-Switch` 是一款专为管理 AI 接口配置而设计的图形化工具，可统一管理多个 Agent 客户端的供应商配置与 API Key，支持 `Claude Code`、`Codex`、`OpenCode` 等主流 AI 编程助手，降低配置错误风险。
 
 适用场景包括：

@@ -167,7 +167,6 @@ export default defineConfig({
         text: 'Agents',
         items: [
           { text: 'CC-Switch', link: '/clients/cc-switch' },
-          { text: 'GPT 模型配置 Skill', link: '/clients/yunqiao-skill' },
           { text: 'Claude Code', link: '/clients/claude-code' },
           { text: 'Codex', link: '/clients/codex' },
           { text: 'Codex++', link: '/clients/codex-plus-plus' },

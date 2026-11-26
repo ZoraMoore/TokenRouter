@@ -60,8 +60,6 @@ npx @openai/codex
 
 ## 导入
 
-首次接入或更新 GPT 型号时，也可以使用[云桥词元配置 Skill](/clients/yunqiao-skill)，通过 CC Switch 查询模型、保存配置并检查生效情况。
-
 安装完成后，选择以下两种方式之一将 `Codex` 接入云桥词元 API。
 
 ::: details 使用 CC-Switch
