@@ -20,3 +20,6 @@ backend/migrations/*.sql text eol=lf
 
 # Dockerfile
 Dockerfile text eol=lf
+
+# GPT-6 Astra 提示词的行尾空格属于上游正文。
+backend/internal/upstream/openai/instructions_gpt6_astra.txt whitespace=-blank-at-eol

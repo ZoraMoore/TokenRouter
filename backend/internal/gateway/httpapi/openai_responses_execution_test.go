@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -2079,6 +2080,81 @@ func TestOpenAIGatewayService_Forward_APIKeyMissingInstructionsKeepsLargeInputRa
 	require.JSONEq(t, expectedBody, string(upstream.lastBody))
 	require.False(t, gjson.GetBytes(upstream.lastBody, "instructions").Exists())
 	require.Equal(t, "9007199254740993", gjson.GetBytes(upstream.lastBody, "input.0.content.0.nonce").Raw)
+}
+
+// TestOpenAIResponsesMappedCodexInstructions 比较最终型号对应的出站提示词。
+func TestOpenAIResponsesMappedCodexInstructions(t *testing.T) {
+	const (
+		requestedModel = "gpt-5.6-sol"
+		responsesModel = "gpt-6.1-sol"
+		compactModel   = "gpt-6.2-astra-openai-compact"
+		clientPrompt   = "  client instructions\n "
+	)
+	cases := []struct {
+		name         string
+		model        string
+		compact      bool
+		instructions string
+		wantSHA256   string
+	}{
+		{
+			name:       "responses mapping",
+			model:      responsesModel,
+			wantSHA256: "3c43dfaabb60f17def6b94fb672f4600b08b4f35ca4e27912595947329fe9da2",
+		},
+		{
+			name:         "explicit instructions",
+			model:        responsesModel,
+			instructions: clientPrompt,
+		},
+		{
+			name:       "compact mapping",
+			model:      compactModel,
+			compact:    true,
+			wantSHA256: "6c8bdad0f92784f908323ae3bcf7cb12c2fcd15fd7fbb36bc67d608da826165e",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := newOpenAIOAuthNamespaceTestProvider()
+			provider.Record.Credentials["model_mapping"] = map[string]any{requestedModel: responsesModel}
+			provider.Record.Credentials["compact_model_mapping"] = map[string]any{requestedModel: compactModel}
+
+			payload := map[string]any{"model": requestedModel, "input": "hello", "stream": true}
+			if tc.instructions != "" {
+				payload["instructions"] = tc.instructions
+			}
+			body, err := json.Marshal(payload)
+			require.NoError(t, err)
+
+			c, _ := newOpenAIImageGenerationControlTestContext(false, "codex_cli_rs/0.98.0")
+			upstream := &auxiliaryHTTPRecorder{}
+			if tc.compact {
+				c.Request.URL.Path = "/v1/responses/compact"
+				payload := fmt.Sprintf(`{"id":"resp_mapped_compact","status":"completed","model":%q,"output":[],"usage":{"input_tokens":1,"output_tokens":1}}`, tc.model)
+				upstream.resp = &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": {"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(payload)),
+				}
+			} else {
+				upstream.resp = openAICompatSSECompletedResponse("resp_mapped", tc.model)
+			}
+			service := newResponsesFixture(responsesFixtureInputs{transport: upstream})
+			result, err := service.Forward(context.Background(), c, provider, body)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, tc.model, gjson.GetBytes(upstream.lastBody, "model").String())
+			instructions := gjson.GetBytes(upstream.lastBody, "instructions")
+			require.Equal(t, gjson.String, instructions.Type)
+			if tc.wantSHA256 == "" {
+				require.Equal(t, tc.instructions, instructions.String())
+				return
+			}
+			sum := sha256.Sum256([]byte(instructions.String()))
+			require.Equal(t, tc.wantSHA256, fmt.Sprintf("%x", sum))
+		})
+	}
 }
 
 // TestOpenAIResponsesGPT62CodexInstructions 检查 Codex 上游收到的会话前缀和逐轮指令。

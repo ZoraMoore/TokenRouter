@@ -274,6 +274,8 @@ Responses HTTP/SSE 同样区分结构进度和可见输出：`response.created`�
 
 ### Codex 基础指令和 Responses Lite
 
+普通 Codex 转发需要补基础指令时，网关按模型映射结果选择内置提示词。GPT-5.6 和具名的 GPT-6 系列使用对应的 Codex v0.172.0 模板。没有专属模板的型号使用 GPT-5.6。名称含 `codex` 的型号（如 `codex-auto-review`）使用通用 Codex 提示词。
+
 普通 Codex 转发按最终上游模型选择指令的位置。GPT-6.2、Sol 和 Astra 把 `input` 里的 `system` 原位转成 `developer`。请求缺少逐轮指令、允许补默认且未携带 `previous_response_id` 时，网关把内置基础指令放在第一条 `developer`，供全量历史重放时匹配相同的前缀。顶层 `instructions` 用于本轮指令，也可携带图片工具的桥接说明。
 
 Messages 转发到 GPT-6.2 Codex 时，纯文本或直接引用模型字段的强制模板可以生成第一条 `developer`。请求带客户端指导或续聊 ID，或者模板通过条件、子模板或其他动作取值时，渲染结果写入顶层 `instructions`。

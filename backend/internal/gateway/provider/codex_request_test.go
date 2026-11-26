@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"testing"
@@ -1574,18 +1575,18 @@ func TestApplyCodexOAuthTransform_CodexCLI_SuppliesDefaultWhenEmpty(t *testing.T
 	require.True(t, result.Modified)
 }
 
-func TestApplyCodexOAuthTransform_GPT55SuppliesModelSpecificInstructions(t *testing.T) {
+// TestApplyCodexOAuthTransform_SuppliesModelSpecificInstructions 检查 OAuth 转换写入的型号模板。
+func TestApplyCodexOAuthTransform_SuppliesModelSpecificInstructions(t *testing.T) {
 	reqBody := map[string]any{
-		"model":        "gpt-5.5",
+		"model":        "gpt-6.1-sol",
 		"instructions": "   ",
 	}
 
 	result := ApplyCodexOAuthTransform(reqBody, true, false)
-
 	instructions, ok := reqBody["instructions"].(string)
 	require.True(t, ok)
-	require.Contains(t, instructions, "You are Codex, a coding agent based on GPT-5")
-	require.NotContains(t, instructions, "You are GPT-5.1 running in the Codex CLI")
+	sum := sha256.Sum256([]byte(instructions))
+	require.Equal(t, "3c43dfaabb60f17def6b94fb672f4600b08b4f35ca4e27912595947329fe9da2", fmt.Sprintf("%x", sum))
 	require.True(t, result.Modified)
 }
 

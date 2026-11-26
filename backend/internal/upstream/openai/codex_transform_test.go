@@ -409,13 +409,13 @@ func TestEnsureCodexReasoningInclude(t *testing.T) {
 	require.Equal(t, []any{"foo", "reasoning.encrypted_content"}, body3["include"])
 }
 
-// TestDefaultCodexSynthInstructionsModelAware 检查各模型使用的 Codex base prompt。
+// TestDefaultCodexSynthInstructionsModelAware 检查网关填入的提示词会去掉首尾空白。
 func TestDefaultCodexSynthInstructionsModelAware(t *testing.T) {
-	require.True(t, strings.Contains(DefaultCodexSynthInstructions("gpt-5-codex"), "You are Codex, based on GPT-5"))
-	require.True(t, strings.Contains(DefaultCodexSynthInstructions("gpt-5.5"), "You are Codex, a coding agent based on GPT-5"))
-	require.False(t, strings.Contains(DefaultCodexSynthInstructions("gpt-5.5"), "You are GPT-5.1 running in the Codex CLI"))
-	require.True(t, strings.Contains(DefaultCodexSynthInstructions("gpt-5.2"), "You are GPT-5.2 running in the Codex CLI"))
-	require.True(t, strings.Contains(DefaultCodexSynthInstructions("gpt-5.1"), "You are GPT-5.1 running in the Codex CLI"))
+	for _, model := range []string{"gpt-5.6-sol", "gpt-6.1-sol", "codex-auto-review", "unknown-model"} {
+		want := strings.TrimSpace(CodexBaseInstructionsForModel(model))
+		require.NotEmpty(t, want)
+		require.True(t, DefaultCodexSynthInstructions(model) == want, "model %q", model)
+	}
 }
 
 // TestCodexGPT62DefaultDeveloperPrefix 覆盖缺省指令在完整历史与增量续聊中的放置。

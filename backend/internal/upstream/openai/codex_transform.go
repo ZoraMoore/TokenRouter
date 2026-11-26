@@ -1245,12 +1245,7 @@ func ExtractPromptLikeInstructionsFromInput(reqBody map[string]any) string {
 	return strings.Join(texts, "\n\n")
 }
 
-// DefaultCodexSynthInstructions 返回 Codex 请求缺少逐轮指令时使用的基础提示。
-//
-// 按 model 选择真实 Codex CLI 的 base instructions（codex 系→GPT-5-Codex，
-// gpt-5.5 及未单独维护的 GPT-5 版本→GPT-5.5，gpt-5.2→GPT-5.2，gpt-5.1→GPT-5.1），
-// 使合成请求在提示词层面贴近真实 Codex 行为；
-// 若内嵌 prompt 意外为空，回退到最小占位符以保证字段非空。
+// DefaultCodexSynthInstructions 返回去掉首尾空白的基础提示词，供网关填入缺省指令。
 func DefaultCodexSynthInstructions(model string) string {
 	if instructions := strings.TrimSpace(CodexBaseInstructionsForModel(model)); instructions != "" {
 		return instructions

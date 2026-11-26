@@ -131,7 +131,11 @@ func TransformRequest(ctx context.Context, prepared *Prelude, profile Profile, p
 	instructions := gjson.GetBytes(body, "instructions")
 	instructionsEmpty := instructions.Type != gjson.String || strings.TrimSpace(instructions.String()) == ""
 	if instructionsEmpty && profile.UsesCodex && !compatMessagesBridge && !nativeCNResponses && !cacheableInstructions {
-		markPatchSet("instructions", openai.DefaultCodexSynthInstructions(requestedModel))
+		promptModel := upstreamModel
+		if strings.TrimSpace(promptModel) == "" {
+			promptModel = requestedModel
+		}
+		markPatchSet("instructions", openai.DefaultCodexSynthInstructions(promptModel))
 	}
 	if billingModel != requestedModel {
 		p.Log("[OpenAI] Model mapping applied: %s -> %s (provider: %s, isCodexCLI: %v)", requestedModel, billingModel, profile.Name, isCodexCLI)
