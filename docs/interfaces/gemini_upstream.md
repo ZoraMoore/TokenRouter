@@ -78,21 +78,6 @@ Gemini 原生入口返回 Google 格式的错误，Anthropic 和 OpenAI 入口�
 
 执行结果分别报告：已观测的 usage（包括明确的零）、语义输出、旧的 TTFT、内联图片张数和失败分类。`countTokens` 的本地估算单独携带，不计入实际的 usage 和资金记录；图片的回退判断和结算条件由调用方分别处理。流式输出不增加整流缓冲，各入口的断开处理保持各自的方式。
 
-每次上游调用独立合并流式用量。分片省略字段或返回 `null` 时保留该字段的上次有效值。明确返回的累计计数覆盖前值，零也参与更新。计费使用合并后的用量：普通输入为总输入扣除缓存读取，输出包含候选和思考计数。Gemini SSE 逐帧透传。流式转非流式的 Gemini 响应以及 Messages、Chat、Responses 的用量使用合并结果。
-
-每次执行完成时，`audit.gemini_usage` 保存本地与上游请求 ID、计数字段的类型和数字值、缓存缺失及归零次数、响应读取状态和最终用量。样本最多保存前八帧用量及最后一帧，字段限于五个 Token 计数。管理员可在系统日志中按请求 ID 对账，并通过 `client_disconnected`、`context_canceled` 和 `usage_observation.eof` 判断是否读到完整响应。
-
-<a id="gemini_stream_lifecycle"></a>
-### 流式响应与尾部用量
-
-Gemini 使用 TokenFlux 上游的共享 SSE 读取器，按完整事件合并多行 `data:`。每次上游调用单独保存已出现且非 null 的用量字段，完成全部候选后继续收集最多五秒的尾部用量。Messages、Chat、Responses 的最终用量和流式聚合 JSON 均使用这份快照。Messages 输出普通输入与缓存读取两个字段，OpenAI 格式的总输入包含缓存。
-
-上游返回 Google 错误、无内容结束、缺少完成标记、损坏 JSON 或过大帧时，返回对应的流式失败。读取被取消时关闭响应体并等待读取协程退出，已收到的用量仍交给结算流程。调用方配置的流数据间隔超时按实际读取活动续期，生成结束后的五秒窗口按绝对时间截止。
-
-实现依据为 TokenFlux/TokenRouter 的 `f428ca1da6995cc2c4a544be55ee780a94f48489` 和 `4effd6b50e0a5c9b5415f29f5546472430fc242a`，核对版本为 `4ced45bb1854eb3296015fb4b092b64a8c263b46`。
-
-提供商转发层在读取失败时同时返回已观测结果和错误，并传递客户端断开标记。完成处理按入口既有的部分失败规则决定是否结算，用量快照保存上游输入与缓存分类。HTTP 200 内的 Google 错误进入提供商错误策略。响应已经提交时，当前协议输出一次终态错误，Gemini 入口根据相同的去重标记判断是否已经输出错误。
-
 Gemini 的授权会话、三类 OAuth 的编排、project 和 tier 发现、token 回填和刷新资格，由 `provider.GeminiAuthorization` 负责；协议交换、Drive 和 Resource Manager 在 `upstream/gemini/codeassist`。app 直接构造授权实例，并整理完整的配置；provider 组合协议参数，动态的 OAuth 配置在调用时读取。管理员刷新 tier 使用 provider 的管理选项。project 和提供商的缓存键、刷新时的 CAS 保持兼容。构造时不启动清理，由 app 统一启动和停止；停止超时时保留未完成的状态，有限次数的重试没结束时，不会报告已排空。
 
 Batch 客户端和 JSONL 编码、创作台的 generateContent 调用和图片解码，都使用原生实现。`protocol/gemini` 为批量和创作保留了明确的报文变体；任务输入只取必要的字段，任务状态机、最后的完成和清理、资金处理由任务用例负责。Vertex 的 URL 和 token 接口绑定 `upstream/vertex` 和提供商的缓存协调；Gemini 不 import Vertex，原生执行通过手动传入的 URL 和认证输入复用协议输出。

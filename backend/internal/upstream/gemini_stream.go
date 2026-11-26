@@ -108,7 +108,6 @@ func GeminiCandidateCount(body []byte) int {
 }
 
 // ReadGeminiStream 按完整 SSE 事件读取 Gemini 响应，并在候选完成后收集最多五秒的尾部用量。
-// @project-doc docs/interfaces/gemini_upstream.md#gemini_stream_lifecycle
 func ReadGeminiStream(ctx context.Context, resp *http.Response, options GeminiStreamOptions, consume func(GeminiStreamEvent) error) (GeminiStreamResult, error) {
 	if ctx == nil {
 		ctx = context.Background()

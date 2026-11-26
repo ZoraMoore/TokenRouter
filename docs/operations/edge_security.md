@@ -119,13 +119,6 @@ gzip_types text/plain text/css application/json application/javascript applicati
 
 除非 Nginx 的 Real IP 处理只信任明确的代理 CIDR，否则不要使用入站 `$http_x_forwarded_for` 值。
 
-<a id="production_edge_uploads"></a>
-### 上传超时与入口日志
-
-生产源站和三网前置的 `client_body_timeout` 为 180 秒，计量两次读取请求体之间的空闲时间。默认和直连 HTTPS 入口接受最多 100 MiB 的正文，三网入口接受最多 256 MiB。SSE 代理读写超时为一小时，上传和响应逐段转发。
-
-三网前置用 Nginx 的 `$request_id` 生成 `X-Scienceedu-Edge-ID`。源站检查 TCP 对端、主机名和 32 位小写十六进制格式，通过后采用前置 ID。其他入口从本机生成。前置记录 `/var/log/nginx/cn-api.access.log`，源站记录 `/var/log/nginx/scienceedu-api-trace.log`。两层都保存诊断 ID、应用响应的请求 ID、实际协议、传输字节和上游计时。`request_length` 含请求行、请求头和收到的正文。上传中断后如果应用尚未提交响应，使用诊断 ID 关联两层日志。
-
 ## Caddy 与 CDN
 
 仓库内 `deploy/Caddyfile` 设置了 64 KiB 请求头上限、10 秒请求头超时和 256 MiB 绝对请求体上限，并根据 TCP 对端覆盖转发地址，因此它是客户端直连 Caddy 的基线。Caddy 位于 CDN 后面时，其中的 `{remote_host}` 转发行要按下面的方式修改；原样使用的话，所有客户端都会被算成 CDN 的出口地址，使拒绝聚合和无效认证限速错误地作用于互不相关的用户。
