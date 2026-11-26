@@ -91,6 +91,11 @@ func NativeConvertGeminiToClaudeMessage(runtime NativeGeminiRuntime, geminiResp 
 		stopReason = "tool_use"
 	}
 
+	usageFields := map[string]any{
+		"input_tokens":            usage.InputTokens,
+		"output_tokens":           usage.OutputTokens,
+		"cache_read_input_tokens": usage.CacheReadInputTokens,
+	}
 	resp := map[string]any{
 		"id":            runtime.MessageID(),
 		"type":          "message",
@@ -99,10 +104,7 @@ func NativeConvertGeminiToClaudeMessage(runtime NativeGeminiRuntime, geminiResp 
 		"content":       contentBlocks,
 		"stop_reason":   stopReason,
 		"stop_sequence": nil,
-		"usage": map[string]any{
-			"input_tokens":  usage.InputTokens,
-			"output_tokens": usage.OutputTokens,
-		},
+		"usage":         usageFields,
 	}
 
 	return resp, usage
@@ -135,7 +137,9 @@ func NativeExtractGeminiUsage(data []byte) *NativeGeminiUsage {
 	cached := int(usage.Get("cachedContentTokenCount").Int())
 	thoughts := int(usage.Get("thoughtsTokenCount").Int())
 
-	// 从 candidatesTokensDetails 提取 IMAGE 模态 token 数
+	// IMAGE details describe a subset of candidate output; retain the first
+	// matching modality for image accounting while total output uses candidates
+	// plus thoughts.
 	imageTokens := 0
 	candidateDetails := usage.Get("candidatesTokensDetails")
 	if candidateDetails.Exists() {
@@ -148,8 +152,9 @@ func NativeExtractGeminiUsage(data []byte) *NativeGeminiUsage {
 		})
 	}
 
-	// 注意：Gemini 的 promptTokenCount 包含 cachedContentTokenCount，
-	// 但 Claude 的 input_tokens 不包含 cache_read_input_tokens，需要减去
+	// Separate cached prompt tokens from uncached Messages input and add thinking
+	// to candidate output; image tokens remain an overlapping subset, not another
+	// additive bucket.
 	return &NativeGeminiUsage{
 		InputTokens:          prompt - cached,
 		OutputTokens:         cand + thoughts,

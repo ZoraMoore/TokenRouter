@@ -13,7 +13,7 @@ func NativeGeminiResponseToResponses(runtime Runtime, native NativeGeminiRuntime
 ) (*ResponsesResponse, *NativeGeminiUsage, bool, error) {
 	claudeRespMap, usage := NativeConvertGeminiToClaudeMessage(native, geminiResp, originalModel, rawData, true)
 	usedOverride := false
-	if usageOverride != nil && (usageOverride.InputTokens > 0 || usageOverride.OutputTokens > 0 || usageOverride.CacheReadInputTokens > 0) {
+	if usageOverride != nil {
 		usage = usageOverride
 		usedOverride = true
 		if usageMap, ok := claudeRespMap["usage"].(map[string]any); ok {

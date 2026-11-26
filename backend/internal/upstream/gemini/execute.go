@@ -120,29 +120,34 @@ func (Executor) Execute(ctx context.Context, input upstream.AttemptInput, sink u
 		return result, fmt.Errorf("gemini upstream status %d", resp.StatusCode)
 	}
 	output := upstream.NewOutputContext(sink)
+	var usageAudit responseUsageAudit
+	resp.Body = &auditedResponseBody{ReadCloser: resp.Body, audit: &usageAudit}
+	defer func() { usageAudit.record(ctx, target.ProviderID, &result, failure) }()
 	if result.RequestID != "" {
 		output.Header("x-request-id", result.RequestID)
 	}
 	response := target.Response
+	response.Context = ctx
+	response.Stream.Candidates = exchange.CandidateCount
 	var modelObserver protocol.ResponseModelObserver
 	defer func() { result.UpstreamResponseModel = modelObserver.Model() }()
 	priorRaw, priorState := response.ObserveRaw, response.ObserveState
+
 	response.ObserveRaw = func(payload []byte) {
+		usageAudit.observe(payload)
 		if priorRaw != nil {
 			priorRaw(payload)
 		}
 		modelObserver.ObserveGemini(payload)
 		observed := geminiwire.ObservePayload(payload)
 		result.HasUsage = result.HasUsage || observed.HasUsage
+		if usage := ExtractGeminiUsage(payload); usage != nil {
+			result.Usage = *usage
+		}
 		result.Served = result.Served || observed.Semantic
 		if observed.Semantic && result.FirstSemanticOutput == nil {
 			elapsed := time.Since(started)
 			result.FirstSemanticOutput = &elapsed
-		}
-		if observed.HasUsage {
-			if usage := ExtractGeminiUsage(payload); usage != nil {
-				result.Usage = *usage
-			}
 		}
 		if images := CountGeminiInlineImageOutputs(payload); images > result.ObservedImages {
 			result.ObservedImages = images

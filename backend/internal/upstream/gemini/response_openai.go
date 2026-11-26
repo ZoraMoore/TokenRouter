@@ -1,14 +1,12 @@
 package gemini
 
 import (
-	"bufio"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/tidwall/gjson"
@@ -179,12 +177,16 @@ func (s *ResponseAdapter) HandleOpenAICompatStreamingResponseFromGemini(
 	ccState := bridge.NewResponsesEventToChatState(bridge.Runtime{Now: time.Now, ReadRandom: rand.Read})
 	ccState.Model = originalModel
 	ccState.IncludeUsage = includeUsage
+	// Use one client tool restorer for this stream because events can split tool
+	// identity and arguments; restoration state must follow their order before
+	// Responses emission.
 	clientToolRestorer := bridge.NewResponsesClientToolStreamRestorer(clientToolMapping)
 
 	state := bridge.NewNativeGeminiCompatStream(bridge.NativeGeminiRuntime{RandomHex: upstream.RandomHex, MessageID: upstream.GenerateAnthropicMsgID})
-	var firstTokenMs *int
-	firstChunk := true
 
+	// Chunk serialization errors suppress output, while writer errors signal
+	// disconnect to the outer loop so it can return its accumulated usage
+	// snapshot.
 	writeChatChunk := func(chunk protocolopenai.ChatCompletionsChunk) bool {
 		payload, err := json.Marshal(chunk)
 		if err != nil {
@@ -197,6 +199,9 @@ func (s *ResponseAdapter) HandleOpenAICompatStreamingResponseFromGemini(
 		}
 		return false
 	}
+	// Restore each Responses event after reversing upstream names; failed
+	// serialization or restoration skips the event, and successful restored
+	// payloads determine their own emitted event labels.
 	writeResponsesEvent := func(event protocolopenai.ResponsesStreamEvent) bool {
 		payload, err := json.Marshal(event)
 		if err != nil {
@@ -204,6 +209,8 @@ func (s *ResponseAdapter) HandleOpenAICompatStreamingResponseFromGemini(
 		}
 		payload = s.Options.ReverseTools(payload)
 		payloads, _, err := clientToolRestorer.RestoreEvent(payload)
+		// A restoration error suppresses this event while keeping the same restorer
+		// for later events; any state already changed by that failed call remains.
 		if err != nil {
 			return false
 		}
@@ -218,6 +225,7 @@ func (s *ResponseAdapter) HandleOpenAICompatStreamingResponseFromGemini(
 		return false
 	}
 
+	var firstTokenMs *int
 	resultSnapshot := func() *StreamResult {
 		return &StreamResult{
 			Usage:        LegacyNativeGeminiUsage(state.Usage()),
@@ -251,50 +259,53 @@ func (s *ResponseAdapter) HandleOpenAICompatStreamingResponseFromGemini(
 			return resultSnapshot(), nil
 		}
 	}
-	reader := bufio.NewReader(resp.Body)
-	for {
-		line, err := reader.ReadString('\n')
-		if line != "" {
-			trimmed := strings.TrimRight(line, "\r\n")
-			if after, ok0 := strings.CutPrefix(trimmed, "data:"); ok0 {
-				payload := strings.TrimSpace(after)
-				if payload != "" && payload != "[DONE]" {
-					rawBytes := []byte(payload)
-					if isOAuth {
-						if innerBytes, uwErr := UnwrapGeminiResponse(rawBytes); uwErr == nil {
-							rawBytes = innerBytes
-						}
-					}
-
-					var geminiResp map[string]any
-					if err := json.Unmarshal(rawBytes, &geminiResp); err == nil {
-						s.observeRaw(rawBytes)
-						if firstChunk {
-							firstChunk = false
-							ms := int(time.Since(startTime).Milliseconds())
-							firstTokenMs = &ms
-							if s.Options.ObserveState != nil {
-								s.Options.ObserveState(nil, firstTokenMs)
-							}
-						}
-						for event := range state.Process(geminiResp, rawBytes) {
-							if emitAnthropicEvent(event) {
-								return resultSnapshot(), nil
-							}
-						}
-					}
-				}
+	observed, readErr := s.readStream(resp, isOAuth, func(event upstream.GeminiStreamEvent) error {
+		if len(event.Data) == 0 {
+			if event.Terminal {
+				c.Complete()
+			}
+			return c.Err()
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(event.Data, &payload); err != nil {
+			return err
+		}
+		if firstTokenMs == nil {
+			ms := int(time.Since(startTime).Milliseconds())
+			firstTokenMs = &ms
+			if s.Options.ObserveState != nil {
+				s.Options.ObserveState(nil, firstTokenMs)
 			}
 		}
-
-		if errors.Is(err, io.EOF) {
-			break
+		s.observeRaw(event.Data)
+		for message := range state.Process(payload, event.Data) {
+			if emitAnthropicEvent(message) {
+				return c.Err()
+			}
 		}
-		if err != nil {
-			return nil, fmt.Errorf("stream read error: %w", err)
+		if event.Terminal {
+			c.Complete()
+		}
+		return c.Err()
+	})
+	// Preserve sparse accounting independently of client delivery and terminal
+	// conversion; a usage-only tail cannot zero previously observed input tokens.
+	if len(observed.UsageJSON) > 0 {
+		var usagePayload map[string]any
+		_ = json.Unmarshal(observed.UsageJSON, &usagePayload)
+		for range state.Process(usagePayload, observed.UsageJSON) {
 		}
 	}
+	if c.Err() != nil {
+		return resultSnapshot(), nil
+	}
+	if readErr != nil {
+		return resultSnapshot(), readErr
+	}
 
+	// Finish the Gemini bridge before downstream finalization so final
+	// input/cache counts enter the Responses state before its terminal usage and
+	// completion events are generated.
 	for event := range state.Finish() {
 		if event.Type == "message_delta" {
 			usage := state.Usage()

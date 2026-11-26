@@ -27,6 +27,7 @@ import (
 	gatewayprovider "github.com/TokenFlux/TokenRouter/internal/gateway/provider"
 	selectionadapter "github.com/TokenFlux/TokenRouter/internal/gateway/provider/selection"
 	gatewaytestkit "github.com/TokenFlux/TokenRouter/internal/gateway/testkit"
+	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry"
 	"github.com/TokenFlux/TokenRouter/internal/ops"
 	"github.com/TokenFlux/TokenRouter/internal/protocol/bridge"
 	protocolopenai "github.com/TokenFlux/TokenRouter/internal/protocol/openai"
@@ -1137,6 +1138,10 @@ func TestOpenAINativeFirstOutputTimeoutDisabledKeepsPreamblePrivateAcrossKeepali
 	require.Contains(t, rec.Body.String(), ":\n\n")
 	require.NotContains(t, rec.Body.String(), "response.created")
 	require.NotContains(t, rec.Body.String(), "response.in_progress")
+	keepaliveAt, ok := c.Request.Context().Value(telemetry.FirstDownstreamKeepaliveAt).(time.Time)
+	require.True(t, ok, "the stream must record its flushed keepalive")
+	require.False(t, keepaliveAt.IsZero())
+	require.Nil(t, c.Request.Context().Value(telemetry.FirstVisibleOutputAt))
 }
 
 func TestOpenAINativeFirstOutputFailoverKeepsAttemptHeadersPrivateAfterKeepaliveCommit(t *testing.T) {

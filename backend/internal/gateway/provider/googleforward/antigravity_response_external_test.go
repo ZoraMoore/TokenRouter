@@ -241,7 +241,9 @@ func TestAntigravityCompatStreamErrorCommitsSingleTerminalFrame(t *testing.T) {
 	result, err := googleforward.AntigravityResponseForTest(svc, &googleforward.AttemptForTest{Output: gatewayhttp.NewGoogleBoundary(c, svc.Options, true)}).HandleResponsesStreamingFromAntigravity(upstream.NewOutputContext(gatewayhttp.NewGoogleBoundary(c, svc.Options, true).Sink()), resp, time.Now(), "gemini-3.1-pro-high", bridge.ResponsesClientToolMapping{})
 
 	require.Error(t, err)
-	require.Nil(t, result)
+	require.NotNil(t, result)
+	require.Equal(t, 8, result.Usage.InputTokens)
+	require.Equal(t, 1, result.Usage.OutputTokens)
 	require.True(t, gatewayhttp.IsResponseCommitted(c))
 	require.Equal(t, 1, strings.Count(recorder.Body.String(), "event: error"))
 }
@@ -266,6 +268,8 @@ func TestAntigravityCompatKeepaliveAfterFirstEvent(t *testing.T) {
 	)
 	require.NoError(t, err)
 	time.Sleep(1200 * time.Millisecond)
+	_, err = io.WriteString(writer, "data: {\"response\":{\"candidates\":[{\"finishReason\":\"STOP\"}]}}\n\n")
+	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 	require.NoError(t, <-done)
 	require.Contains(t, recorder.Body.String(), ": ping\n\n")
@@ -845,3 +849,19 @@ func generateLargeUnwrapJSON(minSize int) []byte {
 func (cancelReadCloser) Read([]byte) (int, error) { return 0, context.Canceled }
 
 func (cancelReadCloser) Close() error { return nil }
+
+// TestAntigravityGeminiLateCache 检查完成标记之后的 Gemini 缓存尾帧。
+func TestAntigravityGeminiLateCache(t *testing.T) {
+	svc := newAntigravityCompatibilityFixture(googleforward.Options{MaxLineSize: 500 * 1024 * 1024}, nil)
+	c, recorder := newAntigravityCompatContext(http.MethodPost, "/v1/chat/completions", nil)
+	body := "data: " + `{"response":{"responseId":"review-tail","candidates":[{"content":{"parts":[{"text":"OK"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":10}}}` + "\n\ndata: " + `{"response":{"usageMetadata":{"cachedContentTokenCount":60,"candidatesTokenCount":10}}}` + "\n\n"
+	resp := &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body))}
+	adapter := googleforward.AntigravityResponseForTest(svc, &googleforward.AttemptForTest{Output: gatewayhttp.NewGoogleBoundary(c, svc.Options, true)})
+	result, err := adapter.HandleChatCompletionsStreamingFromAntigravity(upstream.NewOutputContext(gatewayhttp.NewGoogleBoundary(c, svc.Options, true).Sink()), resp, time.Now(), "gemini-2.5-pro", true)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	t.Logf("input=%d cache=%d output=%d", result.Usage.InputTokens, result.Usage.CacheReadInputTokens, result.Usage.OutputTokens)
+	require.Equal(t, 40, result.Usage.InputTokens)
+	require.Equal(t, 60, result.Usage.CacheReadInputTokens)
+	require.Contains(t, recorder.Body.String(), `"cached_tokens":60`)
+}

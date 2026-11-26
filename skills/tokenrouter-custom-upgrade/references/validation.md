@@ -4,14 +4,7 @@ Use this reference before accepting a synced source tree or custom image. Expand
 
 ## Customization Gate
 
-Run:
-
-```bash
-skills/tokenrouter-custom-upgrade/scripts/check_customizations.sh "$(git rev-parse --show-toplevel)"
-git diff --check
-```
-
-Review the diff against the selected upstream tag. The checker covers known markers but cannot discover every new customization.
+Run `git diff --check` and review the diff against the selected upstream commit or tag. Validate the specific fix and the fork’s current behavior with relevant security regression and compatibility tests. The older customization checker is applicable only to the historical layouts described in [repository-sync.md](repository-sync.md).
 
 ## Backend
 
@@ -66,7 +59,7 @@ Do not accept the image until this succeeds:
 docker run --rm --entrypoint /app/sub2api "$custom_image" --version
 ```
 
-The reported version, commit, and date must match the intended source. Keep the old image locally through production verification.
+The reported version, commit, and date must match the intended source. If the old image still exists locally, leave it available through production verification. Do not export or archive it unless the user explicitly requests an image backup.
 
 ## External Side Effects
 

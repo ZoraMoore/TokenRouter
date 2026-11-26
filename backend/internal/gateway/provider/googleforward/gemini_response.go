@@ -3,12 +3,18 @@ package googleforward
 import (
 	"io"
 	"net/http"
+	"time"
 
+	"github.com/TokenFlux/TokenRouter/internal/upstream"
 	gemininative "github.com/TokenFlux/TokenRouter/internal/upstream/gemini"
 )
 
 func (s *Gemini) geminiResponseAdapter(c *attempt) *gemininative.ResponseAdapter {
 	return &gemininative.ResponseAdapter{Options: gemininative.ResponseOptions{
+		Stream: upstream.GeminiStreamOptions{
+			IdleTimeout:   time.Duration(s.Options.StreamInterval) * time.Second,
+			MaxFrameBytes: s.Options.MaxLineSize,
+		},
 		GoogleError: func(status int, message string) error { return c.GoogleError(status, message) },
 
 		ReadBody: func(body io.Reader) ([]byte, error) {

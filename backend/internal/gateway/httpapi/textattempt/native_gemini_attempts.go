@@ -189,7 +189,7 @@ func (b *nativeGeminiAttemptBridge) Forward(state textflow.AttemptState) textflo
 
 // OtherFailure 保留 Gemini 原生适配，重试与完成资格由文本核心控制。
 func (b *nativeGeminiAttemptBridge) OtherFailure(err error) {
-	// ForwardNative already wrote the response
+	gatewayhttp.WriteGoogleError(b.c, http.StatusBadGateway, "Upstream request failed")
 	b.reqLog.Error("gemini.forward_failed", zap.Int64("provider_id", b.provider.Record.ID), zap.Error(err))
 }
 

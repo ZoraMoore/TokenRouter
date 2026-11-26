@@ -203,6 +203,7 @@ func (s *NativeGeminiCompatStream) Finish() iter.Seq[*AnthropicStreamEvent] {
 		if s.sawToolUse {
 			stopReason = "tool_use"
 		}
+		usage := s.usage
 		if emit(&AnthropicStreamEvent{
 			Type: "message_delta",
 			Delta: &AnthropicDelta{
@@ -210,9 +211,9 @@ func (s *NativeGeminiCompatStream) Finish() iter.Seq[*AnthropicStreamEvent] {
 				StopReason: stopReason,
 			},
 			Usage: &AnthropicUsage{
-				InputTokens:          s.usage.InputTokens,
-				OutputTokens:         s.usage.OutputTokens,
-				CacheReadInputTokens: s.usage.CacheReadInputTokens,
+				InputTokens:          usage.InputTokens,
+				OutputTokens:         usage.OutputTokens,
+				CacheReadInputTokens: usage.CacheReadInputTokens,
 			},
 		}) {
 			return

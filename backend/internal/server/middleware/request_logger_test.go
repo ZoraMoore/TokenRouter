@@ -81,6 +81,38 @@ func TestRequestLoggerBoundsIncomingRequestID(t *testing.T) {
 	}
 }
 
+// TestRequestLoggerRecordsEdgeAlias 验证入口诊断 ID 可用于查找请求。
+func TestRequestLoggerRecordsEdgeAlias(t *testing.T) {
+	const edgeID = "1a2b3c4d5e6f78901234567890abcdef"
+	for _, value := range []string{edgeID, "caller-id"} {
+		t.Run(value, func(t *testing.T) {
+			var record telemetry.RequestRecord
+			router := gin.New()
+			router.Use(RequestLogger(func(saved telemetry.RequestRecord) { record = saved }))
+			router.GET("/t", func(c *gin.Context) { c.Status(http.StatusOK) })
+			request := httptest.NewRequest(http.MethodGet, "/t", nil)
+			request.Header.Set("X-Scienceedu-Edge-ID", value)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+
+			for _, alias := range record.Aliases {
+				if alias.Kind == "edge" && alias.Value == value {
+					if value != edgeID {
+						t.Fatalf("invalid edge ID stored: %q", value)
+					}
+					if response.Header().Get(requestIDHeader) == value {
+						t.Fatal("edge ID replaced the application's request ID")
+					}
+					return
+				}
+			}
+			if value == edgeID {
+				t.Fatal("valid edge ID missing from the request aliases")
+			}
+		})
+	}
+}
+
 // TestRequestLoggerPreservesIDAcrossStreaming 覆盖上游响应头覆盖、流式提交和请求拒绝。
 func TestRequestLoggerPreservesIDAcrossStreaming(t *testing.T) {
 	for _, status := range []int{200, 401, 403, 429, 500} {

@@ -14,7 +14,7 @@ import (
 func (s *ResponseAdapter) HandleChatCompletionsNonStreamingFromAntigravity(c *upstream.OutputContext, resp *http.Response, startTime time.Time, originalModel string) (*StreamResult, error) {
 	claudeResponse, result, err := s.CollectClaudeStreamResponse(resp, startTime, originalModel)
 	if err != nil {
-		return nil, s.Options.MapCollectionError(err)
+		return result, s.Options.MapCollectionError(err)
 	}
 	var anthropicResponse protocolanthropic.AnthropicResponse
 	if json.Unmarshal(claudeResponse, &anthropicResponse) != nil {
@@ -40,7 +40,7 @@ func (s *ResponseAdapter) HandleResponsesNonStreamingFromAntigravity(
 ) (*StreamResult, error) {
 	claudeResponse, result, err := s.CollectClaudeStreamResponse(resp, startTime, originalModel)
 	if err != nil {
-		return nil, s.Options.MapCollectionError(err)
+		return result, s.Options.MapCollectionError(err)
 	}
 	var anthropicResponse protocolanthropic.AnthropicResponse
 	if json.Unmarshal(claudeResponse, &anthropicResponse) != nil {

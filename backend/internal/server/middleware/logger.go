@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net/http"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry/logging"
 	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry/timing"
 	"github.com/TokenFlux/TokenRouter/internal/server/clientip"
+	"github.com/TokenFlux/TokenRouter/internal/server/httpx"
 )
 
 // Logger 请求日志中间件。
@@ -21,6 +23,13 @@ func Logger() gin.HandlerFunc {
 
 		// 请求路径
 		path := c.Request.URL.Path
+		declaredLength := c.Request.ContentLength
+		var upload *httpx.RequestBodyRead
+		if isResponsesUpload(c.Request) {
+			ctx, observation := httpx.WithRequestBodyRead(c.Request.Context())
+			c.Request = c.Request.WithContext(ctx)
+			upload = observation
+		}
 
 		// 处理请求
 		c.Next()
@@ -80,8 +89,8 @@ func Logger() gin.HandlerFunc {
 		if model != "" {
 			fields = append(fields, zap.String("model", model))
 		}
-		if c.Request.ContentLength >= 0 {
-			fields = append(fields, zap.Int64("request_content_length", c.Request.ContentLength))
+		if declaredLength >= 0 {
+			fields = append(fields, zap.Int64("request_content_length", declaredLength))
 		}
 		for _, key := range []telemetry.ContextKey{telemetry.ResponsesTerminal, telemetry.ResponsesFailureWrite} {
 			if value := c.GetString(string(key)); value != "" {
@@ -89,6 +98,7 @@ func Logger() gin.HandlerFunc {
 			}
 		}
 		fields = appendRequestStageFields(fields, c)
+		fields = appendResponsesUploadFields(fields, c, upload)
 		telemetry.UpdateRequest(c.Request.Context(), func(record *telemetry.RequestRecord) {
 			record.Timings = make(map[string]int64)
 			for _, field := range fields {
@@ -107,6 +117,41 @@ func Logger() gin.HandlerFunc {
 	}
 }
 
+// isResponsesUpload 将正文观测用于 Responses 的 HTTP 请求与 compact 子路径。
+func isResponsesUpload(request *http.Request) bool {
+	if request.Method != http.MethodPost {
+		return false
+	}
+	path := request.URL.Path
+	for _, endpoint := range []string{"/responses", "/v1/responses", "/openai/v1/responses", "/backend-api/codex/responses"} {
+		if path == endpoint || strings.HasPrefix(path, endpoint+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// appendResponsesUploadFields 保存已经收到的字节，方便核对中途断开的上传。
+func appendResponsesUploadFields(fields []zap.Field, c *gin.Context, upload *httpx.RequestBodyRead) []zap.Field {
+	if upload == nil || upload.FinishedAt.IsZero() {
+		return fields
+	}
+	fields = append(fields,
+		zap.Int64("request_body_wire_bytes", upload.WireBytes),
+		zap.String("request_body_read_state", upload.State),
+	)
+	if upload.State == "complete" {
+		fields = append(fields, zap.Int("request_body_decoded_bytes", upload.DecodedBytes))
+	}
+	if start, _ := c.Request.Context().Value(telemetry.RequestStartedAt).(time.Time); !start.IsZero() {
+		fields = append(fields,
+			zap.Int64("request_body_read_start_ms", upload.StartedAt.Sub(start).Milliseconds()),
+			zap.Int64("request_body_read_end_ms", upload.FinishedAt.Sub(start).Milliseconds()),
+		)
+	}
+	return fields
+}
+
 // appendRequestStageFields 将请求入口、提供商槽位和出站 HTTP 阶段写入访问日志。
 // 这些字段记录各阶段耗时与计数。
 func appendRequestStageFields(fields []zap.Field, c *gin.Context) []zap.Field {
@@ -122,10 +167,13 @@ func appendRequestStageFields(fields []zap.Field, c *gin.Context) []zap.Field {
 		}
 		fields = append(fields, zap.Int64(name, at.Sub(startedAt).Milliseconds()))
 	}
+	appendTimestamp(telemetry.AuthorizationFinishedAt, "authorization_finished_ms")
+	appendTimestamp(telemetry.UserSlotAcquiredAt, "user_slot_acquired_ms")
 	appendTimestamp(telemetry.ProviderSlotAcquiredAt, "provider_slot_acquired_ms")
 	appendTimestamp(telemetry.FirstSSEDataAt, "upstream_first_sse_data_ms")
 	appendTimestamp(telemetry.FirstVisibleOutputAt, "first_visible_output_ms")
 	appendTimestamp(telemetry.FirstDownstreamFlushAt, "first_downstream_flush_ms")
+	appendTimestamp(telemetry.FirstDownstreamKeepaliveAt, "first_downstream_keepalive_ms")
 
 	if snapshot, ok := timing.HTTPTraceSnapshotFromContext(ctx); ok {
 		if elapsed, valid := timing.HTTPTraceElapsedMs(snapshot, snapshot.GetConnAt); valid {

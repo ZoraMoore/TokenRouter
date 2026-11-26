@@ -1,0 +1,4 @@
+interface:
+  display_name: "云桥词元 API 配置"
+  short_description: "通过 CC Switch 配置云桥词元 API，更新 Codex 的 GPT 模型并检查生效情况"
+  default_prompt: "使用 $yunqiao-api-cc-switch，帮我查询当前云桥词元 Key 可用的 GPT 模型，并通过 CC Switch 更新 Codex 配置。"

@@ -267,7 +267,7 @@ func (s *Antigravity) forwardAntigravityCompat(
 		Stream:        request.clientStream,
 		Target:        target,
 	}, c.Sink())
-	if err != nil {
+	if err != nil && !result.HasUsage && !result.Served {
 		return nil, err
 	}
 	return &protocolforward.MessagesResult{
@@ -282,7 +282,7 @@ func (s *Antigravity) forwardAntigravityCompat(
 		FirstTokenMs:          result.FirstTokenMs,
 		ReasoningEffort:       request.reasoningEffort,
 		ClientDisconnect:      result.ClientDisconnect,
-	}, nil
+	}, err
 }
 
 func (s *Antigravity) prepareAntigravityCompatCall(

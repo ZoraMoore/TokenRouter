@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/TokenFlux/TokenRouter/internal/protocol/bridge"
+	"github.com/TokenFlux/TokenRouter/internal/upstream"
 	"github.com/TokenFlux/TokenRouter/internal/upstream/gemini/codeassist"
 )
 
@@ -20,6 +21,8 @@ const (
 )
 
 // CredentialMode 描述传输认证形式，不引入业务提供商实体。
+type candidateCountContextKey struct{}
+
 type CredentialMode string
 
 type (
@@ -102,6 +105,7 @@ func BuildRequest(ctx context.Context, body []byte, plan RequestPlan) (*http.Req
 	if !plan.Native && !wrapped {
 		wire = bridge.NativeNormalizeGeminiRequestForAIStudio(wire)
 	}
+	ctx = context.WithValue(ctx, candidateCountContextKey{}, upstream.GeminiCandidateCount(wire))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(wire))
 	if err != nil {
 		return nil, "", err
@@ -116,4 +120,12 @@ func BuildRequest(ctx context.Context, body []byte, plan RequestPlan) (*http.Req
 		req.Header.Set("User-Agent", codeassist.GeminiCLIUserAgent)
 	}
 	return req, "x-request-id", nil
+}
+
+func requestCandidateCount(req *http.Request) int {
+	count, _ := req.Context().Value(candidateCountContextKey{}).(int)
+	if count <= 0 {
+		return 1
+	}
+	return count
 }

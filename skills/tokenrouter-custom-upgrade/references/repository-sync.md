@@ -1,6 +1,6 @@
 # Repository Synchronization
 
-Use this reference for audit or source-sync work. It does not authorize production deployment.
+Use this reference when the user requests a security patch, upstream source sync, or a version upgrade. Compare and preserve the current refactored fork. This does not authorize production deployment or site backups.
 
 ## Establish The Baseline
 
@@ -19,17 +19,15 @@ Classify differences as runtime behavior, tests, build/deployment, documentation
 
 Before a merge:
 
-1. Save a binary Git patch of tracked changes and an archive of valuable untracked source outside the repository. Record the starting commit and old image ID.
+1. Record the starting commit. Use an isolated source checkout if needed to preserve existing changes. Keep production images and data out of source sync.
 2. Run the repository's secret scan. If its scanner is unavailable, report that drift and use a conservative filename/high-confidence fallback; never interpret a broken scanner as success.
-3. Run focused tests for existing runtime customizations when practical.
-4. Commit custom work in logical Conventional Commits. Do not create or switch branches when repository instructions forbid it.
-5. Confirm the worktree is clean.
+3. Run focused tests for the affected security behavior and current customizations. Follow repository branch and worktree rules. Keep unrelated local changes intact.
 
 If Git author identity is absent, use a repository-local neutral identity rather than changing global Git configuration or impersonating the user. Tell the user so they can replace it before future GitHub commits.
 
 ## Fetch And Review The Target
 
-Fetch only the selected release tag when possible. Verify:
+Fetch the selected security fix or exact release tag. Verify the prerequisite commits and review the smallest useful patch before considering a complete merge:
 
 - the tag resolves to the expected repository and commit;
 - the current upstream base is an ancestor of the target;
@@ -47,7 +45,7 @@ When the upstream prefixes already equal the fork's required next sequence, reco
 
 ## Merge And Reconcile
 
-Merge the exact release with a reviewable merge commit. Resolve conflicts by preserving fork product, payment, security, deployment, and documentation semantics. Specifically verify:
+Apply the security patch or merge the exact release the user requested. Resolve conflicts by preserving the fork’s current product, payment, security, deployment, and documentation semantics. The checks below apply only if these customizations still exist in the refactored branch:
 
 - EasyPay `QueryOrder` still calls the GET helper and its tests read `r.URL.Query()`;
 - URL-bearing transport errors cannot expose `pkey`;
@@ -56,7 +54,7 @@ Merge the exact release with a reviewable merge commit. Resolve conflicts by pre
 - upstream README additions are routed into the repository's maintained docs according to local instructions;
 - generated code and lockfiles match the merged source.
 
-Run the bundled checker after the merge:
+Use the bundled checker as a reference for compatible historical layouts. It encodes older customization markers; assess which checks still apply before treating a failed check as a regression. For a compatible layout run:
 
 ```bash
 skills/tokenrouter-custom-upgrade/scripts/check_customizations.sh "$(git rev-parse --show-toplevel)"
@@ -64,4 +62,4 @@ skills/tokenrouter-custom-upgrade/scripts/check_customizations.sh "$(git rev-par
 
 Official release tags can precede the workflow's `VERSION` file writeback. Ensure the custom branch contains the target version and still pass `--build-arg VERSION=<target>` during image construction.
 
-Finish source sync with `git diff --check`, a clean worktree, and a concise diff of the fork against the target tag. Do not push until the user supplies/authorizes the private GitHub destination.
+Finish source sync with `git diff --check` and a concise comparison against the target commit or tag. Report unrelated worktree changes left in place. Do not push until the user supplies/authorizes the private GitHub destination.

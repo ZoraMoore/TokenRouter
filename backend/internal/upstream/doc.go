@@ -10,5 +10,7 @@
 //   - image*.go 处理图片模型、请求字段、上传内容和返回字节。
 //   - error_message.go、model_error.go 和 stream_error.go 识别错误并整理客户端错误描述。
 //   - client_tools_stream.go 转换 Responses 流中的客户端工具事件。
+//   - gemini_stream.go、gemini_collect.go 读取 Gemini 事件、收集尾部用量和聚合候选。
+//   - sse_heartbeat.go 识别上游的空事件和心跳。
 //   - http_profile.go、path_segment.go、session_identity.go 和 wait.go 处理传输策略、路径校验、会话标识和可取消等待。
 package upstream

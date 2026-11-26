@@ -222,3 +222,14 @@ func (c *OutputContext) Err() error {
 	}
 	return nil
 }
+
+// Complete 将已验证的生成结束状态传给输出端。
+func (c *OutputContext) Complete() {
+	if writer, ok := c.Writer.(*deferredOutputWriter); ok {
+		(&OutputContext{Writer: writer.writer()}).Complete()
+		return
+	}
+	if writer, ok := c.Writer.(*sinkWriter); ok && writer.err == nil {
+		writer.err = writer.sink.Emit(OutputEvent{Terminal: true, Flush: true})
+	}
+}

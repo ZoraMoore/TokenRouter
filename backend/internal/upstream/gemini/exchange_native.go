@@ -14,6 +14,7 @@ import (
 func ExchangeNative(ctx context.Context, options ExchangeOptions) (ExchangeResult, error) {
 	requestIDHeader := options.RequestIDHeader
 	var resp *http.Response
+	candidateCount := 1
 	for attempt := 1; attempt <= options.MaxRetries; attempt++ {
 		upstreamReq, idHeader, err := options.Build(ctx)
 		if err != nil {
@@ -23,6 +24,7 @@ func ExchangeNative(ctx context.Context, options ExchangeOptions) (ExchangeResul
 			return ExchangeResult{}, options.BuildError(err)
 		}
 		requestIDHeader = idHeader
+		candidateCount = requestCandidateCount(upstreamReq)
 
 		resp, err = options.Do(upstreamReq)
 		if err != nil {
@@ -109,5 +111,5 @@ func ExchangeNative(ctx context.Context, options ExchangeOptions) (ExchangeResul
 		break
 	}
 
-	return ExchangeResult{Response: resp, RequestIDHeader: requestIDHeader}, nil
+	return ExchangeResult{Response: resp, RequestIDHeader: requestIDHeader, CandidateCount: candidateCount}, nil
 }

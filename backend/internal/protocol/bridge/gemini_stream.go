@@ -29,6 +29,7 @@ type GeminiToAnthropicStreamProcessor struct {
 	pendingSignature  string
 	trailingSignature string
 	originalModel     string
+	finishReason      string
 	webSearchQueries  []string
 	groundingChunks   []GeminiGroundingChunk
 
@@ -56,6 +57,9 @@ func NewGeminiToAnthropicStreamProcessor(originalModel string, runtime GeminiCon
 
 // ProcessResponse 转换平台已解包的 Gemini 事件，不执行传输或读取提供商状态。
 func (p *GeminiToAnthropicStreamProcessor) ProcessResponse(v1Resp *GeminiResponseInput) []byte {
+	if p.messageStopSent {
+		return nil
+	}
 	geminiResp := &v1Resp.Response
 
 	var result bytes.Buffer
@@ -99,7 +103,8 @@ func (p *GeminiToAnthropicStreamProcessor) ProcessResponse(v1Resp *GeminiRespons
 			}
 		}
 		if finishReason != "" {
-			_, _ = result.Write(p.emitFinish(finishReason))
+			p.finishReason = finishReason
+			_, _ = result.Write(p.endBlock())
 		}
 	}
 
@@ -123,7 +128,7 @@ func (p *GeminiToAnthropicStreamProcessor) Finish() ([]byte, *ClaudeUsage) {
 
 	var result bytes.Buffer
 	if !p.messageStopSent {
-		_, _ = result.Write(p.emitFinish(""))
+		_, _ = result.Write(p.emitFinish(p.finishReason))
 	}
 
 	return result.Bytes(), usage
@@ -516,4 +521,15 @@ func (p *GeminiToAnthropicStreamProcessor) TakeDiagnostics() []string {
 
 func (p *GeminiToAnthropicStreamProcessor) addDiagnostic(format string, args ...any) {
 	p.diagnostics = append(p.diagnostics, fmt.Sprintf(format, args...))
+}
+
+// SetUsageSnapshot 在终态输出前写入完整的累计用量。
+func (p *GeminiToAnthropicStreamProcessor) SetUsageSnapshot(usage *NativeGeminiUsage) {
+	if usage == nil {
+		return
+	}
+	p.inputTokens = usage.InputTokens
+	p.outputTokens = usage.OutputTokens
+	p.cacheReadTokens = usage.CacheReadInputTokens
+	p.imageOutputTokens = usage.ImageOutputTokens
 }

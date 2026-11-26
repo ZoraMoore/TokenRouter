@@ -5,6 +5,8 @@ import (
 	"log"
 	"strings"
 
+	"github.com/tidwall/gjson"
+
 	"github.com/TokenFlux/TokenRouter/internal/protocol/bridge"
 )
 
@@ -30,10 +32,8 @@ func (p *StreamingProcessor) ProcessLine(line string) []byte {
 		return nil
 	}
 
-	// 解包 v1internal 响应
 	var v1Resp V1InternalResponse
-	if err := json.Unmarshal([]byte(data), &v1Resp); err != nil {
-		// 尝试直接解析为 GeminiResponse
+	if !gjson.Get(data, "response").IsObject() {
 		var directResp GeminiResponse
 		if err2 := json.Unmarshal([]byte(data), &directResp); err2 != nil {
 			return nil
@@ -41,6 +41,8 @@ func (p *StreamingProcessor) ProcessLine(line string) []byte {
 		v1Resp.Response = directResp
 		v1Resp.ResponseID = directResp.ResponseID
 		v1Resp.ModelVersion = directResp.ModelVersion
+	} else if err := json.Unmarshal([]byte(data), &v1Resp); err != nil {
+		return nil
 	}
 
 	result := p.ProcessResponse(&bridge.GeminiResponseInput{Response: v1Resp.Response, ResponseID: v1Resp.ResponseID, ModelVersion: v1Resp.ModelVersion})

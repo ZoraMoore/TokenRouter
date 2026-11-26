@@ -228,7 +228,7 @@ func TestGeminiForwardAsResponsesCommitsStreamBeforeReadFailure(t *testing.T) {
 
 	_, err := svc.ForwardAsResponses(context.Background(), gatewayhttp.NewGoogleBoundary(c, svc.Options, false), provider, body, nil)
 
-	require.ErrorContains(t, err, "stream read error")
+	require.ErrorContains(t, err, "stream_read_error")
 	require.Positive(t, recorder.Body.Len(), "首个字节写出后 handler 必须禁止 failover")
 }
 
@@ -580,3 +580,124 @@ func (r *geminiResponsesFailingStream) Read(p []byte) (int, error) {
 }
 
 func (r *geminiResponsesFailingStream) Close() error { return nil }
+
+// TestGeminiPartialUsageSurvivesProvider 验证服务层返回断流之前的用量。
+func TestGeminiPartialUsageSurvivesProvider(t *testing.T) {
+	for _, name := range []string{"chat", "responses", "messages", "native"} {
+		t.Run(name, func(t *testing.T) {
+			stream := "data: " + `{"candidates":[{"content":{"parts":[{"text":"hello"}]}}],"usageMetadata":{"promptTokenCount":100,"cachedContentTokenCount":60,"candidatesTokenCount":10}}` + "\n\n"
+			stub := &geminiCompatHTTPUpstreamStub{response: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(&antigravityCompatErrorReader{data: []byte(stream), err: io.ErrUnexpectedEOF})}}
+			svc := newGeminiFixture(geminiDependencies{httpUpstream: stub, cfg: &googleforward.Options{}})
+			provider := geminiPoolModeAPIKeyProvider()
+			body := []byte(`{"model":"gemini-2.5-flash","input":"hello","messages":[{"role":"user","content":"hello"}],"stream":true}`)
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/"+name, bytes.NewReader(body))
+			var result *forwardcore.MessagesResult
+			var err error
+			switch name {
+			case "chat":
+				result, err = svc.ForwardAsChatCompletions(t.Context(), gatewayhttp.NewGoogleBoundary(c, svc.Options, false), provider, body)
+			case "responses":
+				result, err = svc.ForwardAsResponses(t.Context(), gatewayhttp.NewGoogleBoundary(c, svc.Options, false), provider, body, nil)
+			case "messages":
+				body = []byte(`{"model":"gemini-2.5-flash","max_tokens":16,"messages":[{"role":"user","content":"hello"}],"stream":true}`)
+				result, err = svc.Forward(t.Context(), gatewayhttp.NewGoogleBoundary(c, svc.Options, false), provider, body)
+			case "native":
+				body = []byte(`{"contents":[{"role":"user","parts":[{"text":"hello"}]}]}`)
+				result, err = svc.ForwardNative(t.Context(), gatewayhttp.NewGoogleBoundary(c, svc.Options, false), provider, "gemini-2.5-flash", "streamGenerateContent", true, body)
+			}
+			require.Error(t, err)
+			require.NotNil(t, result, "执行器已收到用量，转发层需要把结果交给完成处理")
+			require.Equal(t, 40, result.Usage.InputTokens)
+			require.Equal(t, 60, result.Usage.CacheReadInputTokens)
+		})
+	}
+}
+
+// TestGeminiDisconnectFlag 验证客户端写入失败状态传到网关。
+func TestGeminiDisconnectFlag(t *testing.T) {
+	for _, kind := range []string{"responses", "chat", "messages", "native"} {
+		t.Run(kind, func(t *testing.T) {
+			body := []byte(`{"model":"gemini-2.5-flash","input":"hello","stream":true}`)
+			stream := "data: " + `{"candidates":[{"content":{"parts":[{"text":"hello"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":100,"cachedContentTokenCount":60,"candidatesTokenCount":10}}` + "\n\n"
+			stub := &geminiCompatHTTPUpstreamStub{response: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}}
+			svc := newGeminiFixture(geminiDependencies{httpUpstream: stub, cfg: &googleforward.Options{}})
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+			c.Writer = &antigravityFailingWriter{ResponseWriter: c.Writer, failAfter: 0}
+			var result *forwardcore.MessagesResult
+			var err error
+			provider := geminiPoolModeAPIKeyProvider()
+			output := gatewayhttp.NewGoogleBoundary(c, svc.Options, false)
+			switch kind {
+			case "responses":
+				result, err = svc.ForwardAsResponses(t.Context(), output, provider, body, nil)
+			case "chat":
+				body = []byte(`{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"hello"}],"stream":true}`)
+				result, err = svc.ForwardAsChatCompletions(t.Context(), output, provider, body)
+			case "messages":
+				body = []byte(`{"model":"gemini-2.5-flash","max_tokens":16,"messages":[{"role":"user","content":"hello"}],"stream":true}`)
+				result, err = svc.Forward(t.Context(), output, provider, body)
+			case "native":
+				body = []byte(`{"contents":[{"role":"user","parts":[{"text":"hello"}]}]}`)
+				result, err = svc.ForwardNative(t.Context(), output, provider, "gemini-2.5-flash", "streamGenerateContent", true, body)
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.True(t, result.ClientDisconnect, "客户端写入已经失败，返回结果仍标为未断开")
+		})
+	}
+}
+
+// TestGeminiStreamErrorIsDelivered 验证 HTTP 200 流中的上游错误会输出给客户端。
+func TestGeminiStreamErrorIsDelivered(t *testing.T) {
+	body := []byte(`{"model":"gemini-2.5-flash","input":"hello","stream":true}`)
+	stream := "data: " + `{"candidates":[{"content":{"parts":[{"text":"hello"}]}}],"usageMetadata":{"promptTokenCount":100,"cachedContentTokenCount":60,"candidatesTokenCount":1}}` + "\n\ndata: " + `{"error":{"code":429,"message":"quota","status":"RESOURCE_EXHAUSTED"}}` + "\n\n"
+	stub := &geminiCompatHTTPUpstreamStub{response: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}}
+	svc := newGeminiFixture(geminiDependencies{httpUpstream: stub, cfg: &googleforward.Options{}})
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	_, err := svc.ForwardAsResponses(t.Context(), gatewayhttp.NewGoogleBoundary(c, svc.Options, false), geminiPoolModeAPIKeyProvider(), body, nil)
+	require.Error(t, err)
+	require.Contains(t, recorder.Body.String(), `"error":{`, "客户端已接收正文，后续错误需要一个 SSE 错误事件")
+}
+
+// TestGeminiNativeStreamErrorIsDelivered 检查原生入口的流式错误输出。
+func TestGeminiNativeStreamErrorIsDelivered(t *testing.T) {
+	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"hello"}]}]}`)
+	stream := "data: " + `{"candidates":[{"content":{"parts":[{"text":"hello"}]}}],"usageMetadata":{"promptTokenCount":100,"cachedContentTokenCount":60,"candidatesTokenCount":1}}` + "\n\ndata: " + `{"error":{"code":429,"message":"quota","status":"RESOURCE_EXHAUSTED"}}` + "\n\n"
+	stub := &geminiCompatHTTPUpstreamStub{response: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}}
+	svc := newGeminiFixture(geminiDependencies{httpUpstream: stub, cfg: &googleforward.Options{}})
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-flash:streamGenerateContent", bytes.NewReader(body))
+	result, err := svc.ForwardNative(t.Context(), gatewayhttp.NewGoogleBoundary(c, svc.Options, false), geminiPoolModeAPIKeyProvider(), "gemini-2.5-flash", "streamGenerateContent", true, body)
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 60, result.Usage.CacheReadInputTokens)
+	var failover *forwardcore.UpstreamFailoverError
+	require.False(t, errors.As(err, &failover))
+	require.Contains(t, recorder.Body.String(), `"text":"hello"`)
+	require.Contains(t, recorder.Body.String(), `"error":{`, "Google 原生客户端需要收到上游错误")
+}
+
+// TestGeminiEmbeddedErrorBeforeOutputCanRetry 检查未输出内容前的流式错误继续使用池模式重试规则。
+func TestGeminiEmbeddedErrorBeforeOutputCanRetry(t *testing.T) {
+	payload := "data: " + `{"error":{"code":429,"message":"quota","status":"RESOURCE_EXHAUSTED"}}` + "\n\n"
+	stub := &geminiCompatHTTPUpstreamStub{response: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(payload))}}
+	svc := newGeminiFixture(geminiDependencies{httpUpstream: stub, cfg: &googleforward.Options{}})
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"hello"}]}]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/test:streamGenerateContent", bytes.NewReader(body))
+	result, err := svc.ForwardNative(t.Context(), gatewayhttp.NewGoogleBoundary(c, svc.Options, false), geminiPoolModeAPIKeyProvider(), "gemini-2.5-flash", "streamGenerateContent", true, body)
+	require.Nil(t, result)
+	var failover *forwardcore.UpstreamFailoverError
+	require.ErrorAs(t, err, &failover)
+	require.Equal(t, 429, failover.StatusCode)
+	require.True(t, failover.RetryableOnSameProvider)
+	require.False(t, c.Writer.Written())
+}

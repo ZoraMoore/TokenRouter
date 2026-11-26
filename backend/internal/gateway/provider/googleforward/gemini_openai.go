@@ -289,7 +289,12 @@ func (s *Gemini) forwardClaudeBodyAsOpenAICompat(
 		return compatibilityResult, executeErr
 	}
 	if executeErr != nil {
-		return nil, executeErr
+		executeErr = s.streamFailure(ctx, c, provider, result, executeErr, func(status int, body []byte) error {
+			return c.GeminiOpenAICompatMappedError(provider, status, result.RequestID, body, protocol)
+		})
+		if !result.HasUsage && !result.Served {
+			return nil, executeErr
+		}
 	}
 	requestID = result.RequestID
 	usage := &result.Usage
@@ -328,8 +333,8 @@ func (s *Gemini) forwardClaudeBodyAsOpenAICompat(
 
 		ImageInputSize: imageInputSize,
 
-		ClientDisconnect: false,
-	}, nil
+		ClientDisconnect: result.ClientDisconnect,
+	}, executeErr
 }
 
 func (s *Gemini) buildGeminiChatCompletionsUpstreamRequestFunc(

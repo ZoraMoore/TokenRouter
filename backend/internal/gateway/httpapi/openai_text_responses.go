@@ -15,6 +15,7 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/gateway/session"
 	textflow "github.com/TokenFlux/TokenRouter/internal/gateway/text"
 	"github.com/TokenFlux/TokenRouter/internal/identity/httpapi/authctx"
+	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry"
 	"github.com/TokenFlux/TokenRouter/internal/protocol"
 	"github.com/TokenFlux/TokenRouter/internal/scheduler"
 )
@@ -49,6 +50,7 @@ func (h *OpenAITextHandler) Responses(c *gin.Context) {
 		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
+	MarkOpsTimestamp(c, telemetry.AuthorizationFinishedAt)
 	reqLog := RequestLogger(
 		c,
 		"handler.openai_gateway.responses",
@@ -243,6 +245,7 @@ func (h *OpenAITextHandler) Responses(c *gin.Context) {
 	if !acquired {
 		return
 	}
+	MarkOpsTimestamp(c, telemetry.UserSlotAcquiredAt)
 	// 将已取得用户租约加入保留 HTTP passthrough 标记的选择上下文。
 	if lease := scheduler.RequestLease(c.Request.Context()); lease != nil {
 		selectionCtx = scheduler.WithRequestLease(selectionCtx, lease)

@@ -15,7 +15,10 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry/logging"
 )
 
-const requestIDHeader = "X-Request-ID"
+const (
+	requestIDHeader     = "X-Request-ID"
+	edgeRequestIDHeader = "X-Scienceedu-Edge-ID"
+)
 
 // requestIDWriter 在提交 HTTP 响应时恢复本服务的请求 ID。
 type requestIDWriter struct {
@@ -105,6 +108,11 @@ func RequestLogger(observers ...func(telemetry.RequestRecord)) gin.HandlerFunc {
 			zap.String("path", c.Request.URL.Path),
 			zap.String("method", c.Request.Method),
 		)
+		edgeID := c.GetHeader(edgeRequestIDHeader)
+		validEdgeID := validEdgeRequestID(edgeID)
+		if validEdgeID {
+			requestLogger = requestLogger.With(zap.String("edge_request_id", edgeID))
+		}
 
 		ctx = logging.IntoContext(ctx, requestLogger)
 		started := time.Now().UTC()
@@ -123,6 +131,9 @@ func RequestLogger(observers ...func(telemetry.RequestRecord)) gin.HandlerFunc {
 		}
 		if clientID, valid := normalizeCorrelationID(c.GetHeader(clientRequestIDHeader)); valid {
 			record.Aliases = append(record.Aliases, telemetry.RequestAlias{Kind: "caller", Value: clientID})
+		}
+		if validEdgeID {
+			record.Aliases = append(record.Aliases, telemetry.RequestAlias{Kind: "edge", Value: edgeID})
 		}
 		ctx = telemetry.WithRequestCapture(ctx, record, observe)
 		c.Request = c.Request.WithContext(ctx)
@@ -175,4 +186,18 @@ func RequestLogger(observers ...func(telemetry.RequestRecord)) gin.HandlerFunc {
 		}()
 		c.Next()
 	}
+}
+
+// validEdgeRequestID 检查 Nginx 生成的 32 位小写十六进制请求 ID。
+func validEdgeRequestID(value string) bool {
+	if len(value) != 32 {
+		return false
+	}
+	for i := range len(value) {
+		char := value[i]
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
 }

@@ -269,11 +269,11 @@ func (s *NativeGeminiMessagesStream) Finish() iter.Seq[NativeMessageEvent] {
 			stopReason = "tool_use"
 		}
 
+		usage := s.usage
 		usageObj := map[string]any{
-			"output_tokens": s.usage.OutputTokens,
-		}
-		if s.usage.InputTokens > 0 {
-			usageObj["input_tokens"] = s.usage.InputTokens
+			"input_tokens":            usage.InputTokens,
+			"output_tokens":           usage.OutputTokens,
+			"cache_read_input_tokens": usage.CacheReadInputTokens,
 		}
 		if !emit("message_delta", map[string]any{
 			"type": "message_delta",

@@ -16,16 +16,18 @@ func (s *ResponseAdapter) CompleteMessages(c *upstream.OutputContext, resp *http
 	var firstTokenMs *int
 	if stream {
 		streamRes, err := s.HandleStreamingResponse(c, resp, startTime, originalModel)
-		if err != nil {
-			return nil, nil, err
+		if streamRes != nil {
+			usage = streamRes.Usage
+			firstTokenMs = streamRes.FirstTokenMs
 		}
-		usage = streamRes.Usage
-		firstTokenMs = streamRes.FirstTokenMs
+		if err != nil {
+			return usage, firstTokenMs, err
+		}
 	} else {
 		if useUpstreamStream {
-			collected, usageObj, err := CollectGeminiSSE(resp.Body, true, s.Options.ObserveRaw)
+			collected, usageObj, err := s.collectSSE(resp, true)
 			if err != nil {
-				return nil, nil, s.Options.ClaudeError(http.StatusBadGateway, "upstream_error", "Failed to read upstream stream")
+				return usageObj, nil, err
 			}
 			collectedBytes, _ := json.Marshal(collected)
 			s.Options.ObserveImages(collectedBytes)
@@ -37,7 +39,7 @@ func (s *ResponseAdapter) CompleteMessages(c *upstream.OutputContext, resp *http
 				c.JSON(http.StatusOK, claudeResp)
 			}
 			usage = usageObj2
-			if usageObj != nil && (usageObj.InputTokens > 0 || usageObj.OutputTokens > 0) {
+			if usageObj != nil {
 				usage = usageObj
 			}
 		} else {
@@ -57,16 +59,18 @@ func (s *ResponseAdapter) CompleteNative(c *upstream.OutputContext, resp *http.R
 
 	if stream {
 		streamRes, err := s.HandleNativeStreamingResponse(c, resp, startTime, isOAuth)
-		if err != nil {
-			return nil, nil, err
+		if streamRes != nil {
+			usage = streamRes.Usage
+			firstTokenMs = streamRes.FirstTokenMs
 		}
-		usage = streamRes.Usage
-		firstTokenMs = streamRes.FirstTokenMs
+		if err != nil {
+			return usage, firstTokenMs, err
+		}
 	} else {
 		if useUpstreamStream {
-			collected, usageObj, err := CollectGeminiSSE(resp.Body, isOAuth, s.Options.ObserveRaw)
+			collected, usageObj, err := s.collectSSE(resp, isOAuth)
 			if err != nil {
-				return nil, nil, s.Options.GoogleError(http.StatusBadGateway, "Failed to read upstream stream")
+				return usageObj, nil, err
 			}
 			b, _ := json.Marshal(collected)
 			s.Options.ObserveImages(b)
@@ -95,15 +99,17 @@ func (s *ResponseAdapter) CompleteOpenAI(c *upstream.OutputContext, resp *http.R
 	var firstTokenMs *int
 	if clientStream {
 		streamRes, err := s.HandleOpenAICompatStreamingResponseFromGemini(c, resp, startTime, originalModel, isOAuth, includeUsage, protocol, clientToolMapping)
-		if err != nil {
-			return nil, nil, err
+		if streamRes != nil {
+			usage = streamRes.Usage
+			firstTokenMs = streamRes.FirstTokenMs
 		}
-		usage = streamRes.Usage
-		firstTokenMs = streamRes.FirstTokenMs
-	} else if useUpstreamStream {
-		collected, usageObj, err := CollectGeminiSSE(resp.Body, isOAuth, s.Options.ObserveRaw)
 		if err != nil {
-			return nil, nil, s.Options.CompatError(protocol, http.StatusBadGateway, "upstream_error", "Failed to read upstream stream")
+			return usage, firstTokenMs, err
+		}
+	} else if useUpstreamStream {
+		collected, usageObj, err := s.collectSSE(resp, isOAuth)
+		if err != nil {
+			return usageObj, nil, err
 		}
 		collectedBytes, _ := json.Marshal(collected)
 		if protocol == OpenAICompatResponses {

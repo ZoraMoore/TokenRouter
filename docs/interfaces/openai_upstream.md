@@ -272,6 +272,8 @@ Responses WebSocket 的 TTFT 只按实际的 token delta 计算；上游没有 d
 
 Responses HTTP/SSE 同样区分结构进度和可见输出：`response.created`、空的 reasoning item 等进度，可以提交当前的 attempt、解除首输出超时，并关闭输出前的 failover 窗口，但不记录 TTFT；非空的文本或工具 delta、完整的文本或工具参数、图片结果，以及终态里实际的 output，才开始计算 TTFT。只带 usage 的终态保持 TTFT 未观测。
 
+HTTP 响应首次刷新 SSE 注释心跳时记录 `first_downstream_keepalive_ms`。这个计时与 `first_visible_output_ms` 并列，可以区分连接保持和模型输出到达的时间。
+
 ### Codex 基础指令和 Responses Lite
 
 普通 Codex 转发需要补基础指令时，网关按模型映射结果选择内置提示词。GPT-5.6 和具名的 GPT-6 系列使用对应的 Codex v0.172.0 模板。没有专属模板的型号使用 GPT-5.6。名称含 `codex` 的型号（如 `codex-auto-review`）使用通用 Codex 提示词。

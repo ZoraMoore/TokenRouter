@@ -107,6 +107,8 @@ func (Executor) Execute(ctx context.Context, input upstream.AttemptInput, sink u
 		}
 	}
 	options := target.Response
+	options.Context = ctx
+	options.Candidates = upstream.GeminiCandidateCount(input.Body)
 	var modelObserver protocol.ResponseModelObserver
 	defer func() { result.UpstreamResponseModel = modelObserver.Model() }()
 	priorRaw := options.ObserveRaw

@@ -244,7 +244,12 @@ func (s *Gemini) Forward(ctx context.Context, output Output, provider *gatewaypr
 		return compatibilityResult, executeErr
 	}
 	if executeErr != nil {
-		return nil, executeErr
+		executeErr = s.streamFailure(ctx, c, provider, result, executeErr, func(status int, body []byte) error {
+			return c.GeminiMappedError(provider, status, result.RequestID, body)
+		})
+		if !result.HasUsage && !result.Served {
+			return nil, executeErr
+		}
 	}
 	requestID = result.RequestID
 	usage := &result.Usage
@@ -277,8 +282,9 @@ func (s *Gemini) Forward(ctx context.Context, output Output, provider *gatewaypr
 
 		ImageSize: imageSize,
 
-		ImageInputSize: imageInputSize,
-	}, nil
+		ImageInputSize:   imageInputSize,
+		ClientDisconnect: result.ClientDisconnect,
+	}, executeErr
 }
 
 func (s *Gemini) ForwardNative(ctx context.Context, output Output, provider *gatewayprovider.ExecutionProvider, originalModel string, action string, stream bool, body []byte) (*forwardcore.MessagesResult, error) {
@@ -480,7 +486,12 @@ func (s *Gemini) ForwardNative(ctx context.Context, output Output, provider *gat
 		return compatibilityResult, executeErr
 	}
 	if executeErr != nil {
-		return nil, executeErr
+		executeErr = s.streamFailure(ctx, c, provider, result, executeErr, func(status int, body []byte) error {
+			return c.GeminiNativeUpstreamError(provider, &http.Response{StatusCode: status, Header: result.UpstreamHeaders}, body, result.RequestID, false)
+		})
+		if !result.HasUsage && !result.Served {
+			return nil, executeErr
+		}
 	}
 	if result.EstimatedTokenCount != nil {
 		return &forwardcore.MessagesResult{
@@ -522,8 +533,9 @@ func (s *Gemini) ForwardNative(ctx context.Context, output Output, provider *gat
 
 		ImageSize: imageSize,
 
-		ImageInputSize: imageInputSize,
-	}, nil
+		ImageInputSize:   imageInputSize,
+		ClientDisconnect: result.ClientDisconnect,
+	}, executeErr
 }
 
 // checkErrorPolicyInLoop 在重试循环内预检查错误策略。

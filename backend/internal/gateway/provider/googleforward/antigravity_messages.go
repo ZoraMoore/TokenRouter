@@ -309,7 +309,7 @@ func (s *Antigravity) Forward(ctx context.Context, output Output, provider *gate
 		Stream:        claudeReq.Stream,
 		Target:        target,
 	}, c.Sink())
-	if err != nil {
+	if err != nil && !result.HasUsage && !result.Served {
 		return nil, err
 	}
 	return &forwardcore.MessagesResult{
@@ -323,5 +323,5 @@ func (s *Antigravity) Forward(ctx context.Context, output Output, provider *gate
 		Duration:              result.Duration,
 		FirstTokenMs:          result.FirstTokenMs,
 		ClientDisconnect:      result.ClientDisconnect,
-	}, nil
+	}, err
 }

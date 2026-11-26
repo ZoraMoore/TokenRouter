@@ -518,7 +518,9 @@ func TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover(t *testing.T) {
 				tt.body,
 			)
 
-			require.Nil(t, result)
+			require.NotNil(t, result)
+			require.Equal(t, 8, result.Usage.InputTokens)
+			require.Zero(t, result.Usage.OutputTokens)
 			var failoverErr *forwardcore.UpstreamFailoverError
 			require.ErrorAs(t, err, &failoverErr)
 			require.True(t, failoverErr.RetryableOnSameProvider)

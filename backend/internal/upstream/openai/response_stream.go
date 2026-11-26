@@ -19,9 +19,10 @@ import (
 )
 
 const (
-	StreamTimeFlush   StreamTime = "first_downstream_flush"
-	StreamTimeVisible StreamTime = "first_visible_output"
-	StreamTimeData    StreamTime = "first_sse_data"
+	StreamTimeFlush     StreamTime = "first_downstream_flush"
+	StreamTimeKeepalive StreamTime = "first_downstream_keepalive"
+	StreamTimeVisible   StreamTime = "first_visible_output"
+	StreamTimeData      StreamTime = "first_sse_data"
 )
 
 type StreamTime string
@@ -1079,6 +1080,7 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 					continue
 				}
 				flusher.Flush()
+				options.MarkTime(StreamTimeKeepalive)
 				lastDownstreamWriteAt = time.Now()
 				continue
 			}
@@ -1091,6 +1093,7 @@ func ReadStreamingResponse(ctx context.Context, resp *http.Response, c *upstream
 				clientDisconnected = true
 				options.Logf("Client disconnected during keepalive flush, continuing to drain upstream for billing")
 			} else {
+				options.MarkTime(StreamTimeKeepalive)
 				lastDownstreamWriteAt = time.Now()
 			}
 		}

@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -21,6 +23,23 @@ const (
 	requestBodyReadMaxInitCap = 1 << 20
 	maxDecompressedBodySize   = 64 << 20
 )
+
+type requestBodyReadKey struct{}
+
+// RequestBodyRead 保存读取耗时、收到的字节数和解压结果。
+type RequestBodyRead struct {
+	StartedAt    time.Time
+	FinishedAt   time.Time
+	WireBytes    int64
+	DecodedBytes int
+	State        string
+}
+
+// WithRequestBodyRead 让入口日志读取处理器写入的正文读取信息。
+func WithRequestBodyRead(ctx context.Context) (context.Context, *RequestBodyRead) {
+	observation := &RequestBodyRead{}
+	return context.WithValue(ctx, requestBodyReadKey{}, observation), observation
+}
 
 func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
 	if req == nil || req.Body == nil {
@@ -40,25 +59,37 @@ func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
 	}
 
 	buf := bytes.NewBuffer(make([]byte, 0, capHint))
-	if _, err := io.Copy(buf, req.Body); err != nil {
+	observation, _ := req.Context().Value(requestBodyReadKey{}).(*RequestBodyRead)
+	if observation != nil {
+		observation.StartedAt = time.Now()
+	}
+	wireBytes, err := io.Copy(buf, req.Body)
+	if observation != nil {
+		observation.FinishedAt = time.Now()
+		observation.WireBytes = wireBytes
+		observation.State = "read_error"
+	}
+	if err != nil {
 		return nil, err
 	}
-	raw := buf.Bytes()
-
+	decoded := buf.Bytes()
 	enc := strings.ToLower(strings.TrimSpace(req.Header.Get("Content-Encoding")))
-	if enc == "" || enc == "identity" {
-		return raw, nil
+	if enc != "" && enc != "identity" {
+		decoded, err = decompressRequestBody(enc, decoded)
+		if err != nil {
+			if observation != nil {
+				observation.State = "decode_error"
+			}
+			return nil, fmt.Errorf("decode Content-Encoding %q: %w", enc, err)
+		}
+		req.Header.Del("Content-Encoding")
+		req.Header.Del("Content-Length")
+		req.ContentLength = int64(len(decoded))
 	}
-
-	decoded, err := decompressRequestBody(enc, raw)
-	if err != nil {
-		return nil, fmt.Errorf("decode Content-Encoding %q: %w", enc, err)
+	if observation != nil {
+		observation.State = "complete"
+		observation.DecodedBytes = len(decoded)
 	}
-
-	req.Header.Del("Content-Encoding")
-	req.Header.Del("Content-Length")
-	req.ContentLength = int64(len(decoded))
-
 	return decoded, nil
 }
 

@@ -39,6 +39,9 @@ type unifiedRecordModels struct{}
 
 type unifiedSearchSource struct{}
 
+// unifiedCacheReadFailure 在已有完整事件之后模拟传输中断。
+type unifiedCacheReadFailure struct{ io.Reader }
+
 // TestTextPricingCompactModel 核对 Compact 的全局模型、提供商覆盖与最终结算型号。
 func TestTextPricingCompactModel(t *testing.T) {
 	for _, passthrough := range []bool{false, true} {
@@ -251,3 +254,37 @@ func TestUnifiedNativeUsageSurvivesCaptureAndRecord(t *testing.T) {
 }
 
 func (unifiedSearchSource) Current() searchtools.Searcher { return nil }
+
+func (r unifiedCacheReadFailure) Read(data []byte) (int, error) {
+	n, err := r.Reader.Read(data)
+	if err == io.EOF {
+		return n, io.ErrUnexpectedEOF
+	}
+	return n, err
+}
+
+// TestUnifiedGeminiPartialUsageReachesCompletion 验证错误与缓存经过真实分派及完成输入捕获。
+func TestUnifiedGeminiPartialUsageReachesCompletion(t *testing.T) {
+	payload := "data: " + `{"candidates":[{"content":{"parts":[{"text":"partial"}]}}],"usageMetadata":{"promptTokenCount":100,"cachedContentTokenCount":60,"candidatesTokenCount":10}}` + "\n\n"
+	transport := &auxiliaryHTTPRecorder{resp: &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(unifiedCacheReadFailure{Reader: strings.NewReader(payload)})}}
+	target := gatewayadapter.NewExecutionProvider(&provider.Record{ID: 42, Platform: "gemini", Type: "apikey", Concurrency: 1, Credentials: map[string]any{"api_key": "test-key", "pool_mode": true}})
+	executor := &UnifiedTextExecutor{Gemini: &GeminiExecutor{Runtime: &googleforward.Gemini{Transport: transport, Options: googleforward.Options{Configured: true, ResponseReadLimit: 1 << 20}}}}
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	result, err := executor.Responses(t.Context(), c, target, []byte(`{"model":"gemini-2.5-flash","input":"hello","stream":true}`))
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.NativeUsage)
+	require.Equal(t, 40, result.NativeUsage.InputTokens)
+	require.Equal(t, 60, result.NativeUsage.CacheReadInputTokens)
+	require.Equal(t, 10, result.NativeUsage.OutputTokens)
+	user := &identity.User{ID: 1}
+	captured := gatewayadapter.CaptureOpenAI(t.Context(), &gatewayadapter.OpenAICapture{Result: result, APIKey: &apikey.APIKey{ID: 2, User: user}, User: user, Provider: &target.Record})
+	require.NotNil(t, captured.Result)
+	require.Equal(t, 40, captured.Result.Usage.InputTokens)
+	require.Equal(t, 60, captured.Result.Usage.CacheReadInputTokens)
+	result.NativeUsage.CacheReadInputTokens = 0
+	require.Equal(t, 60, captured.Result.Usage.CacheReadInputTokens)
+	require.Contains(t, recorder.Body.String(), `"error":{`)
+}

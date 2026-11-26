@@ -181,6 +181,8 @@ TokenRouter、PostgreSQL 和 Redis 的 Docker 标准输出日志各配置为单�
 
 主节点 Nginx 的 `api.scienceedu.me` 和 `direct-api.scienceedu.me` 将请求交给 `127.0.0.1:18080` 的 HAProxy。`cn-api.scienceedu.me` 继续经过 `45.8.173.112`，再访问主节点的 HTTPS 入口。HAProxy 按活动连接数分配请求，primary、secondary 和 tertiary 的权重为 2、1、1。权重影响节点分配比例，实际请求数量还受连接持续时间影响。
 
+三网前置在 `/etc/nginx/conf.d/scienceedu-cn-api.conf` 中为源站配置 HTTP/1.1 连接池，每个 worker 最多缓存 64 条空闲连接，空闲 45 秒后关闭。回源 TLS 继续验证 `direct-api.scienceedu.me` 的证书，WebSocket 握手使用 Upgrade 请求头。前置与源站的入口配置见[上传超时与入口日志](edge_security.md#production_edge_uploads)。
+
 HAProxy 每三秒检查应用 `/health`，连续两次失败后停止向该节点分配请求，连续两次成功后恢复。入口仅在后端连接尚未建立时改选节点。SSE 和 WebSocket 使用一小时的空闲超时。
 
 `api.scienceedu.me` 的 Nginx 优先从 `/var/www/scienceedu-ui/assets` 提供按内容哈希命名的公共静态资源，未命中时转发到应用池。在镜像切换前运行 `bash deploy/publish-ui-assets.sh backend/internal/web/dist/assets /var/www/scienceedu-ui/assets`，源目录取构建该镜像的产物。脚本串行发布，检查同名资源的内容，并核对发布目录中的 SHA-256。各版本文件按内容哈希共存，供滚动更新中的节点和已打开的页面读取。
@@ -205,7 +207,7 @@ Compose 项目名分别为 `sub2api`、`scienceedu-node2`、`scienceedu-node3`�
 
 三个应用的数据目录分别保存日志、审计文件、模型目录和定价快照。文件配置的变更需要同步到各节点，数据库中的业务设置由三个应用共享。
 
-secondary 和 tertiary 的容器资源上限均为 1.8 核 CPU、3 GiB 内存。tertiary 设置 `GOMEMLIMIT=2GiB`，为 Go 运行时之外的内存用量留出空间。PostgreSQL 的连接上限为 100，primary、secondary 和 tertiary 的应用连接池上限分别为 50、25、15；调整节点数量或连接池时，需要同时核对数据库剩余连接数。
+secondary 和 tertiary 的容器资源上限均为 1.8 核 CPU、3 GiB 内存。两个节点都设置 `GOMEMLIMIT=2GiB` 和 `GOGC=50`，为 Go 运行时之外的内存用量留出空间。PostgreSQL 的连接上限为 100，primary、secondary 和 tertiary 的应用连接池上限分别为 50、25、15；调整节点数量或连接池时，需要同时核对数据库剩余连接数。
 
 ### 排空节点后更新
 

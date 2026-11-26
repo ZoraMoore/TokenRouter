@@ -1,58 +1,26 @@
 ---
 name: tokenrouter-custom-upgrade
-description: Safely sync a customized TokenFlux TokenRouter/Sub2API fork to a selected upstream release, preserve local behavior, validate migrations and tests, build an immutable custom Docker image, and optionally upgrade a production Compose deployment with verified backups and rollback points. Use for inspecting, updating, testing, or deploying this custom TokenRouter fork; do not use for routine account administration or an unmodified upstream installation.
+description: 防御性审查官方上游 TokenRouter 源码，定位漏洞、核对二开版本是否受影响，并判断是否需要升级或合入补丁。仅在用户明确要求时同步、构建或部署；生产镜像和数据库等站点数据仅在明确要求备份时备份。
 ---
 
-# TokenRouter Custom Upgrade
+# TokenRouter 上游源码安全审查
 
-Keep the custom fork reproducible while advancing it to an explicit upstream release. Treat source synchronization, image construction, and production deployment as separate authorization scopes.
+默认做**只读源码审查**。先回答上游哪里有漏洞，再判断用户正在重构的二开版是否受影响、是否有必要升级。保留技能名 `tokenrouter-custom-upgrade`，原有调用方式可继续使用。
 
-## Start
+## 默认流程
 
-1. Discover the repository root, deployment root, active branch, remotes, running image, and current application/database versions. Paths such as `/opt/sub2api` are hints from the current deployment, not universal assumptions.
-2. Follow repository instructions before reading or changing business files. If the repository requires `project-doc`, load it and route through `docs/index.md` and the relevant operations documents.
-3. Determine the authorized mode from the user's request:
-   - **Audit:** inspect differences and risk; do not modify source or production.
-   - **Sync:** merge a selected upstream release and preserve custom source; do not deploy.
-   - **Build:** sync if requested, run validation, and build a custom image; do not deploy.
-   - **Deploy:** perform the full backup, cutover, migration, verification, and rollback-ready workflow. Production mutation requires an explicit upgrade/deploy request.
-4. Use an exact upstream tag and an exact custom image tag. Never substitute `latest` for a requested release.
+1. 从本地仓库远端和项目资料核实官方上游身份。使用用户指定的分支、标签或提交，记录实际审查的 SHA。未指定时可核对官方默认分支及其 SHA。远端别名不是身份依据。审查上游时直接读 Git 对象或使用独立检出，保留二开工作区和未提交修改。涉及本地仓库时遵守其工程文档及协作规范。
+2. 按 [源码安全审查](references/security-audit.md) 检查入口、权限边界和敏感操作，结合版本差异与官方安全公告。报告代码位置、触发条件、影响和修复建议。只做防御性验证，不对线上目标测试攻击，不编写利用代码。
+3. 如可取得二开源码或生产镜像对应的提交，核对相同代码路径、配置条件及修复是否已合入。二开重构后以实际实现为准。无法确定部署版本或配置时写明影响待核实。给出“应优先修复”“可择期升级”或“当前没有发现需要升级的依据”，并说明局部补丁、配置缓解或完整升级的适用条件。
 
-## Route To Details
+## 用户要求升级时
 
-- For any source synchronization, read [references/repository-sync.md](references/repository-sync.md).
-- Before accepting source or an image, read [references/validation.md](references/validation.md).
-- Before touching production containers, data, `.env`, or Compose, read [references/deployment.md](references/deployment.md).
-- After a merge, run `scripts/check_customizations.sh <repo-root>` to catch silent loss of the known custom behavior.
+- **同步源码或合入补丁**：读 [源码同步](references/repository-sync.md)。优先按用户指定范围合入所需修复，核对重构后的行为、冲突和数据库迁移。未经要求不合并整个上游、不推送。
+- **测试或构建镜像**：读 [验证](references/validation.md)。使用明确的目标提交和镜像标签；构建完成不等于部署。
+- **生产升级或部署**：只有用户明确要求才读 [生产部署与回退](references/deployment.md) 并执行。默认不备份生产镜像、PostgreSQL、Redis、卷、配置或其他网站内容；用户明确要求备份时，才备份其指定范围。部署请求本身不包含备份授权。现有镜像标签和摘要可用于记录回退目标，无须导出镜像。
 
-## Current Customization Contract
+核对是否存在已验证的回退方案。镜像回退不会撤销数据库迁移。若迁移不可逆或旧镜像与新结构的兼容性无法确认，先说明哪个步骤不可逆及可用方案，再由用户决定如何上线；不要自行发起备份或恢复数据库。
 
-Preserve these behaviors unless the user explicitly changes them:
+## 交付
 
-- EasyPay active order queries use `GET /api.php`; payment creation and refunds remain POST. New order IDs use the upstream `tr_` prefix and notifications use upstream field validation.
-- EasyPay transport errors must not expose the query URL because it contains the merchant key.
-- EasyPay provider and service-level draft tests assert GET query parameters and credential redaction.
-- The frontend Docker build uses a 4096 MiB Node heap; this affects build time only, not runtime memory.
-- `website-docs/` remains a separate versioned VitePress site and is excluded from the main Docker build context.
-- TLS profiles store `signature_algorithms_cert` for ClientHello extension 50. Extension 13 uses `signature_algorithms`.
-- Profile queries use migration 259's historical metadata to exclude unpublished captures from the template list and runtime cache.
-- The already-applied `259_add_tls_fingerprint_profile_verification.sql` is immutable. For v0.1.277, upstream migrations 259–265 use fork IDs 260–266. For v0.2.10, upstream migrations 266–296 use fork IDs 267–297. Migration 273 archives existing group prices; migration 282 transfers group price cards and billing settings into separate pricing configurations. Custom migration 298 preserves independent image rates across ordinary requests, public quotes, creative tasks, and batch funding snapshots.
-- Vite production builds avoid the duplicate checker process while retaining the preceding `vue-tsc` typecheck.
-- Migration 278 uses PostgreSQL's constant default for OpenAI history, restores the future default to `unknown`, and updates differing platform values. Rehearsals include every historical table and compare all usage fields, platform totals, balances, prices, and TLS settings before production cutover.
-
-This list is a guardrail, not the complete customization inventory. Derive the full inventory from Git history and the diff against the upstream base. If the customization contract intentionally evolves, update this skill and its checker in the same change.
-
-## Non-Negotiable Invariants
-
-- Do not use the in-app updater for this fork. It downloads the official binary and can overwrite custom code while leaving Compose pointed at an older custom image.
-- Never push or print production `.env`, database dumps, Redis data, credentials, API keys, or account exports.
-- Preserve a dirty worktree before merging. Create recoverable source artifacts and commit custom changes by purpose; do not discard or overwrite unknown changes.
-- Review every upstream migration. Allocate migration IDs from the fork's actual maximum, update exact filename references, and never alter an already-applied migration.
-- A binary/image rollback does not undo database migrations. Never delete `schema_migrations` rows as a rollback technique.
-- Build with explicit `VERSION`, source commit, and build date. Verify the version from the finished image before production cutover.
-- Keep the previous image and a validated final backup until post-deployment checks pass.
-- Do not send a real payment, consume a user's API key, or call a paid upstream merely for smoke testing unless explicitly authorized.
-
-## Completion
-
-Report the upstream tag, custom source commit, image tag and ID, preserved customizations, tests run, backup location, applied migrations, health/log checks, data-count comparison, and any intentionally untested external workflow. Keep the worktree clean and identify anything not pushed to the user's GitHub repository.
+检查报告先列已确认的发现，再列待验证项和覆盖缺口。按严重性排序，区分上游受影响和当前网站受影响。若执行了升级，记录实际提交和镜像、测试及迁移结果、验证结果，以及是否有现成回退点。

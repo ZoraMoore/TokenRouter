@@ -195,6 +195,8 @@ func (p *OpenAIResponseOutput) StreamOptions(ctx context.Context, c *gin.Context
 		switch moment {
 		case openai.StreamTimeFlush:
 			MarkOpsTimestamp(c, telemetry.FirstDownstreamFlushAt)
+		case openai.StreamTimeKeepalive:
+			MarkOpsTimestamp(c, telemetry.FirstDownstreamKeepaliveAt)
 		case openai.StreamTimeData:
 			MarkOpsTimestamp(c, telemetry.FirstSSEDataAt)
 		case openai.StreamTimeVisible:

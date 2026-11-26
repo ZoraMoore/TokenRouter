@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tidwall/gjson"
+
 	"github.com/TokenFlux/TokenRouter/internal/protocol/bridge"
 )
 
@@ -23,24 +25,17 @@ type NonStreamingProcessor struct {
 func TransformGeminiToClaude(geminiResp []byte, originalModel string) ([]byte, *ClaudeUsage, error) {
 	// 解包 v1internal 响应
 	var v1Resp V1InternalResponse
-	if err := json.Unmarshal(geminiResp, &v1Resp); err != nil {
+	if !gjson.GetBytes(geminiResp, "response").IsObject() {
 		// 尝试直接解析为 GeminiResponse
 		var directResp GeminiResponse
 		if err2 := json.Unmarshal(geminiResp, &directResp); err2 != nil {
-			return nil, nil, fmt.Errorf("parse gemini response: %w", err)
+			return nil, nil, fmt.Errorf("parse gemini response: %w", err2)
 		}
 		v1Resp.Response = directResp
 		v1Resp.ResponseID = directResp.ResponseID
 		v1Resp.ModelVersion = directResp.ModelVersion
-	} else if len(v1Resp.Response.Candidates) == 0 {
-		// 第一次解析成功但 candidates 为空，说明是直接的 GeminiResponse 格式
-		var directResp GeminiResponse
-		if err2 := json.Unmarshal(geminiResp, &directResp); err2 != nil {
-			return nil, nil, fmt.Errorf("parse gemini response as direct: %w", err2)
-		}
-		v1Resp.Response = directResp
-		v1Resp.ResponseID = directResp.ResponseID
-		v1Resp.ModelVersion = directResp.ModelVersion
+	} else if err := json.Unmarshal(geminiResp, &v1Resp); err != nil {
+		return nil, nil, fmt.Errorf("parse gemini response: %w", err)
 	}
 
 	// 使用处理器转换

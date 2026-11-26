@@ -1,46 +1,22 @@
-# Production Deployment And Rollback
+# 生产部署与回退
 
-Read this reference only when the user explicitly authorizes production upgrade/deployment.
+仅在用户明确要求生产升级或部署时执行。本次授权的上线范围由用户要求决定。
 
-## Pre-Cutover
+## 切换前
 
-Confirm:
+- 核对目标提交、镜像标签、已运行的验证，以及 Compose 实际读取的镜像配置。记录现有容器的镜像标签、摘要、版本和已应用的迁移编号。确认原镜像是否仍可直接使用，记录标签或摘要无需备份镜像。
+- 确认应用、数据库和 Redis 健康，检查目标镜像与迁移实际所需的磁盘空间。基线用只读的健康检查和必要的非敏感计数获取。
+- 检查旧版与迁移后数据库的兼容性。没有数据库回退点且存在不可逆迁移，或旧镜像兼容性不明时，具体说明丢失的回退能力和可选的切换范围，依用户决定推进。不以此为理由擅自备份。
 
-- source tests and image probe passed;
-- the current application, PostgreSQL, and Redis are healthy;
-- enough disk space exists for at least two fresh dumps and both images;
-- the old image tag and ID are recorded and still present;
-- the final target image resolves through the actual Compose `.env`;
-- migration compatibility and rollback requirements have been reviewed.
+## 备份按用户要求执行
 
-Record non-sensitive baseline counts for stable business tables and the current maximum migration. Check health and the home page before downtime.
+显式要求备份什么就只备份什么。未明确要求时直接跳过本节，不导出、归档或复制生产镜像，不做 PostgreSQL dump、Redis snapshot、卷快照或配置副本，不把生产数据复制给测试环境。仅需要演练时使用合成数据或用户已提供且授权使用的现有副本。
 
-## Final Consistent Backup
+若用户要求备份，按其范围选择一致性方法、存放位置和最小权限，在切换前核对备份可用性。例如用户要求 PostgreSQL dump 时，检查 `pg_restore -l` 能读取，并校验文件完整性。前置磁盘估算按实际备份范围执行。镜像、Redis 或配置只有在授权范围内才随之备份。凭据和转储不进仓库或聊天。
 
-For the safest cutover, stop only the application container; leave PostgreSQL and Redis running. Then create a timestamped backup directory outside the repository containing:
+## 切换镜像
 
-- PostgreSQL custom-format dump;
-- Redis snapshot;
-- production `.env` with mode `0600`;
-- Compose file;
-- application `config.yaml`, installation lock, and model-pricing files when present;
-- baseline counts and old image metadata.
-
-Validate the dump with `pg_restore -l`, then create and verify SHA-256 checksums for every backup file.
-
-Redis authentication must reflect the deployment. If Redis has no password but the container carries an empty `REDISCLI_AUTH`, run the save command with that variable unset:
-
-```bash
-docker exec <redis-container> sh -c 'env -u REDISCLI_AUTH redis-cli save'
-```
-
-Do this only after confirming Redis is actually passwordless. With password authentication enabled, preserve the configured authentication instead.
-
-## Switch The Image
-
-Follow `docs/operations/upgrade_notes.md` in the repository for release-specific Compose and proxy changes. For an image-only upgrade, update the image value in the production environment file. Preserve permissions and compare hashes with the image line excluded. Never print the whole file.
-
-Validate Compose resolution before mutation, then recreate only the application:
+根据仓库实际的发布说明处理 Compose 与迁移。仅更新获授权的配置值，保留文件权限和其他设置，不打印整份生产 `.env`。确认 Compose 解析到所需镜像后，只重建应用服务：
 
 ```bash
 docker compose --env-file <deploy-root>/.env -f <compose-file> config --images
@@ -48,35 +24,10 @@ docker compose --env-file <deploy-root>/.env -f <compose-file> \
   up -d --no-deps --force-recreate <app-service>
 ```
 
-Wait for a terminal health state while watching startup/migration logs. Do not treat `health: starting` as success.
+等待应用健康检查结束，核验实际镜像和构建版本、首页和健康接口、关键路由和权限保护、预期迁移与结构、重要数据不变量和启动日志。检查重启和 OOM 状态，避免用真实付款或付费上游请求做冒烟测试。
 
-## Post-Cutover Verification
+## 回退
 
-Verify all of the following:
-
-- binary version/commit and actual container image;
-- health and home page return 200;
-- new authenticated routes exist (an unauthenticated 401 is useful evidence that routing and auth are active);
-- every expected migration is present with the intended filename;
-- expected tables, columns, constraints/indexes, and functions exist;
-- stable business-table counts match the pre-cutover baseline;
-- container restart count is zero and it was not OOM-killed;
-- logs contain no migration checksum error, ERROR, PANIC, or FATAL after background workers have run several cycles;
-- invalid gateway credentials are rejected;
-- feature flags such as `creative_enabled` have the intended effective value.
-
-Do not perform a real payment or paid model request without explicit authorization.
-
-## Rollback
-
-If the new container fails before applying migrations, restore the old image value and recreate the application.
-
-If migrations were applied, first determine whether the old binary is explicitly compatible with the new schema. Do not assume compatibility merely because migrations looked additive. When compatibility is uncertain or the documented rollback requires it:
-
-1. stop the new application;
-2. restore PostgreSQL from the validated final dump;
-3. restore Redis and application configuration when their state is part of the failure;
-4. restore the old image value and recreate the old application;
-5. repeat health, log, and baseline checks.
-
-Never roll back by deleting `schema_migrations` rows or editing historical migration files. Keep the backup and old image until the user accepts the upgraded service.
+- 未应用迁移，或已验证旧镜像兼容当前数据库结构时，可使用仍存在且已核验的旧镜像恢复应用配置。回退后复查健康、迁移和关键行为。
+- 镜像切换不会撤销任何已应用的迁移。若旧镜像不兼容或无法确认兼容，查看是否有已验证的恢复点或可行的向前修复。恢复数据库、Redis 或配置可能覆盖上线后的写入，须得到用户明确授权。没有可用恢复点时，报告实际能否回退。
+- 保留现有可用的回退点，避免删除原镜像。不要通过删除迁移记录或编辑历史迁移文件回退。

@@ -1,17 +1,85 @@
 package middleware
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry"
 	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry/logging"
+	"github.com/TokenFlux/TokenRouter/internal/server/httpx"
 )
+
+// TestLoggerRecordsResponsesUploadSizes 验证访问日志区分压缩后收到的字节和解压后的字节。
+func TestLoggerRecordsResponsesUploadSizes(t *testing.T) {
+	payload := strings.Repeat("test", 128)
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	_, err := io.WriteString(writer, payload)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	wireSize := compressed.Len()
+	sink := initMiddlewareTestLogger(t)
+	router := gin.New()
+	router.Use(RequestLogger(), Logger())
+	router.POST("/v1/responses", func(c *gin.Context) {
+		body, readErr := httpx.ReadRequestBodyWithPrealloc(c.Request)
+		require.NoError(t, readErr)
+		require.Equal(t, payload, string(body))
+		c.Status(http.StatusOK)
+	})
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", &compressed)
+	request.Header.Set("Content-Encoding", "gzip")
+	router.ServeHTTP(httptest.NewRecorder(), request)
+
+	for _, event := range sink.list() {
+		if event != nil && event.Message == "http request completed" {
+			require.EqualValues(t, wireSize, event.Fields["request_content_length"])
+			require.EqualValues(t, wireSize, event.Fields["request_body_wire_bytes"])
+			require.EqualValues(t, len(payload), event.Fields["request_body_decoded_bytes"])
+			require.Contains(t, event.Fields, "request_body_read_start_ms")
+			require.Contains(t, event.Fields, "request_body_read_end_ms")
+			return
+		}
+	}
+	t.Fatal("access log event not found")
+}
+
+// TestLoggerRecordsPartialResponsesUpload 验证上传断开时仍能看到已经收到的字节数。
+func TestLoggerRecordsPartialResponsesUpload(t *testing.T) {
+	sink := initMiddlewareTestLogger(t)
+	router := gin.New()
+	router.Use(RequestLogger(), Logger())
+	router.POST("/v1/responses", func(c *gin.Context) {
+		_, err := httpx.ReadRequestBodyWithPrealloc(c.Request)
+		require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+		c.Status(http.StatusBadRequest)
+	})
+	reader := io.MultiReader(strings.NewReader("partial"), iotest.ErrReader(io.ErrUnexpectedEOF))
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", reader)
+	request.ContentLength = 32
+	router.ServeHTTP(httptest.NewRecorder(), request)
+
+	for _, event := range sink.list() {
+		if event != nil && event.Message == "http request completed" {
+			require.EqualValues(t, 7, event.Fields["request_body_wire_bytes"])
+			require.Equal(t, "read_error", event.Fields["request_body_read_state"])
+			require.NotContains(t, event.Fields, "request_body_decoded_bytes")
+			return
+		}
+	}
+	t.Fatal("access log event not found")
+}
 
 func TestLogger_AccessLogIncludesCoreFields(t *testing.T) {
 	sink := initMiddlewareTestLogger(t)

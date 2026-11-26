@@ -1,4 +1,4 @@
 interface:
-  display_name: "TokenRouter Custom Upgrade"
-  short_description: "Safely sync, test, and deploy a customized TokenRouter"
-  default_prompt: "Use $tokenrouter-custom-upgrade to sync my customized TokenRouter fork to a selected upstream release and safely deploy it."
+  display_name: "TokenRouter 上游源码安全审查"
+  short_description: "检查上游源码漏洞，核对二开影响并判断是否需要升级或合入安全补丁"
+  default_prompt: "用 $tokenrouter-custom-upgrade 审查 TokenRouter 上游源码，指出可确认的漏洞，并判断我的二开版本是否需要升级。"

@@ -1,7 +1,7 @@
 package gemini
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +20,8 @@ import (
 )
 
 type ResponseOptions struct {
+	Context                       context.Context
+	Stream                        upstream.GeminiStreamOptions
 	ObserveRaw                    func([]byte)
 	ObserveState                  func(*upstream.TokenUsage, *int)
 	GoogleError                   func(int, string) error
@@ -86,6 +88,7 @@ func (s *ResponseAdapter) HandleStreamingResponse(c *upstream.OutputContext, res
 	}
 
 	state := bridge.NewNativeGeminiMessagesStream(bridge.NativeGeminiRuntime{RandomHex: upstream.RandomHex, MessageID: upstream.GenerateAnthropicMsgID})
+
 	var firstTokenMs *int
 	writeEvent := func(event bridge.NativeMessageEvent) {
 		if event.FirstToken && firstTokenMs == nil {
@@ -108,53 +111,46 @@ func (s *ResponseAdapter) HandleStreamingResponse(c *upstream.OutputContext, res
 	for event := range state.Begin(upstream.GenerateAnthropicMsgID(), originalModel) {
 		writeEvent(event)
 	}
-	reader := bufio.NewReader(resp.Body)
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil && !errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("stream read error: %w", err)
-		}
-
-		if !strings.HasPrefix(line, "data:") {
-			if errors.Is(err, io.EOF) {
-				break
+	observed, err := s.readStream(resp, true, func(event upstream.GeminiStreamEvent) error {
+		if len(event.Data) == 0 {
+			if event.Terminal {
+				c.Complete()
 			}
-			continue
+			return nil
 		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if payload == "" || payload == "[DONE]" {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			continue
+		s.observeRaw(event.Data)
+		s.Options.ObserveImages(event.Data)
+		var payload map[string]any
+		if err := json.Unmarshal(event.Data, &payload); err != nil {
+			return err
 		}
-
-		unwrappedBytes, err := UnwrapGeminiResponse([]byte(payload))
-		if err != nil {
-			continue
+		for message := range state.Process(payload, event.Data) {
+			writeEvent(message)
 		}
-		s.observeRaw(unwrappedBytes)
-		s.Options.ObserveImages(unwrappedBytes)
-
-		var geminiResp map[string]any
-		if err := json.Unmarshal(unwrappedBytes, &geminiResp); err != nil {
-			continue
+		if event.Terminal {
+			c.Complete()
 		}
-
-		for event := range state.Process(geminiResp, unwrappedBytes) {
-			writeEvent(event)
-		}
-
-		// EOF 前最后一行即使没有换行符也要处理。
-		if errors.Is(err, io.EOF) {
-			break
+		return nil
+	})
+	// Refresh sparse usage before final conversion so absent tail fields cannot
+	// replace input or cache counters that were observed in earlier frames.
+	if len(observed.UsageJSON) > 0 {
+		var usagePayload map[string]any
+		_ = json.Unmarshal(observed.UsageJSON, &usagePayload)
+		for range state.Process(usagePayload, observed.UsageJSON) {
 		}
 	}
-
+	result := &StreamResult{Usage: LegacyNativeGeminiUsage(state.Usage()), FirstTokenMs: firstTokenMs}
+	if c.Err() != nil {
+		return result, nil
+	}
+	if err != nil {
+		return result, err
+	}
 	for event := range state.Finish() {
 		writeEvent(event)
 	}
-	return &StreamResult{Usage: LegacyNativeGeminiUsage(state.Usage()), FirstTokenMs: firstTokenMs}, nil
+	return result, c.Err()
 }
 
 func WriteSSE(w io.Writer, event string, data any, observers ...func([]byte)) {
@@ -182,65 +178,20 @@ func UnwrapIfNeeded(isOAuth bool, raw []byte) []byte {
 }
 
 func CollectGeminiSSE(body io.Reader, isOAuth bool, observers ...func([]byte)) (map[string]any, *upstream.TokenUsage, error) {
-	reader := bufio.NewReader(body)
-
-	var last map[string]any
-	var lastWithParts map[string]any
-	var collectedParts []any
-	usage := &upstream.TokenUsage{}
-
-	for {
-		line, err := reader.ReadString('\n')
-		if line != "" {
-			trimmed := strings.TrimRight(line, "\r\n")
-			if after, ok := strings.CutPrefix(trimmed, "data:"); ok {
-				payload := strings.TrimSpace(after)
-				switch payload {
-				case "", "[DONE]":
-					if payload == "[DONE]" {
-						return MergeCollectedGeminiParts(PickGeminiCollectResult(last, lastWithParts), collectedParts), usage, nil
-					}
-				default:
-					var parsed map[string]any
-					var rawBytes []byte
-					if isOAuth {
-						innerBytes, err := UnwrapGeminiResponse([]byte(payload))
-						if err == nil {
-							rawBytes = innerBytes
-							_ = json.Unmarshal(innerBytes, &parsed)
-						}
-					} else {
-						rawBytes = []byte(payload)
-						_ = json.Unmarshal(rawBytes, &parsed)
-					}
-					if parsed != nil {
-						for _, observe := range observers {
-							if observe != nil {
-								observe(rawBytes)
-							}
-						}
-						last = parsed
-						if u := ExtractGeminiUsage(rawBytes); u != nil {
-							usage = u
-						}
-						if parts := ExtractGeminiParts(parsed); len(parts) > 0 {
-							lastWithParts = parsed
-							collectedParts = AppendCollectedGeminiParts(collectedParts, parts)
-						}
-					}
-				}
+	adapter := ResponseAdapter{Options: ResponseOptions{ObserveRaw: func(raw []byte) {
+		for _, observe := range observers {
+			if observe != nil {
+				observe(raw)
 			}
 		}
-
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return nil, nil, err
-		}
+	}}}
+	var closer io.ReadCloser
+	if existing, ok := body.(io.ReadCloser); ok {
+		closer = existing
+	} else {
+		closer = io.NopCloser(body)
 	}
-
-	return MergeCollectedGeminiParts(PickGeminiCollectResult(last, lastWithParts), collectedParts), usage, nil
+	return adapter.collectSSE(&http.Response{Body: closer}, isOAuth)
 }
 
 func PickGeminiCollectResult(last map[string]any, lastWithParts map[string]any) map[string]any {
@@ -364,107 +315,57 @@ func (s *ResponseAdapter) HandleNativeNonStreamingResponse(c *upstream.OutputCon
 
 func (s *ResponseAdapter) HandleNativeStreamingResponse(c *upstream.OutputContext, resp *http.Response, startTime time.Time, isOAuth bool) (*NativeStreamResult, error) {
 	if s.Options.DebugHeaders {
-		logger.LegacyPrintf("service.gemini_messages_compat", "[GeminiAPI] ========== Streaming Response Headers ==========")
 		for key, values := range resp.Header {
 			if strings.HasPrefix(strings.ToLower(key), "x-ratelimit") {
 				logger.LegacyPrintf("service.gemini_messages_compat", "[GeminiAPI] %s: %v", key, values)
 			}
 		}
-		logger.LegacyPrintf("service.gemini_messages_compat", "[GeminiAPI] ====================================================")
 	}
-
 	if s.Options.HasHeaderFilter {
 		s.Options.WriteHeaders(c.Writer.Header(), resp.Header)
 	}
-
 	c.Status(resp.StatusCode)
+	c.Header("Content-Type", "text/event-stream; charset=utf-8")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
-
-	contentType := resp.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "text/event-stream; charset=utf-8"
-	}
-	c.Header("Content-Type", contentType)
-
-	flusher, ok := c.Writer.(http.Flusher)
-	if !ok {
-		return nil, errors.New("streaming not supported")
-	}
-
-	reader := bufio.NewReader(resp.Body)
-	usage := &upstream.TokenUsage{}
-	var firstTokenMs *int
-
-	for {
-		line, err := reader.ReadString('\n')
-		if line != "" {
-			trimmed := strings.TrimRight(line, "\r\n")
-			if after, ok0 := strings.CutPrefix(trimmed, "data:"); ok0 {
-				payload := strings.TrimSpace(after)
-				// keepalive 和结束标记直接透传。
-				if payload == "[DONE]" {
-					c.NextEvent(false, true)
-				}
-				if payload == "" || payload == "[DONE]" {
-					_, _ = io.WriteString(c.Writer, line)
-					flusher.Flush()
-				} else {
-					var rawToWrite string
-					rawToWrite = payload
-
-					var rawBytes []byte
-					if isOAuth {
-						innerBytes, err := UnwrapGeminiResponse([]byte(payload))
-						if err == nil {
-							rawToWrite = string(innerBytes)
-							rawBytes = innerBytes
-						}
-					} else {
-						rawBytes = []byte(payload)
-					}
-
-					if u := ExtractGeminiUsage(rawBytes); u != nil {
-						usage = u
-					}
-					s.observeRaw(rawBytes)
-					s.Options.ObserveImages(rawBytes)
-
-					if firstTokenMs == nil {
-						ms := int(time.Since(startTime).Milliseconds())
-						firstTokenMs = &ms
-						if s.Options.ObserveState != nil {
-							s.Options.ObserveState(nil, firstTokenMs)
-						}
-					}
-
-					observed := geminiwire.ObservePayload(rawBytes)
-					c.NextEvent(observed.Semantic, observed.Terminal)
-					if isOAuth {
-						// SSE 格式需要双换行分隔事件。
-						_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", rawToWrite)
-					} else {
-						// AI Studio 响应直接透传。
-						_, _ = io.WriteString(c.Writer, line)
-					}
-					flusher.Flush()
-				}
-			} else {
-				_, _ = io.WriteString(c.Writer, line)
-				flusher.Flush()
+	result := &NativeStreamResult{Usage: &upstream.TokenUsage{}}
+	observed, err := s.readStream(resp, isOAuth, func(event upstream.GeminiStreamEvent) error {
+		if len(event.Data) == 0 {
+			if event.Terminal {
+				c.Complete()
+			}
+			return nil
+		}
+		if usage := ExtractGeminiUsage(event.Data); usage != nil {
+			result.Usage = usage
+		}
+		if result.FirstTokenMs == nil {
+			ms := int(time.Since(startTime).Milliseconds())
+			result.FirstTokenMs = &ms
+			if s.Options.ObserveState != nil {
+				s.Options.ObserveState(nil, result.FirstTokenMs)
 			}
 		}
-
-		if errors.Is(err, io.EOF) {
-			break
+		s.observeRaw(event.Data)
+		s.Options.ObserveImages(event.Data)
+		if c.Err() != nil {
+			return nil
 		}
-		if err != nil {
-			return nil, err
+		c.NextEvent(geminiwire.ObservePayload(event.Data).Semantic, event.Terminal)
+		if _, err := fmt.Fprintf(c.Writer, "data: %s\n\n", event.Data); err != nil {
+			return nil
 		}
+		c.Writer.Flush()
+		return nil
+	})
+	if usage := ExtractGeminiUsage(observed.UsageJSON); usage != nil {
+		result.Usage = usage
 	}
-
-	return &NativeStreamResult{Usage: usage, FirstTokenMs: firstTokenMs}, nil
+	if c.Err() != nil {
+		return result, nil
+	}
+	return result, err
 }
 
 // UnwrapGeminiResponse 解包 Gemini OAuth 响应中的 response 字段
@@ -501,4 +402,25 @@ func (s *ResponseAdapter) observeRaw(payload []byte) {
 	if s.Options.ObserveRaw != nil {
 		s.Options.ObserveRaw(payload)
 	}
+}
+
+func (s *ResponseAdapter) collectSSE(resp *http.Response, isOAuth bool) (map[string]any, *upstream.TokenUsage, error) {
+	options := s.Options.Stream
+	if isOAuth {
+		options.Unwrap = UnwrapGeminiResponse
+	}
+	collected, observed, err := upstream.CollectGeminiStream(s.Options.Context, resp, options, s.observeRaw)
+	usage := ExtractGeminiUsage(observed.UsageJSON)
+	if usage == nil {
+		usage = &upstream.TokenUsage{}
+	}
+	return collected, usage, err
+}
+
+func (s *ResponseAdapter) readStream(resp *http.Response, wrapped bool, consume func(upstream.GeminiStreamEvent) error) (upstream.GeminiStreamResult, error) {
+	options := s.Options.Stream
+	if wrapped {
+		options.Unwrap = UnwrapGeminiResponse
+	}
+	return upstream.ReadGeminiStream(s.Options.Context, resp, options, consume)
 }

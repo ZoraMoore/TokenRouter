@@ -230,3 +230,71 @@ func TestExecuteGeminiCancelledRequestDoesNotReachServer(t *testing.T) {
 	require.Zero(t, calls.Load())
 	require.EqualValues(t, 1, releases.Load())
 }
+
+// TestExecuteGeminiPreservesOmittedCache 验证后续分片只更新输出时，四种出口仍按缓存拆分输入。
+func TestExecuteGeminiPreservesOmittedCache(t *testing.T) {
+	for _, kind := range []string{"native", "messages", "chat", "responses"} {
+		t.Run(kind, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hi\"}]}}],\"usageMetadata\":{\"promptTokenCount\":100,\"cachedContentTokenCount\":80,\"candidatesTokenCount\":1}}\n\n")
+				_, _ = io.WriteString(w, "data: {\"candidates\":[{\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":100,\"candidatesTokenCount\":12}}\n\ndata: [DONE]\n\n")
+			}))
+			defer server.Close()
+			mode := OpenAIResponse
+			if kind == "native" {
+				mode = NativeResponse
+			}
+			if kind == "messages" {
+				mode = MessagesResponse
+			}
+			for _, stream := range []bool{true, false} {
+				t.Run(fmt.Sprintf("stream=%v", stream), func(t *testing.T) {
+					var closes atomic.Int32
+					target := localTarget(server, mode, stream, &closes)
+					target.UpstreamStream = true
+					target.IncludeUsage = true
+					if kind == "responses" {
+						target.OpenAIProtocol = OpenAICompatResponses
+					}
+					sink := &executeSink{}
+					result, err := (Executor{}).Execute(t.Context(), nativeInput(target, stream), sink)
+					require.NoError(t, err)
+					require.True(t, result.HasUsage)
+					require.Equal(t, 20, result.Usage.InputTokens)
+					require.Equal(t, 80, result.Usage.CacheReadInputTokens)
+					require.Equal(t, 12, result.Usage.OutputTokens)
+					switch kind {
+					case "native":
+						require.Contains(t, sink.body.String(), `"cachedContentTokenCount":80`)
+					case "messages":
+						require.Contains(t, sink.body.String(), `"cache_read_input_tokens":80`)
+					default:
+						require.Contains(t, sink.body.String(), `"cached_tokens":80`)
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestExecuteGeminiSparseUsageReadFailure 保留断流之前跨帧返回的缓存用量。
+func TestExecuteGeminiSparseUsageReadFailure(t *testing.T) {
+	for _, mode := range []ResponseMode{NativeResponse, MessagesResponse, OpenAIResponse} {
+		t.Run(fmt.Sprint(mode), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Length", "10000")
+				_, _ = io.WriteString(w, "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hi\"}]}}],\"usageMetadata\":{\"promptTokenCount\":100,\"cachedContentTokenCount\":80}}\n\ndata: {\"usageMetadata\":{\"candidatesTokenCount\":12}}\n\n")
+			}))
+			defer server.Close()
+			var closes atomic.Int32
+			target := localTarget(server, mode, true, &closes)
+			target.UpstreamStream = true
+			result, err := (Executor{}).Execute(t.Context(), nativeInput(target, true), &executeSink{})
+			require.Error(t, err)
+			require.Equal(t, 20, result.Usage.InputTokens)
+			require.Equal(t, 80, result.Usage.CacheReadInputTokens)
+			require.Equal(t, 12, result.Usage.OutputTokens)
+		})
+	}
+}

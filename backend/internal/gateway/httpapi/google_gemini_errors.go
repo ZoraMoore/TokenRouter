@@ -1,11 +1,15 @@
 package httpapi
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 
 	gatewayprovider "github.com/TokenFlux/TokenRouter/internal/gateway/provider"
 	"github.com/TokenFlux/TokenRouter/internal/gateway/provider/googleforward"
@@ -17,6 +21,8 @@ import (
 	"github.com/TokenFlux/TokenRouter/internal/upstream"
 	gemininative "github.com/TokenFlux/TokenRouter/internal/upstream/gemini"
 )
+
+const googleErrorWrittenKey = "google_final_error_written"
 
 // GeminiOutput 保存当前 HTTP 请求和静态输出配置。
 type GeminiOutput struct {
@@ -85,7 +91,13 @@ func (s *GeminiOutput) GeminiNativeUpstreamError(provider *gatewayprovider.Execu
 		contentType = "application/json"
 	}
 	MarkResponseCommitted(c)
-	c.Data(resp.StatusCode, contentType, respBody)
+	if !c.Writer.Written() {
+		if beginGoogleError(c) {
+			c.Data(resp.StatusCode, contentType, respBody)
+		}
+	} else {
+		writeGoogleErrorBody(c, resp.StatusCode, respBody)
+	}
 	if upstreamMsg == "" {
 		return fmt.Errorf("gemini upstream error: %d", resp.StatusCode)
 	}
@@ -138,10 +150,7 @@ func (s *GeminiOutput) GeminiMappedError(provider *gatewayprovider.ExecutionProv
 		"upstream_error",
 		"Upstream request failed",
 	); matched {
-		c.JSON(status, gin.H{
-			"type":  "error",
-			"error": gin.H{"type": errType, "message": errMsg},
-		})
+		_ = s.ClaudeError(status, errType, errMsg)
 		if upstreamMsg == "" {
 			upstreamMsg = errMsg
 		}
@@ -258,10 +267,7 @@ func (s *GeminiOutput) GeminiMappedError(provider *gatewayprovider.ExecutionProv
 		}
 	}
 
-	c.JSON(statusCode, gin.H{
-		"type":  "error",
-		"error": gin.H{"type": errType, "message": errMsg},
-	})
+	_ = s.ClaudeError(statusCode, errType, errMsg)
 	if upstreamMsg == "" {
 		return fmt.Errorf("upstream error: %d", upstreamStatus)
 	}
@@ -270,26 +276,14 @@ func (s *GeminiOutput) GeminiMappedError(provider *gatewayprovider.ExecutionProv
 
 func (s *GeminiOutput) ClaudeError(status int, errType, message string) error {
 	c := s.Context
-
-	MarkResponseCommitted(c)
-	c.JSON(status, gin.H{
-		"type":  "error",
-		"error": gin.H{"type": errType, "message": message},
-	})
+	if beginGoogleError(c) {
+		WriteAnthropicStreamError(c, status, errType, "", message, c.Writer.Written(), MarkOpsStreamError)
+	}
 	return fmt.Errorf("%s", message)
 }
 
 func (s *GeminiOutput) GoogleError(status int, message string) error {
-	c := s.Context
-
-	MarkResponseCommitted(c)
-	c.JSON(status, gin.H{
-		"error": gin.H{
-			"code":    status,
-			"message": message,
-			"status":  HTTPStatusToGoogleStatus(status),
-		},
-	})
+	WriteGoogleError(s.Context, status, message)
 	return fmt.Errorf("%s", message)
 }
 
@@ -407,7 +401,13 @@ func (s *GeminiOutput) GeminiOpenAICompatError(
 	c := s.Context
 
 	if protocol == gemininative.OpenAICompatResponses {
-		(&ForwardConversionOutput{Context: c, Responses: true, Commit: func() { MarkResponseCommitted(c) }}).Error(status, errType, message)
+		if beginGoogleError(c) {
+			if c.Writer.Written() {
+				DefaultOpenAIErrorOutput().WriteStreamingErrorWithCode(c, status, errType, errType, message, true, true)
+			} else {
+				c.JSON(status, gin.H{"error": gin.H{"code": errType, "message": message}})
+			}
+		}
 		return fmt.Errorf("%s", message)
 	}
 	return s.ChatError(status, errType, message)
@@ -415,14 +415,55 @@ func (s *GeminiOutput) GeminiOpenAICompatError(
 
 func (s *GeminiOutput) ChatError(status int, errType, message string) error {
 	c := s.Context
-
-	c.JSON(status, gin.H{
-		"error": gin.H{
-			"type":    errType,
-			"message": message,
-		},
-	})
+	if beginGoogleError(c) {
+		DefaultOpenAIErrorOutput().WriteStreamingErrorWithCode(c, status, errType, "", message, c.Writer.Written(), true)
+	}
 	return fmt.Errorf("%s", message)
 }
 
 func HTTPStatusToGoogleStatus(status int) string { return httpx.HTTPStatusToGoogleStatus(status) }
+
+// beginGoogleError 选择一次最终错误输出，请求取消后停止写入。
+func beginGoogleError(c *gin.Context) bool {
+	if c.GetBool(googleErrorWrittenKey) || (c.Request != nil && c.Request.Context().Err() != nil) {
+		return false
+	}
+	c.Set(googleErrorWrittenKey, true)
+	MarkResponseCommitted(c)
+	return true
+}
+
+// writeGoogleErrorBody 根据响应提交状态选择 JSON 或原生 SSE 错误。
+func writeGoogleErrorBody(c *gin.Context, status int, body []byte) {
+	if !beginGoogleError(c) {
+		return
+	}
+	if !c.Writer.Written() || !strings.Contains(strings.ToLower(c.Writer.Header().Get("Content-Type")), "text/event-stream") {
+		c.Data(status, "application/json; charset=utf-8", body)
+		return
+	}
+	message := logredact.SanitizeUpstreamQueries(upstream.ExtractErrorMessage(body))
+	if message == "" {
+		message = http.StatusText(status)
+	}
+	value := gjson.GetBytes(body, "error")
+	if !json.Valid(body) || !value.IsObject() {
+		body, _ = json.Marshal(gin.H{"error": gin.H{"code": status, "message": message, "status": HTTPStatusToGoogleStatus(status)}})
+	}
+	body, _ = sjson.SetBytes(body, "error.message", message)
+	code := int(gjson.GetBytes(body, "error.code").Int())
+	if code < 400 || code > 599 {
+		code = status
+	}
+	body, _ = sjson.SetBytes(body, "error.code", code)
+	if name := gjson.GetBytes(body, "error.status"); name.Type != gjson.String || name.String() == "" {
+		body, _ = sjson.SetBytes(body, "error.status", HTTPStatusToGoogleStatus(code))
+	}
+	var compact bytes.Buffer
+	_ = json.Compact(&compact, body)
+	MarkOpsStreamFailure(c, "upstream_error", "", message, status)
+	sink := ResponseSink{Writer: c.Writer}
+	if err := sink.Emit(upstream.OutputEvent{Data: []byte("data: " + compact.String() + "\n\n"), Terminal: true, Flush: true}); err != nil {
+		_ = c.Error(err)
+	}
+}

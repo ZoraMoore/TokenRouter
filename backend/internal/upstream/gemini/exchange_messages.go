@@ -40,6 +40,7 @@ type ExchangeOptions struct {
 	ReplaceBody                             func([]byte)
 }
 type ExchangeResult struct {
+	CandidateCount  int
 	Response        *http.Response
 	RequestIDHeader string
 	EstimatedTokens *int
@@ -48,6 +49,7 @@ type ExchangeResult struct {
 func ExchangeMessages(ctx context.Context, options ExchangeOptions) (ExchangeResult, error) {
 	requestIDHeader := options.RequestIDHeader
 	var resp *http.Response
+	candidateCount := 1
 	signatureRetryStage := 0
 	for attempt := 1; attempt <= options.MaxRetries; attempt++ {
 		upstreamReq, idHeader, err := options.Build(ctx)
@@ -58,6 +60,7 @@ func ExchangeMessages(ctx context.Context, options ExchangeOptions) (ExchangeRes
 			return ExchangeResult{}, options.BuildError(err)
 		}
 		requestIDHeader = idHeader
+		candidateCount = requestCandidateCount(upstreamReq)
 
 		resp, err = options.Do(upstreamReq)
 		if err != nil {
@@ -195,5 +198,5 @@ func ExchangeMessages(ctx context.Context, options ExchangeOptions) (ExchangeRes
 		break
 	}
 
-	return ExchangeResult{Response: resp, RequestIDHeader: requestIDHeader}, nil
+	return ExchangeResult{Response: resp, RequestIDHeader: requestIDHeader, CandidateCount: candidateCount}, nil
 }

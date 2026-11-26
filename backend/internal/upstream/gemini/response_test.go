@@ -263,3 +263,17 @@ func TestExtractGeminiUsage(t *testing.T) {
 		})
 	}
 }
+
+// TestGeminiHistoricalCountRepresentations 验证同一缓存数量的整数、字符串和小数表示。
+func TestGeminiHistoricalCountRepresentations(t *testing.T) {
+	for _, value := range []string{`114729`, `"114729"`, `114729.0`, `1.14729e5`} {
+		t.Run(value, func(t *testing.T) {
+			raw := []byte(`{"usageMetadata":{"promptTokenCount":114729,"cachedContentTokenCount":` + value + `,"candidatesTokenCount":114}}`)
+			usage := ExtractGeminiUsage(raw)
+			require.NotNil(t, usage)
+			require.Equal(t, 0, usage.InputTokens)
+			require.Equal(t, 114729, usage.CacheReadInputTokens)
+			require.Equal(t, 114, usage.OutputTokens)
+		})
+	}
+}

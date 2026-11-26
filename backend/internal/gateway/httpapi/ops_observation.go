@@ -113,14 +113,19 @@ func SetOpsLatencyMs(c *gin.Context, key string, value int64) {
 
 // MarkOpsTimestamp 记录请求阶段的绝对时间，供访问日志计算相对入口的耗时。
 func MarkOpsTimestamp(c *gin.Context, key telemetry.ContextKey) {
-	if c == nil || c.Request == nil || key == "" {
+	markOpsTimestampAt(c, key, time.Now())
+}
+
+// markOpsTimestampAt 记录最早的阶段时间，支持在心跳 goroutine 停止后读取时间。
+func markOpsTimestampAt(c *gin.Context, key telemetry.ContextKey, at time.Time) {
+	if c == nil || c.Request == nil || key == "" || at.IsZero() {
 		return
 	}
 	ctx := c.Request.Context()
-	if _, exists := ctx.Value(key).(time.Time); exists {
+	if previous, exists := ctx.Value(key).(time.Time); exists && !at.Before(previous) {
 		return
 	}
-	ctx = context.WithValue(ctx, key, time.Now())
+	ctx = context.WithValue(ctx, key, at)
 	c.Request = c.Request.WithContext(ctx)
 }
 

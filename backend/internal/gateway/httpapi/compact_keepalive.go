@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/TokenFlux/TokenRouter/internal/infra/telemetry"
 )
 
 const (
@@ -30,8 +32,9 @@ type openAICompactSSEKeepalive struct {
 	stopped bool
 	// bytes 记录已写出的心跳注释字节数。判断 Forward 是否开始输出协议内容时，
 	// OpenAICompactKeepaliveAdjustedWrittenSize 会扣除这些字节。
-	bytes int
-	stop  chan struct{}
+	bytes        int
+	stop         chan struct{}
+	firstFlushAt time.Time
 }
 
 // compactKeepaliveWriter 包装 gin.ResponseWriter，写方法在互斥锁下停止心跳，读方法加锁读取状态。
@@ -90,6 +93,8 @@ func StartOpenAISSEKeepalive(c *gin.Context, interval time.Duration) func() {
 	}()
 	return func() {
 		k.Stop()
+		// 由请求 goroutine 写回计时，心跳 goroutine 不修改 Gin 的请求上下文。
+		markOpsTimestampAt(c, telemetry.FirstDownstreamKeepaliveAt, k.firstFlushAt)
 		// 请求结束后恢复中间件 writer，compact 包装器随请求释放。
 		if current, ok := c.Writer.(*compactKeepaliveWriter); ok && current == wrappedWriter {
 			c.Writer = originalWriter
@@ -121,6 +126,9 @@ func (k *openAICompactSSEKeepalive) beat() bool {
 		return false
 	}
 	k.writer.Flush()
+	if k.firstFlushAt.IsZero() {
+		k.firstFlushAt = time.Now()
+	}
 	return true
 }
 

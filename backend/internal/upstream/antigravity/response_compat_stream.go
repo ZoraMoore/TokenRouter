@@ -6,12 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/TokenFlux/TokenRouter/internal/infra/httpclient"
 	logger "github.com/TokenFlux/TokenRouter/internal/infra/telemetry/logging"
 	protocolanthropic "github.com/TokenFlux/TokenRouter/internal/protocol/anthropic"
 	"github.com/TokenFlux/TokenRouter/internal/protocol/bridge"
@@ -38,10 +36,6 @@ type antigravityResponsesStreamAdapter struct {
 	clientToolRestorer *bridge.ResponsesClientToolStreamRestorer
 }
 
-type antigravityCompatScanEvent struct {
-	line string
-	err  error
-}
 type antigravityCompatStreamSession struct {
 	processor      *StreamingProcessor
 	adapter        antigravityCompatStreamAdapter
@@ -68,6 +62,12 @@ func NewAntigravityChatStreamAdapter(c *upstream.OutputContext, model string, in
 }
 
 func (a *antigravityChatStreamAdapter) Emit(event *protocolanthropic.AnthropicStreamEvent, writer *ClientWriter) {
+	// Chat 总输入由终态快照的普通输入和缓存组成，零值也参与更新。
+	if event.Type == "message_delta" && event.Usage != nil {
+		a.anthropicState.InputTokens = event.Usage.InputTokens
+		a.anthropicState.CacheReadInputTokens = event.Usage.CacheReadInputTokens
+		a.anthropicState.CacheCreationInputTokens = event.Usage.CacheCreationInputTokens
+	}
 	for _, responseEvent := range bridge.AnthropicEventToResponsesEvents(bridge.Runtime{Now: time.Now, ReadRandom: rand.Read}, event, a.anthropicState) {
 		a.emitResponseEvent(&responseEvent, writer)
 	}
@@ -120,6 +120,12 @@ func NewAntigravityResponsesStreamAdapter(
 }
 
 func (a *antigravityResponsesStreamAdapter) Emit(event *protocolanthropic.AnthropicStreamEvent, writer *ClientWriter) {
+	// Responses 在全缓存请求结束时，需要将先前的普通输入覆盖为零。
+	if event.Type == "message_delta" && event.Usage != nil {
+		a.anthropicState.InputTokens = event.Usage.InputTokens
+		a.anthropicState.CacheReadInputTokens = event.Usage.CacheReadInputTokens
+		a.anthropicState.CacheCreationInputTokens = event.Usage.CacheCreationInputTokens
+	}
 	for _, responseEvent := range bridge.AnthropicEventToResponsesEvents(bridge.Runtime{Now: time.Now, ReadRandom: rand.Read}, event, a.anthropicState) {
 		a.emitResponseEvent(responseEvent, writer)
 	}
@@ -317,122 +323,25 @@ func (s *ResponseAdapter) HandleAntigravityCompatStream(
 		c.Status(http.StatusOK)
 	}
 	session := NewAntigravityCompatStreamSession(originalModel, startTime, adapter, writer)
-	events, stopScanner, maxLineSize := s.StartAntigravityCompatScanner(resp.Body)
-	defer stopScanner()
-
-	timeout := s.AntigravityCompatStreamTimeout()
-	timeoutTimer, timeoutCh := NewAntigravityCompatTimer(timeout)
-	if timeoutTimer != nil {
-		defer timeoutTimer.Stop()
-	}
-	keepaliveTicker, keepaliveCh := s.NewAntigravityCompatKeepaliveTicker()
-	if keepaliveTicker != nil {
-		defer keepaliveTicker.Stop()
-	}
-
-	for {
-		select {
-		case event, open := <-events:
-			if !open {
-				if !session.hasMeaningfulData() && !writer.Disconnected() {
-					return nil, AntigravityCompatEmptyStreamError(s.Options.Failover)
-				}
-				return session.finish(), nil
-			}
-			if event.err != nil {
-				return s.HandleAntigravityCompatReadError(c, session, event.err, maxLineSize, prefix)
-			}
-			ResetAntigravityCompatTimer(timeoutTimer, timeout)
-			s.observeRaw([]byte(event.line))
-			session.consume(event.line)
-
-		case <-timeoutCh:
-			if writer.Disconnected() {
-				return session.collectResult(true), nil
-			}
-			if !session.hasMeaningfulData() {
-				return nil, AntigravityCompatEmptyStreamError(s.Options.Failover)
-			}
-			logger.LegacyPrintf("service.antigravity_gateway", "Stream data interval timeout (%s)", prefix)
-			WriteAntigravityCompatStreamError(c, adapter, writer, "stream_timeout", s.Options.MarkCommitted)
-			return session.collectResult(false), fmt.Errorf("stream data interval timeout")
-
-		case <-keepaliveCh:
-			if session.hasMeaningfulData() && !writer.Disconnected() {
-				writer.Write([]byte(": ping\n\n"))
-			}
+	observed, err := s.readGeminiStream(resp, s.unwrapConvertedGeminiResponse, func(event upstream.GeminiStreamEvent) error {
+		if len(event.Data) > 0 {
+			s.observeRaw(event.Data)
+			session.consume("data: " + string(event.Data))
 		}
-	}
-}
-
-func (s *ResponseAdapter) StartAntigravityCompatScanner(
-	body io.Reader,
-) (<-chan antigravityCompatScanEvent, func(), int) {
-	maxLineSize := upstream.DefaultSSELineLimit
-	if s.Options.MaxLineSize > 0 {
-		maxLineSize = s.Options.MaxLineSize
-	}
-	scanner := bufio.NewScanner(body)
-	scanBuf := httpclient.GetSSEScannerBuf64K()
-	scanner.Buffer(scanBuf[:0], maxLineSize)
-
-	events := make(chan antigravityCompatScanEvent, 16)
-	done := make(chan struct{})
-	go func() {
-		defer httpclient.PutSSEScannerBuf64K(scanBuf)
-		defer close(events)
-		send := func(event antigravityCompatScanEvent) bool {
-			select {
-			case events <- event:
-				return true
-			case <-done:
-				return false
-			}
+		if event.Terminal {
+			c.Complete()
 		}
-		for scanner.Scan() {
-			if !send(antigravityCompatScanEvent{line: scanner.Text()}) {
-				return
-			}
+		return nil
+	}, func() {
+		if session.hasMeaningfulData() && !writer.Disconnected() {
+			writer.Write([]byte(": ping\n\n"))
 		}
-		if err := scanner.Err(); err != nil {
-			send(antigravityCompatScanEvent{err: err})
-		}
-	}()
-	return events, func() { close(done) }, maxLineSize
-}
-
-func (s *ResponseAdapter) AntigravityCompatStreamTimeout() time.Duration {
-	return time.Duration(s.Options.StreamDataIntervalTimeout) * time.Second
-}
-
-func (s *ResponseAdapter) NewAntigravityCompatKeepaliveTicker() (*time.Ticker, <-chan time.Time) {
-	interval := time.Duration(s.Options.StreamKeepaliveInterval) * time.Second
-	if interval <= 0 {
-		return nil, nil
+	})
+	session.processor.SetUsageSnapshot(bridge.NativeExtractGeminiUsage(observed.UsageJSON))
+	if err != nil {
+		return s.HandleAntigravityCompatReadError(c, session, err, s.Options.MaxLineSize, prefix)
 	}
-	ticker := time.NewTicker(interval)
-	return ticker, ticker.C
-}
-
-func NewAntigravityCompatTimer(timeout time.Duration) (*time.Timer, <-chan time.Time) {
-	if timeout <= 0 {
-		return nil, nil
-	}
-	timer := time.NewTimer(timeout)
-	return timer, timer.C
-}
-
-func ResetAntigravityCompatTimer(timer *time.Timer, timeout time.Duration) {
-	if timer == nil {
-		return
-	}
-	if !timer.Stop() {
-		select {
-		case <-timer.C:
-		default:
-		}
-	}
-	timer.Reset(timeout)
+	return session.finish(), nil
 }
 
 func (s *ResponseAdapter) HandleAntigravityCompatReadError(
@@ -448,13 +357,20 @@ func (s *ResponseAdapter) HandleAntigravityCompatReadError(
 	if disconnect, handled := HandleStreamReadError(err, session.writer.Disconnected(), prefix); handled {
 		return session.collectResult(disconnect), nil
 	}
-	if errors.Is(err, bufio.ErrTooLong) {
+	var streamError *upstream.GeminiStreamError
+	tooLarge := errors.Is(err, bufio.ErrTooLong) ||
+		(errors.As(err, &streamError) && streamError.Kind == "stream_frame_too_large")
+	if tooLarge {
 		logger.LegacyPrintf("service.antigravity_gateway", "SSE line too long (%s): max_size=%d error=%v", prefix, maxLineSize, err)
 		WriteAntigravityCompatStreamError(c, session.adapter, session.writer, "response_too_large", s.Options.MarkCommitted)
-		return session.result(false), err
+		return session.collectResult(false), err
 	}
-	WriteAntigravityCompatStreamError(c, session.adapter, session.writer, "stream_read_error", s.Options.MarkCommitted)
-	return nil, fmt.Errorf("stream read error: %w", err)
+	reason := "stream_read_error"
+	if errors.As(err, &streamError) && streamError.Kind == "stream_timeout" {
+		reason = "stream_timeout"
+	}
+	WriteAntigravityCompatStreamError(c, session.adapter, session.writer, reason, s.Options.MarkCommitted)
+	return session.collectResult(false), fmt.Errorf("stream read error: %w", err)
 }
 
 func WriteAntigravityCompatStreamError(
